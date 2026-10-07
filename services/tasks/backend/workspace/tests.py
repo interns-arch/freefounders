@@ -1,0 +1,411 @@
+from datetime import timedelta
+
+from django.test import TestCase
+from django.utils import timezone
+from rest_framework.test import APIClient
+
+from accounts.models import Role, User
+from crm.models import Task
+
+from .models import Group, Idea, Link, LinkCollection, Notice
+
+
+def make(username, role, department="sales"):
+    return User.objects.create_user(username, f"{username}@x.com", "pass@12345",
+                                    role=role, department=department)
+
+
+class Base(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = make("boss", Role.ADMIN, "management")
+        self.manager = make("meera", Role.SALES_MANAGER)
+        self.rahul = make("rahul", Role.SALES_EXECUTIVE)
+        self.amit = make("amit", Role.SALES_EXECUTIVE)
+
+    def as_(self, user):
+        res = self.client.post("/api/auth/login", {"username": user.username, "password": "pass@12345"})
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
+
+
+class GroupTests(Base):
+    def test_exec_cannot_create_group_manager_can(self):
+        self.as_(self.rahul)
+        self.assertEqual(self.client.post("/api/groups/", {"name": "X"}).status_code, 403)
+        self.as_(self.manager)
+        res = self.client.post("/api/groups/", {"name": "Sales Sprint", "category": "Sales"})
+        self.assertEqual(res.status_code, 201)
+        g = Group.objects.get()
+        self.assertEqual(g.owner, self.manager)
+        self.assertTrue(g.members.filter(pk=self.manager.pk).exists())  # auto-member
+
+    def test_membership_visibility(self):
+        g1 = Group.objects.create(name="Mine", owner=self.manager)
+        g1.members.add(self.rahul)
+        Group.objects.create(name="Other", owner=self.manager)
+        self.as_(self.rahul)
+        names = [g["name"] for g in self.client.get("/api/groups/").data]
+        self.assertEqual(names, ["Mine"])
+        self.as_(self.admin)  # admin sees all
+        self.assertEqual(len(self.client.get("/api/groups/").data), 2)
+
+    def test_only_owner_or_admin_manages_members(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        g.members.add(self.rahul)
+        self.as_(self.rahul)
+        res = self.client.post(f"/api/groups/{g.id}/add_member/", {"user": self.amit.id})
+        self.assertEqual(res.status_code, 403)
+        self.as_(self.manager)
+        res = self.client.post(f"/api/groups/{g.id}/add_member/", {"user": self.amit.id})
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(g.members.filter(pk=self.amit.pk).exists())
+        self.client.post(f"/api/groups/{g.id}/remove_member/", {"user": self.amit.id})
+        self.assertFalse(g.members.filter(pk=self.amit.pk).exists())
+
+    def test_destroy_archives_instead_of_deleting(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        self.as_(self.manager)
+        self.client.delete(f"/api/groups/{g.id}/")
+        g.refresh_from_db()
+        self.assertFalse(g.active)
+
+    def test_group_member_sees_group_tasks(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        g.members.add(self.rahul)
+        Task.objects.create(title="Group work", assigned_to=self.amit,
+                            created_by=self.manager, group=g)
+        self.as_(self.rahul)  # not assignee, not creator -- but group member
+        res = self.client.get("/api/tasks/")
+        titles = [t["title"] for t in res.data["results"]]
+        self.assertIn("Group work", titles)
+
+    def test_cannot_create_task_in_foreign_group(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        self.as_(self.rahul)
+        res = self.client.post("/api/tasks/", {"due_at": (timezone.now() + timedelta(days=1)).isoformat(), "title": "X", "assigned_to": self.rahul.id,
+                                               "effort_minutes": 30, "group": g.id})
+        self.assertEqual(res.status_code, 403)
+
+    def test_group_dashboard_counts(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        g.members.add(self.rahul)
+        now = timezone.now()
+        Task.objects.create(title="a", assigned_to=self.rahul, group=g)
+        Task.objects.create(title="b", assigned_to=self.rahul, group=g, status="in_progress")
+        Task.objects.create(title="c", assigned_to=self.rahul, group=g, status="done")
+        Task.objects.create(title="d", assigned_to=self.rahul, group=g,
+                            due_at=now - timedelta(hours=1))
+        self.as_(self.manager)
+        tiles = self.client.get(f"/api/groups/{g.id}/dashboard/").data["tiles"]
+        self.assertEqual(tiles, {"total": 4, "pending": 2, "in_progress": 1,
+                                 "completed": 1, "overdue": 1, "members": 1})
+
+
+class NoticeTests(Base):
+    def publish(self, **kw):
+        defaults = dict(title="N", status="published", author=self.admin)
+        defaults.update(kw)
+        return Notice.objects.create(**defaults)
+
+    def test_everyone_notice_visible_and_read_flow(self):
+        n = self.publish(title="All hands")
+        self.as_(self.rahul)
+        feed = self.client.get("/api/notices/").data
+        self.assertEqual([x["title"] for x in feed], ["All hands"])
+        self.assertFalse(feed[0]["read"])
+        self.client.post(f"/api/notices/{n.id}/read/")
+        feed = self.client.get("/api/notices/?read=true").data
+        self.assertEqual(len(feed), 1)
+        self.assertEqual(len(self.client.get("/api/notices/?read=false").data), 0)
+
+    def test_targeting_role_department_users_group(self):
+        self.publish(title="For execs", audience_type="role",
+                     audience_value={"role": "sales_executive"})
+        self.publish(title="For accounts dept", audience_type="department",
+                     audience_value={"department": "accounts"})
+        self.publish(title="For amit only", audience_type="users",
+                     audience_value={"users": [self.amit.id]})
+        g = Group.objects.create(name="G", owner=self.manager)
+        g.members.add(self.rahul)
+        self.publish(title="For group", audience_type="group", audience_value={"group": g.id})
+        self.as_(self.rahul)
+        titles = sorted(x["title"] for x in self.client.get("/api/notices/").data)
+        self.assertEqual(titles, ["For execs", "For group"])
+        self.as_(self.amit)
+        titles = sorted(x["title"] for x in self.client.get("/api/notices/").data)
+        self.assertEqual(titles, ["For amit only", "For execs"])
+
+    def test_draft_scheduled_and_expired_are_hidden(self):
+        now = timezone.now()
+        self.publish(title="Draft", status="draft")
+        self.publish(title="Future", publish_at=now + timedelta(days=1))
+        self.publish(title="Expired", expire_at=now - timedelta(hours=1))
+        self.publish(title="Live")
+        self.as_(self.rahul)
+        titles = [x["title"] for x in self.client.get("/api/notices/").data]
+        self.assertEqual(titles, ["Live"])
+
+    def test_manage_is_admin_only_and_publish_action(self):
+        self.as_(self.manager)
+        self.assertEqual(self.client.get("/api/notices/?manage=true").status_code, 403)
+        self.assertEqual(self.client.post("/api/notices/", {"title": "X"}).status_code, 403)
+        self.as_(self.admin)
+        res = self.client.post("/api/notices/", {"title": "New policy", "content": "Details"})
+        self.assertEqual(res.status_code, 201)
+        nid = res.data["id"]
+        self.assertEqual(self.client.get("/api/notices/?manage=true").data[0]["status"], "draft")
+        res = self.client.post(f"/api/notices/{nid}/publish/")
+        self.assertEqual(res.data["status"], "published")
+        self.assertIsNotNone(res.data["publish_at"])
+        res = self.client.post(f"/api/notices/{nid}/archive/")
+        self.assertEqual(res.data["status"], "archived")
+
+    def test_audience_validation(self):
+        self.as_(self.admin)
+        res = self.client.post("/api/notices/", {"title": "X", "audience_type": "users",
+                                                 "audience_value": {}}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+
+class LinkTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.coll = LinkCollection.objects.create(name="Important Tools", created_by=self.admin)
+
+    def test_collection_manage_permission(self):
+        self.as_(self.rahul)
+        self.assertEqual(self.client.post("/api/link-collections/", {"name": "X"}).status_code, 403)
+        self.as_(self.manager)
+        self.assertEqual(self.client.post("/api/link-collections/", {"name": "E-books"}).status_code, 201)
+
+    def test_add_link_validates_scheme(self):
+        self.as_(self.rahul)
+        bad = self.client.post("/api/links/", {"collection": self.coll.id, "title": "X",
+                                               "url": "javascript:alert(1)"})
+        self.assertEqual(bad.status_code, 400)
+        ok = self.client.post("/api/links/", {"collection": self.coll.id, "title": "Drive",
+                                              "url": "https://drive.google.com"})
+        self.assertEqual(ok.status_code, 201)
+
+    def test_group_link_hidden_from_non_members(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        g.members.add(self.rahul)
+        Link.objects.create(collection=self.coll, title="Secret", url="https://x.com",
+                            group=g, added_by=self.manager)
+        Link.objects.create(collection=self.coll, title="Public", url="https://y.com",
+                            added_by=self.manager)
+        self.as_(self.amit)
+        titles = [l["title"] for l in self.client.get("/api/links/").data]
+        self.assertEqual(titles, ["Public"])
+        self.as_(self.rahul)
+        titles = sorted(l["title"] for l in self.client.get("/api/links/").data)
+        self.assertEqual(titles, ["Public", "Secret"])
+
+    def test_edit_own_only_and_favorite_toggle(self):
+        link = Link.objects.create(collection=self.coll, title="A", url="https://a.com",
+                                   added_by=self.rahul)
+        self.as_(self.amit)
+        self.assertEqual(self.client.patch(f"/api/links/{link.id}/", {"title": "B"}).status_code, 403)
+        res = self.client.post(f"/api/links/{link.id}/favorite/")
+        self.assertTrue(res.data["favorited"])
+        favs = self.client.get("/api/links/?favorites=true").data
+        self.assertEqual(len(favs), 1)
+        self.client.post(f"/api/links/{link.id}/favorite/")
+        self.assertEqual(len(self.client.get("/api/links/?favorites=true").data), 0)
+        self.as_(self.rahul)
+        self.assertEqual(self.client.patch(f"/api/links/{link.id}/", {"title": "B"}).status_code, 200)
+
+
+class IdeaTests(Base):
+    def test_scopes_my_shared_group(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        g.members.add(self.rahul)
+        Idea.objects.create(title="Shared idea", author=self.amit)
+        Idea.objects.create(title="Group idea", author=self.manager, group=g)
+        Idea.objects.create(title="My idea", author=self.rahul)
+        self.as_(self.rahul)
+        my = [i["title"] for i in self.client.get("/api/ideas/?scope=my").data["results"]]
+        self.assertEqual(my, ["My idea"])
+        shared = sorted(i["title"] for i in self.client.get("/api/ideas/?scope=shared").data["results"])
+        self.assertEqual(shared, ["My idea", "Shared idea"])
+        grp = [i["title"] for i in self.client.get("/api/ideas/?scope=group").data["results"]]
+        self.assertEqual(grp, ["Group idea"])
+        # amit is not in the group -> group idea invisible
+        self.as_(self.amit)
+        grp = [i["title"] for i in self.client.get("/api/ideas/?scope=group").data["results"]]
+        self.assertEqual(grp, [])
+
+    def test_group_idea_requires_membership(self):
+        g = Group.objects.create(name="G", owner=self.manager)
+        self.as_(self.rahul)
+        res = self.client.post("/api/ideas/", {"title": "X", "group": g.id})
+        self.assertEqual(res.status_code, 403)
+
+    def test_status_change_needs_review_capability(self):
+        idea = Idea.objects.create(title="I", author=self.rahul)
+        self.as_(self.rahul)
+        self.assertEqual(self.client.patch(f"/api/ideas/{idea.id}/", {"status": "approved"}).status_code, 403)
+        self.assertEqual(self.client.patch(f"/api/ideas/{idea.id}/", {"title": "I2"}).status_code, 200)
+        self.as_(self.manager)
+        res = self.client.patch(f"/api/ideas/{idea.id}/", {"status": "approved"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["status"], "approved")
+
+    def test_cannot_edit_others_idea(self):
+        idea = Idea.objects.create(title="I", author=self.rahul)
+        self.as_(self.amit)
+        self.assertEqual(self.client.patch(f"/api/ideas/{idea.id}/", {"title": "hack"}).status_code, 403)
+
+    def test_comments_and_votes(self):
+        idea = Idea.objects.create(title="I", author=self.rahul)
+        self.as_(self.amit)
+        res = self.client.post(f"/api/ideas/{idea.id}/comments/", {"body": "Nice one"})
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(len(self.client.get(f"/api/ideas/{idea.id}/comments/").data), 1)
+        self.assertEqual(self.client.post(f"/api/ideas/{idea.id}/comments/", {"body": "  "}).status_code, 400)
+        res = self.client.post(f"/api/ideas/{idea.id}/vote/")
+        self.assertEqual(res.data, {"voted": True, "vote_count": 1})
+        res = self.client.post(f"/api/ideas/{idea.id}/vote/")
+        self.assertEqual(res.data, {"voted": False, "vote_count": 0})
+
+
+class GroupMemberPickingTests(Base):
+    """A group used to be created empty and filled one person at a time from
+    a dropdown with no search. Members can now be chosen on the form, and
+    several added at once afterwards."""
+
+    def test_members_can_be_chosen_while_creating_the_group(self):
+        self.as_(self.manager)
+        res = self.client.post("/api/groups/",
+                               {"name": "Bijwasan floor",
+                                "members": [self.rahul.id, self.amit.id]},
+                               format="json")
+        self.assertEqual(res.status_code, 201)
+        names = {m["id"] for m in res.data["members_detail"]}
+        # the creator is always in their own group
+        self.assertEqual(names, {self.rahul.id, self.amit.id, self.manager.id})
+
+    def test_several_people_can_be_added_in_one_call(self):
+        self.as_(self.manager)
+        gid = self.client.post("/api/groups/", {"name": "G"}, format="json").data["id"]
+        res = self.client.post(f"/api/groups/{gid}/add_member/",
+                               {"users": [self.rahul.id, self.amit.id]}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["member_count"], 3)
+
+    def test_adding_one_the_old_way_still_works(self):
+        self.as_(self.manager)
+        gid = self.client.post("/api/groups/", {"name": "G"}, format="json").data["id"]
+        res = self.client.post(f"/api/groups/{gid}/add_member/",
+                               {"user": self.rahul.id}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["member_count"], 2)
+
+    def test_an_unknown_id_is_refused_and_nobody_is_added(self):
+        self.as_(self.manager)
+        gid = self.client.post("/api/groups/", {"name": "G"}, format="json").data["id"]
+        res = self.client.post(f"/api/groups/{gid}/add_member/",
+                               {"users": [self.rahul.id, 99999]}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(self.client.get(f"/api/groups/{gid}/").data["member_count"], 1)
+
+    def test_an_empty_list_is_refused(self):
+        self.as_(self.manager)
+        gid = self.client.post("/api/groups/", {"name": "G"}, format="json").data["id"]
+        self.assertEqual(self.client.post(f"/api/groups/{gid}/add_member/",
+                                          {"users": []}, format="json").status_code, 400)
+
+    def test_only_the_owner_or_an_admin_may_add(self):
+        """An outsider gets 404 rather than 403 -- they cannot see the group at
+        all, so its existence is not leaked. Either way nobody is added."""
+        self.as_(self.manager)
+        gid = self.client.post("/api/groups/", {"name": "G"}, format="json").data["id"]
+        self.as_(self.rahul)
+        res = self.client.post(f"/api/groups/{gid}/add_member/",
+                               {"users": [self.amit.id]}, format="json")
+        self.assertIn(res.status_code, (403, 404))
+        self.as_(self.manager)
+        self.assertEqual(self.client.get(f"/api/groups/{gid}/").data["member_count"], 1)
+
+
+class GroupAsAssignShortcutTests(Base):
+    """Picking a group is a shortcut for picking its people. It does NOT make
+    the group own anything: the task still belongs to one person, and five
+    members still means five separate tasks with five separate scores. Five
+    people sharing one task could not be scored fairly; five copies can."""
+
+    def setUp(self):
+        super().setUp()
+        self.as_(self.manager)
+        self.gid = self.client.post(
+            "/api/groups/",
+            {"name": "CRM Team", "members": [self.rahul.id, self.amit.id]},
+            format="json").data["id"]
+
+    def members_of(self, gid):
+        return {m["id"] for m in self.client.get(f"/api/groups/{gid}/").data["members_detail"]}
+
+    def test_the_form_can_read_the_members_off_the_list(self):
+        """The Assign to field fills from members_detail on the list call, so
+        it must be there without fetching each group one at a time."""
+        rows = self.client.get("/api/groups/?active=true").data
+        row = next(g for g in rows if g["id"] == self.gid)
+        self.assertIn("members_detail", row)
+        self.assertEqual(row["member_count"], 3)          # + the creator
+
+    def test_one_task_per_member_each_owned_by_one_person(self):
+        from crm.models import Task
+        for uid in sorted(self.members_of(self.gid)):
+            res = self.client.post("/api/tasks/", {
+                "title": "August expense sheet", "assigned_to": uid,
+                "group": self.gid, "effort_minutes": 45, "category": "Calls",
+                "due_at": (timezone.now() + timedelta(days=1)).isoformat(),
+            }, format="json")
+            self.assertEqual(res.status_code, 201, res.data)
+        made = Task.objects.filter(group_id=self.gid)
+        self.assertEqual(made.count(), 3)
+        # every task has exactly one owner, and no two share one
+        self.assertEqual(len({t.assigned_to_id for t in made}), 3)
+
+    def test_the_group_tag_survives_on_every_copy(self):
+        from crm.models import Task
+        self.client.post("/api/tasks/", {
+            "title": "T", "assigned_to": self.rahul.id, "group": self.gid,
+            "effort_minutes": 30, "category": "Calls",
+            "due_at": (timezone.now() + timedelta(days=1)).isoformat(),
+        }, format="json")
+        self.assertEqual(Task.objects.get(group_id=self.gid).group_id, self.gid)
+
+    def test_a_group_task_is_visible_to_every_member(self):
+        """The point of the group tag: teammates can see each other's copy."""
+        self.client.post("/api/tasks/", {
+            "title": "Shared sight", "assigned_to": self.rahul.id, "group": self.gid,
+            "effort_minutes": 30, "category": "Calls",
+            "due_at": (timezone.now() + timedelta(days=1)).isoformat(),
+        }, format="json")
+        self.as_(self.amit)          # a member, but not the assignee or creator
+        titles = [t["title"] for t in self.client.get("/api/tasks/").data["results"]]
+        self.assertIn("Shared sight", titles)
+
+    def test_a_non_member_still_cannot_see_it(self):
+        self.client.post("/api/tasks/", {
+            "title": "Private to the group", "assigned_to": self.rahul.id,
+            "group": self.gid, "effort_minutes": 30, "category": "Calls",
+            "due_at": (timezone.now() + timedelta(days=1)).isoformat(),
+        }, format="json")
+        outsider = make("outsider", Role.WAREHOUSE, "warehouse")
+        self.as_(outsider)
+        titles = [t["title"] for t in self.client.get("/api/tasks/").data["results"]]
+        self.assertNotIn("Private to the group", titles)
+
+    def test_scoring_is_untouched_by_the_group(self):
+        """Each copy scores its own owner. The scorer never looks at groups --
+        this test fails the moment somebody makes it."""
+        import inspect
+        from crm import scoring
+        self.assertNotIn("group", inspect.getsource(scoring).lower(),
+                         "scoring.py mentions groups — a group must not affect a person's score")
+
+    def test_only_a_manager_or_admin_can_create_a_group(self):
+        self.as_(self.rahul)
+        self.assertEqual(self.client.post("/api/groups/", {"name": "Nope"}).status_code, 403)

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tasks-backend:
+    name: Tasks API (Django)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/tasks/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: services/tasks/backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Tests
+        env:
+          DATABASE_URL: ""
+          NOTIF_SCHEDULER: "false"
+        run: python manage.py test
+
+  tasks-frontend:
+    name: Tasks web (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/tasks/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/tasks/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  assets:
+    name: Assets (typecheck + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/assets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: services/assets/.node-version
+          cache: npm
+          cache-dependency-path: services/assets/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

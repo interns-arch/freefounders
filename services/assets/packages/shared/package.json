@@ -1,0 +1,14 @@
+{
+  "name": "@eam/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "tsc -b && node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  }
+}

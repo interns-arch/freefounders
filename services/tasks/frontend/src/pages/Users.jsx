@@ -1,0 +1,435 @@
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { api, errorText } from '../api'
+import { useAuth } from '../auth'
+import PersonProfile from './PersonProfile'
+import { WorkloadPanel } from './TaskExtras'
+import { useDepartments } from '../useDepartments'
+import { useRoles } from '../useRoles'
+
+/* C2: fetch-on-expand workload for one team member */
+function WorkloadCell({ userId }) {
+  const [w, setW] = useState(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    api(`/api/tasks/workload/?user=${userId}`)
+      .then(setW).catch(e => setErr(errorText(e.data) || e.message))
+  }, [userId])
+  if (err) return <div className="muted small">{err}</div>
+  if (!w) return <div className="muted small">Loading workload…</div>
+  return <WorkloadPanel w={w} />
+}
+
+// the top of the tree reports to nobody -- Super Admin included
+const TOP_ADMIN = ['admin', 'super_admin']
+
+const EMPTY = {
+  username: '', email: '', first_name: '', last_name: '',
+  role: 'sales_executive', department: 'sales', whatsapp_phone: '',
+  reporting_manager: '', password: '',
+}
+
+export default function Users() {
+  const { can } = useAuth()
+  return can('users.manage') ? <ManageTeam /> : <Directory />
+}
+
+/* ---------- Read-only directory (every role) ---------- */
+
+function Directory() {
+  const { rows: ROLES } = useRoles()
+  const { user } = useAuth()
+  const isManager = user.role === 'sales_manager'
+  const [rows, setRows] = useState(null)
+  const [q, setQ] = useState('')
+  const [fRole, setFRole] = useState('')
+  const [wlFor, setWlFor] = useState(null)   // C2: which member's workload is open
+  const [profileFor, setProfileFor] = useState(null)  // name click -> full drill-down
+  const [viewable, setViewable] = useState(new Set()) // whose task profile I may open
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    api('/api/team/').then(setRows).catch(e => setErr(e.message))
+    api('/api/tasks/people/').then(d => setViewable(new Set(d.map(p => p.id)))).catch(() => {})
+  }, [])
+
+  const shown = useMemo(() => (rows || []).filter(u => {
+    if (fRole && u.role !== fRole) return false
+    if (q.trim() && !`${u.name} ${u.username} ${u.email} ${u.mobile}`.toLowerCase().includes(q.trim().toLowerCase())) return false
+    return true
+  }), [rows, q, fRole])
+
+  if (err) return <div className="err">{err}</div>
+  if (!rows) return <div className="center-note">Loading…</div>
+
+  return (
+    <div>
+      <div className="page-head">
+        <h1>My Team</h1>
+        <span className="muted small">
+          {isManager ? 'Reporting to you' : 'Your department'} · {rows.length} member{rows.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {isManager && rows.length === 0 && (
+        <p className="muted">No one reports to you yet — ask Admin/HR to set "Reports to" on your team members.</p>
+      )}
+      <div className="filters">
+        <input type="search" placeholder="Search team member…" value={q} onChange={e => setQ(e.target.value)} />
+        <select value={fRole} onChange={e => setFRole(e.target.value)}>
+          <option value="">All roles</option>
+          {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      {err && <div className="err">{err}</div>}
+      <table className="table">
+        <thead><tr><th>User</th><th>Mobile</th><th>Reports To</th><th>Department</th><th>Role</th><th /></tr></thead>
+        <tbody>
+          {shown.map(u => (
+            <>
+              <tr key={u.id}>
+                <td>
+                  {viewable.has(u.id) ? (
+                    <button className="link-name" title="Open full task profile"
+                      onClick={() => setProfileFor(u)}>{u.name}</button>
+                  ) : <strong>{u.name}</strong>}
+                  <div className="muted small">{u.email || '@' + u.username}</div>
+                </td>
+                <td>{u.mobile || '—'}</td>
+                <td>{u.reports_to || 'NA'}</td>
+                <td>{u.department_display}</td>
+                <td><span className={`role-pill role-${u.role}`}>{u.role_display}</span></td>
+                <td>
+                  <button className="btn btn-sm" title="Open tasks & pending effort"
+                    onClick={() => setWlFor(wlFor === u.id ? null : u.id)}>
+                    {wlFor === u.id ? 'Hide' : '📊 Workload'}
+                  </button>
+                </td>
+              </tr>
+              {wlFor === u.id && (
+                <tr key={`wl-${u.id}`}>
+                  <td colSpan={6} style={{ paddingTop: 0 }}><WorkloadCell userId={u.id} /></td>
+                </tr>
+              )}
+            </>
+          ))}
+        </tbody>
+      </table>
+      {profileFor && (
+        <PersonProfile userId={profileFor.id} name={profileFor.name}
+          onClose={() => setProfileFor(null)} />
+      )}
+    </div>
+  )
+}
+
+/* ---------- Admin management ---------- */
+
+function ManageTeam() {
+  const { rows: ROLES, managerRoles } = useRoles()
+  const { user: me } = useAuth()
+  const [rows, setRows] = useState([])
+  const [editing, setEditing] = useState(null)   // null | 'new' | user object
+  const [q, setQ] = useState('')
+  const [fRole, setFRole] = useState('')
+  const [fManager, setFManager] = useState('')
+  const [wlFor, setWlFor] = useState(null)       // C2: which member's workload is open
+  const [profileFor, setProfileFor] = useState(null)  // name click -> full drill-down
+  const [viewable, setViewable] = useState(new Set()) // whose task profile I may open
+  const [err, setErr] = useState('')
+
+  const load = () => {
+    api('/api/users/?page_size=200').then(d => setRows(d.results || d)).catch(e => setErr(e.message))
+    // refresh WITH the table: a user added a second ago must be clickable too
+    api('/api/tasks/people/').then(d => setViewable(new Set(d.map(p => p.id)))).catch(() => {})
+  }
+  useEffect(() => { load() }, [])
+
+  // level 2 and up, decided by the backend -- a new manager role lands here
+  // without anyone remembering to add it
+  const managers = useMemo(() =>
+    rows.filter(u => managerRoles.includes(u.role) && u.is_active), [rows, managerRoles])
+
+  const shown = useMemo(() => rows.filter(u => {
+    if (fRole && u.role !== fRole) return false
+    if (fManager && String(u.reporting_manager || '') !== fManager) return false
+    if (q.trim()) {
+      const hay = `${u.first_name} ${u.last_name} ${u.username} ${u.email} ${u.whatsapp_phone}`.toLowerCase()
+      if (!hay.includes(q.trim().toLowerCase())) return false
+    }
+    return true
+  }), [rows, q, fRole, fManager])
+
+  const [purging, setPurging] = useState(null)   // deactivated user to delete for good
+
+  const toggleActive = async (u) => {
+    setErr('')
+    try {
+      await api(`/api/users/${u.id}/${u.is_active ? 'deactivate' : 'activate'}/`, { method: 'POST' })
+      load()
+    } catch (e) { setErr(e.message) }
+  }
+
+  return (
+    <div>
+      <div className="page-head">
+        <h1>My Team</h1>
+        <button className="btn btn-primary" onClick={() => setEditing('new')}>+ Add user</button>
+      </div>
+      <div className="filters">
+        <input type="search" placeholder="Search team member…" value={q} onChange={e => setQ(e.target.value)} />
+        <select value={fRole} onChange={e => setFRole(e.target.value)}>
+          <option value="">All roles</option>
+          {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <select value={fManager} onChange={e => setFManager(e.target.value)}>
+          <option value="">Reporting manager…</option>
+          {managers.map(m => (
+            <option key={m.id} value={m.id}>
+              {`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.username}
+              {` — ${m.role_display}`}
+            </option>
+          ))}
+        </select>
+        <span className="muted small">{shown.length}/{rows.length} members</span>
+      </div>
+      {err && <div className="err">{err}</div>}
+      <table className="table">
+        <thead>
+          <tr><th>User</th><th>Mobile</th><th>Reports To</th><th>Role</th><th>Status</th><th /></tr>
+        </thead>
+        <tbody>
+          {shown.map(u => (
+            <Fragment key={u.id}>
+              <tr key={u.id} className={u.is_active ? '' : 'inactive'}>
+                <td>
+                  {viewable.has(u.id) ? (
+                    <button className="link-name" title="Open full task profile"
+                      onClick={() => setProfileFor(u)}>
+                      {u.first_name || u.username} {u.last_name}
+                    </button>
+                  ) : <strong>{u.first_name || u.username} {u.last_name}</strong>}
+                  <div className="muted small">{u.email || '@' + u.username}</div>
+                </td>
+                <td>{u.whatsapp_phone || '—'}</td>
+                <td>{u.reporting_manager_name || 'NA'}</td>
+                <td><span className={`role-pill role-${u.role}`}>{u.role_display}</span></td>
+                <td>{u.is_active ? <span className="ok">Active</span> : <span className="off">Deactivated</span>}</td>
+                <td className="row-actions">
+                  {u.is_active && (
+                    <button className="btn btn-sm" title="Open tasks & pending effort"
+                      onClick={() => setWlFor(wlFor === u.id ? null : u.id)}>
+                      {wlFor === u.id ? 'Hide' : '📊'}
+                    </button>
+                  )}
+                  <button className="btn btn-sm" onClick={() => setEditing(u)}>Edit</button>
+                  {u.id !== me.id && (
+                    <button className="btn btn-sm" onClick={() => toggleActive(u)}>
+                      {u.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  )}
+                  {!u.is_active && u.id !== me.id && (
+                    <button className="btn btn-sm btn-danger" onClick={() => setPurging(u)}>Delete</button>
+                  )}
+                </td>
+              </tr>
+              {wlFor === u.id && (
+                <tr key={`wl-${u.id}`}>
+                  <td colSpan={6} style={{ paddingTop: 0 }}><WorkloadCell userId={u.id} /></td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+
+      {purging && (
+        <PurgeModal user={purging} onClose={() => setPurging(null)}
+          onDone={() => { setPurging(null); load() }} />
+      )}
+
+      {profileFor && (
+        <PersonProfile userId={profileFor.id}
+          name={`${profileFor.first_name || profileFor.username} ${profileFor.last_name || ''}`.trim()}
+          onClose={() => setProfileFor(null)} />
+      )}
+
+      {editing && (
+        <UserModal
+          initial={editing === 'new' ? null : editing}
+          managers={managers}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function UserModal({ initial, managers, onClose, onSaved }) {
+  const { rows: ROLES } = useRoles()
+  const DEPARTMENTS = useDepartments()
+  const [f, setF] = useState(initial
+    ? { ...EMPTY, ...initial, reporting_manager: initial.reporting_manager || '', password: '' }
+    : EMPTY)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const set = k => e => setF(prev => ({ ...prev, [k]: e.target.value }))
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setErr('')
+    setBusy(true)
+    const body = {
+      username: f.username, email: f.email, first_name: f.first_name, last_name: f.last_name,
+      role: f.role, department: f.department, whatsapp_phone: f.whatsapp_phone,
+      reporting_manager: f.reporting_manager ? Number(f.reporting_manager) : null,
+    }
+    if (f.password) body.password = f.password
+    try {
+      if (initial) await api(`/api/users/${initial.id}/`, { method: 'PATCH', body })
+      else await api('/api/users/', { method: 'POST', body: { ...body, password: f.password } })
+      onSaved()
+    } catch (ex) {
+      setErr(errorText(ex.data) || ex.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <form className="modal-card" onSubmit={submit}>
+        <h2>{initial ? `Edit ${initial.username}` : 'Add user'}</h2>
+        <div className="form-grid">
+          <div>
+            <label>Username *</label>
+            <input value={f.username} onChange={set('username')} disabled={!!initial} autoFocus={!initial} />
+          </div>
+          <div>
+            <label>Email</label>
+            <input type="email" value={f.email} onChange={set('email')} />
+            <div className="muted small">
+              Task and approval mails go here. Leave blank if their mailbox does
+              not exist yet — otherwise every mail bounces back to us.
+            </div>
+          </div>
+          <div>
+            <label>First name</label>
+            <input value={f.first_name} onChange={set('first_name')} />
+          </div>
+          <div>
+            <label>Last name</label>
+            <input value={f.last_name} onChange={set('last_name')} />
+          </div>
+          <div>
+            <label>Role *</label>
+            <select value={f.role} onChange={set('role')}>
+              {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Department *</label>
+            <select value={f.department} onChange={set('department')}>
+              {DEPARTMENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>WhatsApp / Mobile *</label>
+            <input required value={f.whatsapp_phone} onChange={set('whatsapp_phone')}
+              placeholder="9876543210" />
+            <div className="muted small">No number means no WhatsApp alerts.</div>
+          </div>
+          <div>
+            <label>Reports to {!TOP_ADMIN.includes(f.role) && '*'}</label>
+            <select required={!TOP_ADMIN.includes(f.role)} value={f.reporting_manager}
+              onChange={set('reporting_manager')}>
+              <option value="">{TOP_ADMIN.includes(f.role) ? 'NA' : 'Select a manager…'}</option>
+              {/* full name + role: there are three Rahuls, a first name alone
+                  is not enough to pick the right manager */}
+              {managers.filter(m => !initial || m.id !== initial.id)
+                .map(m => (
+                  <option key={m.id} value={m.id}>
+                    {`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.username}
+                    {` — ${m.role_display}`}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="wide">
+            <label>{initial ? 'New password (blank = keep)' : 'Password *'}</label>
+            <input type="password" value={f.password} onChange={set('password')} autoComplete="new-password" />
+          </div>
+        </div>
+        {!TOP_ADMIN.includes(f.role) && (
+          <p className="muted small">
+            <strong>Reports to</strong> decides who approves this person's change
+            requests. Leave it blank and every request lands on the admins instead.
+          </p>
+        )}
+        {err && <div className="err">{err}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {busy ? 'Saving…' : initial ? 'Save changes' : 'Create user'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+/* Permanent delete of a deactivated person. Shows what goes with them and
+   asks for their username, because this one cannot be undone. */
+function PurgeModal({ user, onClose, onDone }) {
+  const [info, setInfo] = useState(null)
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    api(`/api/users/${user.id}/purge/`).then(setInfo).catch(e => setErr(e.message))
+  }, [user.id])
+  const go = async () => {
+    setBusy(true); setErr('')
+    try {
+      await api(`/api/users/${user.id}/purge/`, { method: 'POST', body: { confirm: typed.trim() } })
+      onDone()
+    } catch (e) { setErr(e.data?.confirm || e.data?.detail || e.message) }
+    finally { setBusy(false) }
+  }
+  const name = `${user.first_name || user.username} ${user.last_name || ''}`.trim()
+  return (
+    <div className="modal" onClick={onClose}>
+      <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <h2>Delete {name} permanently?</h2>
+        {!info && !err && <p className="muted">Checking what goes with them…</p>}
+        {info && (
+          <>
+            <p className="small" style={{ marginBottom: 10 }}>This removes the person and cannot be undone:</p>
+            <ul className="purge-list">
+              <li><strong>{info.tasks_total}</strong> tasks assigned to them
+                {info.tasks_total > 0 && <span className="muted"> ({info.tasks_open} open, {info.tasks_overdue} overdue, {info.tasks_done} done)</span>}
+                {' '}— deleted with their files and comments</li>
+              {info.mistakes > 0 && <li><strong>{info.mistakes}</strong> mistake records — deleted</li>}
+              <li>Their notifications, requests and history — deleted</li>
+              {info.tasks_given_to_others > 0 && (
+                <li className="keep"><strong>{info.tasks_given_to_others}</strong> tasks they gave to others — <strong>kept</strong>, just without "given by"</li>
+              )}
+              {info.reports > 0 && (
+                <li className="keep"><strong>{info.reports}</strong> people report to them — they'll show no reporting manager</li>
+              )}
+            </ul>
+            <label className="small" style={{ display: 'block', margin: '14px 0 6px', fontWeight: 700 }}>
+              Type <code>{info.username}</code> to confirm
+            </label>
+            <input className="ff-input" value={typed} onChange={e => setTyped(e.target.value)} autoFocus />
+          </>
+        )}
+        {err && <div className="err">{err}</div>}
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-danger" disabled={!info || busy || typed.trim().toLowerCase() !== info.username.toLowerCase()}
+            onClick={go}>{busy ? 'Deleting…' : 'Delete permanently'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}

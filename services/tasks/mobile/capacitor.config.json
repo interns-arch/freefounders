@@ -1,0 +1,14 @@
+{
+  "appId": "net.cartrends.automationtask",
+  "appName": "Automation Task",
+  "webDir": "www",
+  "server": {
+    "url": "https://partsexpressonline.com",
+    "cleartext": true,
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0f1a17"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "automation-task-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Android/iOS shell for Automation Task: opens the live site, so every deploy reaches the app without a new download.",
+  "scripts": {
+    "sync": "cap sync android",
+    "apk": "cap sync android && cd android && gradlew.bat assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}

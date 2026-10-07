@@ -1,0 +1,86 @@
+# Self-contained stack for the shared EC2 box. Its own compose project, its own
+# network, one published port. Nothing here references or restarts any other
+# stack running on the host.
+#
+#   docker compose up -d --build
+#
+# Postgres runs here too and is NOT published to the host — only `web` reaches
+# it, over the private compose network.
+
+services:
+  db:
+    # Must be 18.x: the seed dump was taken from PostgreSQL 18.6 and pg_restore
+    # cannot read an archive produced by a newer major version than itself.
+    image: postgres:18
+    container_name: automate-task-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # PG18+ images store data in a major-version subdirectory and refuse to
+      # start if the mount lands on /var/lib/postgresql/data instead.
+      - pgdata:/var/lib/postgresql
+    # Deliberately no `ports:` — the database must never be internet-facing.
+    # The box already has 8 other Postgres containers; this one stays private.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: automate-task:latest
+    container_name: automate-task-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Host 7001 -> gunicorn 8000. 7001 was confirmed unused by any other
+      # container or host process before this was chosen.
+      - "7001:8000"
+    volumes:
+      # Uploads live on a named volume, not the container's own disk, so a
+      # rebuild does not orphan the database rows that point at them.
+      - media:/app/backend/media
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      # Uncapped JSON logs are a slow way to fill a shared disk and take the
+      # other stacks down with them.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          # ~7.6G total on the box with 25 other containers running. A ceiling
+          # keeps a runaway request here from triggering the OOM killer
+          # against a neighbouring stack.
+          memory: 900M
+
+volumes:
+  media:
+  pgdata:

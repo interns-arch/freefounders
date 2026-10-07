@@ -1,0 +1,69 @@
+import { useState } from 'react'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth'
+
+export default function Login() {
+  const { user, ready, login } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  // back to the page that sent them here (e.g. a task link from an email)
+  const from = location.state?.from
+  const dest = from ? `${from.pathname}${from.search || ''}` : '/'
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [show, setShow] = useState(false)      // 👁 show/hide password
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (ready && user) return <Navigate to={dest} replace />
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setErr('')
+    setBusy(true)
+    try {
+      await login(username.trim(), password)
+      navigate(dest, { replace: true })
+    } catch (ex) {
+      setErr(ex.status === 401 ? 'Invalid username or password, or account deactivated.' : ex.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="login-wrap">
+      <form className="login-card" onSubmit={submit}>
+        <div className="brand big" style={{ flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <img src="/logo.png" alt="CarTrends" style={{ height: 64, width: 'auto' }} />
+          <div style={{ textAlign: 'center' }}>Automation Task <small>by CarTrends</small></div>
+        </div>
+        <label>Username or email</label>
+        <input value={username} onChange={e => setUsername(e.target.value)} autoFocus autoComplete="username" />
+        <label>Password</label>
+        <div style={{ position: 'relative' }}>
+          <input type={show ? 'text' : 'password'} value={password}
+            onChange={e => setPassword(e.target.value)} autoComplete="current-password"
+            style={{ width: '100%', paddingRight: 42 }} />
+          <button type="button" tabIndex={-1}
+            title={show ? 'Hide password' : 'Show password'}
+            aria-label={show ? 'Hide password' : 'Show password'}
+            onClick={() => setShow(v => !v)}
+            style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              fontSize: 17, lineHeight: 1, padding: '4px 6px', color: '#66716c',
+            }}>
+            {show ? '🙈' : '👁'}
+          </button>
+        </div>
+        {err && <div className="err">{err}</div>}
+        <button className="btn btn-primary" disabled={busy || !username || !password}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+        <p className="fine">Internal system — accounts are created by an administrator.</p>
+        <p className="fine"><a href="/install">📱 Get the mobile app</a></p>
+      </form>
+    </div>
+  )
+}

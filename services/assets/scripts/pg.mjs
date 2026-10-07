@@ -1,0 +1,100 @@
+// Local PostgreSQL helpers: runs a real PostgreSQL server from npm (embedded-postgres),
+// so nothing needs to be installed. Set DATABASE_URL to use your own server instead.
+import EmbeddedPostgres from 'embedded-postgres';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import pg from 'pg';
+
+export const ROOT = path.resolve(import.meta.dirname, '..');
+export const PG_PORT = Number(process.env.PG_PORT ?? 5433);
+export const localUrl = (db) => `postgres://postgres:postgres@localhost:${PG_PORT}/${db}`;
+
+async function canConnect() {
+  const client = new pg.Client({ connectionString: localUrl('postgres'), connectionTimeoutMillis: 1500 });
+  try {
+    await client.connect();
+    await client.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Starts the bundled PostgreSQL (data in ./.data/pg), or reuses one already listening. */
+export async function startPostgres() {
+  if (process.env.DATABASE_URL) return { external: true, stop: async () => {} };
+  if (await canConnect()) return { external: true, stop: async () => {} };
+
+  const dir = path.join(ROOT, '.data', 'pg');
+  const server = new EmbeddedPostgres({
+    databaseDir: dir,
+    user: 'postgres',
+    password: 'postgres',
+    port: PG_PORT,
+    persistent: true,
+    // UTF-8 regardless of the OS code page (Windows defaults to WIN1252).
+    initdbFlags: ['--encoding=UTF8', '--locale=C', '--lc-messages=C'],
+    onLog: () => {},
+    onError: (msg) => {
+      const text = String(msg).trim();
+      if (/\b(ERROR|FATAL|PANIC)\b/.test(text)) console.error(`[postgres] ${text}`);
+    },
+  });
+  if (!fs.existsSync(path.join(dir, 'PG_VERSION'))) {
+    console.log('• First run: initialising the local PostgreSQL database…');
+    await server.initialise();
+  }
+  await server.start();
+  return { external: false, stop: () => server.stop() };
+}
+
+export async function ensureDatabase(name, { recreate = false } = {}) {
+  if (process.env.DATABASE_URL) return;
+  const client = new pg.Client({ connectionString: localUrl('postgres') });
+  await client.connect();
+  try {
+    if (recreate) await client.query(`drop database if exists "${name}" with (force)`);
+    const exists = await client.query('select 1 from pg_database where datname = $1', [name]);
+    if (!exists.rowCount) await client.query(`create database "${name}" encoding 'UTF8' template template0`);
+  } finally {
+    await client.end();
+  }
+}
+
+/** Runs a node script / binary from the repo and resolves when it exits successfully. */
+export function run(args, { env = {}, cwd = ROOT } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, args, { cwd, stdio: 'inherit', env: { ...process.env, ...env } });
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${args.join(' ')} exited with ${code}`))));
+  });
+}
+
+export const TSC = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+export const VITE = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
+export const API_DIST = path.join(ROOT, 'apps', 'api', 'dist');
+
+/** This PC's address on the local network (e.g. 192.168.1.20), so phones can open QR links. */
+export function lanAddress() {
+  const candidates = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.family !== 'IPv4' || a.internal) continue;
+      // Skip virtual adapters (WSL, Hyper-V, VirtualBox, VPNs) when a real one exists.
+      const virtual = /vethernet|virtual|vmware|vbox|wsl|docker|tailscale|zerotier|hamachi/i.test(name);
+      candidates.push({ address: a.address, score: (virtual ? 0 : 2) + (/^192\.168\.|^10\./.test(a.address) ? 1 : 0) });
+    }
+  }
+  candidates.sort((x, y) => y.score - x.score);
+  return candidates[0]?.address ?? null;
+}
+
+/** Base URL printed into QR codes. PUBLIC_URL wins; otherwise the LAN address. */
+export function publicUrl(port) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, '');
+  // Render (and similar hosts) give the public https address; QR codes must point there.
+  if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, '');
+  const ip = lanAddress();
+  return ip ? `http://${ip}:${port}` : null;
+}

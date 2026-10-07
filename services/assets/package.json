@@ -1,0 +1,26 @@
+{
+  "name": "asset-management-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise Asset Management Portal",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build -w @eam/shared && npm run build -w @eam/api && npm run build -w @eam/web",
+    "start": "node scripts/start.mjs",
+    "test": "node scripts/test.mjs",
+    "db:reset": "node scripts/db-reset.mjs",
+    "db:generate": "npm run db:generate -w @eam/api",
+    "typecheck": "npm run build -w @eam/shared && npm run typecheck -w @eam/api && npm run typecheck -w @eam/web"
+  },
+  "devDependencies": {
+    "embedded-postgres": "17.10.0-beta.17",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
