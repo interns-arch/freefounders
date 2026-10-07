@@ -30,11 +30,11 @@ function AppSwitcher() {
   const mine = APP_LINKS.filter(a => tokenApps().includes(a.app))
   if (mine.length < 2) return null
   return (
-    <nav className="app-switch" aria-label="Switch app">
+    <div role="navigation" className="app-switch" aria-label="Switch app">
       {mine.map(a => a.app === 'tasks'
         ? <span key={a.app} className="on" aria-current="page">{a.name}</span>
         : <a key={a.app} href={a.href}>{a.name}</a>)}
-    </nav>
+    </div>
   )
 }
 

@@ -5,7 +5,8 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "e2e": "npm --prefix e2e test"
   },
   "engines": {
     "node": ">=22"
