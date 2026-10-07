@@ -308,3 +308,119 @@ Each phase ends with: all tests green, deployed to staging, founder sign-off.
 2. Does CarTrends keep using the current EC2 app until Phase 2 is done? (Recommended: yes, no disruption.)
 3. Where is Assets used live today, and by whom? (Render? same CarTrends staff?)
 4. Payroll: switched on for CarTrends only, or hidden for everyone at launch?
+
+---
+
+## 13. Phase 1 design: Platform + single login (DRAFT, awaiting founder approval)
+
+Based on a survey of both apps' login code (2026-10-07). Goal: one login for Tasks and Assets
+**without changing any existing behaviour**. All 659 Tasks tests and 44 Assets tests must stay
+green, unchanged.
+
+### 13.1 What exists today
+| | Tasks (Django) | Assets (NestJS) |
+|---|---|---|
+| Login with | username or email | email, username or employee code |
+| Credential | SimpleJWT HS256, access 8 h, refresh 365 d (rotating), in `localStorage` | `eam_session` httpOnly cookie, 7 d sliding, sessions table |
+| Passwords | Django PBKDF2 | argon2id, lockout 5 tries / 15 min |
+| Roles | 20 hard-coded roles to a capability dict | DB roles with 24 permissions, one per user |
+| "Me" | `/api/auth/me`, gives `capabilities[]` | `/api/auth/me`, gives `permissions[]` |
+
+### 13.2 New pieces
+```
+services/platform   NestJS 11 + Drizzle + Postgres (same stack/tooling as Assets; auth code ported from it)
+apps/portal         small React + Vite app: login page, "Choose your workspace", change password
+infra/gateway       one origin for everything (dev: Node proxy; prod: Caddy)
+```
+**One origin, path-routed.** Avoids CORS and third-party cookies, and both apps' web code already
+calls relative `/api/...`:
+```
+/                  → portal (login, app chooser)
+/api/platform/*    → Platform API
+/tasks/*           → Tasks web     /tasks/api/*  → Django (prefix stripped)
+/assets/*          → Assets web    /assets/api/* → NestJS (prefix stripped)
+```
+
+### 13.3 Platform data (schema `platform`)
+- **companies**: id, name, code, enabled_apps[] (`tasks`, `assets`), status. Billing columns come in Phase 8.
+- **people**: id, company_id, full_name, employee_code, email, mobile, status (active/inactive), timestamps.
+- **logins**: person_id (1:1, optional), username, password_hash (argon2id), failed_logins, locked_until, last_login_at, must_change_password. **No reversible password copy, ever.**
+- **person_apps**: person_id, app, local_user_id (the user's id inside Tasks/Assets), granted_at. "Can this person open this app?"
+- **refresh_sessions**: sha256(token), person_id, expires_at, last_seen_at, ip, user_agent, client (web/mobile), revoked_at.
+- **signing_keys**: Ed25519 key pairs (`kid`, public key, encrypted private key, active), for rotation.
+
+### 13.4 Tokens
+- **Access token**: JWT, **EdDSA (Ed25519)**, 15 min. Claims: `sub` = person_id, `cid` = company_id,
+  `apps` = {tasks: local_user_id, assets: local_user_id}, `kid`, `iss` = freefounders-platform,
+  `aud` = freefounders.
+- **Refresh token**: random 32 bytes; only its hash is stored. Rotated on each use. Reusing an old one
+  revokes the whole session. Web: httpOnly `ff_refresh` cookie (path `/api/platform/auth`, SameSite=Lax,
+  Secure). Mobile (Phase 7): returned in the body, kept in secure storage.
+- **Stay signed in**: refresh session slides; it expires after **90 days unused** (Tasks today: 365 d).
+- Public keys are published at `/api/platform/.well-known/jwks.json`. Tasks and Assets fetch and cache them,
+  with no DB call per request.
+- **Logout** revokes the session. Password change, deactivation or removing app access revokes all
+  of that person's sessions; access tokens die within 15 min.
+
+### 13.5 Platform API
+```
+POST /auth/login            {login, password}       login = email | username | employee code
+POST /auth/refresh                                  cookie → new access token (+ rotated cookie)
+POST /auth/logout
+GET  /auth/me                                       person, company, apps the person can open
+POST /auth/change-password
+GET  /.well-known/jwks.json
+Admin (company admin, Phase-1 permission: platform.users.manage):
+GET/POST/PATCH /people      list/create/edit/deactivate people, set/reset login
+PUT  /people/:id/apps       grant/revoke Tasks/Assets → calls that app's provision endpoint
+```
+Lockout 5 / 15 min, timing-safe unknown-user check, `X-Requested-With` CSRF header (same rules as Assets).
+
+### 13.6 How Tasks accepts it (Django)
+1. `accounts.User` gets `platform_person_id` (UUID, nullable, unique). This is an additive migration.
+2. New `accounts/platform_auth.py`: `PlatformJWTAuthentication` verifies EdDSA against cached JWKS,
+   reads `apps.tasks`, loads that local User, and **still rejects `is_active=False`**. It is listed *before*
+   SimpleJWT in `DEFAULT_AUTHENTICATION_CLASSES`; SimpleJWT stays, so all existing tests and the
+   legacy login keep working.
+3. Roles and capabilities stay local and unchanged in Phase 1 (dynamic roles = Phase 3).
+4. `POST /api/internal/provision` (service token signed by Platform, `aud=tasks-internal`): find by
+   platform_person_id, then email, then username; otherwise create a user (default role chosen by admin).
+   Returns the local user id.
+5. Web (`frontend/src/api.js`): when `PLATFORM_LOGIN` is on, the access token comes from
+   `/api/platform/auth/refresh` (kept in memory, not localStorage), and the 401 retry calls the Platform. The login page
+   redirects to the portal. With the flag off, behaviour is exactly as today.
+
+### 13.7 How Assets accepts it (NestJS)
+1. `users.platform_person_id` (uuid, unique, nullable): new Drizzle migration.
+2. `AuthService.resolve()` also accepts `Authorization: Bearer <platform JWT>`: verify, then load
+   `apps.assets` user, then build the same `Actor` from its role permissions. Cookie sessions keep working.
+3. `POST /api/internal/provision` (same scheme): match by platform_person_id, employee code, email, username;
+   otherwise create a user (and, as today, a staff employee when needed).
+4. Web (`lib/api.ts`): same in-memory access-token + refresh pattern behind `PLATFORM_LOGIN`.
+
+### 13.8 Portal + app chooser + switcher
+- Login, then `GET /auth/me`. One app opens it directly. Two apps show "Choose your workspace"
+  (☐ remember my choice, per device).
+- Header switcher `[Tasks ⇄ Assets]`: a small component added to both apps' headers, shown when
+  the token lists both apps. Switching is a plain link; no second login.
+- Branding: "FreeFounders" placeholder until logo/colours are chosen.
+
+### 13.9 Tests (Phase 1 is done when all are green in CI)
+- Platform: integration tests for login (all 3 identifiers), lockout, refresh rotation + reuse
+  detection, logout/revocation, change password, JWKS, people + app grant/provision.
+- Tasks: new tests for `PlatformJWTAuthentication` (valid, expired, wrong key, wrong audience,
+  inactive user, unlinked person) + provision. **Existing 659 untouched.**
+- Assets: same set for the Bearer path + provision. **Existing 44 untouched.**
+- End-to-end smoke (through the gateway): log in once, open Tasks, open Assets, switch back,
+  log out (both apps now refuse), deactivate (refused within 15 min).
+
+### 13.10 Out of scope for Phase 1 (later phases)
+Multi-company isolation/RLS and CarTrends data migration (Phase 2) · unified roles (Phase 3) ·
+removing the Assets password vault (Phase 2) · mobile OTP · billing · new UI design (Phase 6).
+
+### 13.11 Build order
+1. Platform service scaffold + data + auth API + tests + CI job
+2. Tasks: person link, auth class, provision, tests
+3. Assets: person link, Bearer path, provision, tests
+4. Gateway + portal (login, chooser) + both web apps behind `PLATFORM_LOGIN` + switcher
+5. End-to-end smoke test, `CLAUDE.md` updated, founder demo + sign-off
