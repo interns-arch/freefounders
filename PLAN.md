@@ -311,7 +311,7 @@ Each phase ends with: all tests green, deployed to staging, founder sign-off.
 
 ---
 
-## 13. Phase 1 design: Platform + single login (DRAFT, awaiting founder approval)
+## 13. Phase 1 design: Platform + single login (APPROVED 2026-10-07)
 
 Based on a survey of both apps' login code (2026-10-07). Goal: one login for Tasks and Assets
 **without changing any existing behaviour**. All 659 Tasks tests and 44 Assets tests must stay
@@ -356,7 +356,7 @@ calls relative `/api/...`:
 - **Refresh token**: random 32 bytes; only its hash is stored. Rotated on each use. Reusing an old one
   revokes the whole session. Web: httpOnly `ff_refresh` cookie (path `/api/platform/auth`, SameSite=Lax,
   Secure). Mobile (Phase 7): returned in the body, kept in secure storage.
-- **Stay signed in**: refresh session slides; it expires after **90 days unused** (Tasks today: 365 d).
+- **Stay signed in**: refresh session slides; it expires after **1 year unused** (same as Tasks today; founder decision).
 - Public keys are published at `/api/platform/.well-known/jwks.json`. Tasks and Assets fetch and cache them,
   with no DB call per request.
 - **Logout** revokes the session. Password change, deactivation or removing app access revokes all
