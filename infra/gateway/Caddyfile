@@ -1,0 +1,38 @@
+# DRAFT: verified when the staging environment exists (needs the AWS account). Dev uses dev-gateway.mjs.
+# Production gateway (Caddy): the same path routing as dev-gateway.mjs, with automatic HTTPS.
+# Each app is built for its sub-path (VITE_PLATFORM_LOGIN=true VITE_BASE=/tasks/ or /assets/).
+# Upstream host names are the docker-compose service names; adjust for your deployment.
+{$FF_DOMAIN:app.freefounders.local} {
+	encode gzip
+
+	# Platform API (path kept: it is mounted at /api/platform).
+	handle /api/platform/* {
+		reverse_proxy platform:4000
+	}
+
+	# Tasks: API and uploads go to Django; the web build is served by Django too.
+	handle_path /tasks/api/* {
+		rewrite * /api{uri}
+		reverse_proxy tasks:8000
+	}
+	handle /media/* {
+		reverse_proxy tasks:8000
+	}
+	handle_path /tasks/* {
+		reverse_proxy tasks:8000
+	}
+	redir /tasks /tasks/
+
+	# Assets: the NestJS server serves both its API and its web build.
+	handle_path /assets/* {
+		reverse_proxy assets:3000
+	}
+	redir /assets /assets/
+
+	# Portal (static build of apps/portal).
+	handle {
+		root * /srv/portal
+		try_files {path} /index.html
+		file_server
+	}
+}

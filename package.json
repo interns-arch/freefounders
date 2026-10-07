@@ -1,0 +1,13 @@
+{
+  "name": "freefounders",
+  "private": true,
+  "description": "FreeFounders: one login for Tasks and Assets",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
