@@ -188,6 +188,8 @@ export const users = pgTable('users', {
   passwordSaved: text('password_saved'),
   passwordSavedAt: timestamp('password_saved_at', { withTimezone: true }),
   passwordSavedByName: text('password_saved_by_name'),
+  /** The FreeFounders Platform person this login belongs to (set by /internal/provision). */
+  platformPersonId: uuid('platform_person_id').unique(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`), uniqueIndex('users_email_lower_idx').on(sql`lower(${t.email})`)]);

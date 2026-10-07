@@ -8,6 +8,7 @@ import { badRequest } from '../../common/http';
 import { CredentialVault } from '../../core/credential-vault.service';
 import { DbService } from '../../db/db.service';
 import { employees, roles, sessions, users } from '../../db/schema';
+import { ACCESS_AUDIENCE, verifyPlatformToken } from './platform-token';
 
 export const SESSION_COOKIE = 'eam_session';
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -156,6 +157,32 @@ export class AuthService {
         permissions: new Set(row.permissions as Permission[]),
       },
     };
+  }
+
+  /**
+   * Builds the Actor from a FreeFounders Platform access token. The token names this app's user id
+   * (`apps.assets`); that user must be linked to the token's person and still active. Permissions come
+   * from the user's role here, exactly as for a cookie session.
+   */
+  async resolvePlatformToken(token: string): Promise<Actor | null> {
+    const claims = await verifyPlatformToken(token, ACCESS_AUDIENCE);
+    const localId = (claims?.apps as Record<string, unknown> | undefined)?.assets;
+    if (!claims || typeof localId !== 'string' || !/^[0-9a-f-]{36}$/i.test(localId) || !/^[0-9a-f-]{36}$/i.test(String(claims.sub))) return null;
+    const [row] = await this.dbs.db
+      .select({
+        userId: users.id,
+        name: users.name,
+        email: users.email,
+        employeeId: users.employeeId,
+        roleName: roles.name,
+        permissions: roles.permissions,
+      })
+      .from(users)
+      .innerJoin(roles, eq(roles.id, users.roleId))
+      .where(and(eq(users.id, localId), eq(users.platformPersonId, String(claims.sub)), eq(users.isActive, true)))
+      .limit(1);
+    if (!row) return null;
+    return { ...row, permissions: new Set(row.permissions as Permission[]) };
   }
 
   async me(actor: Actor) {

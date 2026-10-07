@@ -177,5 +177,6 @@ server log; sign in and change it (top-right menu → Change password).
 | `ADMIN_PASSWORD`| generated                | Optional; otherwise printed once in the log      |
 | `COOKIE_SECURE` | `true` in production     | Set `false` only when not behind HTTPS           |
 | `UPLOAD_DIR`    | `./.data/uploads`        | Handover / return photos — include in backups    |
+| `PLATFORM_JWKS_URL` | blank (off)          | FreeFounders single login: the Platform's public keys, e.g. `http://localhost:4000/api/platform/.well-known/jwks.json` |
 
 Seeding only runs on an empty database, so restarts never touch existing data.
