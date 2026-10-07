@@ -424,3 +424,25 @@ removing the Assets password vault (Phase 2) · mobile OTP · billing · new UI 
 3. Assets: person link, Bearer path, provision, tests
 4. Gateway + portal (login, chooser) + both web apps behind `PLATFORM_LOGIN` + switcher
 5. End-to-end smoke test, `CLAUDE.md` updated, founder demo + sign-off
+
+### 13.12 Status (2026-10-07): built, tested, awaiting founder demo + sign-off
+| Check | Result |
+|---|---|
+| Platform integration tests | 26 pass |
+| Tasks tests | 672 pass (659 original, unchanged, plus 13 new) |
+| Assets tests | 58 pass (44 original, unchanged, plus 14 new) |
+| End-to-end API smoke (`npm run smoke`) | 9 / 9 against the running suite |
+| Browser tests (`npm run e2e`) | 3 / 3: sign in once, chooser, Tasks ⇄ Assets, sign out, return-to-app, People & access |
+
+Differences from the design above (deliberate):
+- **Assets exchanges the token for a cookie.** Its pages load photos with plain `<img>` tags, which cannot
+  send a token. So `POST /api/auth/platform-session` turns a Platform token into an ordinary Assets session
+  that ends with the token (15 min) and is never extended. Tasks uses the token directly.
+- **Role lists come from each app.** `GET /api/internal/roles` in Tasks and Assets, relayed by the Platform's
+  `GET /apps/:app/roles`, so the portal never hard-codes another app's roles (rule §6.4).
+- **People & access lives in the portal** for now (the new web app in Phase 6 takes it over).
+- **Production gateway is a draft** (`infra/gateway/Caddyfile`). It gets verified when staging exists (needs AWS).
+
+Follow-ups noted for later phases: expired Assets session rows are not cleaned up yet; the CarTrends
+rollout (linking existing people to Platform people) belongs to Phase 2's migration; mobile (Phase 7) will use
+the `client: mobile` login, which already returns the refresh token in the body.
