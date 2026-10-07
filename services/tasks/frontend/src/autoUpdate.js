@@ -18,9 +18,11 @@ export function busy() {
   return !!document.querySelector('.modal')          // a form or confirmation is open
 }
 
+import { withBase } from './platform'
+
 async function latestBuild() {
   try {
-    const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' })
+    const res = await fetch(withBase(`/version.json?t=${Date.now()}`), { cache: 'no-store' })
     if (!res.ok) return null
     return (await res.json()).build || null
   } catch { return null }                             // offline: try again later

@@ -3,6 +3,7 @@ import { api, errorText, tokens } from '../api'
 import { useAuth } from '../auth'
 import FormRenderer from './FormRenderer'
 import { useDepartments } from '../useDepartments'
+import { withBase } from '../platform'
 
 const fmtDT = (iso) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -360,7 +361,7 @@ function Submissions({ form, onBack }) {
   const exportCsv = async () => {
     setErr('')
     try {
-      const res = await fetch(`/api/forms/${form.id}/export/`,
+      const res = await fetch(withBase(`/api/forms/${form.id}/export/`),
         { headers: { Authorization: `Bearer ${tokens.access}` } })
       if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`)
       const blob = await res.blob()

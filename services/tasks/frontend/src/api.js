@@ -1,8 +1,11 @@
 // Minimal API client: JWT in localStorage, one automatic refresh-and-retry
 // on 401, hard logout when the refresh token itself is dead.
+// Under FreeFounders single login (platform.js) the token is the Platform's,
+// held in memory, and renewing it asks the Platform instead.
+import { PLATFORM, platformLogout, platformRefresh, platformToken, withBase } from './platform'
 
 const store = {
-  get access() { return localStorage.getItem('ct.access') },
+  get access() { return PLATFORM ? platformToken() : localStorage.getItem('ct.access') },
   get refresh() { return localStorage.getItem('ct.refresh') },
   set(tokens) {
     if (tokens.access) localStorage.setItem('ct.access', tokens.access)
@@ -16,7 +19,7 @@ export const tokens = store
 async function rawRequest(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json' }
   if (auth && store.access) headers.Authorization = `Bearer ${store.access}`
-  const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined })
+  const res = await fetch(withBase(path), { method, headers, body: body ? JSON.stringify(body) : undefined })
   return res
 }
 
@@ -31,6 +34,10 @@ export function setUnauthorizedHandler(fn) { onUnauthorized = fn }
    access token, false only when the session is really gone. */
 let refreshing = null
 function renewSession() {
+  if (PLATFORM) {
+    if (!refreshing) refreshing = platformRefresh().finally(() => { setTimeout(() => { refreshing = null }, 0) })
+    return refreshing
+  }
   if (!refreshing) {
     const used = store.refresh
     refreshing = (async () => {
@@ -47,7 +54,7 @@ function renewSession() {
 
 export async function api(path, opts = {}) {
   let res = await rawRequest(path, opts)
-  if (res.status === 401 && store.refresh && opts.auth !== false) {
+  if (res.status === 401 && (PLATFORM || store.refresh) && opts.auth !== false) {
     if (await renewSession()) {
       res = await rawRequest(path, opts)
     } else {
@@ -82,13 +89,13 @@ export function errorText(data) {
 }
 
 export async function apiUpload(path, formData) {
-  const doSend = () => fetch(path, {
+  const doSend = () => fetch(withBase(path), {
     method: 'POST',
     headers: store.access ? { Authorization: `Bearer ${store.access}` } : {},
     body: formData,
   })
   let res = await doSend()
-  if (res.status === 401 && store.refresh && await renewSession()) res = await doSend()
+  if (res.status === 401 && (PLATFORM || store.refresh) && await renewSession()) res = await doSend()
   const data = await res.json().catch(() => null)
   if (!res.ok) throw new ApiError(res.status, data)
   return data
@@ -105,6 +112,7 @@ export async function login(username, password) {
 }
 
 export async function logout() {
+  if (PLATFORM) { await platformLogout(); return }
   try { await api('/api/auth/logout', { method: 'POST', body: { refresh: store.refresh } }) } catch { /* best effort */ }
   store.clear()
 }

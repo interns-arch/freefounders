@@ -1525,3 +1525,9 @@ a.btn { display: inline-block; }
 a.stat-link { color: inherit; text-decoration: none; cursor: pointer; }
 a.stat-link:hover { border-color: var(--accent-2); box-shadow: var(--shadow-lg); }
 a.stat-link:active { transform: translateY(1px); }
+
+/* FreeFounders single login: app switcher in the sidebar */
+.app-switch { display: flex; gap: 4px; margin: 0 0 14px; padding: 3px; border-radius: 10px; background: var(--sidebar-2); }
+.app-switch a, .app-switch span { flex: 1; text-align: center; padding: 6px 8px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--sidebar-ink); text-decoration: none; }
+.app-switch a:hover { background: rgba(255,255,255,.06); }
+.app-switch .on { background: var(--accent); color: #fff; }

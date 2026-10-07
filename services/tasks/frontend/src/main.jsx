@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles.css'
 import { busy, startAutoUpdate } from './autoUpdate'
+import { withBase } from './platform'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -24,7 +25,7 @@ startAutoUpdate()
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', async () => {
     try {
-      const reg = await navigator.serviceWorker.register('/sw.js')
+      const reg = await navigator.serviceWorker.register(withBase('/sw.js'))
 
       const announce = (worker) => {
         if (worker && navigator.serviceWorker.controller) {

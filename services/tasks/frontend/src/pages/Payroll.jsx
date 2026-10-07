@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, errorText, tokens } from '../api'
 import { useAuth } from '../auth'
+import { withBase } from '../platform'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -68,7 +69,7 @@ function Runs() {
 
   const exportCsv = async (run) => {
     try {
-      const res = await fetch(`/api/payroll-runs/${run.id}/export/`, { headers: { Authorization: `Bearer ${tokens.access}` } })
+      const res = await fetch(withBase(`/api/payroll-runs/${run.id}/export/`), { headers: { Authorization: `Bearer ${tokens.access}` } })
       if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`)
       const a = document.createElement('a')
       a.href = URL.createObjectURL(await res.blob())

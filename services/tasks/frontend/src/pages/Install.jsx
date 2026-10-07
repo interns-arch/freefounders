@@ -3,6 +3,7 @@
    deploy reaches it without downloading the app again).
    iPhone  -> Safari "Add to Home Screen" (Apple does not allow APKs, and an
    App Store app needs a Mac + Apple developer account). */
+import { withBase } from '../platform'
 const APK = '/downloads/automation-task.apk'
 
 function platform() {
@@ -46,7 +47,7 @@ export default function Install() {
     <div className="public-wrap">
       <div className="public-card install-wrap">
         <div className="brand">
-          <img src="/logo.png" alt="CarTrends"
+          <img src={withBase('/logo.png')} alt="CarTrends"
             style={{ height: 34, width: 'auto', background: '#fff', borderRadius: 7, padding: '3px 6px' }} />
           <div>Automation Task<small>Get the app</small></div>
         </div>

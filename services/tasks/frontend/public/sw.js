@@ -9,8 +9,10 @@
 // update and show the in-app "Update" button.
 const VERSION = '__BUILD_VERSION__';
 const CACHE = 'cartrends-shell-' + VERSION;
-const SHELL = ['/', '/index.html', '/manifest.webmanifest',
-               '/icons/icon-192.png', '/icons/icon-512.png'];
+// '/' normally; '/tasks/' when served under the FreeFounders address.
+const BASE = new URL(self.registration.scope).pathname;
+const SHELL = ['', 'index.html', 'manifest.webmanifest',
+               'icons/icon-192.png', 'icons/icon-512.png'].map((p) => BASE + p);
 
 self.addEventListener('install', (event) => {
   // NO skipWaiting here: the new version waits until the user taps Update
@@ -37,12 +39,12 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   // Never serve business data from a cache.
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/media/')) return;
+  if (url.pathname.startsWith(BASE + 'api/') || url.pathname.startsWith('/api/') || url.pathname.startsWith('/media/')) return;
 
   // Navigations: network first, fall back to the cached shell when offline.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html'))
+      fetch(request).catch(() => caches.match(BASE + 'index.html'))
     );
     return;
   }

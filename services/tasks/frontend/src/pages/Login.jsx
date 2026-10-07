@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { withBase } from '../platform'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 
@@ -35,7 +36,7 @@ export default function Login() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="brand big" style={{ flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-          <img src="/logo.png" alt="CarTrends" style={{ height: 64, width: 'auto' }} />
+          <img src={withBase('/logo.png')} alt="CarTrends" style={{ height: 64, width: 'auto' }} />
           <div style={{ textAlign: 'center' }}>Automation Task <small>by CarTrends</small></div>
         </div>
         <label>Username or email</label>

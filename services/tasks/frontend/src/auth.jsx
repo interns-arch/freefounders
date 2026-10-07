@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { api, login as apiLogin, logout as apiLogout, setUnauthorizedHandler, tokens } from './api'
+import { PLATFORM } from './platform'
 
 const AuthCtx = createContext(null)
 export const useAuth = () => useContext(AuthCtx)
@@ -10,7 +11,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     setUnauthorizedHandler(() => setUser(null))
-    if (!tokens.access) { setReady(true); return }
+    // Single login: no token in memory yet on a fresh page; the first call fetches one.
+    if (!PLATFORM && !tokens.access) { setReady(true); return }
     api('/api/auth/me')
       .then(setUser)
       .catch(() => {})

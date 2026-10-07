@@ -15,6 +15,8 @@ const versionFile = {
 }
 
 export default defineConfig({
+  // '/tasks/' when built for the FreeFounders shared address (see src/platform.js).
+  base: process.env.VITE_BASE || '/',
   plugins: [react(), versionFile],
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   server: {

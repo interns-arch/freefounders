@@ -23,6 +23,26 @@ import HR from './pages/HR'
 import Mistakes from './pages/Mistakes'
 import Install from './pages/Install'
 import Icon, { Avatar } from './icons'
+import { APP_LINKS, BASE, PLATFORM, goToPortal, tokenApps, withBase } from './platform'
+
+/* FreeFounders single login: [Tasks ⇄ Assets], shown when the person has both. */
+function AppSwitcher() {
+  const mine = APP_LINKS.filter(a => tokenApps().includes(a.app))
+  if (mine.length < 2) return null
+  return (
+    <nav className="app-switch" aria-label="Switch app">
+      {mine.map(a => a.app === 'tasks'
+        ? <span key={a.app} className="on" aria-current="page">{a.name}</span>
+        : <a key={a.app} href={a.href}>{a.name}</a>)}
+    </nav>
+  )
+}
+
+/* Single login: signing in happens in the FreeFounders portal. */
+function PortalRedirect() {
+  useEffect(() => { goToPortal() }, [])
+  return <div className="center-note">Signing in…</div>
+}
 
 /* Page titles for the mobile top bar */
 const TITLES = {
@@ -72,10 +92,11 @@ function Shell({ children }) {
 
       <aside className="sidebar">
         <div className="brand">
-          <img src="/logo.png" alt="CarTrends"
+          <img src={withBase('/logo.png')} alt="CarTrends"
             style={{ height: 30, width: 'auto', background: '#fff', borderRadius: 6, padding: '3px 5px' }} />
           <div>Automation Task<small>CarTrends</small></div>
         </div>
+        {PLATFORM && <AppSwitcher />}
         <nav>
           <NavLink to="/" end><Icon name="dashboard" className="nav-ic" />Dashboard</NavLink>
           {can('tasks.view_all') && <NavLink to="/team"><Icon name="chart" className="nav-ic" />Team Performance</NavLink>}
@@ -103,10 +124,11 @@ function Shell({ children }) {
               <div className="who-role">{user.role_display}</div>
             </div>
           </div>
-          <button className="btn btn-ghost" onClick={() => setPwOpen(true)}>Change password</button>
+          <button className="btn btn-ghost"
+            onClick={() => (PLATFORM ? window.location.assign('/account') : setPwOpen(true))}>Change password</button>
           <button
             className="btn btn-ghost"
-            onClick={async () => { await logout(); navigate('/login') }}
+            onClick={async () => { await logout(); if (PLATFORM) window.location.assign('/'); else navigate('/login') }}
           >
             Sign out
           </button>
@@ -266,7 +288,7 @@ function Protected({ children, capability }) {
   const location = useLocation()
   if (!ready) return <div className="center-note">Loading…</div>
   // remember where they were going -- an email link must survive the login
-  if (!user) return <Navigate to="/login" replace state={{ from: location }} />
+  if (!user) return PLATFORM ? <PortalRedirect /> : <Navigate to="/login" replace state={{ from: location }} />
   if (capability && !can(capability)) return <Navigate to="/" replace />
   return <Shell>{children}</Shell>
 }
@@ -274,9 +296,9 @@ function Protected({ children, capability }) {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={BASE}>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={PLATFORM ? <PortalRedirect /> : <Login />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/install" element={<Install />} />
           <Route path="/f/:token" element={<PublicForm />} />

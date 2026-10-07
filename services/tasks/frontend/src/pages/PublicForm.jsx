@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import FormRenderer from './FormRenderer'
+import { withBase } from '../platform'
 
 /* The share-link page (/f/<token>) — works without login. */
 export default function PublicForm() {
@@ -10,7 +11,7 @@ export default function PublicForm() {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/public/forms/${token}/`)
+    fetch(withBase(`/api/public/forms/${token}/`))
       .then(async r => {
         const data = await r.json().catch(() => null)
         if (!r.ok) throw new Error(data?.detail || 'Form not found.')
