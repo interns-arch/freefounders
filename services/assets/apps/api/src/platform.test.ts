@@ -208,3 +208,13 @@ describe('provision', () => {
     assert.equal((await call('POST', '/internal/provision', await service(), { personId: randomUUID(), fullName: ' ' })).status, 400);
   });
 });
+
+describe('internal roles', () => {
+  test('lists Assets roles for the Platform only', async () => {
+    assert.equal((await call('GET', '/internal/roles')).status, 401);
+    assert.equal((await call('GET', '/internal/roles', await access(ids.person, ids.mia))).status, 401);
+    const res = await call('GET', '/internal/roles', await service());
+    assert.equal(res.status, 200);
+    assert.ok(res.body.some((r: { value: string }) => r.value === 'Manager'));
+  });
+});

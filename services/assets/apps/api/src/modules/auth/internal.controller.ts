@@ -1,7 +1,7 @@
-import { Body, ConflictException, Controller, HttpCode, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, ConflictException, Controller, Get, HttpCode, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type Actor } from '../../common/actor';
 import { type AuthedRequest, badRequest, Public, ZodPipe } from '../../common/http';
@@ -46,11 +46,24 @@ export class InternalController {
   @Post('provision')
   @HttpCode(200)
   async provision(@Req() req: AuthedRequest, @Body() raw: unknown) {
+    await this.requireService(req);
+    const input = new ZodPipe(provisionSchema).transform(raw);
+    return this.dbs.tx(() => this.findOrCreate(input));
+  }
+
+  /** Roles an admin can pick when giving someone Assets access. */
+  @Public()
+  @Get('roles')
+  async roles(@Req() req: AuthedRequest) {
+    await this.requireService(req);
+    const rows = await this.dbs.db.select({ name: roles.name, description: roles.description }).from(roles).orderBy(asc(roles.name));
+    return rows.map((r) => ({ value: r.name, label: r.name, description: r.description }));
+  }
+
+  private async requireService(req: AuthedRequest) {
     const token = bearerToken(req.headers.authorization);
     const claims = token ? await verifyPlatformToken(token, SERVICE_AUDIENCE) : null;
     if (!claims || claims.sub !== 'platform') throw new UnauthorizedException('Platform service token required');
-    const input = new ZodPipe(provisionSchema).transform(raw);
-    return this.dbs.tx(() => this.findOrCreate(input));
   }
 
   private async findOrCreate(input: ProvisionInput) {

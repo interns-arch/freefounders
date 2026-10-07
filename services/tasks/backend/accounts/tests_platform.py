@@ -153,3 +153,14 @@ class ProvisionTests(TestCase):
     def test_bad_input(self):
         self.assertEqual(self.provision(personId="not-a-uuid").status_code, 400)
         self.assertEqual(self.provision(fullName="  ").status_code, 400)
+
+
+@override_settings(PLATFORM_JWKS=JWKS)
+class InternalRolesTests(TestCase):
+    def test_lists_tasks_roles_for_the_platform_only(self):
+        c = APIClient()
+        self.assertEqual(c.get("/api/internal/roles").status_code, 401)
+        c.credentials(HTTP_AUTHORIZATION=f"Bearer {token('platform', {}, aud='tasks-internal')}")
+        res = c.get("/api/internal/roles")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn({"value": "warehouse_manager", "label": "Warehouse Manager"}, res.data)

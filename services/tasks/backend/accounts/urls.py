@@ -15,6 +15,7 @@ urlpatterns = [
     path("auth/me", views.me),
     path("auth/change-password", views.change_password),
     path("internal/provision", internal.provision),
+    path("internal/roles", internal.roles),
     path("team/", views.team_directory),
     path("roles/", views.roles),
     path("departments/", views.departments),

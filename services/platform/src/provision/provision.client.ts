@@ -24,6 +24,23 @@ export function internalUrl(app: AppKey): string | undefined {
 export class ProvisionClient {
   constructor(private readonly tokens: TokensService) {}
 
+  /** The roles an admin can choose from inside an app, e.g. [{ value: 'warehouse', label: 'Warehouse Team' }]. */
+  async roles(app: AppKey): Promise<Array<{ value: string; label: string }>> {
+    const base = internalUrl(app);
+    if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);
+    try {
+      const res = await fetch(`${base}/roles`, {
+        headers: { authorization: `Bearer ${await this.tokens.signService(app)}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = (await res.json()) as Array<{ value: string; label: string }>;
+      return rows.map((r) => ({ value: String(r.value), label: String(r.label ?? r.value) }));
+    } catch (err) {
+      throw new BadGatewayException(`Could not load ${app} roles: ${(err as Error).message}`);
+    }
+  }
+
   async provision(app: AppKey, input: ProvisionInput): Promise<string> {
     const base = internalUrl(app);
     if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);

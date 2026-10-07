@@ -114,3 +114,11 @@ def provision(request):
         {"userId": user.pk, "username": user.username, "created": created, "active": user.is_active},
         status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
     )
+
+
+@api_view(["GET"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def roles(request):
+    """Roles an admin can pick when giving someone Tasks access."""
+    return Response([{"value": value, "label": label} for value, label in Role.choices])

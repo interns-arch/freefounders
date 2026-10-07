@@ -57,6 +57,10 @@ before(async () => {
     try {
       const jwks = createRemoteJWKSet(new URL(`${base}/.well-known/jwks.json`));
       const { payload } = await jwtVerify(String(req.headers.authorization).slice(7), jwks, { audience: 'tasks-internal', issuer: 'freefounders-platform' });
+      if (req.method === 'GET' && req.url?.endsWith('/roles')) {
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{ value: 'warehouse', label: 'Warehouse Team' }]));
+        return;
+      }
       provisionCalls.push({ body: JSON.parse(raw), aud: payload.aud });
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ userId: 42 }));
     } catch {
@@ -341,5 +345,17 @@ describe('apps', () => {
     assert.equal(rows.length, 0);
     const sessions = await dbs.db.select().from(refreshSessions).where(eq(refreshSessions.personId, ids.member));
     assert.ok(sessions.length > 0);
+  });
+});
+
+describe('app information for admins', () => {
+  test('lists the company apps and the roles inside each app', async () => {
+    const admin = await login('admin@acme.test');
+    assert.deepEqual((await call('GET', '/apps', { token: admin.token })).body, [{ app: 'tasks', name: 'Tasks', path: '/tasks/' }]);
+    const roles = await call('GET', '/apps/tasks/roles', { token: admin.token });
+    assert.deepEqual(roles.body, [{ value: 'warehouse', label: 'Warehouse Team' }]);
+    assert.equal((await call('GET', '/apps/assets/roles', { token: admin.token })).status, 502, 'Assets not connected in this test');
+    const member = await login('mia');
+    assert.equal((await call('GET', '/apps', { token: member.token })).status, 403);
   });
 });
