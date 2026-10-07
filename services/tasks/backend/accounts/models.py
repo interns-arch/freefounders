@@ -127,6 +127,10 @@ class User(AbstractUser):
         default=False,
         help_text="Works on the weekly off day -- used by HR for comp-off accrual.",
     )
+    # The FreeFounders Platform person this login belongs to. Set when the
+    # Platform provisions the user; Platform tokens are only accepted for a
+    # user whose id here matches the token's subject.
+    platform_person_id = models.UUIDField(null=True, blank=True, unique=True, editable=False)
 
     @property
     def is_admin_role(self) -> bool:

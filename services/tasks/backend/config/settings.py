@@ -124,6 +124,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        # FreeFounders Platform tokens (EdDSA) first; anything else falls
+        # through to the app's own SimpleJWT login exactly as before.
+        "accounts.platform_auth.PlatformJWTAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
@@ -141,6 +144,13 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
 }
+
+# FreeFounders Platform sign-in (accounts/platform_auth.py). Blank = off.
+# PLATFORM_JWKS_URL: the Platform's public keys, e.g.
+#   http://localhost:4000/api/platform/.well-known/jwks.json
+# PLATFORM_JWKS: the same key set inline as JSON (tests, air-gapped installs).
+PLATFORM_JWKS_URL = env("PLATFORM_JWKS_URL")
+PLATFORM_JWKS = env("PLATFORM_JWKS")
 
 CORS_ALLOWED_ORIGINS = [
     o for o in env(
