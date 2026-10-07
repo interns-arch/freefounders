@@ -113,6 +113,13 @@
       "when": 1791377184213,
       "tag": "0015_platform_person",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791377486381,
+      "tag": "0016_platform_sessions",
+      "breakpoints": true
     }
   ]
 }

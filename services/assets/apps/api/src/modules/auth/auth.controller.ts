@@ -1,9 +1,10 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { changePasswordSchema, loginSchema, type LoginInput } from '@eam/shared';
 import type { Actor } from '../../common/actor';
 import { type AuthedRequest, CurrentActor, Public, ZodPipe } from '../../common/http';
 import { AuthService, SESSION_COOKIE, SESSION_TTL_MS } from './auth.service';
+import { bearerToken, platformEnabled } from './platform-token';
 
 @Controller('auth')
 export class AuthController {
@@ -26,6 +27,24 @@ export class AuthController {
       path: '/',
     });
     return { ok: true };
+  }
+
+  /** FreeFounders single login: `Authorization: Bearer <platform token>` in, short session cookie out. */
+  @Public()
+  @Post('platform-session')
+  @HttpCode(200)
+  async platformSession(@Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
+    const bearer = bearerToken(req.headers.authorization);
+    if (!bearer || !platformEnabled()) throw new UnauthorizedException('Please sign in');
+    const { token, expiresAt } = await this.auth.platformSession(bearer, { ip: req.ip, userAgent: req.headers['user-agent'] });
+    res.cookie(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE !== 'false',
+      expires: expiresAt,
+      path: '/',
+    });
+    return { ok: true, expiresAt };
   }
 
   @Public()

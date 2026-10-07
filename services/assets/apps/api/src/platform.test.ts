@@ -9,7 +9,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { exportJWK, SignJWT } from 'jose';
 import { type Permission, SYSTEM_ROLES } from '@eam/shared';
 import { DbService } from './db/db.service';
-import { employees, roles, users } from './db/schema';
+import { employees, roles, sessions, users } from './db/schema';
 import { createApp } from './main';
 import { hashPassword } from './modules/auth/auth.service';
 
@@ -112,6 +112,45 @@ describe('platform access tokens', () => {
     const token = await access(person, created.body.userId);
     assert.equal((await call('GET', '/auth/me', token)).status, 200);
     assert.equal((await call('GET', '/users', token)).status, 403);
+  });
+});
+
+describe('platform session exchange', () => {
+  async function exchange(token?: string) {
+    const res = await fetch(`${base}/auth/platform-session`, {
+      method: 'POST',
+      headers: { 'x-requested-with': 'XMLHttpRequest', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    });
+    return { status: res.status, cookie: res.headers.get('set-cookie')?.split(';')[0] };
+  }
+  const meWithCookie = async (cookie: string) =>
+    (await fetch(`${base}/auth/me`, { headers: { cookie } })).status;
+
+  test('a Platform token becomes a short session cookie that works like a normal one', async () => {
+    const { status, cookie } = await exchange(await access(ids.person, ids.mia, { ttl: 600 }));
+    assert.equal(status, 200);
+    assert.match(cookie!, /^eam_session=/);
+    assert.equal(await meWithCookie(cookie!), 200);
+    const rows = await dbs.root.select().from(sessions).where(eq(sessions.userId, ids.mia));
+    const s = rows.find((r) => r.fixedExpiry)!;
+    assert.ok(s.expiresAt.getTime() <= Date.now() + 600_000 + 1000, 'ends with the token');
+  });
+
+  test('it is never extended, and stops working when it ends', async () => {
+    const { cookie } = await exchange(await access(ids.person, ids.mia));
+    await dbs.root.update(sessions).set({ lastSeenAt: new Date(Date.now() - 3 * 3600_000) }).where(eq(sessions.fixedExpiry, true));
+    const [before] = await dbs.root.select().from(sessions).where(eq(sessions.fixedExpiry, true)).limit(1);
+    assert.equal(await meWithCookie(cookie!), 200);
+    const [afterUse] = await dbs.root.select().from(sessions).where(eq(sessions.id, before.id));
+    assert.equal(afterUse.expiresAt.getTime(), before.expiresAt.getTime(), 'not slid forward');
+    await dbs.root.update(sessions).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(sessions.fixedExpiry, true));
+    assert.equal(await meWithCookie(cookie!), 401);
+  });
+
+  test('bad or missing tokens get no session', async () => {
+    assert.equal((await exchange()).status, 401);
+    assert.equal((await exchange(await access(ids.person, ids.mia, { signer: forger }))).status, 401);
+    assert.equal((await exchange(await access(randomUUID(), ids.mia))).status, 401);
   });
 });
 

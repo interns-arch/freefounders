@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "fixed_expiry" boolean DEFAULT false NOT NULL;

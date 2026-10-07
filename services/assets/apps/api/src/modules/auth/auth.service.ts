@@ -15,6 +15,8 @@ export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RENEW_AFTER_MS = 60 * 60 * 1000;
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MS = 15 * 60 * 1000;
+/** Upper bound for a session made from a Platform token (Platform access tokens live 15 minutes). */
+const PLATFORM_SESSION_MAX_MS = 15 * 60 * 1000;
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
@@ -126,6 +128,7 @@ export class AuthService {
       .select({
         sessionId: sessions.id,
         lastSeenAt: sessions.lastSeenAt,
+        fixedExpiry: sessions.fixedExpiry,
         userId: users.id,
         name: users.name,
         email: users.email,
@@ -140,7 +143,7 @@ export class AuthService {
       .limit(1);
     if (!row) return null;
 
-    if (Date.now() - row.lastSeenAt.getTime() > RENEW_AFTER_MS) {
+    if (!row.fixedExpiry && Date.now() - row.lastSeenAt.getTime() > RENEW_AFTER_MS) {
       await db
         .update(sessions)
         .set({ lastSeenAt: new Date(), expiresAt: new Date(Date.now() + SESSION_TTL_MS) })
@@ -165,6 +168,10 @@ export class AuthService {
    * from the user's role here, exactly as for a cookie session.
    */
   async resolvePlatformToken(token: string): Promise<Actor | null> {
+    return (await this.platformUser(token))?.actor ?? null;
+  }
+
+  private async platformUser(token: string): Promise<{ actor: Actor; expiresAt: Date } | null> {
     const claims = await verifyPlatformToken(token, ACCESS_AUDIENCE);
     const localId = (claims?.apps as Record<string, unknown> | undefined)?.assets;
     if (!claims || typeof localId !== 'string' || !/^[0-9a-f-]{36}$/i.test(localId) || !/^[0-9a-f-]{36}$/i.test(String(claims.sub))) return null;
@@ -182,7 +189,29 @@ export class AuthService {
       .where(and(eq(users.id, localId), eq(users.platformPersonId, String(claims.sub)), eq(users.isActive, true)))
       .limit(1);
     if (!row) return null;
-    return { ...row, permissions: new Set(row.permissions as Permission[]) };
+    return { actor: { ...row, permissions: new Set(row.permissions as Permission[]) }, expiresAt: new Date((claims.exp ?? 0) * 1000) };
+  }
+
+  /**
+   * Exchanges a Platform access token for an ordinary session cookie, so the web app (photos, downloads,
+   * everything) works unchanged. The session ends when the token would have and is never extended: the
+   * web app exchanges a fresh token, and once the Platform session is gone (sign-out, deactivation) so is this.
+   */
+  async platformSession(token: string, meta: { ip?: string; userAgent?: string }) {
+    const found = await this.platformUser(token);
+    if (!found) throw new UnauthorizedException('Please sign in');
+    const sessionToken = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Math.min(found.expiresAt.getTime(), Date.now() + PLATFORM_SESSION_MAX_MS));
+    await this.dbs.db.insert(sessions).values({
+      id: sha256(sessionToken),
+      userId: found.actor.userId!,
+      expiresAt,
+      fixedExpiry: true,
+      ip: meta.ip ?? null,
+      userAgent: meta.userAgent?.slice(0, 300) ?? null,
+    });
+    await this.dbs.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, found.actor.userId!));
+    return { token: sessionToken, expiresAt };
   }
 
   async me(actor: Actor) {
