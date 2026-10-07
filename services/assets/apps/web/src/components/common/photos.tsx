@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { api } from '@/lib/api';
+import { withBase } from '@/lib/platform';
 import type { AllocationPhoto } from '@/lib/types';
 import { cn, formatDateTime } from '@/lib/utils';
 
@@ -36,7 +37,7 @@ export async function uploadPhotos(assetId: string, allocationId: string | null,
 
 const KIND_LABEL: Record<AllocationPhoto['kind'], string> = { ASSET: 'Asset', HANDOVER: 'Handover', RETURN: 'Return' };
 
-export const photoUrl = (p: Pick<AllocationPhoto, 'assetId' | 'id'>) => `/api/assets/${p.assetId}/photos/${p.id}`;
+export const photoUrl = (p: Pick<AllocationPhoto, 'assetId' | 'id'>) => withBase(`/api/assets/${p.assetId}/photos/${p.id}`);
 
 /** Camera / gallery picker with previews. On phones the file input offers "Take photo". */
 export function PhotoPicker({ files, onChange, hint }: { files: File[]; onChange: (files: File[]) => void; hint?: string }) {

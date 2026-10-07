@@ -28,6 +28,7 @@ import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useHotkeys, useScannerInput } from '@/lib/hotkeys';
 import { useCompanyName } from '@/lib/config';
+import { APP_LINKS, PLATFORM, platformApps, withBase } from '@/lib/platform';
 import { resolveCode } from '@/lib/scan';
 import { cn } from '@/lib/utils';
 import { CommandPalette } from './command-palette';
@@ -53,12 +54,37 @@ function Brand() {
   const company = useCompanyName();
   return (
     <div className="flex items-center gap-2 px-1">
-      <img src="/logo.webp" alt={company.full ?? 'Car Trends'} className="h-11 w-auto shrink-0" />
+      <img src={withBase('/logo.webp')} alt={company.full ?? 'Car Trends'} className="h-11 w-auto shrink-0" />
       <span className="min-w-0 border-l pl-2 leading-tight">
         <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Asset</span>
         <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Portal</span>
       </span>
     </div>
+  );
+}
+
+/** FreeFounders single login: [Tasks | Assets], shown when the person has both. */
+function AppSwitcher() {
+  const [apps, setApps] = useState<string[]>([]);
+  useEffect(() => {
+    void platformApps().then(setApps);
+  }, []);
+  const mine = APP_LINKS.filter((a) => apps.includes(a.app));
+  if (mine.length < 2) return null;
+  return (
+    <nav aria-label="Switch app" className="mr-1 hidden items-center gap-0.5 rounded-lg bg-muted p-0.5 text-xs font-medium sm:flex">
+      {mine.map((a) =>
+        a.app === 'assets' ? (
+          <span key={a.app} aria-current="page" className="rounded-md bg-primary px-2.5 py-1 text-primary-foreground">
+            {a.name}
+          </span>
+        ) : (
+          <a key={a.app} href={a.href} className="rounded-md px-2.5 py-1 text-muted-foreground hover:bg-background hover:text-foreground">
+            {a.name}
+          </a>
+        ),
+      )}
+    </nav>
   );
 }
 
@@ -290,6 +316,7 @@ export function AppShell() {
             <Button variant="ghost" size="icon-sm" className={cn('hidden', can('asset:view', 'employee:view') && 'sm:inline-flex')} onClick={() => navigate('/scan')} aria-label="Scan QR or barcode" title="Scan">
               <ScanLine />
             </Button>
+            {PLATFORM && <AppSwitcher />}
             <NotificationBell />
             <Button variant="ghost" size="icon-sm" className="hidden sm:inline-flex" onClick={theme.toggle} aria-label="Toggle dark mode" title="Theme">
               {theme.dark ? <Sun /> : <Moon />}
@@ -314,7 +341,7 @@ export function AppShell() {
                     <QrCode /> My QR & profile
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onSelect={() => setPwd(true)}>
+                <DropdownMenuItem onSelect={() => (PLATFORM ? window.location.assign('/account') : setPwd(true))}>
                   <KeyRound /> Change password
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={theme.toggle}>
@@ -327,7 +354,8 @@ export function AppShell() {
                 <DropdownMenuItem
                   onSelect={async () => {
                     await logout();
-                    navigate('/login', { replace: true });
+                    if (PLATFORM) window.location.assign('/');
+                    else navigate('/login', { replace: true });
                   }}
                 >
                   <LogOut /> Sign out

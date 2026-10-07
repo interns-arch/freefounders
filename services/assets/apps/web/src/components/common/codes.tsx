@@ -2,6 +2,7 @@ import JsBarcode from 'jsbarcode';
 import QRCodeLib from 'qrcode';
 import { useEffect, useRef, useState } from 'react';
 import { useAppConfig } from '@/lib/config';
+import { BASE } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 
 /**
@@ -11,7 +12,8 @@ import { cn } from '@/lib/utils';
  */
 export function useQrLinks() {
   const q = useAppConfig();
-  const base = q.data?.publicUrl || window.location.origin;
+  // Under the FreeFounders address the app lives at /assets/.
+  const base = (q.data?.publicUrl || window.location.origin) + BASE.replace(/\/$/, '');
   const host = new URL(base).hostname;
   return {
     ready: !q.isLoading,

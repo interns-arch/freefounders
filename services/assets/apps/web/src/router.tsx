@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { createBrowserRouter, isRouteErrorResponse, Link, Navigate, Outlet, useLocation, useRouteError } from 'react-router';
 import { ConfirmProvider } from '@/components/common/confirm';
 import { AppShell } from '@/components/layout/app-shell';
@@ -7,6 +7,7 @@ import { MAIN_NAV, navVisible } from '@/components/layout/nav';
 import { Button } from '@/components/ui/button';
 import { QuickAddProvider } from '@/features/quick-add/quick-add';
 import { useAuth } from '@/lib/auth';
+import { BASE, goToPortal, PLATFORM } from '@/lib/platform';
 
 const LoginPage = lazy(() => import('@/features/auth/login-page'));
 const DashboardPage = lazy(() => import('@/features/dashboard/dashboard-page'));
@@ -62,10 +63,17 @@ function Root() {
   );
 }
 
+/** Single login: signing in happens in the FreeFounders portal. */
+function PortalRedirect() {
+  useEffect(() => goToPortal(), []);
+  return <Splash />;
+}
+
 function RequireAuth() {
   const { me, loading } = useAuth();
   const location = useLocation();
   if (loading) return <Splash />;
+  if (!me && PLATFORM) return <PortalRedirect />;
   if (!me) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   return <AppShell />;
 }
@@ -95,7 +103,7 @@ export const router = createBrowserRouter([
     element: <Root />,
     errorElement: <RouteError />,
     children: [
-      { path: '/login', element: <LoginPage /> },
+      { path: '/login', element: PLATFORM ? <PortalRedirect /> : <LoginPage /> },
       {
         element: <RequireAuth />,
         errorElement: <RouteError />,
@@ -133,4 +141,4 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+], { basename: BASE });

@@ -1,3 +1,5 @@
+import { ensurePlatformSession, PLATFORM, withBase } from './platform';
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -12,7 +14,7 @@ export class ApiError extends Error {
 type Query = Record<string, string | number | boolean | null | undefined | string[]>;
 
 function buildUrl(path: string, query?: Query): string {
-  const url = `/api${path}`;
+  const url = withBase(`/api${path}`);
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) {
@@ -26,7 +28,7 @@ function buildUrl(path: string, query?: Query): string {
 /** Fired when the session has expired so the app can send the user to sign in. */
 export const UNAUTHORIZED_EVENT = 'eam:unauthorized';
 
-async function request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, query?: Query, retried = false): Promise<T> {
   let res: Response;
   try {
     res = await fetch(buildUrl(path, query), {
@@ -45,6 +47,10 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
   const text = await res.text();
   const data = text ? safeJson(text) : null;
   if (!res.ok) {
+    // Single login: the short session made from the Platform sign-in ran out; make a new one and retry once.
+    if (res.status === 401 && PLATFORM && !retried && (await ensurePlatformSession())) {
+      return request<T>(method, path, body, query, true);
+    }
     if (res.status === 401 && path !== '/auth/login' && path !== '/auth/me') {
       window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }

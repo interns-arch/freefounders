@@ -1,4 +1,5 @@
 import { loginSchema } from '@eam/shared';
+import { withBase } from '@/lib/platform';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Boxes, LogOut, ScanLine, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
@@ -51,7 +52,7 @@ export default function LoginPage() {
         <div className="absolute -top-24 -right-24 size-96 rounded-full bg-red-600/25 blur-3xl" />
         <div className="absolute -bottom-32 -left-16 size-96 rounded-full bg-zinc-500/15 blur-3xl" />
         <div className="relative">
-          <img src="/logo.webp" alt={company.full ?? 'Car Trends'} className="h-auto w-full max-w-md drop-shadow-[0_8px_24px_rgba(220,38,38,0.25)]" />
+          <img src={withBase('/logo.webp')} alt={company.full ?? 'Car Trends'} className="h-auto w-full max-w-md drop-shadow-[0_8px_24px_rgba(220,38,38,0.25)]" />
           <p className="mt-4 text-sm font-medium tracking-wide text-zinc-300">
             {company.full ?? 'Asset Portal'}
             {company.full && <span className="text-zinc-500"> · Asset Portal</span>}
@@ -81,7 +82,7 @@ export default function LoginPage() {
       <div className="flex min-w-0 items-center justify-center p-6 sm:p-10">
         <div className="w-full min-w-0 max-w-sm">
           <div className="mb-8 lg:hidden">
-            <img src="/logo.webp" alt={company.full ?? 'Car Trends'} className="mx-auto h-auto w-full max-w-64" />
+            <img src={withBase('/logo.webp')} alt={company.full ?? 'Car Trends'} className="mx-auto h-auto w-full max-w-64" />
             <p className="mt-2 text-center text-xs text-muted-foreground">{company.full ? `${company.full} · Asset Portal` : 'Asset Portal'}</p>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>

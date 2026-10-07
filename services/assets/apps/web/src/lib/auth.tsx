@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo } from 'react';
 import type { Permission } from '@eam/shared';
 import { api, ApiError, UNAUTHORIZED_EVENT } from './api';
+import { PLATFORM, platformLogout } from './platform';
 import type { Me } from './types';
 
 interface AuthState {
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await api.post('/auth/logout').catch(() => {});
+    if (PLATFORM) await platformLogout();
     await qc.cancelQueries();
     // Update "me" through its live observer first (clear() would detach it and leave the old user
     // on screen), then drop everything else this user loaded.
