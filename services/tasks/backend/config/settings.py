@@ -26,6 +26,9 @@ if TESTING:
     for flag in ("AI_ENABLED", "WHATSAPP_ENABLED", "GMAIL_ENABLED"):
         os.environ[flag] = "false"
     os.environ["WHATSAPP_APP_SECRET"] = ""      # webhook tests post unsigned
+    # Full-strength PBKDF2 costs ~1.5s per hash; the suite creates hundreds
+    # of users. Tests only need a working hasher, not a slow one.
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 def env(name, default=""):
     """Env lookup where a BLANK value in .env means 'unset' -- the
