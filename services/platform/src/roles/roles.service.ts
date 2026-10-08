@@ -2,11 +2,12 @@ import { ModuleRef } from '@nestjs/core';
 import { DirectoryService } from '../people/directory.service';
 import { ConflictException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
-import { type AppKey, APPS, companies, people, personApps, personRoles, roleGrants, roles } from '../db/schema';
+import { type AppKey, APPS, companies, people, personApps, personRoles, type RoleDuty, roleGrants, roles } from '../db/schema';
 import { type AppCatalogue, internalUrl, ProvisionClient } from '../provision/provision.client';
 
 /** The two locked roles every company has. Their codes are new, so they never collide with an app's own roles. */
@@ -18,12 +19,39 @@ const grantSchema = z.object({
   permission: z.string().trim().min(1).max(60),
   scope: z.string().trim().max(20).optional().default(''),
 });
+export const dutySchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    title: z.string().trim().min(1, 'Give the duty a title').max(150),
+    description: z.string().trim().max(1000).nullable().optional(),
+    steps: z.array(z.string().trim().min(1).max(200)).max(20).optional().default([]),
+    frequency: z.enum(['daily', 'weekly', 'monthly', 'once']),
+    weekday: z.number().int().min(0).max(6).nullable().optional(),
+    monthDay: z.number().int().min(1).max(28).nullable().optional(),
+  })
+  .refine((d) => d.frequency !== 'weekly' || d.weekday != null, { message: 'Choose the day of the week', path: ['weekday'] })
+  .refine((d) => d.frequency !== 'monthly' || d.monthDay != null, { message: 'Choose the day of the month', path: ['monthDay'] });
+
+/** Keeps each duty's id (Tasks remembers what it already created by it); new duties get one. */
+function withIds(duties: z.infer<typeof dutySchema>[]): RoleDuty[] {
+  return duties.map((d) => ({
+    id: d.id ?? randomUUID(),
+    title: d.title,
+    description: d.description ?? null,
+    steps: d.steps ?? [],
+    frequency: d.frequency,
+    weekday: d.frequency === 'weekly' ? (d.weekday ?? 0) : null,
+    monthDay: d.frequency === 'monthly' ? (d.monthDay ?? 1) : null,
+  }));
+}
+
 export const roleInputSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(80),
   description: z.string().trim().max(300).nullable().optional(),
   colour: z.string().trim().max(20).nullable().optional(),
   level: z.number().int().min(1).max(3).optional().default(1),
   grants: z.array(grantSchema).max(500).optional().default([]),
+  duties: z.array(dutySchema).max(50).optional(),
 });
 export const personRolesSchema = z.object({ roleIds: z.array(z.string().uuid()).max(50) });
 export type RoleInput = z.infer<typeof roleInputSchema>;
@@ -121,6 +149,7 @@ export class RolesService {
         level: roles.level,
         system: roles.system,
         archived: roles.archived,
+        duties: roles.duties,
         people: sql<number>`(select count(*)::int from ${personRoles} pr join ${people} p on p.id = pr.person_id where pr.role_id = ${roles.id} and p.status = 'active')`,
       })
       .from(roles)
@@ -165,7 +194,7 @@ export class RolesService {
     const id = await this.dbs.db.transaction(async (tx) => {
       const [role] = await tx
         .insert(roles)
-        .values({ companyId: caller.companyId, code: await this.freeCode(caller.companyId, input.name), name: input.name, description: input.description ?? null, colour: input.colour ?? null, level: input.level })
+        .values({ companyId: caller.companyId, code: await this.freeCode(caller.companyId, input.name), name: input.name, description: input.description ?? null, colour: input.colour ?? null, level: input.level, duties: withIds(input.duties ?? []) })
         .returning({ id: roles.id });
       if (grants.length) await tx.insert(roleGrants).values(grants.map((g) => ({ roleId: role.id, ...g })));
       return role.id;
@@ -188,6 +217,7 @@ export class RolesService {
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.colour !== undefined ? { colour: input.colour } : {}),
           ...(input.level ? { level: input.level } : {}),
+          ...(input.duties ? { duties: withIds(input.duties) } : {}),
           updatedAt: new Date(),
         })
         .where(eq(roles.id, id));
@@ -217,6 +247,7 @@ export class RolesService {
       colour: role.colour,
       level: role.system ? 3 : role.level,
       grants: grants.map(({ app, permission, scope }) => ({ app: app as AppKey, permission, scope })),
+      duties: (role.duties ?? []).map(({ id: _id, ...d }) => ({ ...d, steps: d.steps ?? [] })), // the copy's duties are its own
     });
   }
 
@@ -340,6 +371,7 @@ export class RolesService {
       level: r.level,
       system: r.system,
       grants: grants.filter((g) => g.roleId === r.id).map(({ app, permission, scope }) => ({ app, permission, scope })),
+      duties: r.duties ?? [],
     }));
     const result: Record<string, string> = {};
     for (const app of (c?.apps ?? []).filter((a): a is AppKey => (APPS as readonly string[]).includes(a))) {

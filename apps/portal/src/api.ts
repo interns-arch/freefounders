@@ -131,6 +131,17 @@ export interface Grant {
   scope: string;
 }
 
+/** A responsibility of a role: Tasks creates it as a task for everyone holding the role (PLAN.md §17.3). */
+export interface Duty {
+  id?: string;
+  title: string;
+  description?: string | null;
+  steps: string[];
+  frequency: 'daily' | 'weekly' | 'monthly' | 'once';
+  weekday?: number | null;
+  monthDay?: number | null;
+}
+
 export interface Role {
   id: string;
   code: string;
@@ -142,6 +153,7 @@ export interface Role {
   archived: boolean;
   people: number;
   grants: Grant[];
+  duties?: Duty[];
 }
 
 export interface CataloguePermission {

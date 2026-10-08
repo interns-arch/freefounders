@@ -402,6 +402,8 @@ def send_followup_reminders(force=False) -> int:
     from hr.approvals import remind_and_escalate
     sent += remind_and_escalate()       # leave / corrections waiting too long (PLAN.md §17.2)
     sent += remind_task_approvals()     # change requests / completion reviews waiting too long
+    from .duties import create_duty_tasks
+    create_duty_tasks()                 # role duties due today (PLAN.md §17.3)
     send_daily_task_digest()            # date-guarded: one per person per day
     send_day_end_digest()               # date-guarded: once a day after 7 PM
     send_weekly_overdue_email()         # week-guarded: Monday (1st working day) 10 AM

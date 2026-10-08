@@ -1,0 +1,1 @@
+ALTER TABLE "platform"."roles" ADD COLUMN "duties" jsonb DEFAULT '[]'::jsonb NOT NULL;

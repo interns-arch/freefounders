@@ -6,6 +6,7 @@ which keeps the matrix auditable.
 """
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 
 class Role(models.TextChoices):
@@ -199,6 +200,8 @@ class AccessGrant(models.Model):
 class UserAccessRole(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="access_roles")
     role = models.ForeignKey(AccessRole, on_delete=models.CASCADE, related_name="members")
+    # When the person got the role: a role's joining checklist goes only to people who get it later (§17.3).
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "role"], name="user_access_role_uq")]

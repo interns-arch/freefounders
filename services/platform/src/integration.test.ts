@@ -745,3 +745,38 @@ describe('people directory (Phase 5)', () => {
     fakePeopleExport = { departments: [], people: [] };
   });
 });
+
+describe('role duties (Phase 5)', () => {
+  test('duties are saved with lasting ids, checked, and sent to the apps with the role', async () => {
+    const admin = await login('admin@acme.test');
+    const bad = await call('POST', '/roles', { token: admin.token, body: { name: 'Duty Bad', grants: [], duties: [{ title: 'Weekly sweep', frequency: 'weekly' }] } });
+    assert.equal(bad.status, 400, 'weekly needs a day');
+    const created = await call('POST', '/roles', {
+      token: admin.token,
+      body: {
+        name: 'Store Keeper',
+        grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'team' }],
+        duties: [
+          { title: 'Open the store', frequency: 'daily', steps: ['Unlock', 'Count cash'] },
+          { title: 'Stock count', frequency: 'monthly', monthDay: 25 },
+          { title: 'Read the store SOP', frequency: 'once' },
+        ],
+      },
+    });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const duties = created.body.duties as Array<{ id: string; title: string; weekday: number | null; monthDay: number | null }>;
+    assert.equal(duties.length, 3);
+    assert.ok(duties.every((d) => /^[0-9a-f-]{36}$/.test(d.id)));
+    assert.equal(duties[1].monthDay, 25);
+    const pushed = accessPushes.at(-1)!.body.roles.find((r: { id: string }) => r.id === created.body.id);
+    assert.deepEqual(pushed.duties.map((d: { title: string }) => d.title), ['Open the store', 'Stock count', 'Read the store SOP']);
+
+    // Editing keeps the ids of the duties that stay.
+    const kept = duties.slice(0, 2).map((d) => ({ ...d }));
+    const updated = await call('PATCH', `/roles/${created.body.id}`, { token: admin.token, body: { duties: kept } });
+    assert.equal(updated.status, 200, JSON.stringify(updated.body));
+    assert.deepEqual(updated.body.duties.map((d: { id: string }) => d.id), duties.slice(0, 2).map((d) => d.id));
+    const copy = await call('POST', `/roles/${created.body.id}/duplicate`, { token: admin.token });
+    assert.notEqual(copy.body.duties[0].id, duties[0].id, 'a copy has its own duties');
+  });
+});

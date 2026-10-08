@@ -15,6 +15,20 @@ export const PERSON_STATUSES = ['active', 'inactive'] as const;
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
 
+/** A duty of a role: Tasks creates it as a task for every holder, each period (PLAN.md §17.3). */
+export interface RoleDuty {
+  id: string;
+  title: string;
+  description?: string | null;
+  steps?: string[];
+  /** once = when someone gets the role (joining checklist). */
+  frequency: 'daily' | 'weekly' | 'monthly' | 'once';
+  /** weekly: 0 = Monday … 6 = Sunday */
+  weekday?: number | null;
+  /** monthly: 1-28 */
+  monthDay?: number | null;
+}
+
 /** Per app, module key -> on/off. A module missing here counts as on (existing companies are unchanged). */
 export type ModuleSwitches = Partial<Record<AppKey, Record<string, boolean>>>;
 
@@ -176,6 +190,8 @@ export const roles = platform.table(
     level: integer('level').notNull().default(1),
     /** Locked roles (Super Admin, Admin): everything, cannot be edited or deleted. */
     system: boolean('system').notNull().default(false),
+    /** Responsibilities (Phase 5): recurring duties and joining checklist, pushed to Tasks with the role. */
+    duties: jsonb('duties').$type<RoleDuty[]>().notNull().default([]),
     archived: boolean('archived').notNull().default(false),
     ...timestamps,
   },

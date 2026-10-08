@@ -11,6 +11,7 @@ import {
   type Role,
   type Scope,
   SCOPE_LABELS,
+  type Duty,
 } from '../api';
 import { Modal, PageNav, TopBar } from '../ui';
 
@@ -156,6 +157,7 @@ function RoleEditor({ role, catalogue, onClose, onSaved }: { role: Role | null; 
   const [description, setDescription] = useState(role?.description ?? '');
   const [level, setLevel] = useState(role?.level ?? 1);
   const [grants, setGrants] = useState<Map<string, Grant>>(() => new Map((role?.grants ?? []).map((g) => [key(g), g])));
+  const [duties, setDuties] = useState<Duty[]>(() => role?.duties ?? []);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -184,7 +186,7 @@ function RoleEditor({ role, catalogue, onClose, onSaved }: { role: Role | null; 
     e.preventDefault();
     setBusy(true);
     setError('');
-    const body = { name: name.trim(), description: description.trim() || null, level, grants: [...grants.values()] };
+    const body = { name: name.trim(), description: description.trim() || null, level, grants: [...grants.values()], duties: duties.map((d) => ({ ...d, steps: d.steps.map((st) => st.trim()).filter(Boolean) })) };
     try {
       await call(role ? 'PATCH' : 'POST', role ? `/roles/${role.id}` : '/roles', body);
       await onSaved();
@@ -268,6 +270,8 @@ function RoleEditor({ role, catalogue, onClose, onSaved }: { role: Role | null; 
         </div>
         <p className="fine">Own = only my records · Team = mine and my direct reports · Department = everyone in my department · Company = everyone.</p>
 
+        {!locked && <DutiesEditor duties={duties} onChange={setDuties} />}
+
         {error && (
           <p className="error" role="alert">
             {error}
@@ -285,5 +289,84 @@ function RoleEditor({ role, catalogue, onClose, onSaved }: { role: Role | null; 
         </div>
       </form>
     </Modal>
+  );
+}
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const FREQUENCY_LABELS: Record<Duty['frequency'], string> = {
+  daily: 'Every working day',
+  weekly: 'Every week',
+  monthly: 'Every month',
+  once: 'Once, when someone gets this role',
+};
+
+/** What this role is responsible for: each duty becomes a task for everyone holding the role (PLAN.md §17.3). */
+function DutiesEditor({ duties, onChange }: { duties: Duty[]; onChange: (d: Duty[]) => void }) {
+  const update = (i: number, patch: Partial<Duty>) => onChange(duties.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+  return (
+    <section className="duties" aria-label="Duties">
+      <h3>Duties</h3>
+      <p className="fine">Each duty becomes a task in Tasks for everyone with this role, at the time you choose. Steps become its checklist.</p>
+      {duties.map((d, i) => (
+        <fieldset key={d.id ?? `new-${i}`} className="fieldset duty">
+          <div className="grid2">
+            <label className="field">
+              <span>Duty</span>
+              <input value={d.title} onChange={(e) => update(i, { title: e.target.value })} maxLength={150} required aria-label={`Duty ${i + 1} title`} />
+            </label>
+            <label className="field">
+              <span>When</span>
+              <select
+                value={d.frequency}
+                aria-label={`Duty ${i + 1} frequency`}
+                onChange={(e) => {
+                  const frequency = e.target.value as Duty['frequency'];
+                  update(i, { frequency, weekday: frequency === 'weekly' ? (d.weekday ?? 0) : null, monthDay: frequency === 'monthly' ? (d.monthDay ?? 1) : null });
+                }}
+              >
+                {(Object.keys(FREQUENCY_LABELS) as Duty['frequency'][]).map((f) => (
+                  <option key={f} value={f}>
+                    {FREQUENCY_LABELS[f]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {d.frequency === 'weekly' && (
+              <label className="field">
+                <span>Day</span>
+                <select value={d.weekday ?? 0} onChange={(e) => update(i, { weekday: Number(e.target.value) })}>
+                  {WEEKDAYS.map((w, n) => (
+                    <option key={w} value={n}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {d.frequency === 'monthly' && (
+              <label className="field">
+                <span>Date</span>
+                <input type="number" min={1} max={28} value={d.monthDay ?? 1} onChange={(e) => update(i, { monthDay: Number(e.target.value) })} />
+              </label>
+            )}
+          </div>
+          <label className="field">
+            <span>Steps (one per line, optional)</span>
+            <textarea
+              rows={2}
+              value={d.steps.join('\n')}
+              onChange={(e) => update(i, { steps: e.target.value.split('\n').map((s) => s.trimStart()).filter((s, n, all) => s || n < all.length - 1) })}
+              onBlur={(e) => update(i, { steps: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) })}
+            />
+          </label>
+          <button type="button" className="btn small danger" onClick={() => onChange(duties.filter((_, j) => j !== i))}>
+            Remove duty
+          </button>
+        </fieldset>
+      ))}
+      <button type="button" className="btn small" onClick={() => onChange([...duties, { title: '', steps: [], frequency: 'daily' }])}>
+        + Add duty
+      </button>
+    </section>
   );
 }

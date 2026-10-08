@@ -572,3 +572,32 @@ class Quotation(models.Model):
             # Deterministic, unique, human-friendly: QT-<year>-<pk padded>
             self.number = f"QT-{timezone.now().year}-{self.pk:04d}"
             super().save(update_fields=["number"])
+
+
+class RoleDuty(models.Model):
+    """A responsibility of a role from the FreeFounders role builder (PLAN.md §17.3); see crm/duties.py."""
+    role = models.ForeignKey("accounts.AccessRole", on_delete=models.CASCADE, related_name="duties")
+    duty_id = models.UUIDField(unique=True)  # the Platform's id: lasts across edits
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    steps = models.JSONField(default=list, blank=True)
+    frequency = models.CharField(max_length=10)  # daily | weekly | monthly | once
+    weekday = models.PositiveSmallIntegerField(null=True, blank=True)  # weekly: 0 = Monday
+    month_day = models.PositiveSmallIntegerField(null=True, blank=True)  # monthly: 1-28
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.role.name}: {self.title} ({self.frequency})"
+
+
+class DutyRun(models.Model):
+    """A duty's task for one person in one period: never created twice."""
+    duty = models.ForeignKey(RoleDuty, on_delete=models.CASCADE, related_name="runs")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="duty_runs")
+    period = models.CharField(max_length=12)  # 2026-10-08 | 2026-W41 | 2026-10 | once
+    task = models.ForeignKey(Task, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["duty", "user", "period"], name="duty_run_once_per_period")]

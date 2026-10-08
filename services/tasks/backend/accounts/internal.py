@@ -356,6 +356,9 @@ def _import_access(data):
                 if have.get(permission) != scope:
                     new_grants.append(AccessGrant(role=role, permission=permission, scope=scope))
             by_platform_id[str(rid)] = role
+            if "duties" in r:  # Phase 5: the role's responsibilities
+                from crm.duties import sync_role_duties
+                problems += sync_role_duties(role, r.get("duties"))
         for role_id, permission in drop_grants:
             AccessGrant.objects.filter(role_id=role_id, permission=permission).delete()
         AccessGrant.objects.bulk_create(new_grants)

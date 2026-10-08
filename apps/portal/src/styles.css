@@ -218,3 +218,6 @@ input[type='checkbox'] { width: auto; }
 @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
 .inline-form { display: flex; gap: 8px; align-items: center; flex: 1; }
 .inline-form input { max-width: 320px; }
+.duties { margin-top: 18px; }
+.duties h3 { margin: 0 0 4px; font-size: 15px; }
+.duty textarea { width: 100%; font: inherit; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; }
