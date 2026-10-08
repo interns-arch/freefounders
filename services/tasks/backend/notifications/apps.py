@@ -10,6 +10,9 @@ class NotificationsConfig(AppConfig):
     name = "notifications"
 
     def ready(self):
+        # Multi-company mode runs jobs in `manage.py run_worker`, per company.
+        if os.environ.get("TENANCY", "").strip() == "schemas":
+            return
         # Follow-up reminder ticker. Runs inside the web process (fine for an
         # internal tool); disable with NOTIF_SCHEDULER=false. Never runs for
         # management commands like migrate/test.

@@ -60,10 +60,12 @@ INSTALLED_APPS = [
     "directory",
     "payroll",
     "mistakes",
+    "tenancy",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "tenancy.middleware.CompanyMiddleware",  # no-op unless TENANCY=schemas
     "whitenoise.middleware.WhiteNoiseMiddleware",  # static + SPA on Render
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -152,6 +154,13 @@ SIMPLE_JWT = {
 PLATFORM_JWKS_URL = env("PLATFORM_JWKS_URL")
 PLATFORM_JWKS = env("PLATFORM_JWKS")
 
+# FreeFounders multi-company mode (tenancy/, PLAN.md section 14): one Postgres
+# schema per company, chosen per request from the Platform token. Blank = off,
+# and the app is the single-company install it always was. Needs Postgres.
+TENANCY = env("TENANCY")
+# Encrypts per-company secrets (WhatsApp/Gmail/AI keys). Falls back to SECRET_KEY.
+SETTINGS_KEY = env("SETTINGS_KEY")
+
 CORS_ALLOWED_ORIGINS = [
     o for o in env(
         "CORS_ORIGINS", "http://localhost:5174,http://127.0.0.1:5174"
@@ -203,6 +212,10 @@ if USE_S3:
     AWS_QUERYSTRING_EXPIRE = int(env("AWS_LINK_EXPIRY_SECONDS", "3600"))
     AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN") or None     # optional CDN
     STORAGES["default"] = {"BACKEND": "storages.backends.s3.S3Storage"}
+
+# Multi-company mode: each company's uploads under c/<schema>/.
+if TENANCY == "schemas":
+    STORAGES["default"] = {"BACKEND": "tenancy.storage.CompanyS3Storage" if USE_S3 else "tenancy.storage.CompanyFileSystemStorage"}
 
 # Single-service deploy: WhiteNoise serves the built React app (frontend/dist)
 # at the URL root — /assets/*, sw.js, manifest, face models and / itself.

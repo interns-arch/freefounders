@@ -14,6 +14,7 @@ import re
 import requests
 
 from .models import Classification, RootCause
+from tenancy.company_settings import company_env
 
 log = logging.getLogger(__name__)
 
@@ -65,18 +66,18 @@ CAPA = {
 
 
 def _claude_enabled() -> bool:
-    return (os.environ.get("AI_ENABLED", "false").lower() == "true"
-            and bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()))
+    return (company_env("AI_ENABLED", "false").lower() == "true"
+            and bool(company_env("ANTHROPIC_API_KEY", "").strip()))
 
 
 def _claude(mistake) -> dict | None:
     try:
         res = requests.post(
             "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": os.environ["ANTHROPIC_API_KEY"].strip(),
+            headers={"x-api-key": company_env("ANTHROPIC_API_KEY", "").strip(),
                      "anthropic-version": "2023-06-01",
                      "content-type": "application/json"},
-            json={"model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5"),
+            json={"model": company_env("ANTHROPIC_MODEL", "claude-sonnet-5"),
                   "max_tokens": 500, "system": SYSTEM,
                   "messages": [{"role": "user", "content": (
                       f"Category: {mistake.category}\nSeverity: {mistake.severity}\n"
@@ -86,7 +87,7 @@ def _claude(mistake) -> dict | None:
                       f"{mistake.root_cause_note}\nSOP: {mistake.sop_name or '—'} "
                       f"followed={mistake.sop_followed} adequate={mistake.sop_adequate}\n"
                       f"Occurrence level: {mistake.occurrence_level}")}]},
-            timeout=int(os.environ.get("AI_TIMEOUT_SECONDS", "20")))
+            timeout=int(company_env("AI_TIMEOUT_SECONDS", "20")))
         if res.status_code != 200:
             return None
         reply = "".join(b.get("text", "") for b in res.json().get("content", []))

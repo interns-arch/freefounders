@@ -16,12 +16,13 @@ from crm.models import Holiday
 from .models import (
     Attendance, AttendanceStatus, FaceProfile, LeaveRequest, LeaveStatus, OfficeLocation,
 )
+from tenancy.company_settings import company_env
 
 
 # ---------------------------------------------------------------- config
 
 def _env(name, default):
-    return os.environ.get(name, default)
+    return company_env(name, default)
 
 
 def cfg():

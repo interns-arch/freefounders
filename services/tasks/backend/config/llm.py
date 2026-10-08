@@ -15,6 +15,7 @@ import time
 import re
 
 import requests
+from tenancy.company_settings import company_env
 
 log = logging.getLogger(__name__)
 
@@ -28,13 +29,13 @@ DEFAULT_TIMEOUT = {"nvidia": 90, "anthropic": 30, "openai": 30,
 
 
 def _key() -> str:
-    return (os.environ.get("AI_API_KEY")
-            or os.environ.get("NVIDIA_API_KEY")
-            or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    return (company_env("AI_API_KEY")
+            or company_env("NVIDIA_API_KEY")
+            or company_env("ANTHROPIC_API_KEY") or "").strip()
 
 
 def provider() -> str:
-    explicit = os.environ.get("AI_PROVIDER", "").strip().lower()
+    explicit = company_env("AI_PROVIDER", "").strip().lower()
     if explicit:
         return explicit
     key = _key()
@@ -47,7 +48,7 @@ def provider() -> str:
 
 
 def model() -> str:
-    name = (os.environ.get("AI_MODEL") or os.environ.get("ANTHROPIC_MODEL") or "").strip()
+    name = (company_env("AI_MODEL") or company_env("ANTHROPIC_MODEL") or "").strip()
     if name and not (provider() == "nvidia" and name.startswith("claude")):
         return name
     return {"nvidia": "nvidia/nemotron-3-nano-30b-a3b",
@@ -59,11 +60,11 @@ def model() -> str:
 
 
 def enabled() -> bool:
-    return os.environ.get("AI_ENABLED", "false").lower() == "true" and bool(_key())
+    return company_env("AI_ENABLED", "false").lower() == "true" and bool(_key())
 
 
 def _timeout() -> int:
-    raw = os.environ.get("AI_TIMEOUT_SECONDS", "").strip()
+    raw = company_env("AI_TIMEOUT_SECONDS", "").strip()
     if raw.isdigit():
         return int(raw)
     return DEFAULT_TIMEOUT.get(provider(), 30)
@@ -83,7 +84,7 @@ OPENAI_COMPATIBLE = {
 
 def _chat_url(who: str) -> str:
     """AI_BASE_URL wins, so a provider we have never heard of still works."""
-    override = os.environ.get("AI_BASE_URL", "").strip().rstrip("/")
+    override = company_env("AI_BASE_URL", "").strip().rstrip("/")
     if override:
         return override if override.endswith("/chat/completions")             else f"{override}/chat/completions"
     return OPENAI_COMPATIBLE.get(who, OPENAI_COMPATIBLE["openai"])
@@ -150,7 +151,7 @@ def audio_model() -> str:
     # Measured on Hinglish clips: the general flash model got the name, the
     # time and the effort right where the cheaper transcribe-only model turned
     # "do ghante" into "dukaan". A wrong deadline is worse than a slow one.
-    return ((os.environ.get("AI_AUDIO_MODEL") or "").strip()
+    return ((company_env("AI_AUDIO_MODEL") or "").strip()
             or ("gemini-3.5-flash" if provider() == "gemini" else model()))
 
 

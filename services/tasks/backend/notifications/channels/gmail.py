@@ -17,6 +17,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import requests
+from tenancy.company_settings import company_env
 
 log = logging.getLogger(__name__)
 
@@ -25,11 +26,11 @@ _token_cache = {"access_token": "", "expires_at": 0.0}
 
 def _cfg():
     return {
-        "enabled": os.environ.get("GMAIL_ENABLED", "false").lower() == "true",
-        "client_id": os.environ.get("GMAIL_CLIENT_ID", "").strip(),
-        "client_secret": os.environ.get("GMAIL_CLIENT_SECRET", "").strip(),
-        "refresh_token": os.environ.get("GMAIL_REFRESH_TOKEN", "").strip(),
-        "sender": os.environ.get("GMAIL_SENDER", "").strip(),
+        "enabled": company_env("GMAIL_ENABLED", "false").lower() == "true",
+        "client_id": company_env("GMAIL_CLIENT_ID", "").strip(),
+        "client_secret": company_env("GMAIL_CLIENT_SECRET", "").strip(),
+        "refresh_token": company_env("GMAIL_REFRESH_TOKEN", "").strip(),
+        "sender": company_env("GMAIL_SENDER", "").strip(),
     }
 
 
@@ -39,9 +40,11 @@ def is_configured() -> bool:
 
 
 def _access_token() -> str | None:
-    if _token_cache["access_token"] and _token_cache["expires_at"] > time.time() + 60:
-        return _token_cache["access_token"]
     c = _cfg()
+    # One cached token per Gmail account (each company can have its own).
+    if (_token_cache["access_token"] and _token_cache.get("account", c["refresh_token"]) == c["refresh_token"]
+            and _token_cache["expires_at"] > time.time() + 60):
+        return _token_cache["access_token"]
     try:
         res = requests.post("https://oauth2.googleapis.com/token", data={
             "client_id": c["client_id"],
@@ -54,6 +57,7 @@ def _access_token() -> str | None:
             return None
         data = res.json()
         _token_cache["access_token"] = data["access_token"]
+        _token_cache["account"] = c["refresh_token"]
         _token_cache["expires_at"] = time.time() + int(data.get("expires_in", 3600))
         return _token_cache["access_token"]
     except requests.RequestException as exc:

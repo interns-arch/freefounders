@@ -2,6 +2,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from tenancy.views import create_company
+
 from . import internal, views
 from .serializers import FlexibleLoginSerializer
 
@@ -16,6 +18,7 @@ urlpatterns = [
     path("auth/change-password", views.change_password),
     path("internal/provision", internal.provision),
     path("internal/roles", internal.roles),
+    path("internal/companies", create_company),
     path("team/", views.team_directory),
     path("roles/", views.roles),
     path("departments/", views.departments),

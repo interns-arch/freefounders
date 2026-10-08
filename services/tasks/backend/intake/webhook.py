@@ -20,12 +20,13 @@ from django.views.decorators.http import require_http_methods
 
 from .models import InboundMessage
 from .pipeline import intake_enabled, process_message
+from tenancy.company_settings import company_env
 
 log = logging.getLogger(__name__)
 
 
 def _verify_signature(raw: bytes, header: str | None) -> bool:
-    secret = os.environ.get("WHATSAPP_APP_SECRET", "").strip()
+    secret = company_env("WHATSAPP_APP_SECRET", "").strip()
     if not secret:
         log.warning("WHATSAPP_APP_SECRET unset -- webhook signature NOT verified (dev only)")
         return True
@@ -39,7 +40,7 @@ def _verify_signature(raw: bytes, header: str | None) -> bool:
 @require_http_methods(["GET", "POST"])
 def whatsapp_webhook(request):
     if request.method == "GET":
-        token = os.environ.get("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "").strip()
+        token = company_env("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "").strip()
         if (
             request.GET.get("hub.mode") == "subscribe"
             and token

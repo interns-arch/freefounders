@@ -16,13 +16,14 @@ from django.utils import timezone
 from notifications.service import notify, notify_follow_up_due
 
 from .models import Lead, OPEN_STATUSES, Task, TaskAttachment, TaskStatus
+from tenancy.company_settings import company_env
 
 
 def purge_expired_attachments() -> int:
     """Delete attachments on tasks completed more than the retention window
     ago. Only DONE tasks with a completed_at qualify — open/deleted-but-open
     tasks keep their files."""
-    days = int(os.environ.get("TASK_ATTACHMENT_RETENTION_DAYS", "7"))
+    days = int(company_env("TASK_ATTACHMENT_RETENTION_DAYS", "7"))
     if days <= 0:  # 0 or negative disables the sweep entirely
         return 0
     cutoff = timezone.now() - timezone.timedelta(days=days)

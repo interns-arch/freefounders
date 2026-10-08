@@ -15,6 +15,7 @@ from notifications.channels.gmail import _access_token, is_configured
 
 from .models import InboundMessage
 from .pipeline import intake_enabled, process_message
+from tenancy.company_settings import company_env
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def poll_inbox(max_messages: int = 10) -> int:
     if not token:
         return 0
     headers = {"Authorization": f"Bearer {token}"}
-    query = os.environ.get("GMAIL_POLL_QUERY", "is:unread in:inbox category:primary")
+    query = company_env("GMAIL_POLL_QUERY", "is:unread in:inbox category:primary")
 
     res = requests.get(f"{API}/messages", params={"q": query, "maxResults": max_messages},
                        headers=headers, timeout=20)

@@ -2372,7 +2372,9 @@ def _in_background(fn):
             logging.getLogger(__name__).exception("background notify failed")
         finally:
             connection.close()
-    threading.Thread(target=run, daemon=True, name="bulk-accept-notify").start()
+    # Carry the current company (multi-company mode) into the thread.
+    from tenancy.schemas import run_in_thread_context
+    threading.Thread(target=run_in_thread_context(run), daemon=True, name="bulk-accept-notify").start()
 
 
 def _notify_bulk_accepted(reviewer_id, remarks, by_submitter):

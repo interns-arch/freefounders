@@ -10,6 +10,9 @@ class IntakeConfig(AppConfig):
     name = "intake"
 
     def ready(self):
+        # Multi-company mode runs jobs in `manage.py run_worker`, per company.
+        if os.environ.get("TENANCY", "").strip() == "schemas":
+            return
         # Gmail inbox poller -- only spins up when Gmail is actually
         # configured, so local dev without credentials runs zero threads.
         if os.environ.get("GMAIL_ENABLED", "false").lower() != "true":

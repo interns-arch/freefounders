@@ -24,6 +24,7 @@ from .serializers import (
     GroupSerializer, IdeaCommentSerializer, IdeaSerializer,
     LinkCollectionSerializer, LinkSerializer, NoticeSerializer,
 )
+from tenancy.company_settings import company_env
 
 
 class GroupViewSet(viewsets.ModelViewSet):
@@ -247,7 +248,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         if not notice.is_live:
             raise ValidationError({"detail": "Publish the notice first, then send it."})
 
-        template = os.environ.get("NOTICE_WHATSAPP_TEMPLATE", "company_notice").strip()
+        template = company_env("NOTICE_WHATSAPP_TEMPLATE", "company_notice").strip()
         text = " ".join((notice.content or "").split())[:900] or notice.title
         ids = [u.pk for u in reach]
 

@@ -13,6 +13,7 @@ import logging
 import os
 
 import requests
+from tenancy.company_settings import company_env
 
 log = logging.getLogger(__name__)
 
@@ -21,9 +22,9 @@ GRAPH_VERSION = os.environ.get("WHATSAPP_GRAPH_API_VERSION", "v23.0")
 
 def _cfg():
     return {
-        "enabled": os.environ.get("WHATSAPP_ENABLED", "false").lower() == "true",
-        "token": os.environ.get("WHATSAPP_ACCESS_TOKEN", "").strip(),
-        "phone_id": os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "").strip(),
+        "enabled": company_env("WHATSAPP_ENABLED", "false").lower() == "true",
+        "token": company_env("WHATSAPP_ACCESS_TOKEN", "").strip(),
+        "phone_id": company_env("WHATSAPP_PHONE_NUMBER_ID", "").strip(),
     }
 
 
@@ -75,7 +76,7 @@ def send_text(to_phone: str, body: str) -> dict:
     Without it (dev/testing with verified numbers), sends free-form text."""
     if not to_phone:
         return {"channel": "whatsapp", "status": "skipped", "detail": "user has no whatsapp number"}
-    template = os.environ.get("WHATSAPP_TEMPLATE_NAME", "").strip()
+    template = company_env("WHATSAPP_TEMPLATE_NAME", "").strip()
     if template:
         # template body params reject newlines/tabs — flatten to one line
         clean = " · ".join(part.strip() for part in body.splitlines() if part.strip())[:1000]
@@ -85,7 +86,7 @@ def send_text(to_phone: str, body: str) -> dict:
             "type": "template",
             "template": {
                 "name": template,
-                "language": {"code": os.environ.get("WHATSAPP_TEMPLATE_LANG", "en").strip() or "en"},
+                "language": {"code": company_env("WHATSAPP_TEMPLATE_LANG", "en").strip() or "en"},
                 "components": [{
                     "type": "body",
                     "parameters": [{"type": "text", "text": clean or "You have an update."}],

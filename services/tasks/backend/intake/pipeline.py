@@ -17,6 +17,7 @@ from notifications.service import notify
 
 from .ai import classify
 from .models import InboundMessage
+from tenancy.company_settings import company_env
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def intake_enabled() -> bool:
     useful only to a team that has decided it wants that. Delivery reports
     are unaffected: they come in on the same webhook but never pass here.
     """
-    return os.environ.get("INTAKE_ENABLED", "false").strip().lower() == "true"
+    return company_env("INTAKE_ENABLED", "false").strip().lower() == "true"
 
 
 def process_message(msg: InboundMessage) -> InboundMessage:
