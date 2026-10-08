@@ -125,3 +125,16 @@ jobs:
           cache-dependency-path: apps/portal/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  web:
+    name: Web app (rules + typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run web:build

@@ -42,6 +42,20 @@ for (const dir of DIRS) {
   }
 }
 
+// 3. The two copies of the design tokens (CSS for the web, TypeScript for mobile) say the same thing.
+{
+  const css = readFileSync(path.join(ROOT, 'packages/theme/tokens.css'), 'utf8');
+  const ts = readFileSync(path.join(ROOT, 'packages/theme/src/tokens.ts'), 'utf8');
+  const camel = (name) => name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  const block = (src, start) => src.slice(src.indexOf(start), src.indexOf('}', src.indexOf(start)));
+  for (const [cssStart, tsStart] of [[':root {', 'export const light = {'], ['.dark {', 'export const dark']]) {
+    const tsBlock = block(ts, tsStart);
+    for (const [, name, value] of block(css, cssStart).matchAll(/--([a-z-]+):\s*(oklch\([^)]*\))/g)) {
+      if (!tsBlock.includes(`${camel(name)}: '${value}'`)) problems.push(`packages/theme: --${name} in tokens.css (${cssStart}) is not the same in src/tokens.ts`);
+    }
+  }
+}
+
 if (problems.length) {
   console.error(`✖ Web app rules (PLAN.md §18.2): ${problems.length} problem(s)\n\n${problems.join('\n')}\n`);
   process.exit(1);

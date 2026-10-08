@@ -16,5 +16,6 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', '@tanstack/react-query', 'zod'],
   },
   server: { port: 5176, strictPort: true, host: '127.0.0.1' },
-  build: { outDir: 'dist', chunkSizeWarningLimit: 1200 },
+  // Built files under /static/, not Vite's default /assets/ (that is the Assets app's address space).
+  build: { outDir: 'dist', assetsDir: 'static', chunkSizeWarningLimit: 1200 },
 });
