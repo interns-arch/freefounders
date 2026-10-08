@@ -744,3 +744,21 @@ Approval chains (they need departments and reports-to in the Platform's People d
 3. Assets: receive profile; SIM/reconciliation gate; branding
 4. Tasks: editable HR settings, attendance photo, retention; notification rules
 5. Smoke + browser tests; docs
+
+### 16.9 Status (2026-10-08): built and tested
+| Check | Result |
+|---|---|
+| Platform tests | 42 pass (6 new: profile, logo checked by content, module switches within the plan, launch defaults, version recovery) |
+| Tasks tests | 727 pass (23 new; all earlier tests unchanged) + 40 multi-company tests on Postgres |
+| Assets tests | 73 pass (3 new) |
+| Smoke (`npm run smoke`) | 10 / 10 |
+| Browser (`npm run e2e`) | 7 / 7, incl. brand + module switch followed by the Tasks menu and API, and check-in with a photo (Chromium's fake camera) seen by HR |
+
+Notes and differences from the design above:
+- **Punch photos are private**: stored under `private/`, which the `/media/` route refuses; served only by
+  `GET /api/attendance/<id>/photo/in|out/` to the person, their managers (same rule as their attendance) and HR.
+- New FreeFounders companies get `ATTENDANCE_PHOTO=required`; standalone and imported companies keep it off until HR turns it on.
+- Per-company settings (`company_env`) now also work in a standalone install, so the HR settings screen works there too;
+  with nothing saved it reads the environment exactly as before.
+- `/api/leads/assignees/` stays available with Leads off: Groups, templates and settings use it as the team list.
+- Found while testing: the Tasks menu checked Leads permissions directly, so the Leads link ignored the switch (fixed).

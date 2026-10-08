@@ -109,7 +109,7 @@ function Shell({ children }) {
         <nav>
           <NavLink to="/" end><Icon name="dashboard" className="nav-ic" />Dashboard</NavLink>
           {can('tasks.view_all') && <NavLink to="/team"><Icon name="chart" className="nav-ic" />Team Performance</NavLink>}
-          {user.capabilities.some(c => c.startsWith('leads.view')) && <NavLink to="/leads"><Icon name="target" className="nav-ic" />Leads</NavLink>}
+          {module('leads') && user.capabilities.some(c => c.startsWith('leads.view')) && <NavLink to="/leads"><Icon name="target" className="nav-ic" />Leads</NavLink>}
           <NavLink to="/tasks"><Icon name="tasks" className="nav-ic" />Tasks</NavLink>
           <NavLink to="/groups"><Icon name="users" className="nav-ic" />Groups</NavLink>
           <NavLink to="/notices"><Icon name="megaphone" className="nav-ic" />Notices</NavLink>

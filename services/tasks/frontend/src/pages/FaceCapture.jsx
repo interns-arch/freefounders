@@ -80,7 +80,7 @@ export default function FaceCapture({ title = 'Face verification', action = 'Cap
   }
 
   return (
-    <div className="modal" onMouseDown={e => { if (e.target === e.currentTarget) { stop(); onClose() } }}>
+    <div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e => { if (e.target === e.currentTarget) { stop(); onClose() } }}>
       <div className="modal-card face-card">
         <h2>{title}</h2>
         {hint && <p className="muted small">{hint}</p>}
