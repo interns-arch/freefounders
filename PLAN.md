@@ -922,3 +922,30 @@ new menu ("opens the classic screen"), so CarTrends keeps every feature. They mo
 2. Areas, in parallel, each with its own parity suite: Admin · Tasks lists · Task detail · Tasks reports/home/groups/notices/settings ·
    HR · Assets (inventory side) · Assets (people side).
 3. Switch the gateway to the new app; old e2e suites updated to the new screens; docs.
+
+### 18.6 Status (2026-10-08): built and tested
+| Check | Result |
+|---|---|
+| Web app | rules check (no fetching or colour literals in screens; theme CSS = theme TS) + typecheck + production build pass; first download 461 KB (screens load on demand) |
+| Browser tests (`npm run e2e`) | **33 / 33**: the 9 earlier tests now drive the new app, plus new suites per area: Admin 4, Task workspace 3, Tasks general 7, HR 4, Assets 6 |
+| Smoke (`npm run smoke`) | 10 / 10 |
+| Platform / Tasks / Assets tests | 51 / 754 / 79 pass |
+
+What is in the new app (`apps/web`): sign-in, workspace chooser, change password; Admin (People & access, Roles with duties,
+Settings); every Tasks screen of the launch scope (home, task workspace with all tabs and task detail, team performance,
+groups, notices, notifications, my team, task settings); HR (check-in with photo/face, attendance, leave, holidays, team,
+approvals, HR settings); every Assets screen except SIM cards and Reconciliation. Leads, AI inbox, Mistakes, Forms, Links,
+Ideas, Payroll, SIM cards and Reconciliation open the classic screens (`/classic/…`, same sign-in), as planned in §18.3.
+
+How it was built: the foundation (core, theme, shell, gateway) first, then four areas in parallel, each owning its own
+folders and its own core file(s), then the earlier tests moved to the new screens.
+
+Notes and differences:
+- The Assets cache keys all start with `assets` now (one shared cache for every app).
+- Assets got `GET /api/requests/:id` (same visibility as the list), so `/assets/requests?open=<id>` links open directly.
+- Fixed while porting: the Assets picker never showed its "Request / Add '<typed text>'" option.
+- My team: department and reports-to are read-only there, with a link to People & access (the Platform owns them, §17.1);
+  this closes the gap noted in §17.8.
+- Task settings: departments are shown read-only with a link to Settings (Platform-owned since §17.1).
+- Not ported (small): the AI proofreading box on notices (the task form keeps it).
+- `apps/portal` is no longer served (the new app replaced it); it stays in the repo until Phase 9 clean-up.

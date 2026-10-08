@@ -1,6 +1,6 @@
 /** Requests (ask for an asset), tickets (report a problem) and maintenance (repairs, servicing). */
 import { useQuery } from '@tanstack/react-query';
-import { assetsApi, type Page, type Query } from '../http';
+import { ApiError, assetsApi, type Page, type Query } from '../http';
 import { assetsKey, mutationHook } from './keys';
 import type { AssetRequest, MaintenanceRecord, Ticket } from './types';
 
@@ -15,14 +15,14 @@ export function useRequests(filters: Query) {
  * One request by id (notification links open /assets/requests?open=<id>). The API has no GET /requests/:id, so this
  * looks through the requests this person can see (up to 1,000).
  */
+/** GET /requests/:id — null when it does not exist or this person may not see it. */
 export async function findRequest(id: string): Promise<AssetRequest | null> {
-  for (let page = 1; page <= 5; page++) {
-    const p = await assetsApi.get<Page<AssetRequest>>('/requests', { page, pageSize: 200 });
-    const hit = p.items.find((r) => r.id === id);
-    if (hit) return hit;
-    if (page * p.pageSize >= p.total) break;
+  try {
+    return await assetsApi.get<AssetRequest>(`/requests/${id}`);
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
+    throw err;
   }
-  return null;
 }
 export function useRequest(id: string | null | undefined) {
   return useQuery({ queryKey: assetsKey('requests', 'one', id), queryFn: () => findRequest(id!), enabled: !!id, placeholderData: undefined });

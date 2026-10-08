@@ -406,6 +406,10 @@ describe('asset requests: the manager decides (Phase 5)', () => {
     assert.ok(row, 'the manager sees it');
     assert.equal(row.canDecide, true);
     assert.equal((await call('GET', '/requests', outsider.token)).body.items.some((r: { id: string }) => r.id === id), false);
+    // One request by id: the same rule (the requester, their manager, approvers) — anyone else gets 404.
+    assert.equal((await call('GET', `/requests/${id}`, boss.token)).body.id, id);
+    assert.equal((await call('GET', `/requests/${id}`, worker.token)).status, 200);
+    assert.equal((await call('GET', `/requests/${id}`, outsider.token)).status, 404);
     const workerRow = (await call('GET', '/requests', worker.token)).body.items.find((r: { id: string }) => r.id === id);
     assert.equal(workerRow.canDecide, false, 'not for their own request');
 

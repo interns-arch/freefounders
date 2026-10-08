@@ -20,11 +20,20 @@ edit, commit, push or switch branches in the original folders.
 services/platform/  NestJS: companies, people, single login (EdDSA tokens + JWKS), people admin
 services/tasks/     Django 6 API (backend/) + React 18 web (frontend/) + Capacitor shell (mobile/)
 services/assets/    NestJS API (apps/api) + React 19 web (apps/web) + shared Zod (packages/shared)
-apps/portal/        React: sign in, choose workspace, change password, People & access
+apps/web/           THE web app (Phase 6, PLAN.md §18): sign-in, chooser, Admin, Tasks, HR, Assets screens
+packages/core/      shared logic for web + mobile: HTTP client, session, typed APIs + hooks per area (no DOM)
+packages/theme/     design tokens (tokens.css for web, src/tokens.ts for mobile; kept identical by a check)
+apps/portal/        the old portal (no longer served; replaced by apps/web)
 infra/gateway/      dev-gateway.mjs (one address, routed by path) + Caddyfile (prod draft)
-scripts/            setup / dev / smoke for the whole suite      e2e/  Playwright browser tests
+scripts/            setup / dev / smoke / check-web-rules      e2e/  Playwright browser tests
 ```
-Later phases add `apps/web`, `apps/mobile`, `packages/*` (see PLAN.md §8).
+The repo root is an npm workspace for `apps/web` + `packages/*` (one `npm ci` at the root); the services keep their own installs.
+Phase 7 adds `apps/mobile`.
+
+**Web app rules** (checked before every typecheck/build by `scripts/check-web-rules.mjs`): screens under `apps/web/src/app` and
+`src/features` get data only from `@freefounders/core` hooks (no fetch, no HTTP client) and use theme colours only (no
+hex/rgb/oklch). Each area owns `src/features/<area>/` and `packages/core/src/<area>/`. Same URLs as the old apps
+(`/tasks/…`, `/assets/…`); any path not built in the new app opens the classic screen at `/classic/…`.
 
 ## Whole suite with single login (usual way to work)
 ```
@@ -34,10 +43,11 @@ npm run smoke        # end-to-end API check against the running suite (10 steps,
 npm run e2e          # browser tests against the running suite (first time: npx --prefix e2e playwright install chromium)
 npm run rehearse-import   # CarTrends import rehearsal on demo data, against the running suite
 ```
-Routes on :8080: `/` portal · `/api/platform/*` Platform (:4000) · `/tasks/` web (:5174) and
-`/tasks/api/*` Django (:8000) · `/assets/` web (:5173) and `/assets/api/*` NestJS (:3000) · `/media/*` Django.
+Routes on :8080: `/api/platform/*` Platform (:4000) · `/tasks/api/*` Django (:8000) · `/assets/api/*` NestJS (:3000) ·
+`/media/*` Django · `/classic/tasks/*` old Tasks web (:5174) · `/classic/assets/*` old Assets web (:5173) · everything
+else the new web app (:5176). Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
 Single login is a build/env switch, off by default so each app still runs standalone:
-- web: `VITE_PLATFORM_LOGIN=true` + `VITE_BASE=/tasks/` or `/assets/` (see `src/platform.js`, `src/lib/platform.ts`)
+- old web apps: `VITE_PLATFORM_LOGIN=true` + `VITE_BASE=/classic/tasks/` or `/classic/assets/` (see `src/platform.js`, `src/lib/platform.ts`)
 - APIs: `PLATFORM_JWKS_URL` (Tasks, Assets); Platform: `TASKS_INTERNAL_URL`, `ASSETS_INTERNAL_URL`, `PLATFORM_SECRET`
 How it fits: PLAN.md §13. Tasks uses the Platform token directly (Bearer); Assets exchanges it for
 a 15-minute cookie session (`/api/auth/platform-session`) so photos/downloads keep working.
@@ -88,7 +98,7 @@ cd services/assets && npm ci
 npm run dev          # http://localhost:5173
 npm run typecheck && npm test
 ```
-Portal: `cd apps/portal && npm ci && npm run build` (typecheck + build).
+Web app: `npm ci` (root) then `npm run web:build` (rules + typecheck + build). Browser tests per area: `e2e/web-*.spec.ts`.
 
 Git Bash note: prefix env values that start with `/` with `MSYS_NO_PATHCONV=1`, or `VITE_BASE=/tasks/`
 becomes a Windows path.

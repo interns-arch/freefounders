@@ -1,12 +1,15 @@
+import { lazy } from 'react';
 import type { RouteObject } from 'react-router';
-import { GroupsPage } from './groups';
-import { HomePage } from './home';
-import { NoticesPage } from './notices';
-import { NotificationsPage } from './notifications';
 import { RequireTasks } from './parts';
-import { TaskSettingsPage } from './settings';
-import { TeamReportPage } from './team-report';
-import { UsersPage } from './users';
+
+// Loaded when first opened (smaller first download; the shell shows a loader meanwhile).
+const HomePage = lazy(() => import('./home').then((m) => ({ default: m.HomePage })));
+const TeamReportPage = lazy(() => import('./team-report').then((m) => ({ default: m.TeamReportPage })));
+const GroupsPage = lazy(() => import('./groups').then((m) => ({ default: m.GroupsPage })));
+const NoticesPage = lazy(() => import('./notices').then((m) => ({ default: m.NoticesPage })));
+const NotificationsPage = lazy(() => import('./notifications').then((m) => ({ default: m.NotificationsPage })));
+const UsersPage = lazy(() => import('./users').then((m) => ({ default: m.UsersPage })));
+const TaskSettingsPage = lazy(() => import('./settings').then((m) => ({ default: m.TaskSettingsPage })));
 
 /** /tasks (home), /tasks/team, /tasks/groups, /tasks/notices, /tasks/notifications, /tasks/users, /tasks/settings. */
 export const generalRoutes: RouteObject[] = [

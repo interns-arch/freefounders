@@ -30,6 +30,11 @@ export class RequestsController {
     return this.requests.list(actor, q);
   }
 
+  @Get(':id')
+  get(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.requests.get(actor, id);
+  }
+
   @Post()
   create(@CurrentActor() actor: Actor, @Body(new ZodPipe(requestSchema)) body: RequestInput) {
     return this.requests.create(actor, body);

@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { PRIORITIES, REQUEST_STATUSES, type RequestInput } from '@eam/shared';
 import { type Actor, assertCan, canAny, can } from '../../common/actor';
-import { badRequest, conflict, likePattern, listFilter, listParams, notFound } from '../../common/http';
+import { badRequest, conflict, likePattern, listFilter, listParams, notFound, uuidParam } from '../../common/http';
 import { DbService } from '../../db/db.service';
 import { assetCategories, assetRequests, assets, assetTypes, departments, employees } from '../../db/schema';
 import { HistoryService } from '../../core/history.service';
@@ -34,6 +34,9 @@ export class RequestsService {
       // Their own requests, and those of the people who report to them (PLAN.md §17.2).
       conds.push(or(eq(assetRequests.employeeId, actor.employeeId), eq(employees.managerId, actor.employeeId))!);
     }
+    // One request by id (GET /requests/:id): the same visibility rules as the list.
+    const one = uuidParam(q.id);
+    if (q.id !== undefined) conds.push(one ? eq(assetRequests.id, one) : sql`false`);
     const statuses = listFilter(q.status, REQUEST_STATUSES);
     if (statuses.length) conds.push(inArray(assetRequests.status, statuses));
     const priorities = listFilter(q.priority, PRIORITIES);
@@ -94,6 +97,13 @@ export class RequestsService {
       page: p.page,
       pageSize: p.pageSize,
     };
+  }
+
+  /** One request, if this person may see it (their own, their team's, or all for approvers and fulfillers). */
+  async get(actor: Actor, id: string) {
+    const page = await this.list(actor, { id });
+    if (!page.items.length) throw notFound('Request');
+    return page.items[0];
   }
 
   private async load(id: string) {
