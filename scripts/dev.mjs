@@ -93,11 +93,18 @@ async function up(url) {
 }
 const ready = await Promise.all(['http://127.0.0.1:4000/api/platform/health', 'http://127.0.0.1:8000/health', 'http://127.0.0.1:3000/api/health'].map(up));
 if (ready.every(Boolean)) {
-  try {
-    execFileSync(process.execPath, ['dist/companies.js', 'sync'], { cwd: at('services/platform'), env: { ...process.env, ...INTERNAL }, stdio: 'inherit' });
-  } catch {
-    console.error('✖ Could not set up the companies in Tasks/Assets (see above). Retry: npm --prefix services/platform run company -- sync');
+  // The Platform's file watcher may restart it once more right after start-up: retry a couple of times.
+  let synced = false;
+  for (let attempt = 1; attempt <= 3 && !synced && !stopping; attempt++) {
+    if (attempt > 1) await new Promise((r) => setTimeout(r, 5000));
+    try {
+      execFileSync(process.execPath, ['dist/companies.js', 'sync'], { cwd: at('services/platform'), env: { ...process.env, ...INTERNAL }, stdio: 'inherit' });
+      synced = true;
+    } catch {
+      if (attempt < 3) console.log('• Sync did not finish; retrying…');
+    }
   }
+  if (!synced) console.error('✖ Could not set up the companies in Tasks/Assets (see above). Retry: npm --prefix services/platform run company -- sync');
 } else if (!stopping) {
   console.error('✖ Not every service started; companies were not synced.');
 }

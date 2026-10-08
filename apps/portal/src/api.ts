@@ -105,7 +105,48 @@ export interface Person {
   status: 'active' | 'inactive';
   login: { username: string | null; lastLoginAt: string | null; locked: boolean } | null;
   apps: AppKey[];
+  roleIds: string[];
 }
+
+// Role builder (Phase 3)
+export type Scope = 'own' | 'team' | 'department' | 'company';
+export const SCOPE_LABELS: Record<Scope, string> = { own: 'Own', team: 'Team', department: 'Department', company: 'Company' };
+export const LEVEL_LABELS: Record<number, string> = { 1: 'Member', 2: 'Manager', 3: 'Admin' };
+
+export interface Grant {
+  app: AppKey;
+  permission: string;
+  scope: string;
+}
+
+export interface Role {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  colour: string | null;
+  level: number;
+  system: boolean;
+  archived: boolean;
+  people: number;
+  grants: Grant[];
+}
+
+export interface CataloguePermission {
+  key: string;
+  label: string;
+  group: string;
+  scopes: Scope[] | null;
+  superAdminOnly?: boolean;
+}
+
+export interface AppCatalogue {
+  app: AppKey;
+  scopes: Scope[];
+  permissions: CataloguePermission[];
+}
+
+export const APP_NAMES: Record<AppKey, string> = { tasks: 'Tasks', assets: 'Assets' };
 
 export interface AppRole {
   value: string;

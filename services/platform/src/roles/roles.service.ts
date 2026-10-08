@@ -316,13 +316,14 @@ export class RolesService {
    * Sends the company's full role set, and everyone's roles, to every connected app. Never throws: a failure is
    * reported in the result and logged; `npm run company -- sync` sends everything again.
    */
-  async push(companyId: string): Promise<Record<string, string>> {
+  async push(companyId: string, { retried = false } = {}): Promise<Record<string, string>> {
     const db = this.dbs.db;
     const [c] = await db
       .update(companies)
       .set({ accessVersion: sql`${companies.accessVersion} + 1` })
       .where(eq(companies.id, companyId))
       .returning({ version: companies.accessVersion, apps: companies.enabledApps });
+    let ahead = 0;
     const roleRows = await db.select().from(roles).where(and(eq(roles.companyId, companyId), eq(roles.archived, false)));
     const grants = roleRows.length ? await db.select().from(roleGrants).where(inArray(roleGrants.roleId, roleRows.map((r) => r.id))) : [];
     const payloadRoles = roleRows.map((r) => ({
@@ -347,11 +348,19 @@ export class RolesService {
           people: holders.map((h) => ({ personId: h.personId, roleIds: byPerson.get(h.personId) ?? [] })),
         });
         result[app] = res.applied ? 'ok' : 'stale';
+        if (!res.applied && typeof res.version === 'number') ahead = Math.max(ahead, res.version);
         if (res.problems?.length) this.log.warn(`${app}: ${res.problems.join('; ')}`);
       } catch (err) {
         result[app] = `failed: ${(err as Error).message}`;
         this.log.error(`Role sync to ${app} failed for company ${companyId}: ${(err as Error).message}`);
       }
+    }
+    if (ahead && !retried) {
+      // An app has a newer version than ours (e.g. the Platform database was restored from a backup). The Platform is
+      // the source of truth: move past the app's version and send everything again, once.
+      this.log.warn(`Role sync: an app is at version ${ahead}, ahead of the Platform (${c.version}) for company ${companyId}; resending`);
+      await db.update(companies).set({ accessVersion: sql`greatest(${companies.accessVersion}, ${ahead})` }).where(eq(companies.id, companyId));
+      return this.push(companyId, { retried: true });
     }
     return result;
   }

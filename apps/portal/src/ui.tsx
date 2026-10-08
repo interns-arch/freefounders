@@ -43,6 +43,32 @@ export function TopBar({ me, onSignOut, children }: { me: Me; onSignOut: () => v
   );
 }
 
+/** Admin pages: People and Roles. */
+export function PageNav({ current }: { current: 'people' | 'roles' }) {
+  const link = (to: 'people' | 'roles', label: string) => (
+    <a
+      href={`/${to}`}
+      className={`tab${current === to ? ' on' : ''}`}
+      aria-current={current === to ? 'page' : undefined}
+      onClick={(e) => {
+        e.preventDefault();
+        navigate(`/${to}`);
+      }}
+    >
+      {label}
+    </a>
+  );
+  return (
+    <nav className="tabs" aria-label="Admin">
+      <a className="btn ghost" href="/?choose">
+        ← Workspaces
+      </a>
+      {link('people', 'People & access')}
+      {link('roles', 'Roles')}
+    </nav>
+  );
+}
+
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

@@ -180,6 +180,8 @@ def _export_access():
 
 
 def _import_access(data):
+    """Applies the Platform's role set. Reads everything it needs in a few queries and writes only what changed,
+    so a push with dozens of roles stays fast."""
     from tenancy.models import CompanySetting
 
     from .access import forget, valid_grant
@@ -189,8 +191,9 @@ def _import_access(data):
         version = int(data.get("version"))
         roles = list(data.get("roles") or [])
         people = list(data.get("people") or [])
+        ids = [uuid.UUID(str(r.get("id"))) for r in roles]
     except (TypeError, ValueError):
-        return Response({"detail": "version, roles and people are required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "version, roles (with UUID ids) and people are required"}, status=status.HTTP_400_BAD_REQUEST)
     current = _access_version()
     if version < current:
         # An older push arriving late: keep what we have.
@@ -198,24 +201,32 @@ def _import_access(data):
 
     problems = []
     with transaction.atomic():
+        codes = [_clean(r.get("code")) for r in roles if _clean(r.get("code"))]
+        by_pid = {r.platform_role_id: r for r in AccessRole.objects.filter(platform_role_id__in=ids)}
+        by_code = {r.code: r for r in AccessRole.objects.filter(code__in=codes)}
+        have_grants: dict[int, dict[str, str]] = {}
+        for role_id, permission, scope in AccessGrant.objects.filter(
+                role_id__in=[r.pk for r in [*by_pid.values(), *by_code.values()]]).values_list("role_id", "permission", "scope"):
+            have_grants.setdefault(role_id, {})[permission] = scope
+
         by_platform_id = {}
-        for r in roles:
-            try:
-                rid = uuid.UUID(str(r.get("id")))
-            except ValueError:
-                return Response({"detail": "every role needs a UUID id"}, status=status.HTTP_400_BAD_REQUEST)
+        new_grants, drop_grants = [], []
+        for r, rid in zip(roles, ids):
             code = _clean(r.get("code")) or f"p-{rid.hex[:12]}"
-            role = AccessRole.objects.filter(platform_role_id=rid).first() or AccessRole.objects.filter(code=code).first()
-            if role is None:
-                role = AccessRole(code=code)
-            role.platform_role_id = rid
-            role.name = (_clean(r.get("name")) or code)[:120]
-            role.description = _clean(r.get("description"))[:300]
-            role.colour = _clean(r.get("colour"))[:20]
-            role.level = max(1, min(3, int(r.get("level") or 1)))
-            role.archived = bool(r.get("archived"))
-            role.is_system = bool(r.get("system"))
-            role.save()
+            role = by_pid.get(rid) or by_code.get(code) or AccessRole(code=code)
+            fields = {
+                "platform_role_id": rid,
+                "name": (_clean(r.get("name")) or code)[:120],
+                "description": _clean(r.get("description"))[:300],
+                "colour": _clean(r.get("colour"))[:20],
+                "level": max(1, min(3, int(r.get("level") or 1))),
+                "archived": bool(r.get("archived")),
+                "is_system": bool(r.get("system")),
+            }
+            if role.pk is None or any(getattr(role, k) != v for k, v in fields.items()):
+                for k, v in fields.items():
+                    setattr(role, k, v)
+                role.save()
             wanted = {}
             for g in r.get("grants") or []:
                 if g.get("app", "tasks") != "tasks":
@@ -225,30 +236,45 @@ def _import_access(data):
                     wanted[permission] = scope
                 else:
                     problems.append(f"{role.name}: {permission}{'@' + scope if scope else ''} is not a Tasks permission")
-            role.grants.exclude(permission__in=wanted).delete()
+            have = have_grants.get(role.pk, {})
+            for permission, scope in have.items():
+                if wanted.get(permission) != scope:
+                    drop_grants.append((role.pk, permission))
             for permission, scope in wanted.items():
-                AccessGrant.objects.update_or_create(role=role, permission=permission, defaults={"scope": scope})
+                if have.get(permission) != scope:
+                    new_grants.append(AccessGrant(role=role, permission=permission, scope=scope))
             by_platform_id[str(rid)] = role
+        for role_id, permission in drop_grants:
+            AccessGrant.objects.filter(role_id=role_id, permission=permission).delete()
+        AccessGrant.objects.bulk_create(new_grants)
         # Platform roles that are no longer sent were deleted there: archive (history keeps their name).
         if data.get("complete", True):
-            AccessRole.objects.filter(platform_role_id__isnull=False).exclude(
-                platform_role_id__in=[uuid.UUID(k) for k in by_platform_id]).update(archived=True)
+            AccessRole.objects.filter(platform_role_id__isnull=False, archived=False).exclude(platform_role_id__in=ids).update(archived=True)
 
-        missing = []
+        person_ids = [str(p.get("personId")) for p in people if p.get("personId")]
+        users = {str(u.platform_person_id): u for u in User.objects.filter(platform_person_id__in=person_ids)}
+        held: dict[int, set[int]] = {}
+        for user_id, role_id in UserAccessRole.objects.filter(user__in=users.values()).values_list("user_id", "role_id"):
+            held.setdefault(user_id, set()).add(role_id)
+        missing, add_links, drop_links = [], [], []
         for p in people:
-            user = User.objects.filter(platform_person_id=p.get("personId")).first() if p.get("personId") else None
+            user = users.get(str(p.get("personId")))
             if user is None:
                 missing.append(p.get("personId"))
                 continue
             wanted_roles = [by_platform_id[str(x)] for x in p.get("roleIds") or [] if str(x) in by_platform_id]
-            UserAccessRole.objects.filter(user=user).exclude(role__in=wanted_roles).delete()
-            for role in wanted_roles:
-                UserAccessRole.objects.get_or_create(user=user, role=role)
+            want_ids = {r.pk for r in wanted_roles}
+            have_ids = held.get(user.pk, set())
+            drop_links += [(user.pk, rid) for rid in have_ids - want_ids]
+            add_links += [UserAccessRole(user=user, role_id=rid) for rid in want_ids - have_ids]
             # The primary role shown in the app follows the first built-in role, if there is one.
             builtin = next((r.code for r in wanted_roles if r.code in Role.values), None)
             if builtin and user.role != builtin:
                 user.role = builtin
                 user.save(update_fields=["role", "is_staff"])
+        for user_id, role_id in drop_links:
+            UserAccessRole.objects.filter(user_id=user_id, role_id=role_id).delete()
+        UserAccessRole.objects.bulk_create(add_links)
         CompanySetting.objects.update_or_create(key=ACCESS_VERSION_KEY, defaults={"value": str(version), "secret": False})
     forget()
     return Response({"version": version, "applied": True, "roles": len(by_platform_id), "people": len(people) - len(missing),

@@ -20,8 +20,8 @@ test('one sign-in opens Tasks and Assets, switch between them, sign out', async 
 
   await signIn(page);
   await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Tasks/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Assets/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Tasks/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Assets/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /People & access/ })).toBeVisible();
   await shot(page, '2-choose-workspace');
 
@@ -62,7 +62,8 @@ test('admins manage people from the portal', async ({ page }) => {
   await page.getByRole('button', { name: /People & access/ }).click();
   await expect(page.getByRole('heading', { name: 'People & access' })).toBeVisible();
   await expect(page.getByRole('row', { name: /Demo Owner/ })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'Tasks access for Demo Owner' })).toBeChecked();
+  await expect(page.getByRole('cell', { name: 'Roles of Demo Owner' })).toContainText('Super Admin');
+  await expect(page.getByRole('cell', { name: 'Apps of Demo Owner' })).toContainText('Tasks');
   await shot(page, '5-people');
   await page.getByRole('button', { name: '+ Add person' }).click();
   await expect(page.getByRole('dialog', { name: 'Add person' })).toBeVisible();
@@ -115,4 +116,57 @@ test('a second company sees none of the first company\'s tasks or people', async
   await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(secret)).toHaveCount(0);
   await shot(page, '5-second-company-tasks');
+});
+
+// Phase 3: one role builder for every app.
+test('admins build a role and give it to someone; it reaches Tasks', async ({ page, request }) => {
+  const stamp = Date.now().toString(36);
+  const roleName = `E2E Floor Lead ${stamp}`;
+  await page.goto('/?choose');
+  await signIn(page);
+  await page.getByRole('button', { name: /^Roles/ }).click();
+  await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Super Admin Locked/ })).toBeVisible();
+
+  await page.getByRole('button', { name: '+ New role' }).click();
+  const editor = page.getByRole('dialog', { name: 'New role' });
+  await editor.getByLabel('Name').fill(roleName);
+  await editor.getByRole('checkbox', { name: 'Tasks: See tasks' }).check();
+  await editor.getByRole('radiogroup', { name: 'Scope for See tasks' }).getByRole('radio', { name: 'Department' }).click();
+  await shot(page, '7-role-editor');
+  await editor.getByRole('button', { name: 'Save role' }).click();
+  await expect(page.getByRole('row', { name: new RegExp(roleName) })).toBeVisible();
+
+  // A new person (through the API), then the role through the People screen.
+  const headers = { 'x-requested-with': 'XMLHttpRequest' };
+  const owner = await (await request.post('/api/platform/auth/login', { data: { login: OWNER.login, password: OWNER.password, client: 'mobile' }, headers })).json();
+  const created = await request.post('/api/platform/people', {
+    headers: { ...headers, authorization: `Bearer ${owner.accessToken}` },
+    data: { fullName: `E2E Person ${stamp}`, email: `e2e-${stamp}@freefounders.test`, login: { username: `e2e-${stamp}`, password: 'E2e@123456' } },
+  });
+  expect(created.status()).toBe(201);
+
+  await page.getByRole('link', { name: 'People & access' }).click();
+  await page.getByLabel('Search people').fill(`E2E Person ${stamp}`);
+  const row = page.getByRole('row', { name: new RegExp(`E2E Person ${stamp}`) });
+  await row.getByRole('button', { name: 'Change roles' }).click();
+  const dialog = page.getByRole('dialog', { name: `Roles of E2E Person ${stamp}` });
+  await dialog.getByRole('checkbox', { name: new RegExp(roleName) }).check();
+  await expect(dialog.getByText(/will be able to open: Tasks/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Save roles' }).click();
+  await expect(row.getByRole('cell', { name: /Roles of/ })).toContainText(roleName);
+  await expect(row.getByRole('cell', { name: /Apps of/ })).toContainText('Tasks');
+  await shot(page, '8-people-roles');
+
+  // Their sign-in now opens Tasks with exactly the role's permission.
+  const person = await (await request.post('/api/platform/auth/login', { data: { login: `e2e-${stamp}`, password: 'E2e@123456', client: 'mobile' }, headers })).json();
+  const me = await (await request.get('/tasks/api/auth/me', { headers: { authorization: `Bearer ${person.accessToken}` } })).json();
+  expect(me.capabilities).toEqual(['tasks.view_department']);
+
+  // Leave the demo company as it was: archive this run's role and any left over from earlier runs.
+  const auth = { ...headers, authorization: `Bearer ${owner.accessToken}` };
+  const roles = (await (await request.get('/api/platform/roles', { headers: auth })).json()) as Array<{ id: string; name: string }>;
+  for (const r of roles.filter((x) => x.name.startsWith('E2E Floor Lead '))) {
+    expect((await request.delete(`/api/platform/roles/${r.id}`, { headers: auth })).ok()).toBeTruthy();
+  }
 });

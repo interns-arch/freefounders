@@ -155,3 +155,40 @@ input[type='checkbox'] { width: auto; }
   .page-head { flex-direction: column; align-items: stretch; }
   .auth-card { padding: 24px; }
 }
+
+/* Admin tabs (People | Roles) */
+.tabs { display: flex; align-items: center; gap: 4px; }
+.tab { padding: 7px 12px; border-radius: var(--radius-sm); color: var(--muted); text-decoration: none; font-weight: 600; font-size: 14px; }
+.tab:hover { background: var(--surface-2); color: var(--ink); }
+.tab.on { background: var(--brand-soft); color: var(--brand); }
+
+/* Role chips and the role editor */
+.pill:not(.warn) { background: var(--surface-2); color: var(--muted); }
+.chip { display: inline-block; margin: 2px 6px 2px 0; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+.chip-tasks { color: var(--tasks); }
+.chip-assets { color: var(--assets); }
+.chip-system { color: var(--admin); }
+.role-cell { max-width: 340px; }
+.role-cell .btn { margin-top: 4px; }
+.modal-card:has(.role-editor) { width: min(760px, 100%); }
+.matrix { border: 1px solid var(--line); border-radius: var(--radius-sm); margin: 8px 0 0; }
+.matrix section + section { border-top: 1px solid var(--line); }
+.matrix-app { margin: 0; padding: 10px 14px; font-size: 14px; background: var(--surface-2); }
+.matrix-group { padding: 6px 14px 10px; }
+.matrix-group h4 { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.matrix-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; flex-wrap: wrap; }
+.matrix-row .check { margin: 0; color: var(--ink); }
+.matrix-row .check input { width: auto; }
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.segmented button { font: inherit; font-size: 12.5px; padding: 4px 10px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button.on { background: var(--brand); color: var(--brand-ink); }
+.segmented button:focus-visible { outline: none; box-shadow: var(--ring); }
+.role-pick { display: grid; gap: 2px; max-height: 50dvh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; }
+.role-pick .check { margin: 0; padding: 6px 0; color: var(--ink); justify-content: space-between; }
+.role-pick .check input { width: auto; }
+.role-pick .check > span:first-of-type { flex: 1; }
+@media (max-width: 640px) {
+  .tabs .tab { padding: 6px 8px; font-size: 13px; }
+  .matrix-row { align-items: flex-start; flex-direction: column; gap: 6px; padding: 6px 0; }
+}

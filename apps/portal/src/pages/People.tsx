@@ -1,18 +1,20 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
-import { ApiError, type AppInfo, type AppKey, type AppRole, call, errorText, type Me, type Person, type PlatformRole } from '../api';
-import { Modal, TopBar } from '../ui';
+import { ApiError, type AppInfo, APP_NAMES, call, errorText, type Me, type Person, type PlatformRole, type Role } from '../api';
+import { Modal, PageNav, TopBar } from '../ui';
+import { roleApps } from './Roles';
 
 const LEVELS: Record<PlatformRole, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 
 type Dialog =
   | { kind: 'add' }
-  | { kind: 'grant'; person: Person; app: AppInfo }
+  | { kind: 'roles'; person: Person }
   | { kind: 'password'; person: Person; username: string | null; password: string }
   | { kind: 'edit'; person: Person };
 
 export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [apps, setApps] = useState<AppInfo[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -31,7 +33,9 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
   }, [load, search]);
   useEffect(() => {
     call<AppInfo[]>('GET', '/apps').then(setApps, (err) => setError(errorText(err)));
+    call<Role[]>('GET', '/roles').then(setRoles, (err) => setError(errorText(err)));
   }, []);
+  const roleById = new Map(roles.map((r) => [r.id, r]));
 
   const act = async (fn: () => Promise<unknown>) => {
     setError('');
@@ -41,12 +45,6 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
     } catch (err) {
       setError(errorText(err));
     }
-  };
-
-  const toggleApp = (p: Person, app: AppInfo) => {
-    if (!p.apps.includes(app.app)) return setDialog({ kind: 'grant', person: p, app });
-    if (!window.confirm(`Remove ${app.name} from ${p.fullName}? They will be signed out.`)) return;
-    void act(() => call('DELETE', `/people/${p.id}/apps/${app.app}`));
   };
 
   const resetPassword = (p: Person) =>
@@ -65,15 +63,13 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
   return (
     <div className="page">
       <TopBar me={me} onSignOut={onSignOut}>
-        <a className="btn ghost" href="/?choose">
-          ← Workspaces
-        </a>
+        <PageNav current="people" />
       </TopBar>
       <main className="container">
         <div className="page-head">
           <div>
             <h1>People &amp; access</h1>
-            <p className="muted">Everyone at {me.company.name}: their login and which apps they can open.</p>
+            <p className="muted">Everyone at {me.company.name}: their login and their roles. Roles decide which apps they can open.</p>
           </div>
           <button className="btn primary" onClick={() => setDialog({ kind: 'add' })}>
             + Add person
@@ -94,23 +90,22 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
                 <th>Person</th>
                 <th>Level</th>
                 <th>Sign-in</th>
-                {apps.map((a) => (
-                  <th key={a.app}>{a.name}</th>
-                ))}
+                <th>Roles</th>
+                <th>Apps</th>
                 <th aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
               {people === null && (
                 <tr>
-                  <td colSpan={4 + apps.length} className="muted">
+                  <td colSpan={6} className="muted">
                     Loading…
                   </td>
                 </tr>
               )}
               {people?.length === 0 && (
                 <tr>
-                  <td colSpan={4 + apps.length} className="muted">
+                  <td colSpan={6} className="muted">
                     No one found.
                   </td>
                 </tr>
@@ -135,14 +130,27 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
                       <span className="muted">No login</span>
                     )}
                   </td>
-                  {apps.map((a) => (
-                    <td key={a.app}>
-                      <label className="switch" title={p.apps.includes(a.app) ? `Remove ${a.name}` : `Give ${a.name}`}>
-                        <input type="checkbox" checked={p.apps.includes(a.app)} onChange={() => toggleApp(p, a)} disabled={p.status === 'inactive'} aria-label={`${a.name} access for ${p.fullName}`} />
-                        <span />
-                      </label>
-                    </td>
-                  ))}
+                  <td className="role-cell" aria-label={`Roles of ${p.fullName}`}>
+                    {p.roleIds.map((id) => roleById.get(id)).filter(Boolean).map((r) => (
+                      <span key={r!.id} className={`chip${r!.system ? ' chip-system' : ''}`}>
+                        {r!.name}
+                      </span>
+                    ))}
+                    {p.roleIds.length === 0 && <span className="muted">No role</span>}
+                    <div>
+                      <button className="btn small" onClick={() => setDialog({ kind: 'roles', person: p })} disabled={p.status === 'inactive'}>
+                        Change roles
+                      </button>
+                    </div>
+                  </td>
+                  <td aria-label={`Apps of ${p.fullName}`}>
+                    {p.apps.map((a) => (
+                      <span key={a} className={`chip chip-${a}`}>
+                        {APP_NAMES[a]}
+                      </span>
+                    ))}
+                    {p.apps.length === 0 && <span className="muted">—</span>}
+                  </td>
                   <td className="row-actions">
                     <button className="btn small" onClick={() => setDialog({ kind: 'edit', person: p })}>
                       Edit
@@ -179,7 +187,9 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
         />
       )}
       {dialog?.kind === 'edit' && <PersonForm me={me} person={dialog.person} onClose={() => setDialog(null)} onSaved={async () => (await load(), setDialog(null))} />}
-      {dialog?.kind === 'grant' && <GrantDialog person={dialog.person} app={dialog.app} onClose={() => setDialog(null)} onDone={async () => (await load(), setDialog(null))} />}
+      {dialog?.kind === 'roles' && (
+        <RolesDialog me={me} person={dialog.person} roles={roles} apps={apps} onClose={() => setDialog(null)} onDone={async () => (await load(), setDialog(null))} />
+      )}
       {dialog?.kind === 'password' && (
         <Modal title="Login ready" onClose={() => setDialog(null)}>
           <p>
@@ -330,48 +340,82 @@ function PersonForm({ me, person, onClose, onSaved }: { me: Me; person?: Person;
   );
 }
 
-function GrantDialog({ person, app, onClose, onDone }: { person: Person; app: AppInfo; onClose: () => void; onDone: () => Promise<void> }) {
-  const [roles, setRoles] = useState<AppRole[] | null>(null);
-  const [role, setRole] = useState('');
+function RolesDialog({
+  me,
+  person,
+  roles,
+  apps,
+  onClose,
+  onDone,
+}: {
+  me: Me;
+  person: Person;
+  roles: Role[];
+  apps: AppInfo[];
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set(person.roleIds));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const inPlan = new Set(apps.map((a) => a.app));
+  const reach = [...new Set(roles.filter((r) => chosen.has(r.id)).flatMap((r) => roleApps(r)))].filter((a) => inPlan.has(a));
 
-  useEffect(() => {
-    call<AppRole[]>('GET', `/apps/${app.app}/roles`).then(setRoles, (err) => {
-      setRoles([]);
-      setError(errorText(err));
-    });
-  }, [app.app]);
-
-  const grant = async () => {
+  const save = async () => {
     setBusy(true);
     setError('');
     try {
-      await call('PUT', `/people/${person.id}/apps/${app.app as AppKey}`, role ? { appRole: role } : {});
+      await call('PUT', `/people/${person.id}/roles`, { roleIds: [...chosen] });
       await onDone();
     } catch (err) {
-      setError(errorText(err));
+      setError(err instanceof ApiError ? err.message : errorText(err));
       setBusy(false);
     }
   };
 
   return (
-    <Modal title={`Give ${person.fullName} access to ${app.name}`} onClose={onClose}>
-      <p className="muted">
-        If {person.fullName.split(' ')[0]} already has a {app.name} login (same email, employee ID or username) it is linked; otherwise one is created. The role
-        applies only to a new login.
+    <Modal title={`Roles of ${person.fullName}`} onClose={onClose}>
+      <p className="muted">Pick one or more roles. Their permissions add up; the widest scope wins.</p>
+      <div className="role-pick">
+        {roles.map((r) => {
+          // Only an owner gives or takes Super Admin.
+          const lockedForMe = r.code === 'ff_super_admin' && me.person.role !== 'owner';
+          return (
+            <label key={r.id} className="check">
+              <input
+                type="checkbox"
+                checked={chosen.has(r.id)}
+                disabled={lockedForMe}
+                onChange={() =>
+                  setChosen((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(r.id)) next.delete(r.id);
+                    else next.add(r.id);
+                    return next;
+                  })
+                }
+              />
+              <span>
+                {r.name}
+                {r.system && <span className="pill">Locked</span>}
+              </span>
+              <span>
+                {roleApps(r).map((a) => (
+                  <span key={a} className={`chip chip-${a}`}>
+                    {APP_NAMES[a]}
+                  </span>
+                ))}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      <p className="fine">
+        {reach.length
+          ? `${person.fullName.split(' ')[0]} will be able to open: ${reach.map((a) => APP_NAMES[a]).join(', ')}.`
+          : `${person.fullName.split(' ')[0]} will not be able to open any app.`}{' '}
+        Losing an app signs them out.
       </p>
-      <label className="field">
-        <span>Role in {app.name}</span>
-        <select value={role} onChange={(e) => setRole(e.target.value)} disabled={!roles}>
-          <option value="">{roles ? 'Default role' : 'Loading roles…'}</option>
-          {roles?.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
-            </option>
-          ))}
-        </select>
-      </label>
       {error && (
         <p className="error" role="alert">
           {error}
@@ -381,8 +425,8 @@ function GrantDialog({ person, app, onClose, onDone }: { person: Person; app: Ap
         <button className="btn" onClick={onClose}>
           Cancel
         </button>
-        <button className="btn primary" onClick={() => void grant()} disabled={busy}>
-          {busy ? 'Giving access…' : `Give ${app.name} access`}
+        <button className="btn primary" onClick={() => void save()} disabled={busy}>
+          {busy ? 'Saving…' : 'Save roles'}
         </button>
       </div>
     </Modal>

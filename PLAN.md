@@ -653,3 +653,18 @@ Permissions that are simply yes/no (e.g. *Manage users*) have no scope. Several 
 ### 15.8 Out of scope
 Responsibilities, recurring duties, approval chains (Phase 5) · Location scope (dropped) · punch-in photo (Phase 4) ·
 custom statuses/fields (Phase 4).
+
+### 15.9 Status (2026-10-08): built and tested
+| Check | Result |
+|---|---|
+| Tasks tests | 704 pass (all earlier tests unchanged; 13 Postgres-only skip on SQLite) |
+| Assets tests | 70 pass |
+| Platform tests | 36 pass (incl. role builder, locked roles, Super Admin rules, an app ahead of the Platform) |
+| Smoke (`npm run smoke`) | 10 / 10 |
+| Browser (`npm run e2e`) | 5 / 5: admin builds a role in the portal, gives it to a person, and Tasks reports exactly that permission |
+
+Found and fixed while testing:
+- **Role changes could stop reaching an app.** Each app ignores a role push older than the last one it applied. If the
+  Platform's counter ends up behind (e.g. the Platform database restored from a backup), every later change was ignored.
+  Now the Platform moves past the app's version and resends once.
+- Role pushes write only what changed (dozens of roles stay fast).

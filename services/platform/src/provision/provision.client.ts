@@ -107,7 +107,7 @@ export class ProvisionClient {
   }
 
   /** Sends the company's full role set, and the roles of the listed people, to an app. */
-  async pushAccess(app: AppKey, companyId: string, body: unknown): Promise<{ applied: boolean; missingPeople?: string[]; problems?: string[] }> {
+  async pushAccess(app: AppKey, companyId: string, body: unknown): Promise<{ applied: boolean; version?: number; missingPeople?: string[]; problems?: string[] }> {
     return this.internalJson(app, 'PUT', '/access', companyId, body);
   }
 

@@ -33,6 +33,8 @@ const FAKE_CATALOGUE = {
 };
 let fakeExport: { version: number; roles: unknown[]; people: unknown[] } = { version: 0, roles: [], people: [] };
 const accessPushes: Array<{ cid: unknown; body: any }> = [];
+/** The role-set version the fake app last applied; a lower one is refused as stale, like the real apps do. */
+let fakeAccessVersion = 0;
 
 interface Res {
   status: number;
@@ -86,7 +88,13 @@ before(async () => {
         return;
       }
       if (req.method === 'PUT' && req.url?.endsWith('/access')) {
-        accessPushes.push({ cid: payload.cid, body: JSON.parse(raw) });
+        const body = JSON.parse(raw);
+        accessPushes.push({ cid: payload.cid, body });
+        if (body.version < fakeAccessVersion) {
+          res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ version: fakeAccessVersion, applied: false }));
+          return;
+        }
+        fakeAccessVersion = body.version;
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ applied: true, problems: [] }));
         return;
       }
@@ -537,5 +545,18 @@ describe('role builder (Phase 3)', () => {
     assert.deepEqual(rita.roleIds, []);
     assert.deepEqual(rita.apps, []);
     assert.ok(!accessPushes.at(-1)!.body.roles.some((r: { id: string }) => r.id === roleIds.copy), 'the apps archive it');
+  });
+
+  test('an app ahead of the Platform (e.g. Platform restored from a backup) still gets the change', async () => {
+    const admin = await login('admin@acme.test');
+    fakeAccessVersion += 1000;
+    const before = accessPushes.length;
+    const res = await call('PUT', `/people/${ids.rita}/roles`, { token: admin.token, body: { roleIds: [roleIds.floor] } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.sync.tasks, 'ok');
+    const sent = accessPushes.slice(before).map((p) => p.body.version);
+    assert.equal(sent.length, 2, 'refused once as stale, then resent');
+    assert.ok(sent[1] > sent[0] && sent[1] >= fakeAccessVersion - 0, 'the resend is past the app version');
+    assert.deepEqual(accessPushes.at(-1)!.body.people.find((p: { personId: string }) => p.personId === ids.rita).roleIds, [roleIds.floor]);
   });
 });
