@@ -7,6 +7,7 @@ import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, roles } from '../db/schema';
 import { ProvisionClient } from '../provision/provision.client';
+import { DirectoryService } from './directory.service';
 
 const optional = <T extends z.ZodTypeAny>(s: T) =>
   z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), s.nullable().optional());
@@ -36,6 +37,11 @@ const personFields = {
       .regex(/^\+?[0-9 -]{7,20}$/, 'Enter a valid mobile number'),
   ),
   platformRole: z.enum(PLATFORM_ROLES).optional(),
+  // People directory (PLAN.md §17.1)
+  departmentId: optional(z.string().uuid()),
+  designation: optional(z.string().trim().max(80)),
+  reportsTo: optional(z.string().uuid()),
+  joinDate: optional(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-08')),
 };
 
 export const personCreateSchema = z.object({
@@ -67,6 +73,7 @@ export class PeopleService {
     private readonly dbs: DbService,
     private readonly auth: AuthService,
     private readonly provisioner: ProvisionClient,
+    private readonly directory: DirectoryService,
   ) {}
 
   async list(caller: Caller, search = '') {
@@ -124,6 +131,10 @@ export class PeopleService {
       mobile: p.mobile,
       platformRole: p.platformRole,
       status: p.status,
+      departmentId: p.departmentId,
+      designation: p.designation,
+      reportsTo: p.reportsTo,
+      joinDate: p.joinDate,
       createdAt: p.createdAt,
     };
   }
@@ -173,7 +184,9 @@ export class PeopleService {
   async create(caller: Caller, input: PersonCreate) {
     this.assertRoleChange(caller, input.platformRole);
     await this.assertIdentifiersFree(null, input.login?.username, input.employeeCode);
-    return this.dbs.tx(async (tx) => {
+    await this.directory.assertDepartment(caller.companyId, input.departmentId);
+    await this.directory.assertReportsTo(caller.companyId, null, input.reportsTo);
+    const created = await this.dbs.tx(async (tx) => {
       const [p] = await tx
         .insert(people)
         .values({
@@ -183,6 +196,10 @@ export class PeopleService {
           employeeCode: input.employeeCode ?? null,
           mobile: input.mobile ?? null,
           platformRole: input.platformRole ?? 'member',
+          departmentId: input.departmentId ?? null,
+          designation: input.designation ?? null,
+          reportsTo: input.reportsTo ?? null,
+          joinDate: input.joinDate ?? null,
         })
         .returning();
       let generatedPassword: string | undefined;
@@ -195,6 +212,7 @@ export class PeopleService {
       }
       return { person: this.view(p), generatedPassword };
     });
+    return created;
   }
 
   async update(caller: Caller, id: string, input: PersonUpdate) {
@@ -207,6 +225,8 @@ export class PeopleService {
       await this.assertAnotherOwner(caller.companyId, id);
     }
     if (input.employeeCode !== undefined) await this.assertIdentifiersFree(id, null, input.employeeCode);
+    if (input.departmentId !== undefined) await this.directory.assertDepartment(caller.companyId, input.departmentId);
+    if (input.reportsTo !== undefined) await this.directory.assertReportsTo(caller.companyId, id, input.reportsTo);
 
     const [p] = await this.dbs.db
       .update(people)
@@ -217,12 +237,18 @@ export class PeopleService {
         ...(input.mobile !== undefined ? { mobile: input.mobile } : {}),
         ...(input.platformRole ? { platformRole: input.platformRole } : {}),
         ...(input.status ? { status: input.status } : {}),
+        ...(input.departmentId !== undefined ? { departmentId: input.departmentId } : {}),
+        ...(input.designation !== undefined ? { designation: input.designation } : {}),
+        ...(input.reportsTo !== undefined ? { reportsTo: input.reportsTo } : {}),
+        ...(input.joinDate !== undefined ? { joinDate: input.joinDate } : {}),
         updatedAt: new Date(),
       })
       .where(eq(people.id, id))
       .returning();
     if (input.status === 'inactive') await this.auth.revokeAll(id);
-    return this.view(p);
+    // Department, manager, active/inactive reach the apps (deactivated people are switched off there too).
+    const sync = await this.directory.push(caller.companyId);
+    return { ...this.view(p), sync };
   }
 
   private async assertAnotherOwner(companyId: string, exceptId: string) {
@@ -285,6 +311,7 @@ export class PeopleService {
       .insert(personApps)
       .values({ personId: id, app, localUserId })
       .onConflictDoUpdate({ target: [personApps.personId, personApps.app], set: { localUserId, grantedAt: new Date() } });
+    await this.directory.push(caller.companyId); // the new user gets their department and manager
     return { app, localUserId };
   }
 

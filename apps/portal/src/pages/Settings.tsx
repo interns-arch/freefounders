@@ -1,5 +1,5 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from 'react';
-import { APP_NAMES, type AppKey, call, type CompanySettings, errorText, type Me } from '../api';
+import { APP_NAMES, type AppKey, call, type CompanySettings, type Department, errorText, type Me } from '../api';
 import { PageNav, TopBar } from '../ui';
 
 /** Settings each app keeps itself; the Settings Center links to them (PLAN.md §16.1). */
@@ -55,6 +55,7 @@ export function SettingsPage({ me, onSignOut, onBrandChange }: { me: Me; onSignO
               }}
             />
             <ModulesCard company={company} onSaved={setCompany} />
+            <DepartmentsCard />
             <section className="card settings-card" aria-labelledby="app-settings">
               <h2 id="app-settings">App settings</h2>
               <p className="muted">Each app keeps its own detailed settings. These open in the app.</p>
@@ -276,6 +277,91 @@ function ModulesCard({ company, onSaved }: { company: CompanySettings; onSaved: 
           </ul>
         </div>
       ))}
+    </section>
+  );
+}
+
+/** One department list for every app (PLAN.md §17.1). Codes never change, so renaming is safe. */
+function DepartmentsCard() {
+  const [list, setList] = useState<Department[] | null>(null);
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const load = useCallback(() => call<Department[]>('GET', '/departments').then(setList, (err) => setError(errorText(err))), []);
+  useEffect(() => void load(), [load]);
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setError('');
+    try {
+      await fn();
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  return (
+    <section className="card settings-card" aria-labelledby="departments">
+      <h2 id="departments">Departments</h2>
+      <p className="muted">Used by People, approvals and the Department scope of roles, in every app.</p>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <ul className="module-list">
+        {list?.length === 0 && <li className="muted">No departments yet.</li>}
+        {list?.map((d) => (
+          <li key={d.id}>
+            {editing?.id === d.id ? (
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(() => call('PATCH', `/departments/${d.id}`, { name: editing.name })).then(() => setEditing(null));
+                }}
+              >
+                <input aria-label={`New name for ${d.name}`} value={editing.name} onChange={(e) => setEditing({ id: d.id, name: e.target.value })} autoFocus />
+                <button className="btn small primary">Save</button>
+                <button type="button" className="btn small" onClick={() => setEditing(null)}>
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <div>
+                <strong>{d.name}</strong>
+                {!d.active && <span className="pill">Inactive</span>}
+                <small>
+                  {d.people} {d.people === 1 ? 'person' : 'people'}
+                </small>
+              </div>
+            )}
+            {editing?.id !== d.id && (
+              <span className="row-actions">
+                <button className="btn small" onClick={() => setEditing({ id: d.id, name: d.name })}>
+                  Rename
+                </button>
+                <button className="btn small" onClick={() => void run(() => call('PATCH', `/departments/${d.id}`, { active: !d.active }))}>
+                  {d.active ? 'Deactivate' : 'Activate'}
+                </button>
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <form
+        className="inline-form"
+        style={{ marginTop: 12 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run(() => call('POST', '/departments', { name })).then(() => setName(''));
+        }}
+      >
+        <input aria-label="New department" placeholder="New department" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+        <button className="btn primary" disabled={!name.trim()}>
+          Add department
+        </button>
+      </form>
     </section>
   );
 }

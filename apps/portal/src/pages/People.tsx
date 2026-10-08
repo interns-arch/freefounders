@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
-import { ApiError, type AppInfo, APP_NAMES, call, errorText, type Me, type Person, type PlatformRole, type Role } from '../api';
+import { ApiError, type AppInfo, APP_NAMES, call, errorText, type Me, type Person, type PlatformRole, type Role, type Department } from '../api';
 import { Modal, PageNav, TopBar } from '../ui';
 import { roleApps } from './Roles';
 
@@ -228,6 +228,10 @@ function PersonForm({ me, person, onClose, onSaved }: { me: Me; person?: Person;
     employeeCode: person?.employeeCode ?? '',
     mobile: person?.mobile ?? '',
     platformRole: person?.platformRole ?? ('member' as PlatformRole),
+    departmentId: person?.departmentId ?? '',
+    designation: person?.designation ?? '',
+    reportsTo: person?.reportsTo ?? '',
+    joinDate: person?.joinDate ?? '',
     withLogin: true,
     username: '',
     password: '',
@@ -236,13 +240,30 @@ function PersonForm({ me, person, onClose, onSaved }: { me: Me; person?: Person;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
+  // People directory (PLAN.md §17.1): the company's departments, and who this person can report to.
+  const [depts, setDepts] = useState<Department[]>([]);
+  const [everyone, setEveryone] = useState<Person[]>([]);
+  useEffect(() => {
+    call<Department[]>('GET', '/departments').then(setDepts, () => setDepts([]));
+    call<Person[]>('GET', '/people').then(setEveryone, () => setEveryone([]));
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError('');
     setErrors({});
-    const fields = { fullName: f.fullName, email: f.email, employeeCode: f.employeeCode, mobile: f.mobile, platformRole: f.platformRole };
+    const fields = {
+      fullName: f.fullName,
+      email: f.email,
+      employeeCode: f.employeeCode,
+      mobile: f.mobile,
+      platformRole: f.platformRole,
+      departmentId: f.departmentId || null,
+      designation: f.designation || null,
+      reportsTo: f.reportsTo || null,
+      joinDate: f.joinDate || null,
+    };
     try {
       if (person) {
         const saved = await call<Person>('PATCH', `/people/${person.id}`, fields);
@@ -297,6 +318,44 @@ function PersonForm({ me, person, onClose, onSaved }: { me: Me; person?: Person;
                 </option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            <span>Department</span>
+            <select value={f.departmentId} onChange={set('departmentId')}>
+              <option value="">—</option>
+              {depts
+                .filter((d) => d.active || d.id === f.departmentId)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+            </select>
+            {fieldError('departmentId')}
+          </label>
+          <label className="field">
+            <span>Designation</span>
+            <input value={f.designation} onChange={set('designation')} maxLength={80} placeholder="e.g. Sales Executive" />
+            {fieldError('designation')}
+          </label>
+          <label className="field">
+            <span>Reports to</span>
+            <select value={f.reportsTo} onChange={set('reportsTo')}>
+              <option value="">— nobody (approvals go to admins) —</option>
+              {everyone
+                .filter((p) => p.id !== person?.id && (p.status === 'active' || p.id === f.reportsTo))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.fullName}
+                  </option>
+                ))}
+            </select>
+            {fieldError('reportsTo')}
+          </label>
+          <label className="field">
+            <span>Joining date</span>
+            <input type="date" value={f.joinDate} onChange={set('joinDate')} />
+            {fieldError('joinDate')}
           </label>
         </div>
         {!person && (

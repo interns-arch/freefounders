@@ -22,6 +22,7 @@ urlpatterns = [
     path("internal/access", internal.access),
     path("internal/modules", internal.modules),
     path("internal/company", internal.company),
+    path("internal/people", internal.people),
     path("internal/companies", create_company),
     path("team/", views.team_directory),
     path("roles/", views.roles),

@@ -9,7 +9,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { exportJWK, SignJWT } from 'jose';
 import { type Permission, SYSTEM_ROLES } from '@eam/shared';
 import { DbService } from './db/db.service';
-import { employees, roles, sessions, syncState, users } from './db/schema';
+import { departments, employees, roles, sessions, syncState, users } from './db/schema';
 import { createApp } from './main';
 import { hashPassword } from './modules/auth/auth.service';
 
@@ -340,5 +340,46 @@ describe('settings center (Phase 4)', () => {
       await dbs.root.delete(sessions).where(eq(sessions.userId, admin.id));
       await dbs.root.delete(users).where(eq(users.id, admin.id));
     }
+  });
+});
+
+describe('people directory (Phase 5)', () => {
+  test('departments, manager, designation, join date and deactivation arrive from the Platform', async () => {
+    assert.equal((await call('PUT', '/internal/people', undefined, { version: 1, departments: [], people: [] })).status, 401);
+    const boss = await provision({ email: 'pf-boss@t.test', fullName: 'PF Boss' });
+    const worker = await provision({ email: 'pf-worker@t.test', fullName: 'PF Worker' });
+    assert.equal(boss.status, 200, JSON.stringify(boss.body));
+    const [b] = await dbs.root.select().from(users).where(eq(users.id, boss.body.userId));
+    const [w] = await dbs.root.select().from(users).where(eq(users.id, worker.body.userId));
+    const version = Math.floor(Date.now() / 1000);
+    const res = await call('PUT', '/internal/people', await service(), {
+      version,
+      departments: [{ code: 'pf-field', name: 'PF Field Team' }],
+      people: [
+        { personId: w.platformPersonId, status: 'active', departmentCode: 'pf-field', designation: 'Technician', reportsTo: b.platformPersonId, joinDate: '2026-05-01' },
+        { personId: b.platformPersonId, status: 'active', departmentCode: 'pf-field', designation: 'Lead', reportsTo: null },
+      ],
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.applied, true);
+    const [dept] = await dbs.root.select().from(departments).where(eq(departments.code, 'pf-field'));
+    assert.equal(dept.name, 'PF Field Team');
+    const [we] = await dbs.root.select().from(employees).where(eq(employees.id, w.employeeId!));
+    assert.equal(we.departmentId, dept.id);
+    assert.equal(we.managerId, b.employeeId);
+    assert.equal(we.designation, 'Technician');
+    assert.equal(we.joinDate, '2026-05-01');
+
+    const exported = await call('GET', '/internal/people', await service());
+    const row = exported.body.people.find((p: { personId: string }) => p.personId === w.platformPersonId);
+    assert.deepEqual(row, { personId: w.platformPersonId, departmentCode: 'pf-field', designation: 'Technician', reportsTo: b.platformPersonId, joinDate: '2026-05-01' });
+
+    // Deactivated in the Platform: the login stops at once.
+    const token = await access(w.platformPersonId!, w.id);
+    assert.equal((await call('GET', '/auth/me', token)).status, 200);
+    await call('PUT', '/internal/people', await service(), { version: version + 1, departments: [], people: [{ personId: w.platformPersonId, status: 'inactive' }] });
+    assert.equal((await call('GET', '/auth/me', token)).status, 401);
+    const stale = await call('PUT', '/internal/people', await service(), { version, departments: [], people: [] });
+    assert.deepEqual(stale.body, { version: version + 1, applied: false });
   });
 });

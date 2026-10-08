@@ -134,6 +134,16 @@ export class ProvisionClient {
     return this.internalJson(app, 'PUT', '/company', companyId, body);
   }
 
+  /** An app's departments and each linked person's department / manager (to bring a company into the directory). */
+  async exportPeople(app: AppKey, companyId: string): Promise<import('../people/directory.service').AppPeopleExport> {
+    return this.internalJson(app, 'GET', '/people', companyId);
+  }
+
+  /** Sends the department list and the directory fields of the people who have this app. */
+  async pushPeople(app: AppKey, companyId: string, body: unknown): Promise<{ applied: boolean; version?: number }> {
+    return this.internalJson(app, 'PUT', '/people', companyId, body);
+  }
+
   private async internalJson<T>(app: AppKey, method: string, path: string, companyId: string, body?: unknown): Promise<T> {
     const base = internalUrl(app);
     if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);

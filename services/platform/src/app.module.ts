@@ -11,12 +11,14 @@ import { TokensService } from './keys/tokens.service';
 import { AppsController } from './people/apps.controller';
 import { PeopleController } from './people/people.controller';
 import { PeopleService } from './people/people.service';
+import { DepartmentsController } from './people/departments.controller';
+import { DirectoryService } from './people/directory.service';
 import { ProvisionClient } from './provision/provision.client';
 import { RolesController } from './roles/roles.controller';
 import { RolesService } from './roles/roles.service';
 
 @Module({
-  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController],
-  providers: [DbService, KeysService, TokensService, AuthService, PeopleService, ProvisionClient, RolesService, CompanyService, { provide: APP_GUARD, useClass: AuthGuard }],
+  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController],
+  providers: [DbService, KeysService, TokensService, AuthService, PeopleService, ProvisionClient, RolesService, CompanyService, DirectoryService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

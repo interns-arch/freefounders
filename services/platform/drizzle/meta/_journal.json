@@ -22,6 +22,13 @@
       "when": 1791445678765,
       "tag": "0002_company_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791447806097,
+      "tag": "0003_people_directory",
+      "breakpoints": true
     }
   ]
 }

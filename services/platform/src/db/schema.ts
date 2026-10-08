@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, customType, index, integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { type AnyPgColumn, boolean, customType, date, index, integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 /** Everything the Platform owns lives in its own Postgres schema. */
 export const platform = pgSchema('platform');
@@ -39,8 +39,26 @@ export const companies = platform.table('companies', {
   modules: jsonb('modules').$type<ModuleSwitches>().notNull().default({}),
   /** Goes up on every profile change; like accessVersion, the apps ignore an older profile arriving late. */
   profileVersion: integer('profile_version').notNull().default(0),
+  /** Same for the People directory (departments, reports-to, active), Phase 5. */
+  peopleVersion: integer('people_version').notNull().default(0),
   ...timestamps,
 });
+
+/** The company's departments: one list for every app (Phase 5). `code` is how the apps know a department. */
+export const departments = platform.table(
+  'departments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    active: boolean('active').notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('departments_company_code_uq').on(t.companyId, t.code), uniqueIndex('departments_company_name_uq').on(t.companyId, sql`lower(${t.name})`)],
+);
 
 export const people = platform.table(
   'people',
@@ -55,6 +73,11 @@ export const people = platform.table(
     mobile: text('mobile'),
     platformRole: text('platform_role').notNull().default('member'),
     status: text('status').notNull().default('active'),
+    // People directory (Phase 5): pushed to every app the person has.
+    departmentId: uuid('department_id').references(() => departments.id),
+    designation: text('designation'),
+    reportsTo: uuid('reports_to').references((): AnyPgColumn => people.id),
+    joinDate: date('join_date'),
     ...timestamps,
   },
   (t) => [

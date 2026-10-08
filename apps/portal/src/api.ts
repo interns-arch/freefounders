@@ -106,6 +106,18 @@ export interface Person {
   login: { username: string | null; lastLoginAt: string | null; locked: boolean } | null;
   apps: AppKey[];
   roleIds: string[];
+  departmentId: string | null;
+  designation: string | null;
+  reportsTo: string | null;
+  joinDate: string | null;
+}
+
+export interface Department {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+  people: number;
 }
 
 // Role builder (Phase 3)

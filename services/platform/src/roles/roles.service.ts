@@ -1,3 +1,5 @@
+import { ModuleRef } from '@nestjs/core';
+import { DirectoryService } from '../people/directory.service';
 import { ConflictException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -49,6 +51,7 @@ export class RolesService {
     private readonly dbs: DbService,
     private readonly provisioner: ProvisionClient,
     private readonly auth: AuthService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   // ─── catalogue ──────────────────────────────────────────────────────────
@@ -270,6 +273,8 @@ export class RolesService {
     });
     const apps = await this.applyApps(caller.companyId, personId);
     const sync = await this.push(caller.companyId);
+    // A newly opened app needs the person's department and manager too.
+    await this.moduleRef.get(DirectoryService, { strict: false }).push(caller.companyId);
     return { roleIds: wanted, apps, sync };
   }
 

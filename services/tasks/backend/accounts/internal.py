@@ -176,6 +176,93 @@ def company(request):
         return Response({"detail": "version is required"}, status=status.HTTP_400_BAD_REQUEST)
 
 
+# ---------------------------------------------------------------------------
+# People directory from the Platform (PLAN.md section 17.1)
+# ---------------------------------------------------------------------------
+
+PEOPLE_VERSION_KEY = "FF_PEOPLE_VERSION"
+
+
+@api_view(["GET", "PUT"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def people(request):
+    """GET: departments and each linked person's department and manager (to bring an existing company into the
+    directory). PUT: the Platform's department list and the directory fields of the people who have Tasks."""
+    if request.method == "GET":
+        return Response(_export_people())
+    return _import_people(request.data)
+
+
+def _export_people():
+    from .models import DepartmentOption
+
+    users = User.objects.filter(platform_person_id__isnull=False).select_related("reporting_manager")
+    return {
+        "departments": [{"code": d.code, "name": d.name, "active": d.active} for d in DepartmentOption.objects.all()],
+        "people": [{
+            "personId": str(u.platform_person_id),
+            "departmentCode": u.department or None,
+            "reportsTo": str(u.reporting_manager.platform_person_id)
+            if u.reporting_manager_id and u.reporting_manager.platform_person_id else None,
+        } for u in users],
+    }
+
+
+def _import_people(data):
+    from tenancy.models import CompanySetting
+
+    from .models import DepartmentOption
+
+    try:
+        version = int(data.get("version"))
+        departments = list(data.get("departments") or [])
+        people = list(data.get("people") or [])
+    except (TypeError, ValueError):
+        return Response({"detail": "version, departments and people are required"}, status=status.HTTP_400_BAD_REQUEST)
+    row = CompanySetting.objects.filter(key=PEOPLE_VERSION_KEY).first()
+    current = int(row.value) if row and row.value.isdigit() else 0
+    if version < current:
+        return Response({"version": current, "applied": False})
+
+    with transaction.atomic():
+        known = set()
+        for d in departments:
+            code = re.sub(r"[^a-z0-9_-]", "", _clean(d.get("code")).lower())[:20]
+            if not code:
+                continue
+            known.add(code)
+            DepartmentOption.objects.update_or_create(
+                code=code, defaults={"name": (_clean(d.get("name")) or code)[:60], "active": d.get("active", True) is not False})
+        ids = [str(p.get("personId")) for p in people if p.get("personId")]
+        managers = {str(p.get("reportsTo")) for p in people if p.get("reportsTo")}
+        users = {str(u.platform_person_id): u for u in User.objects.filter(platform_person_id__in=[*ids, *managers])}
+        missing = []
+        for p in people:
+            user = users.get(str(p.get("personId")))
+            if user is None:
+                missing.append(p.get("personId"))
+                continue
+            fields = {}
+            code = _clean(p.get("departmentCode")).lower()
+            if code in known and user.department != code:
+                fields["department"] = code
+            manager = users.get(str(p.get("reportsTo"))) if p.get("reportsTo") else None
+            if manager is not None and manager.pk == user.pk:
+                manager = None
+            if (manager.pk if manager else None) != user.reporting_manager_id:
+                fields["reporting_manager"] = manager
+            active = p.get("status", "active") == "active"
+            if user.is_active != active:
+                fields["is_active"] = active
+            if fields:
+                for k, v in fields.items():
+                    setattr(user, k, v)
+                user.save(update_fields=list(fields))
+        CompanySetting.objects.update_or_create(key=PEOPLE_VERSION_KEY, defaults={"value": str(version), "secret": False})
+    return Response({"version": version, "applied": True, "people": len(people) - len(missing), "missingPeople": missing})
+
+
 ACCESS_VERSION_KEY = "FF_ACCESS_VERSION"
 
 

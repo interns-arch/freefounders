@@ -12,7 +12,8 @@ import { ProvisionClient } from './provision/provision.client';
 import { RolesService } from './roles/roles.service';
 import { CompanyService } from './company/company.service';
 import { DbService } from './db/db.service';
-import { companies, logins, people, personApps, refreshSessions } from './db/schema';
+import { companies, departments, logins, people, personApps, refreshSessions } from './db/schema';
+import { DirectoryService } from './people/directory.service';
 import { createApp } from './main';
 
 const PASSWORD = 'Test@12345';
@@ -37,6 +38,8 @@ const accessPushes: Array<{ cid: unknown; body: any }> = [];
 /** The role-set version the fake app last applied; a lower one is refused as stale, like the real apps do. */
 let fakeAccessVersion = 0;
 const companyPushes: Array<{ cid: unknown; body: any }> = [];
+const peoplePushes: Array<{ cid: unknown; body: any }> = [];
+let fakePeopleExport: { departments: unknown[]; people: unknown[] } = { departments: [], people: [] };
 let fakeProfileVersion = 0;
 const FAKE_MODULES = {
   app: 'tasks',
@@ -87,6 +90,16 @@ before(async () => {
       if (req.method === 'GET' && req.url?.endsWith('/roles')) {
         provisionCalls.push({ body: {}, aud: payload.aud, cid: payload.cid, url: req.url });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{ value: 'warehouse', label: 'Warehouse Team' }]));
+        return;
+      }
+      if (req.method === 'GET' && req.url?.endsWith('/people')) {
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(fakePeopleExport));
+        return;
+      }
+      if (req.method === 'PUT' && req.url?.endsWith('/people')) {
+        const body = JSON.parse(raw);
+        peoplePushes.push({ cid: payload.cid, body });
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ version: body.version, applied: true }));
         return;
       }
       if (req.method === 'GET' && req.url?.endsWith('/modules')) {
@@ -651,5 +664,84 @@ describe('settings center (Phase 4)', () => {
     const res = await call('PATCH', '/company', { token: admin.token, body: { shortName: 'ACME' } });
     assert.equal(res.body.sync.tasks, 'ok');
     assert.ok(companyPushes.at(-1)!.body.version >= fakeProfileVersion);
+  });
+});
+
+describe('people directory (Phase 5)', () => {
+  const dept: Record<string, string> = {};
+
+  test('departments: admins add and rename; codes stay; names are unique', async () => {
+    const admin = await login('admin@acme.test');
+    const mia = await login('mia');
+    assert.equal((await call('POST', '/departments', { token: mia.token, body: { name: 'Sales' } })).status, 403);
+    const sales = await call('POST', '/departments', { token: admin.token, body: { name: 'Sales & Marketing' } });
+    assert.equal(sales.status, 201, JSON.stringify(sales.body));
+    assert.equal(sales.body.code, 'sales-marketing');
+    dept.sales = sales.body.id;
+    assert.equal((await call('POST', '/departments', { token: admin.token, body: { name: 'sales & marketing' } })).status, 400);
+    const ops = await call('POST', '/departments', { token: admin.token, body: { name: 'Operations' } });
+    dept.ops = ops.body.id;
+    const renamed = await call('PATCH', `/departments/${dept.sales}`, { token: admin.token, body: { name: 'Sales' } });
+    assert.equal(renamed.body.code, 'sales-marketing', 'the code never changes');
+    const list = await call('GET', '/departments', { token: mia.token });
+    assert.deepEqual(list.body.map((d: { name: string }) => d.name), ['Operations', 'Sales']);
+  });
+
+  test('a person gets a department, designation, manager and join date; loops and strangers are refused', async () => {
+    const admin = await login('admin@acme.test');
+    const res = await call('PATCH', `/people/${ids.member}`, {
+      token: admin.token,
+      body: { departmentId: dept.sales, designation: 'Sales Executive', reportsTo: ids.admin, joinDate: '2026-04-01' },
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.reportsTo, ids.admin);
+    // Mia reports to Adam, so Adam cannot report to Mia.
+    assert.equal((await call('PATCH', `/people/${ids.admin}`, { token: admin.token, body: { reportsTo: ids.member } })).status, 400);
+    assert.equal((await call('PATCH', `/people/${ids.member}`, { token: admin.token, body: { reportsTo: ids.member } })).status, 400);
+    assert.equal((await call('PATCH', `/people/${ids.member}`, { token: admin.token, body: { departmentId: '00000000-0000-4000-8000-000000000000' } })).status, 400);
+    assert.equal((await call('PATCH', `/people/${ids.member}`, { token: admin.token, body: { reportsTo: ids.otherShared } })).status, 400, 'someone from another company');
+  });
+
+  test('the directory is pushed to the apps, with each app\'s people only; deactivation travels too', async () => {
+    const admin = await login('admin@acme.test');
+    await app.get(DbService).db.insert(personApps).values({ personId: ids.member, app: 'tasks', localUserId: '77' }).onConflictDoNothing();
+    const res = await call('PATCH', `/people/${ids.member}`, { token: admin.token, body: { designation: 'Senior Sales Executive' } });
+    assert.equal(res.body.sync.tasks, 'ok');
+    const pushed = peoplePushes.at(-1)!;
+    assert.equal(pushed.cid, ids.acme);
+    assert.deepEqual(pushed.body.departments.map((d: { code: string }) => d.code).sort(), ['operations', 'sales-marketing']);
+    const mia = pushed.body.people.find((p: { personId: string }) => p.personId === ids.member);
+    assert.deepEqual(mia, { personId: ids.member, status: 'active', departmentCode: 'sales-marketing', designation: 'Senior Sales Executive', reportsTo: ids.admin, joinDate: '2026-04-01' });
+    for (const p of pushed.body.people) {
+      const [has] = await app.get(DbService).db.select().from(personApps).where(eq(personApps.personId, p.personId));
+      assert.ok(has, 'only people who have Tasks are sent to Tasks');
+    }
+  });
+
+  test('an existing company is brought in from its apps once', async () => {
+    const dbs = app.get(DbService);
+    const [c] = await dbs.db.insert(companies).values({ name: 'Oldco', code: 'OLDCO', enabledApps: ['tasks'] }).returning();
+    const [boss] = await dbs.db.insert(people).values({ companyId: c.id, fullName: 'Old Boss' }).returning();
+    const [worker] = await dbs.db.insert(people).values({ companyId: c.id, fullName: 'Old Worker' }).returning();
+    fakePeopleExport = {
+      departments: [{ code: 'sales', name: 'Sales' }, { code: 'warehouse', name: 'Warehouse', active: false }],
+      people: [
+        { personId: worker.id, departmentCode: 'warehouse', reportsTo: boss.id },
+        { personId: boss.id, departmentCode: 'sales', reportsTo: null },
+        { personId: ids.member, departmentCode: 'sales', reportsTo: boss.id },
+      ],
+    };
+    const dir = app.get(DirectoryService);
+    const first = await dir.sync(c.id);
+    assert.equal(first.imported, true);
+    const depts = await dbs.db.select().from(departments).where(eq(departments.companyId, c.id));
+    assert.deepEqual(depts.map((d) => [d.code, d.active]).sort(), [['sales', true], ['warehouse', false]]);
+    const [w] = await dbs.db.select().from(people).where(eq(people.id, worker.id));
+    assert.equal(w.reportsTo, boss.id);
+    assert.equal(w.departmentId, depts.find((d) => d.code === 'warehouse')!.id);
+    const [m] = await dbs.db.select().from(people).where(eq(people.id, ids.member));
+    assert.notEqual(m.reportsTo, boss.id, 'a person of another company is never changed');
+    assert.equal((await dir.sync(c.id)).imported, false, 'only the first time');
+    fakePeopleExport = { departments: [], people: [] };
   });
 });

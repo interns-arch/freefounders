@@ -216,3 +216,5 @@ input[type='checkbox'] { width: auto; }
 .link-tile small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .company-logo { height: 14px; max-width: 48px; object-fit: contain; vertical-align: -2px; margin-right: 5px; }
 @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+.inline-form { display: flex; gap: 8px; align-items: center; flex: 1; }
+.inline-form input { max-width: 320px; }
