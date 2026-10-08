@@ -184,10 +184,6 @@ export const users = pgTable('users', {
   failedLogins: integer('failed_logins').notNull().default(0),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
-  /** Encrypted copy of the current password, so admins can look it up (see CredentialVault). */
-  passwordSaved: text('password_saved'),
-  passwordSavedAt: timestamp('password_saved_at', { withTimezone: true }),
-  passwordSavedByName: text('password_saved_by_name'),
   /** The FreeFounders Platform person this login belongs to (set by /internal/provision). */
   platformPersonId: uuid('platform_person_id').unique(),
   createdAt: createdAt(),
@@ -277,12 +273,6 @@ export const fieldDefinitions = pgTable(
 );
 
 /** Atomic counters for asset tags (LAP-000001) and document numbers (EXIT-00001). */
-/** Server-only settings, e.g. the key that encrypts saved passwords. Never sent to the browser. */
-export const appSettings = pgTable('app_settings', {
-  key: text('key').primaryKey(),
-  value: text('value').notNull(),
-});
-
 export const sequences = pgTable('sequences', {
   prefix: text('prefix').primaryKey(),
   lastValue: integer('last_value').notNull().default(0),

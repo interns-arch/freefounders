@@ -6,6 +6,7 @@ import { type Attributes, type HolderType, type Permission, SYSTEM_ROLES } from 
 import { AppModule } from '../app.module';
 import type { Actor } from '../common/actor';
 import { DbService } from '../db/db.service';
+import { tenancyEnabled } from '../db/tenancy';
 import { roles, users } from '../db/schema';
 import { AllocationService } from '../modules/assets/allocation.service';
 import { AssetsService } from '../modules/assets/assets.service';
@@ -18,7 +19,7 @@ import { OrgService } from '../modules/org/org.service';
 import { MaintenanceService } from '../modules/service/maintenance.service';
 import { RequestsService } from '../modules/service/requests.service';
 import { TicketsService } from '../modules/service/tickets.service';
-import { CATALOG } from './catalog';
+import { DEPARTMENTS, loadCatalog } from './company-setup';
 
 export const DEMO_PASSWORD = 'Demo@1234';
 
@@ -40,36 +41,11 @@ const deviceId = () => `${hex(8)}-${hex(4)}-${hex(4)}-${hex(4)}-${hex(12)}`;
 const FIRST = ['Aarav', 'Vivaan', 'Aditya', 'Ananya', 'Diya', 'Ishaan', 'Kavya', 'Rohan', 'Sneha', 'Arjun', 'Meera', 'Nikhil', 'Pooja', 'Siddharth', 'Tanvi', 'Varun', 'Riya', 'Harsh', 'Divya', 'Kunal', 'Aisha', 'Manish', 'Shreya', 'Yash', 'Nisha', 'Gaurav', 'Priya', 'Amit', 'Swati', 'Rajesh'];
 const LAST = ['Patel', 'Iyer', 'Gupta', 'Reddy', 'Nair', 'Joshi', 'Kulkarni', 'Desai', 'Menon', 'Chopra', 'Bose', 'Pillai', 'Verma', 'Shetty', 'Bhat', 'Agarwal', 'Mishra', 'Khanna'];
 
-/** The starter asset catalog (categories, types, custom fields) — the same for demo and live installs. */
-async function loadCatalog(catalog: CatalogService, admin: Actor) {
-  const types: Record<string, { id: string; trackingMode: string }> = {};
-  for (const c of CATALOG) {
-    const cat = await catalog.createCategory(admin, { name: c.name, code: c.code, icon: c.icon, color: c.color, description: c.description });
-    for (const f of c.fields ?? []) {
-      await catalog.createField(admin, { ...f, categoryId: cat.id, required: f.required ?? false, isUnique: f.isUnique ?? false, showInTable: f.showInTable ?? false, filterable: true, options: f.options ?? null });
-    }
-    for (const t of c.types) {
-      const type = await catalog.createType(admin, { categoryId: cat.id, name: t.name, code: t.code, icon: t.icon, description: t.description ?? null, trackingMode: t.trackingMode ?? 'INDIVIDUAL', consumable: t.consumable ?? false });
-      types[t.code] = { id: type.id, trackingMode: type.trackingMode };
-      for (const f of t.fields ?? []) {
-        await catalog.createField(admin, { ...f, assetTypeId: type.id, required: f.required ?? false, isUnique: f.isUnique ?? false, showInTable: f.showInTable ?? false, filterable: true, options: f.options ?? null });
-      }
-    }
-  }
-  return types;
-}
-
-const DEPARTMENTS: [string, string][] = [
-  ['IT and Data', 'ITD'],
-  ['Inside and Field Sales', 'SAL'],
-  ['Human Resources', 'HR'],
-  ['Accounts and Finance', 'FIN'],
-  ['IT Support', 'ITS'],
-  ['Operations', 'OPS'],
-  ['Warehouse', 'WH'],
-];
-
 async function main() {
+  if (tenancyEnabled()) {
+    console.log('ℹ Multi-company mode: companies are set up by the FreeFounders Platform — nothing to seed.');
+    return;
+  }
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
   const dbs = app.get(DbService);
   const force = process.argv.includes('--force');

@@ -509,24 +509,17 @@ describe('logins of your choice', () => {
     assert.equal(await signIn('store1', 'Store#2026'), 200);
   });
 
-  test('admins can look up the saved password of a login; every look is logged', async () => {
+  // FreeFounders: the saved-password vault was removed (PLAN.md §14.3). Passwords are kept as hashes only.
+  test('nobody can read a password back, not even an admin', async () => {
     const roleList = await call('GET', '/roles');
     const roleId = roleList.body.find((x: { name: string }) => x.name === 'HR').id;
     const created = await call('POST', '/users', { name: 'Saved Pass', username: 'saved.pass', password: 'First#2026', roleId });
     assert.equal(created.status, 201);
     const listed = (await call('GET', '/users?search=saved.pass')).body.items[0];
-    assert.equal(listed.hasSavedPassword, true);
+    assert.equal(listed.hasSavedPassword, undefined);
     assert.equal(listed.passwordSaved, undefined);
-
-    const shown = await call('GET', `/users/${created.body.id}/password`);
-    assert.equal(shown.body.password, 'First#2026');
-    assert.equal(shown.body.loginId, 'saved.pass');
-    assert.equal((await call('GET', `/users/${created.body.id}/password`, undefined, 'bob')).status, 403);
-
-    await call('PATCH', `/users/${created.body.id}`, { password: 'Second#2026' });
-    assert.equal((await call('GET', `/users/${created.body.id}/password`)).body.password, 'Second#2026');
-    const log = await call('GET', `/history?entityType=USER&entityId=${created.body.id}`);
-    assert.ok(log.body.items.some((e: { action: string }) => e.action === 'PASSWORD_VIEWED'));
+    assert.equal((await call('GET', `/users/${created.body.id}/password`)).status, 404);
+    assert.equal(await signIn('saved.pass', 'First#2026'), 200);
   });
 
   test('every new login is on the employee list, except leadership', async () => {

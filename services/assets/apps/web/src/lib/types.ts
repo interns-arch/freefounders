@@ -470,17 +470,7 @@ export interface UserRow {
   employeeCode: string | null;
   isActive: boolean;
   lastLoginAt: string | null;
-  hasSavedPassword: boolean;
-  passwordSavedAt: string | null;
   createdAt: string;
-}
-
-export interface SavedPassword {
-  loginId: string | null;
-  email: string | null;
-  password: string | null;
-  savedAt: string | null;
-  savedByName: string | null;
 }
 
 export interface Role {

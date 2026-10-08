@@ -278,7 +278,7 @@ export class EmployeesService {
       const [role] = await db.select({ id: roles.id }).from(roles).where(eq(roles.id, roleId));
       if (!role) throw badRequest('That role no longer exists', { roleId: 'Not found' });
       const password = input.password ?? `${qrToken(4)}-${qrToken(4)}`;
-      const passwordFields = await this.auth.passwordFields(password, actor.name);
+      const passwordFields = await this.auth.passwordFields(password);
       const [existing] = await db.select().from(users).where(eq(users.employeeId, id));
       await this.auth.assertLoginFree({ username: input.username, email: input.email }, { userId: existing?.id, employeeId: id });
 

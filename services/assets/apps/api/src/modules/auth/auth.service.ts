@@ -5,7 +5,6 @@ import { and, eq, gt, sql } from 'drizzle-orm';
 import type { Permission } from '@eam/shared';
 import type { Actor } from '../../common/actor';
 import { badRequest } from '../../common/http';
-import { CredentialVault } from '../../core/credential-vault.service';
 import { DbService } from '../../db/db.service';
 import { employees, roles, sessions, users } from '../../db/schema';
 import { ACCESS_AUDIENCE, verifyPlatformToken } from './platform-token';
@@ -36,17 +35,11 @@ export class AuthService {
 
   constructor(
     private readonly dbs: DbService,
-    private readonly vault: CredentialVault,
   ) {}
 
-  /** Columns to write whenever a password is set: the hash for sign-in and an encrypted copy admins can view. */
-  async passwordFields(password: string, setByName: string) {
-    return {
-      passwordHash: await hashPassword(password),
-      passwordSaved: await this.vault.seal(password),
-      passwordSavedAt: new Date(),
-      passwordSavedByName: setByName,
-    };
+  /** Columns to write whenever a password is set. Only the hash is kept: nobody can read a password back. */
+  async passwordFields(password: string) {
+    return { passwordHash: await hashPassword(password) };
   }
 
   /** Finds the account for an email address, or for an employee code such as CT000099. */
@@ -251,7 +244,7 @@ export class AuthService {
     if (!user || !(await verify(user.passwordHash, currentPassword).catch(() => false))) {
       throw badRequest('Current password is incorrect', { currentPassword: 'Current password is incorrect' });
     }
-    await db.update(users).set({ ...(await this.passwordFields(newPassword, actor.name)), updatedAt: new Date() }).where(eq(users.id, user.id));
+    await db.update(users).set({ ...(await this.passwordFields(newPassword)), updatedAt: new Date() }).where(eq(users.id, user.id));
     // Sign out other devices.
     await db
       .delete(sessions)

@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Req, Res, UnauthorizedException 
 import type { Response } from 'express';
 import { changePasswordSchema, loginSchema, type LoginInput } from '@eam/shared';
 import type { Actor } from '../../common/actor';
+import { sessionCookieValue } from '../../common/company.middleware';
 import { type AuthedRequest, CurrentActor, Public, ZodPipe } from '../../common/http';
 import { AuthService, SESSION_COOKIE, SESSION_TTL_MS } from './auth.service';
 import { bearerToken, platformEnabled } from './platform-token';
@@ -37,7 +38,7 @@ export class AuthController {
     const bearer = bearerToken(req.headers.authorization);
     if (!bearer || !platformEnabled()) throw new UnauthorizedException('Please sign in');
     const { token, expiresAt } = await this.auth.platformSession(bearer, { ip: req.ip, userAgent: req.headers['user-agent'] });
-    res.cookie(SESSION_COOKIE, token, {
+    res.cookie(SESSION_COOKIE, sessionCookieValue(token, req.companyId), {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE !== 'false',

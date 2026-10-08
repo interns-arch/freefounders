@@ -7,7 +7,9 @@ import helmet from 'helmet';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { AppModule } from './app.module';
+import { companyMiddleware } from './common/company.middleware';
 import { AllExceptionsFilter } from './common/exception.filter';
+import { DbService } from './db/db.service';
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -47,6 +49,8 @@ export async function createApp() {
     }
     next();
   });
+  // Multi-company mode only (TENANCY=schemas): every API request runs in its company's schema.
+  app.use('/api', companyMiddleware(app.get(DbService)));
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableShutdownHooks();
 

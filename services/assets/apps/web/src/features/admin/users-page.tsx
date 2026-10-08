@@ -1,6 +1,6 @@
 import { userCreateSchema, userUpdateSchema } from '@eam/shared';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Copy, EyeOff, KeyRound, Plus, Search, UsersRound } from 'lucide-react';
+import { Plus, Search, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { Controller } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -15,9 +15,9 @@ import { Avatar, Badge, Card, Switch } from '@/components/ui/primitives';
 import { api, errorMessage, type Page } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { queryClient } from '@/lib/queries';
-import type { Role, SavedPassword, UserRow } from '@/lib/types';
+import type { Role, UserRow } from '@/lib/types';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
-import { formatDateTime, relativeTime } from '@/lib/utils';
+import { relativeTime } from '@/lib/utils';
 
 export default function UsersPage() {
   const { values: f, set } = useUrlFilters({ page: '1', pageSize: '25' });
@@ -41,7 +41,6 @@ export default function UsersPage() {
     },
     { key: 'role', header: 'Role', cell: (u) => <Badge tone="indigo">{u.roleName}</Badge> },
     { key: 'employee', header: 'Employee', hideOnMobile: true, cell: (u) => <span className="text-muted-foreground">{u.employeeName ? `${u.employeeName} (${u.employeeCode})` : '—'}</span> },
-    { key: 'password', header: 'Password', cell: (u) => <SavedPasswordCell user={u} /> },
     { key: 'status', header: 'Access', cell: (u) => (u.isActive ? <Badge tone="green" dot>Active</Badge> : <Badge tone="neutral" dot>Disabled</Badge>) },
     { key: 'last', header: 'Last sign-in', hideOnMobile: true, cell: (u) => <span className="text-muted-foreground">{u.lastLoginAt ? relativeTime(u.lastLoginAt) : 'Never'}</span> },
   ];
@@ -69,56 +68,6 @@ export default function UsersPage() {
       </Card>
       {editing && <UserSheet key={editing === 'new' ? 'new' : editing.id} user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
     </div>
-  );
-}
-
-/** Shows a login's saved password on request; each look is recorded in the activity log. */
-function SavedPasswordCell({ user }: { user: UserRow }) {
-  const [shown, setShown] = useState<SavedPassword | null>(null);
-  const [loading, setLoading] = useState(false);
-  if (!user.hasSavedPassword) return <span className="text-xs text-muted-foreground" title="Set before passwords were saved — reset it to save one">Not saved</span>;
-  const stop = (e: React.MouseEvent) => e.stopPropagation();
-  if (shown?.password) {
-    return (
-      <span className="flex items-center gap-1" onClick={stop}>
-        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs select-all" title={shown.savedAt ? `Set ${formatDateTime(shown.savedAt)}${shown.savedByName ? ` by ${shown.savedByName}` : ''}` : undefined}>
-          {shown.password}
-        </code>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Copy password"
-          onClick={() => navigator.clipboard.writeText(shown.password!).then(() => toast.success('Password copied'), () => toast.error('Could not copy'))}
-        >
-          <Copy />
-        </Button>
-        <Button size="icon-sm" variant="ghost" aria-label="Hide password" onClick={() => setShown(null)}>
-          <EyeOff />
-        </Button>
-      </span>
-    );
-  }
-  return (
-    <Button
-      size="sm"
-      variant="outline"
-      loading={loading}
-      onClick={async (e) => {
-        stop(e);
-        setLoading(true);
-        try {
-          const res = await api.get<SavedPassword>(`/users/${user.id}/password`);
-          if (res.password) setShown(res);
-          else toast.error('This password can no longer be read — reset it to save a new one.');
-        } catch (err) {
-          toast.error(errorMessage(err));
-        } finally {
-          setLoading(false);
-        }
-      }}
-    >
-      <KeyRound /> Show
-    </Button>
   );
 }
 

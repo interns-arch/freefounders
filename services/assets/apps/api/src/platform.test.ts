@@ -171,7 +171,7 @@ describe('provision', () => {
     assert.equal(u.email, 'pf-nina@t.test');
     assert.equal(u.username, 'pf-nina');
     assert.equal(u.platformPersonId, person);
-    assert.equal(u.passwordSaved, null, 'no reversible password copy');
+    assert.ok(!('passwordSaved' in u), 'no reversible password copy');
     const [emp] = await dbs.root.select().from(employees).where(eq(employees.id, u.employeeId!));
     assert.equal(emp.fullName, 'Nina New');
     assert.match(emp.employeeCode, /^STAFF-/);

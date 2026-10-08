@@ -4,6 +4,7 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { asc, desc } from 'drizzle-orm';
 import pg from 'pg';
 import * as schema from './schema';
+import { NO_COMPANY, quoteSchema, tenancyEnabled } from './tenancy';
 
 // Return DATE columns as 'YYYY-MM-DD' strings and COUNT(*) as numbers.
 pg.types.setTypeParser(1082, (v) => v);
@@ -26,15 +27,29 @@ export function databaseSsl(): { rejectUnauthorized: boolean } | undefined {
   return { rejectUnauthorized: false };
 }
 
+interface Bound {
+  exec: Executor;
+  inTx: boolean;
+  /** The company schema this work runs in (multi-company mode), else null. */
+  schema: string | null;
+}
+
 /**
- * Owns the connection pool. `db` returns the transaction bound to the current async context
- * (if any), so services can call each other inside one transaction without passing it around.
+ * Owns the connection pool. `db` returns the transaction (or, in multi-company mode, the company-pinned
+ * connection) bound to the current async context, so services can call each other inside one transaction
+ * without passing it around.
  */
 @Injectable()
 export class DbService implements OnModuleDestroy {
-  readonly pool = new pg.Pool({ connectionString: databaseUrl(), ssl: databaseSsl(), max: Number(process.env.DB_POOL_SIZE ?? 20) });
+  // Multi-company mode: a connection that is not pinned to a company sees only the empty ff_none schema.
+  readonly pool = new pg.Pool({
+    connectionString: databaseUrl(),
+    ssl: databaseSsl(),
+    max: Number(process.env.DB_POOL_SIZE ?? 20),
+    ...(tenancyEnabled() ? { options: `-c search_path=${NO_COMPANY}` } : {}),
+  });
   readonly root: Database = drizzle(this.pool, { schema });
-  private readonly als = new AsyncLocalStorage<Tx>();
+  private readonly als = new AsyncLocalStorage<Bound>();
 
   constructor() {
     // An idle connection can be dropped (DB restart, failover). Log it; the pool reconnects on next use.
@@ -42,18 +57,63 @@ export class DbService implements OnModuleDestroy {
   }
 
   get db(): Executor {
-    return this.als.getStore() ?? this.root;
+    return this.als.getStore()?.exec ?? this.root;
   }
 
   get inTransaction(): boolean {
-    return this.als.getStore() !== undefined;
+    return this.als.getStore()?.inTx ?? false;
+  }
+
+  /** The company schema the current work runs in (multi-company mode), else null. */
+  get companySchema(): string | null {
+    return this.als.getStore()?.schema ?? null;
   }
 
   /** Runs `fn` in a transaction, joining the current one if already inside a transaction. */
   async tx<T>(fn: (tx: Executor) => Promise<T>): Promise<T> {
     const current = this.als.getStore();
-    if (current) return fn(current);
-    return this.root.transaction((tx) => this.als.run(tx, () => fn(tx)));
+    if (current?.inTx) return fn(current.exec);
+    const base = (current?.exec ?? this.root) as Database;
+    return base.transaction((tx) => this.als.run({ exec: tx, inTx: true, schema: current?.schema ?? null }, () => fn(tx)));
+  }
+
+  /**
+   * Multi-company mode: takes one connection, points it at `schemaName` only, and runs `fn` (and everything it
+   * starts) on it. Returns a release function the caller must call when the work is finished (for a request:
+   * when the response closes). The connection is pointed back at ff_none before it returns to the pool.
+   */
+  async bindCompany(schemaName: string, fn: () => void): Promise<() => void> {
+    const client = await this.pool.connect();
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      client
+        .query(`set search_path to ${NO_COMPANY}`)
+        .then(() => client.release())
+        .catch((err: Error) => client.release(err));
+    };
+    try {
+      await client.query(`set search_path to ${quoteSchema(schemaName)}`);
+    } catch (err) {
+      release();
+      throw err;
+    }
+    this.als.run({ exec: drizzle(client, { schema }), inTx: false, schema: schemaName }, fn);
+    return release;
+  }
+
+  /** Runs `fn` to completion inside one company's schema (workers, scripts, internal setup). */
+  async inCompany<T>(schemaName: string, fn: () => Promise<T>): Promise<T> {
+    let result!: Promise<T>;
+    const release = await this.bindCompany(schemaName, () => {
+      result = fn();
+    });
+    try {
+      return await result;
+    } finally {
+      release();
+    }
   }
 
   /** The system runs for a single company; records created without one belong to it. */

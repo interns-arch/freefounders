@@ -120,6 +120,13 @@
       "when": 1791377486381,
       "tag": "0016_platform_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791437177651,
+      "tag": "0017_drop_password_vault",
+      "breakpoints": true
     }
   ]
 }

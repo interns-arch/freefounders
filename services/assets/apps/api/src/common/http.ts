@@ -24,6 +24,8 @@ export const RequirePermissions = (...permissions: Permission[]) => SetMetadata(
 export interface AuthedRequest extends Request {
   actor?: Actor;
   sessionId?: string;
+  /** Multi-company mode: the Platform company this request runs for. */
+  companyId?: string;
 }
 
 export const CurrentActor = createParamDecorator((_data: unknown, ctx: ExecutionContext): Actor => {

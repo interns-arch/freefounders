@@ -1,6 +1,7 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Permission } from '@eam/shared';
+import { parseSessionCookie } from '../../common/company.middleware';
 import { type AuthedRequest, IS_PUBLIC, PERMISSIONS_KEY } from '../../common/http';
 import { AuthService, SESSION_COOKIE } from './auth.service';
 import { bearerToken, platformEnabled } from './platform-token';
@@ -15,7 +16,9 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<AuthedRequest>();
-    const token = req.cookies?.[SESSION_COOKIE];
+    const cookie = req.cookies?.[SESSION_COOKIE];
+    // Multi-company mode prefixes the company (`<companyId>~<token>`); the middleware already picked its schema.
+    const token = typeof cookie === 'string' ? parseSessionCookie(cookie).token : undefined;
     if (typeof token === 'string' && token.length > 20) {
       const session = await this.auth.resolve(token);
       if (session) {

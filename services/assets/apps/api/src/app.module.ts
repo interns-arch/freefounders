@@ -3,6 +3,7 @@ import { asc, sql } from 'drizzle-orm';
 import { Public } from './common/http';
 import { CoreModule } from './core/core.module';
 import { DbService } from './db/db.service';
+import { tenancyEnabled } from './db/tenancy';
 import { companies } from './db/schema';
 import { AdminModule } from './modules/admin/admin.module';
 import { AssetsModule } from './modules/assets/assets.module';
@@ -36,6 +37,8 @@ export class ConfigController {
   @Public()
   @Get()
   async config() {
+    // Multi-company mode before sign-in: no company yet, so no company name.
+    if (tenancyEnabled() && !this.dbs.companySchema) return { publicUrl: process.env.PUBLIC_URL?.replace(/\/+$/, '') || null, companyName: null };
     const [company] = await this.dbs.db.select({ name: companies.name }).from(companies).orderBy(asc(companies.createdAt)).limit(1);
     return { publicUrl: process.env.PUBLIC_URL?.replace(/\/+$/, '') || null, companyName: company?.name ?? null };
   }

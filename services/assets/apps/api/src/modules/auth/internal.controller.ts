@@ -1,14 +1,20 @@
-import { Body, ConflictException, Controller, Get, HttpCode, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, ConflictException, Controller, Get, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import type { Response } from 'express';
 import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
 import { asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { type Actor } from '../../common/actor';
+import { type Actor, SYSTEM_ACTOR } from '../../common/actor';
 import { type AuthedRequest, badRequest, Public, ZodPipe } from '../../common/http';
 import { HistoryService } from '../../core/history.service';
 import { SequenceService } from '../../core/sequence.service';
 import { DbService } from '../../db/db.service';
 import { employees, roles, users } from '../../db/schema';
+import { ensureRegistry, listCompanies, migrateCompanySchema, registerCompany, schemaFor, schemaForCode, tenancyEnabled } from '../../db/tenancy';
+import { createSystemRoles, setUpCompany } from '../../seed/company-setup';
+import { CatalogService } from '../catalog/catalog.service';
+import { OrgService } from '../org/org.service';
 import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-token';
 
 const blank = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
@@ -22,6 +28,11 @@ const provisionSchema = z.object({
   appRole: z.preprocess(blank, z.string().trim().max(60).nullable().optional()),
 });
 type ProvisionInput = z.infer<typeof provisionSchema>;
+const companySchema = z.object({
+  companyId: z.string().uuid(),
+  code: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(1).max(200),
+});
 
 const PLATFORM_ACTOR: Actor = { userId: null, name: 'FreeFounders Platform', email: null, employeeId: null, roleName: 'System', permissions: new Set() };
 
@@ -35,7 +46,46 @@ export class InternalController {
     private readonly dbs: DbService,
     private readonly history: HistoryService,
     private readonly sequences: SequenceService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /**
+   * Multi-company mode: the Platform sets up a company in Assets. Creates its schema (or brings it up to date),
+   * registers it, and on first creation adds what every company starts with. Idempotent.
+   */
+  @Public()
+  @Post('companies')
+  async createCompany(@Req() req: AuthedRequest, @Body() raw: unknown, @Res({ passthrough: true }) res: Response) {
+    await this.requireService(req);
+    if (!tenancyEnabled()) throw new ConflictException('Multi-company mode is off (TENANCY=schemas)');
+    const input = new ZodPipe(companySchema).transform(raw);
+    let schema: string;
+    try {
+      schema = schemaForCode(input.code);
+    } catch (err) {
+      throw badRequest((err as Error).message);
+    }
+    const pool = this.dbs.pool;
+    await ensureRegistry(pool);
+    const existing = await schemaFor(pool, input.companyId);
+    if (existing && existing !== schema) throw new ConflictException(`Company already set up as ${existing}`);
+    if (!existing && (await listCompanies(pool)).some((c) => c.schema === schema)) throw new ConflictException('This company code is already used');
+
+    await migrateCompanySchema(pool, schema);
+    await registerCompany(pool, { companyId: input.companyId, schema, name: input.name });
+    const created = await this.dbs.inCompany(schema, () =>
+      this.dbs.tx(async (db) => {
+        const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(roles);
+        if (n > 0) return false;
+        await createSystemRoles(db);
+        const services = { org: this.moduleRef.get(OrgService, { strict: false }), catalog: this.moduleRef.get(CatalogService, { strict: false }) };
+        await setUpCompany(services, SYSTEM_ACTOR, { name: input.name, code: input.code.toUpperCase() });
+        return true;
+      }),
+    );
+    res.status(created ? 201 : 200);
+    return { companyId: input.companyId, schema, created };
+  }
 
   /**
    * The Platform gives a person access to Assets: find their login here (already linked, else same employee
