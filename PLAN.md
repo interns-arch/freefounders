@@ -534,3 +534,33 @@ Platform token (cid = company id)  →  app looks up cid in its registry  →  s
 3. Platform: companies endpoint + CLI, `cid` in service tokens, PBKDF2 import, tests
 4. Dev suite on Postgres with two demo companies; smoke + e2e leak tests; CI Postgres jobs
 5. Import tool + dry run on demo data; docs
+
+### 14.9 Status (2026-10-08): built, tested, rehearsed; awaiting founder sign-off + the real CarTrends dump
+| Check | Result |
+|---|---|
+| Tasks tests (SQLite) | 688 pass: 672 original unchanged, 16 new (13 need Postgres and skip here) |
+| Tasks multi-company tests (Postgres, CI job `tasks-tenancy`) | 29 pass (tenancy + Platform sign-in) |
+| Assets tests | 67 pass: 58 before (the saved-password test now checks passwords cannot be read back), 9 new |
+| Platform tests | 29 pass (26 + 3) |
+| Smoke (`npm run smoke`) | 10 / 10, incl. a second company seeing none of the first one's tasks or people |
+| Browser (`npm run e2e`) | 4 / 4, incl. the same check in the browser |
+| Import rehearsal (`npm run rehearse-import`) | passes: 15 people matched, old Tasks and Assets passwords work, tasks/assets/photo bytes identical, ids continue |
+
+Differences from the design above (deliberate):
+- **The importer reads restored copies, not dump files.** No `pg_restore` is available locally, and reading a
+  database copy works the same on staging. The founder (or the staging box) restores the dump into a scratch
+  database; `scripts/import-company.mjs --tasks-source <url> --assets-source <url>` does the rest.
+- **The Platform sends each person's Platform role when giving app access.** With no app role chosen, owners
+  and admins become the app's own admins (Tasks Super Admin, Assets Admin); role names stay inside each app.
+- **Company creation is a CLI for now** (`npm --prefix services/platform run company -- create|sync|list`); the owner
+  console with a screen for it is Phase 8.
+
+For the founder (the real CarTrends move):
+1. Take `pg_dump -Fc` of the live Tasks database (and Assets, if it holds real data: open question 3), on the server.
+2. Restore each into a scratch database next to FreeFounders (staging), then run the importer **without** `--apply`
+   and go through `review.csv` together.
+3. Run with `--apply`; CarTrends keeps using EC2 until you have checked the result and signed off.
+
+Follow-ups for later phases: the Tasks web app still shows "Automation Task / CarTrends" in its sidebar
+(per-company branding is a Settings Center item, Phase 4); per-company settings have no screen yet (Phase 4;
+`manage.py company_setting` until then); expired Assets session rows are still not cleaned up.

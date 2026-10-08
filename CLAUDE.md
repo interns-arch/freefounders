@@ -32,13 +32,24 @@ npm run setup        # once: npm ci everywhere + Tasks venv
 npm run dev          # everything on http://localhost:8080 — sign in: owner / Demo@1234
 npm run smoke        # end-to-end API check against the running suite (9 steps)
 npm run e2e          # browser tests against the running suite (first time: npx --prefix e2e playwright install chromium)
+npm run rehearse-import   # CarTrends import rehearsal on demo data, against the running suite
 ```
 Routes on :8080: `/` portal · `/api/platform/*` Platform (:4000) · `/tasks/` web (:5174) and
 `/tasks/api/*` Django (:8000) · `/assets/` web (:5173) and `/assets/api/*` NestJS (:3000) · `/media/*` Django.
 Single login is a build/env switch, off by default so each app still runs standalone:
 - web: `VITE_PLATFORM_LOGIN=true` + `VITE_BASE=/tasks/` or `/assets/` (see `src/platform.js`, `src/lib/platform.ts`)
 - APIs: `PLATFORM_JWKS_URL` (Tasks, Assets); Platform: `TASKS_INTERNAL_URL`, `ASSETS_INTERNAL_URL`, `PLATFORM_SECRET`
-How it fits: PLAN.md §13. Tasks uses the Platform token directly (Bearer); Assets exchanges it for
+How it fits: PLAN.md §13.
+
+**Multi-company mode** (PLAN.md §14): `TENANCY=schemas` in Tasks and Assets, one Postgres schema per company
+(`co_<code>`), picked per request from the token's `cid`; without a company the search path is the empty `ff_none`
+schema (fail closed). `npm run dev` runs in this mode: Tasks on the local Postgres (:5434, db `ff_tasks`) with a
+`run_worker` process, then `company sync`. Off by default, so each app still runs standalone and its tests are unchanged.
+- Companies: `npm --prefix services/platform run company -- list | create … | sync`
+- Tasks: `manage.py migrate_companies` (deploy), `run_worker` (jobs; web uses `NOTIF_SCHEDULER=false`),
+  `company_setting <code> <NAME> <value>` (per-company HR/WhatsApp/Gmail/AI values)
+- Assets: `migrate.js` also migrates every company schema; the seed does nothing in this mode
+- Import an existing install: `node scripts/import-company.mjs` (dry run by default; see its header) Tasks uses the Platform token directly (Bearer); Assets exchanges it for
 a 15-minute cookie session (`/api/auth/platform-session`) so photos/downloads keep working.
 
 ## Run and test each part
@@ -55,6 +66,8 @@ python -m venv .venv && .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\python manage.py migrate && .venv\Scripts\python manage.py runserver 8000
 # tests (SQLite, no scheduler thread; ~15 s):
 set DATABASE_URL= & set NOTIF_SCHEDULER=false & .venv\Scripts\python manage.py test
+# multi-company tests need Postgres (start one: node services/platform/scripts/pg-up.mjs):
+set DATABASE_URL=postgres://postgres:postgres@localhost:5434/ff_tasks & set DB_SSLMODE=disable & .venv\Scripts\python manage.py test tenancy
 cd ../frontend && npm ci && npm run dev
 ```
 Assets (Node 22+; embedded Postgres on 5433):
@@ -76,3 +89,6 @@ becomes a Windows path.
 - Platform passwords are hashed only; never add a reversible copy. Provision never takes over a
   login already linked to another person.
 - Keep single-login changes behind the flags above: with them off, each app must behave as before.
+- Same for multi-company changes (`TENANCY`). Never query another company's schema from request code; the
+  registry tables (`public.ff_companies`, `ff.companies`) are the only shared tables in the apps.
+- Import reports (`import-report-*/`, `.data/`) list real people: never commit them.
