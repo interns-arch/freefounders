@@ -25,12 +25,12 @@ export class ProvisionClient {
   constructor(private readonly tokens: TokensService) {}
 
   /** The roles an admin can choose from inside an app, e.g. [{ value: 'warehouse', label: 'Warehouse Team' }]. */
-  async roles(app: AppKey): Promise<Array<{ value: string; label: string }>> {
+  async roles(app: AppKey, companyId: string): Promise<Array<{ value: string; label: string }>> {
     const base = internalUrl(app);
     if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);
     try {
       const res = await fetch(`${base}/roles`, {
-        headers: { authorization: `Bearer ${await this.tokens.signService(app)}` },
+        headers: { authorization: `Bearer ${await this.tokens.signService(app, companyId)}` },
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -41,7 +41,7 @@ export class ProvisionClient {
     }
   }
 
-  async provision(app: AppKey, input: ProvisionInput): Promise<string> {
+  async provision(app: AppKey, companyId: string, input: ProvisionInput): Promise<string> {
     const base = internalUrl(app);
     if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);
     let res: Response;
@@ -49,7 +49,7 @@ export class ProvisionClient {
       res = await fetch(`${base}/provision`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${await this.tokens.signService(app)}`,
+          authorization: `Bearer ${await this.tokens.signService(app, companyId)}`,
           'content-type': 'application/json',
           'x-requested-with': 'XMLHttpRequest',
         },
@@ -65,5 +65,32 @@ export class ProvisionClient {
     // The app rejected the data (e.g. email already used by an unlinked user): show the admin why.
     if (res.status >= 400 && res.status < 500) throw new BadRequestException(`${app}: ${reason}`);
     throw new BadGatewayException(`${app} could not add this person: ${reason}`);
+  }
+
+  /**
+   * Multi-company mode: asks an app to set up a company (its own schema plus starter data). Idempotent, so it is
+   * safe to repeat. Creating a schema runs the app's migrations, which can take a while.
+   */
+  async setUpCompany(app: AppKey, company: { companyId: string; code: string; name: string }): Promise<{ created: boolean; schema: string }> {
+    const base = internalUrl(app);
+    if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);
+    let res: Response;
+    try {
+      res = await fetch(`${base}/companies`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${await this.tokens.signService(app)}`,
+          'content-type': 'application/json',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(company),
+        signal: AbortSignal.timeout(300_000),
+      });
+    } catch (err) {
+      throw new BadGatewayException(`Could not reach ${app}: ${(err as Error).message}`);
+    }
+    const body = (await res.json().catch(() => null)) as { created?: boolean; schema?: string; message?: string; detail?: string } | null;
+    if (res.ok && body?.schema) return { created: Boolean(body.created), schema: body.schema };
+    throw new BadGatewayException(`${app} could not set up ${company.name}: ${body?.message ?? body?.detail ?? `HTTP ${res.status}`}`);
   }
 }

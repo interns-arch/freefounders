@@ -53,10 +53,13 @@ export class TokensService {
     }
   }
 
-  /** Short-lived token the Platform uses to call an app's internal API (audience `<app>-internal`). */
-  async signService(app: AppKey): Promise<string> {
+  /**
+   * Short-lived token the Platform uses to call an app's internal API (audience `<app>-internal`). `cid` names
+   * the company the call is for; in multi-company mode the app runs it inside that company's data.
+   */
+  async signService(app: AppKey, companyId?: string): Promise<string> {
     const key = await this.keys.signingKey();
-    return new SignJWT({})
+    return new SignJWT(companyId ? { cid: companyId } : {})
       .setProtectedHeader({ alg: 'EdDSA', kid: key.kid, typ: 'JWT' })
       .setSubject('platform')
       .setIssuer(ISSUER)

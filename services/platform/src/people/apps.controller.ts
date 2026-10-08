@@ -24,8 +24,8 @@ export class AppsController {
 
   /** Roles to choose from when giving someone access, read from the app itself. */
   @Get(':app/roles')
-  roles(@Param('app') app: string) {
+  roles(@CurrentCaller() caller: Caller, @Param('app') app: string) {
     if (!(APPS as readonly string[]).includes(app)) throw notFound('App');
-    return this.provisioner.roles(app as AppKey);
+    return this.provisioner.roles(app as AppKey, caller.companyId);
   }
 }

@@ -6,7 +6,9 @@ import { after, before, describe, test } from 'node:test';
 import type { INestApplication } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
+import { pbkdf2Sync } from 'node:crypto';
 import { hashPassword } from './auth/auth.service';
+import { ProvisionClient } from './provision/provision.client';
 import { DbService } from './db/db.service';
 import { companies, logins, people, personApps, refreshSessions } from './db/schema';
 import { createApp } from './main';
@@ -16,7 +18,7 @@ let app: INestApplication;
 let base = '';
 let dbs: DbService;
 let fakeTasks: Server;
-const provisionCalls: Array<{ body: Record<string, unknown>; aud: unknown }> = [];
+const provisionCalls: Array<{ body: Record<string, unknown>; aud: unknown; cid: unknown; url?: string }> = [];
 const ids: Record<string, string> = {};
 
 interface Res {
@@ -58,10 +60,17 @@ before(async () => {
       const jwks = createRemoteJWKSet(new URL(`${base}/.well-known/jwks.json`));
       const { payload } = await jwtVerify(String(req.headers.authorization).slice(7), jwks, { audience: 'tasks-internal', issuer: 'freefounders-platform' });
       if (req.method === 'GET' && req.url?.endsWith('/roles')) {
+        provisionCalls.push({ body: {}, aud: payload.aud, cid: payload.cid, url: req.url });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{ value: 'warehouse', label: 'Warehouse Team' }]));
         return;
       }
-      provisionCalls.push({ body: JSON.parse(raw), aud: payload.aud });
+      if (req.method === 'POST' && req.url?.endsWith('/companies')) {
+        const body = JSON.parse(raw);
+        provisionCalls.push({ body, aud: payload.aud, cid: payload.cid, url: req.url });
+        res.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify({ companyId: body.companyId, schema: `co_${String(body.code).toLowerCase()}`, created: true }));
+        return;
+      }
+      provisionCalls.push({ body: JSON.parse(raw), aud: payload.aud, cid: payload.cid, url: req.url });
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ userId: 42 }));
     } catch {
       res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ detail: 'bad service token' }));
@@ -313,6 +322,7 @@ describe('apps', () => {
     assert.equal(grant.body.localUserId, '42');
     const last = provisionCalls.at(-1)!;
     assert.equal(last.aud, 'tasks-internal');
+    assert.equal(last.cid, ids.acme, 'the app is told which company the person belongs to');
     assert.equal(last.body.personId, ids.member);
     assert.equal(last.body.username, 'mia');
     assert.equal(last.body.appRole, 'warehouse');
@@ -357,5 +367,35 @@ describe('app information for admins', () => {
     assert.equal((await call('GET', '/apps/assets/roles', { token: admin.token })).status, 502, 'Assets not connected in this test');
     const member = await login('mia');
     assert.equal((await call('GET', '/apps', { token: member.token })).status, 403);
+  });
+});
+
+describe('multi-company (Phase 2)', () => {
+  test('a password imported from Tasks works once and is upgraded to argon2id', async () => {
+    const djangoHash = `pbkdf2_sha256$1000$saltsalt$${pbkdf2Sync('Imported#2026', 'saltsalt', 1000, 32, 'sha256').toString('base64')}`;
+    const [p] = await dbs.db.insert(people).values({ companyId: ids.acme, fullName: 'Imran Imported', email: 'imran@acme.test' }).returning();
+    await dbs.db.insert(logins).values({ personId: p.id, username: 'imran', passwordHash: djangoHash });
+
+    assert.equal((await call('POST', '/auth/login', { body: { login: 'imran', password: 'wrong-pass' } })).status, 401);
+    await login('imran', 'Imported#2026');
+    const [after] = await dbs.db.select({ hash: logins.passwordHash }).from(logins).where(eq(logins.personId, p.id));
+    assert.match(after.hash, /^\$argon2id\$/);
+    await login('imran', 'Imported#2026');
+  });
+
+  test('roles are read inside the caller company', async () => {
+    const admin = await login('admin@acme.test');
+    assert.equal((await call('GET', '/apps/tasks/roles', { token: admin.token })).status, 200);
+    const last = provisionCalls.at(-1)!;
+    assert.ok(last.url?.endsWith('/roles'));
+    assert.equal(last.cid, ids.acme);
+  });
+
+  test('setting a company up in an app sends its id, code and name', async () => {
+    const res = await app.get(ProvisionClient).setUpCompany('tasks', { companyId: ids.acme, code: 'ACME', name: 'Acme' });
+    assert.deepEqual(res, { created: true, schema: 'co_acme' });
+    const last = provisionCalls.at(-1)!;
+    assert.ok(last.url?.endsWith('/companies'));
+    assert.deepEqual(last.body, { companyId: ids.acme, code: 'ACME', name: 'Acme' });
   });
 });

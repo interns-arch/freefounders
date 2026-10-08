@@ -11,7 +11,8 @@
     "start": "node dist/main.js",
     "test": "node scripts/test.mjs",
     "db:generate": "drizzle-kit generate",
-    "seed": "node dist/seed.js"
+    "seed": "node dist/seed.js",
+    "company": "tsc -p . && node dist/companies.js"
   },
   "engines": {
     "node": ">=22"

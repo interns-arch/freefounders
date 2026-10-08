@@ -263,7 +263,7 @@ export class PeopleService {
     const [company] = await this.dbs.db.select({ enabledApps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
     if (!company?.enabledApps.includes(app)) throw badRequest(`Your plan does not include ${app}`);
     const [login] = await this.dbs.db.select({ username: logins.username }).from(logins).where(eq(logins.personId, id)).limit(1);
-    const localUserId = await this.provisioner.provision(app as AppKey, {
+    const localUserId = await this.provisioner.provision(app as AppKey, caller.companyId, {
       personId: p.id,
       fullName: p.fullName,
       email: p.email,

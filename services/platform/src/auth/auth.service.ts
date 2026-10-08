@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, pbkdf2, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { badRequest, type Caller } from '../common/http';
 import { DbService } from '../db/db.service';
@@ -24,6 +24,24 @@ const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
 export function hashPassword(password: string): Promise<string> {
   return hash(password);
+}
+
+/** A Django PBKDF2 hash brought over from Tasks: `pbkdf2_sha256$<iterations>$<salt>$<base64 hash>`. */
+export function isImportedHash(stored: string): boolean {
+  return stored.startsWith('pbkdf2_sha256$');
+}
+
+/** Checks a password against an argon2id hash, or (imported from Tasks) a Django PBKDF2 hash. */
+export async function verifyPassword(stored: string, password: string): Promise<boolean> {
+  if (!isImportedHash(stored)) return verify(stored, password).catch(() => false);
+  const [, iterations, salt, expected] = stored.split('$');
+  const rounds = Number(iterations);
+  if (!salt || !expected || !Number.isInteger(rounds) || rounds < 1 || rounds > 10_000_000) return false;
+  const derived = await new Promise<Buffer>((resolve, reject) =>
+    pbkdf2(password, salt, rounds, 32, 'sha256', (err, key) => (err ? reject(err) : resolve(key))),
+  ).catch(() => null);
+  const want = Buffer.from(expected, 'base64');
+  return derived !== null && derived.length === want.length && timingSafeEqual(derived, want);
 }
 
 export interface Meta {
@@ -65,7 +83,7 @@ export class AuthService {
   async login(input: string, password: string, meta: Meta): Promise<Issued & { mustChangePassword: boolean }> {
     const db = this.dbs.db;
     const found = await this.findLogin(input);
-    const ok = await verify(found?.login.passwordHash ?? (await this.dummyHash), password).catch(() => false);
+    const ok = await verifyPassword(found?.login.passwordHash ?? (await this.dummyHash), password);
 
     if (!found || found.person.status !== 'active' || found.companyStatus !== 'active') throw new UnauthorizedException(WRONG);
     const { login, person } = found;
@@ -81,7 +99,9 @@ export class AuthService {
       throw new UnauthorizedException(WRONG);
     }
 
-    await db.update(logins).set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(logins.personId, person.id));
+    // A password imported from Tasks (Django PBKDF2) is upgraded to argon2id now that we know it.
+    const upgrade = isImportedHash(login.passwordHash) ? { passwordHash: await hashPassword(password) } : {};
+    await db.update(logins).set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date(), ...upgrade }).where(eq(logins.personId, person.id));
     const familyId = randomUUID();
     const refreshToken = await this.newRefresh(person.id, familyId, meta);
     const accessToken = await this.tokens.signAccess(await this.caller(person.id, familyId));
@@ -223,7 +243,7 @@ export class AuthService {
   async changePassword(caller: Caller, currentPassword: string, newPassword: string) {
     const db = this.dbs.db;
     const [login] = await db.select().from(logins).where(eq(logins.personId, caller.personId)).limit(1);
-    if (!login || !(await verify(login.passwordHash, currentPassword).catch(() => false))) {
+    if (!login || !(await verifyPassword(login.passwordHash, currentPassword))) {
       throw badRequest('Current password is incorrect', { currentPassword: 'Current password is incorrect' });
     }
     if (currentPassword === newPassword) throw badRequest('Choose a new password', { newPassword: 'Choose a new password' });
