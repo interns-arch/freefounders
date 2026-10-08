@@ -20,6 +20,8 @@ urlpatterns = [
     path("internal/roles", internal.roles),
     path("internal/permissions", internal.permissions),
     path("internal/access", internal.access),
+    path("internal/modules", internal.modules),
+    path("internal/company", internal.company),
     path("internal/companies", create_company),
     path("team/", views.team_directory),
     path("roles/", views.roles),

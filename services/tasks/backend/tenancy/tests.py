@@ -217,6 +217,22 @@ class MultiCompanyTests(SimpleTestCase):
             self.assertTrue(storage.generate_filename("task_files/a.pdf").startswith(f"c/{ACME}/"))
         self.assertEqual(storage.generate_filename("task_files/a.pdf").replace("\\", "/"), "task_files/a.pdf")
 
+    def test_module_switches_and_brand_are_per_company(self):
+        from . import profile
+        platform = self.api(service(ACME_ID))
+        res = platform.put("/api/internal/company", {"version": 1, "name": "Acme", "shortName": "Acme",
+                                                     "modules": {"leads": False}}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        try:
+            self.assertEqual(self.api(access(ACME_ID, self.acme_user)).get("/api/leads/").status_code, 404)
+            self.assertEqual(self.api(access(BETA_ID, self.beta_user)).get("/api/leads/").status_code, 200)
+            self.assertEqual(self.api(access(ACME_ID, self.acme_user)).get("/api/auth/me").json()["brand"]["short_name"], "Acme")
+            self.assertIsNone(self.api(access(BETA_ID, self.beta_user)).get("/api/auth/me").json()["brand"])
+        finally:
+            with schemas.use(ACME):
+                CompanySetting.objects.filter(key__in=[profile.PROFILE_KEY, profile.VERSION_KEY]).delete()
+            profile.forget()
+
 
 class TenancyOffTests(SimpleTestCase):
     """With TENANCY unset nothing changes: no company, plain env lookups."""

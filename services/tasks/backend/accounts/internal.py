@@ -151,6 +151,31 @@ def access(request):
     return _import_access(request.data)
 
 
+# ---------------------------------------------------------------------------
+# Company profile from the FreeFounders Settings Center (PLAN.md section 16)
+# ---------------------------------------------------------------------------
+
+@api_view(["GET"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def modules(request):
+    """The modules Tasks can switch on or off, with their defaults for a new company."""
+    from tenancy.profile import catalogue
+    return Response({"app": "tasks", "modules": catalogue()})
+
+
+@api_view(["PUT"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def company(request):
+    """The company's names, colour, logo address and module switches."""
+    from tenancy.profile import apply
+    try:
+        return Response(apply(request.data))
+    except (TypeError, ValueError):
+        return Response({"detail": "version is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+
 ACCESS_VERSION_KEY = "FF_ACCESS_VERSION"
 
 

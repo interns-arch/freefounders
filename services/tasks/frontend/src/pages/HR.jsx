@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, apiUpload, errorText } from '../api'
 import { useAuth } from '../auth'
 import { MySalary, PayrollAdmin } from './Payroll'
@@ -15,14 +16,17 @@ const STATUS_LABEL = {
 }
 
 export default function HR() {
-  const { can } = useAuth()
-  const [tab, setTab] = useState('today')
+  const { can, module } = useAuth()
+  const [params] = useSearchParams()
+  const payroll = module('payroll')
   const tabs = [
     ['today', 'Today'], ['history', 'My Attendance'], ['leave', 'My Leave'],
-    ['salary', 'My Salary'], ['holidays', 'Holidays'],
+    ...(payroll ? [['salary', 'My Salary']] : []), ['holidays', 'Holidays'],
     ...(can('hr.approve') ? [['team', 'Team'], ['approvals', 'Approvals']] : []),
-    ...(can('hr.manage') ? [['payroll', 'Payroll'], ['settings', 'HR Settings']] : []),
+    ...(can('hr.manage') ? [...(payroll ? [['payroll', 'Payroll']] : []), ['settings', 'HR Settings']] : []),
   ]
+  // ?tab=settings opens a tab directly (the FreeFounders Settings page links here).
+  const [tab, setTab] = useState(() => (tabs.some(([v]) => v === params.get('tab')) ? params.get('tab') : 'today'))
   return (
     <div>
       <div className="page-head"><h1>Leave &amp; Attendance</h1></div>

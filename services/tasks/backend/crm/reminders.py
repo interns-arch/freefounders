@@ -17,6 +17,7 @@ from notifications.service import notify, notify_follow_up_due
 
 from .models import Lead, OPEN_STATUSES, Task, TaskAttachment, TaskStatus
 from tenancy.company_settings import company_env
+from tenancy.profile import app_name, module_on
 
 
 def purge_expired_attachments() -> int:
@@ -352,7 +353,7 @@ def send_weekly_overdue_email(force=False) -> int:
         body = "\n".join(lines)
         title = (f"Overdue reminder - {len(tasks)} task(s) past due" if tasks
                  else "Weekly update - your pipeline is clear")
-        result = gmail.send_email(user.email, f"[Automation Task] {title}", body,
+        result = gmail.send_email(user.email, f"[{app_name()}] {title}", body,
                                   link="/tasks", link_label="Open my tasks")
         Notification.objects.create(user=user, type="task_overdue_weekly",
                                     title=title, body=body, link="/tasks",
@@ -373,7 +374,8 @@ def send_followup_reminders(force=False) -> int:
     if not force and not is_working_day(timezone.localtime(now).date()):
         purge_expired_attachments()      # housekeeping bothers nobody
         return 0
-    due = (
+    # Switched-off modules (PLAN.md §16.2) send nothing: no lead follow-ups, no mistake escalations or digests.
+    due = Lead.objects.none() if not module_on("leads") else (
         Lead.objects.filter(
             status__in=OPEN_STATUSES,
             follow_up_at__isnull=False,
@@ -396,7 +398,8 @@ def send_followup_reminders(force=False) -> int:
     purge_expired_attachments()
     from mistakes.sla import escalate_overdue_mistakes  # lazy: avoids app-load cycles
     from mistakes.digests import send_daily_manager_summaries, send_weekly_founder_digest
-    escalate_overdue_mistakes()
-    send_daily_manager_summaries()      # date-guarded: once a day after 09:00
-    send_weekly_founder_digest()        # date-guarded: Mondays only
+    if module_on("mistakes"):
+        escalate_overdue_mistakes()
+        send_daily_manager_summaries()      # date-guarded: once a day after 09:00
+        send_weekly_founder_digest()        # date-guarded: Mondays only
     return sent

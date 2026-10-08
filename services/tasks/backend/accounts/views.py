@@ -17,7 +17,9 @@ from .serializers import ChangePasswordSerializer, UserSerializer, UserWriteSeri
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def me(request):
-    return Response(UserSerializer(request.user).data)
+    from tenancy.profile import brand, modules
+    # Which modules are on, and the company's names/colour/logo (None in a standalone install).
+    return Response({**UserSerializer(request.user).data, "modules": modules(), "brand": brand()})
 
 
 @api_view(["GET", "POST"])

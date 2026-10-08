@@ -1532,3 +1532,6 @@ a.stat-link:active { transform: translateY(1px); }
 .app-switch a, .app-switch span { flex: 1; text-align: center; padding: 6px 8px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--sidebar-ink); text-decoration: none; }
 .app-switch a:hover { background: rgba(255,255,255,.06); }
 .app-switch .on { background: var(--accent); color: #fff; }
+
+/* FreeFounders company brand without a logo: its first letter */
+.brand-initial { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; }

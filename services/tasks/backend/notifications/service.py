@@ -25,17 +25,21 @@ def _remember_whatsapp(user, result: dict, template: str) -> None:
 
 def notify(user, type_: str, title: str, body: str = "", link: str = "",
            wa_template: tuple[str, list] | None = None,
-           link_label: str = "Open in Automate Task",
+           link_label: str | None = None,
            extra_links=(), want_whatsapp: bool = True,
            want_email: bool = True) -> Notification:
     """wa_template=(template_name, [params]) routes the WhatsApp leg through
     an approved Meta template (deliverable any time); without it the message
     goes as free-form text, which Meta only delivers inside a 24h
     customer-service window. want_whatsapp=False keeps it to in-app and email."""
+    from tenancy.profile import app_name, brand
+    if link_label is None:
+        # A FreeFounders company sees its own name; a standalone install keeps the original wording.
+        link_label = f"Open in {app_name()}" if brand() else "Open in Automate Task"
     results = []
     if want_email:
         results.append(gmail.send_email(
-            user.email, f"[Automation Task] {title}", body or title,
+            user.email, f"[{app_name()}] {title}", body or title,
             link=link, link_label=link_label, extra_links=extra_links))
     if not want_whatsapp:
         wa = {"channel": "whatsapp", "status": "skipped", "detail": "not sent to this user"}

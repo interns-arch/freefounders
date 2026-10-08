@@ -100,8 +100,12 @@ function GroupModal({ initial, onClose, onSaved }) {
 /* ---------------- Group detail with tabs ---------------- */
 
 const TABS = ['Dashboard', 'Tasks', 'Ideas', 'Links', 'Members']
+// Ideas and Links are modules a company can switch off (PLAN.md §16.2).
+const TAB_MODULE = { Ideas: 'ideas', Links: 'links' }
 
 function GroupDetail({ group, onBack, onChanged }) {
+  const { module } = useAuth()
+  const tabs = TABS.filter(t => !TAB_MODULE[t] || module(TAB_MODULE[t]))
   const [tab, setTab] = useState('Dashboard')
   const [showEdit, setShowEdit] = useState(false)
   const [err, setErr] = useState('')
@@ -125,7 +129,7 @@ function GroupDetail({ group, onBack, onChanged }) {
       </div>
       {err && <div className="err">{err}</div>}
       <div className="area-tabs">
-        {TABS.map(t => (
+        {tabs.map(t => (
           <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>

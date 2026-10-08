@@ -66,6 +66,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "tenancy.middleware.CompanyMiddleware",  # no-op unless TENANCY=schemas
+    "tenancy.profile.ModuleGateMiddleware",  # switched-off modules answer 404 (PLAN.md §16.2)
     "whitenoise.middleware.WhiteNoiseMiddleware",  # static + SPA on Render
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",

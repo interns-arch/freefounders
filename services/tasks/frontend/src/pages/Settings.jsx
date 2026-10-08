@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, errorText } from '../api'
+import { useAuth } from '../auth'
 import { clearDepartmentCache, useDepartments } from '../useDepartments'
 
 
@@ -10,8 +11,10 @@ export default function Settings() {
   const [taskCfg, setTaskCfg] = useState(null)
   const [err, setErr] = useState('')
 
+  const { module } = useAuth()
+  const leads = module('leads')
   const load = () => Promise.all([
-    api('/api/assignment-rules/'),
+    leads ? api('/api/assignment-rules/') : [],
     api('/api/leads/assignees/'),
     api('/api/task-settings/'),
   ]).then(([r, t, c]) => { setRules(r.results || r); setTeam(t); setTaskCfg(c) }).catch(e => setErr(e.message))
@@ -45,12 +48,12 @@ export default function Settings() {
       )}
       <DepartmentManager onError={setErr} />
       <CategoryManager onError={setErr} />
-      <p className="muted" style={{ marginBottom: 16 }}>
+      {leads && <p className="muted" style={{ marginBottom: 16 }}>
         Auto-assignment rules: when a new lead arrives without an assignee (manual entry,
         or WhatsApp/Gmail/AI intake in Phase 3), the rule for its department picks the owner.
-      </p>
+      </p>}
       {err && <div className="err">{err}</div>}
-      {DEPARTMENTS.map(([dept, label]) => (
+      {leads && DEPARTMENTS.map(([dept, label]) => (
         <RuleCard key={dept} dept={dept} label={label}
           rule={rules.find(r => r.department === dept)}
           team={team} onChanged={load} onError={setErr} />

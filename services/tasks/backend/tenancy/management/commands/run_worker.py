@@ -41,7 +41,10 @@ def run_jobs() -> None:
     from crm.reminders import send_followup_reminders
 
     send_followup_reminders()
-    if company_env("GMAIL_ENABLED", "false").lower() == "true" and company_env("GMAIL_POLL_ENABLED", "false").lower() == "true":
+    from tenancy.profile import module_on
+
+    if (module_on("intake") and company_env("GMAIL_ENABLED", "false").lower() == "true"
+            and company_env("GMAIL_POLL_ENABLED", "false").lower() == "true"):
         from intake.gmail_poll import poll_inbox
 
         poll_inbox()

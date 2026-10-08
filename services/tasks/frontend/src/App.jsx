@@ -55,7 +55,7 @@ const TITLES = {
 }
 
 function Shell({ children }) {
-  const { user, can, logout } = useAuth()
+  const { user, can, module, brand, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [unread, setUnread] = useState(0)
@@ -82,7 +82,7 @@ function Shell({ children }) {
         <button className="icon-btn" onClick={() => setNavOpen(v => !v)} aria-label="Menu">
           <span className="burger" />
         </button>
-        <span className="mobile-title">{TITLES[location.pathname] || 'CarTrends'}</span>
+        <span className="mobile-title">{TITLES[location.pathname] || brand?.short_name || 'CarTrends'}</span>
         <button className="icon-btn" onClick={() => navigate('/notifications')} aria-label="Notifications">
           🔔{unread > 0 && <span className="badge-dot">{unread > 9 ? '9+' : unread}</span>}
         </button>
@@ -91,11 +91,20 @@ function Shell({ children }) {
       <div className="nav-scrim" onClick={() => setNavOpen(false)} />
 
       <aside className="sidebar">
-        <div className="brand">
-          <img src={withBase('/logo.png')} alt="CarTrends"
-            style={{ height: 30, width: 'auto', background: '#fff', borderRadius: 6, padding: '3px 5px' }} />
-          <div>Automation Task<small>CarTrends</small></div>
-        </div>
+        {brand ? (
+          <div className="brand">
+            {brand.logo_url
+              ? <img src={brand.logo_url} alt="" style={{ height: 30, maxWidth: 60, objectFit: 'contain', background: '#fff', borderRadius: 6, padding: '3px 5px' }} />
+              : <span className="brand-initial" aria-hidden>{brand.short_name.slice(0, 1).toUpperCase()}</span>}
+            <div>{brand.short_name}<small>Tasks</small></div>
+          </div>
+        ) : (
+          <div className="brand">
+            <img src={withBase('/logo.png')} alt="CarTrends"
+              style={{ height: 30, width: 'auto', background: '#fff', borderRadius: 6, padding: '3px 5px' }} />
+            <div>Automation Task<small>CarTrends</small></div>
+          </div>
+        )}
         {PLATFORM && <AppSwitcher />}
         <nav>
           <NavLink to="/" end><Icon name="dashboard" className="nav-ic" />Dashboard</NavLink>
@@ -104,11 +113,11 @@ function Shell({ children }) {
           <NavLink to="/tasks"><Icon name="tasks" className="nav-ic" />Tasks</NavLink>
           <NavLink to="/groups"><Icon name="users" className="nav-ic" />Groups</NavLink>
           <NavLink to="/notices"><Icon name="megaphone" className="nav-ic" />Notices</NavLink>
-          <NavLink to="/links"><Icon name="link" className="nav-ic" />Links</NavLink>
-          <NavLink to="/ideas"><Icon name="bulb" className="nav-ic" />Idea Board</NavLink>
-          <NavLink to="/forms"><Icon name="form" className="nav-ic" />Forms</NavLink>
+          {module('links') && <NavLink to="/links"><Icon name="link" className="nav-ic" />Links</NavLink>}
+          {module('ideas') && <NavLink to="/ideas"><Icon name="bulb" className="nav-ic" />Idea Board</NavLink>}
+          {module('forms') && <NavLink to="/forms"><Icon name="form" className="nav-ic" />Forms</NavLink>}
           <NavLink to="/hr"><Icon name="calendar" className="nav-ic" />Attendance</NavLink>
-          <NavLink to="/mistakes"><Icon name="alert" className="nav-ic" />Mistakes</NavLink>
+          {module('mistakes') && <NavLink to="/mistakes"><Icon name="alert" className="nav-ic" />Mistakes</NavLink>}
           <NavLink to="/notifications">
             <Icon name="bell" className="nav-ic" />Notifications {unread > 0 && <span className="badge">{unread}</span>}
           </NavLink>
@@ -143,7 +152,7 @@ function Shell({ children }) {
         {[
           ['/', 'dashboard', 'Home'],
           ['/tasks', 'tasks', 'Tasks'],
-          ['/mistakes', 'alert', 'Mistakes'],
+          module('mistakes') ? ['/mistakes', 'alert', 'Mistakes'] : ['/hr', 'calendar', 'Attendance'],
           ['/notifications', 'bell', 'Alerts'],
         ].map(([to, icon, label]) => (
           <NavLink key={to} to={to} end={to === '/'} className="bn-item">
@@ -283,13 +292,14 @@ function Privacy() {
   )
 }
 
-function Protected({ children, capability }) {
-  const { user, ready, can } = useAuth()
+function Protected({ children, capability, module: moduleKey }) {
+  const { user, ready, can, module } = useAuth()
   const location = useLocation()
   if (!ready) return <div className="center-note">Loading…</div>
   // remember where they were going -- an email link must survive the login
   if (!user) return PLATFORM ? <PortalRedirect /> : <Navigate to="/login" replace state={{ from: location }} />
   if (capability && !can(capability)) return <Navigate to="/" replace />
+  if (moduleKey && !module(moduleKey)) return <Navigate to="/" replace />
   return <Shell>{children}</Shell>
 }
 
@@ -303,16 +313,16 @@ export default function App() {
           <Route path="/install" element={<Install />} />
           <Route path="/f/:token" element={<PublicForm />} />
           <Route path="/" element={<Protected><Home /></Protected>} />
-          <Route path="/leads" element={<Protected><Leads /></Protected>} />
+          <Route path="/leads" element={<Protected module="leads"><Leads /></Protected>} />
           <Route path="/tasks" element={<Protected><Tasks /></Protected>} />
           <Route path="/tasks/:taskId" element={<Protected><Tasks /></Protected>} />
           <Route path="/groups" element={<Protected><Groups /></Protected>} />
           <Route path="/notices" element={<Protected><Notices /></Protected>} />
-          <Route path="/links" element={<Protected><Links /></Protected>} />
-          <Route path="/ideas" element={<Protected><Ideas /></Protected>} />
-          <Route path="/forms" element={<Protected><Forms /></Protected>} />
+          <Route path="/links" element={<Protected module="links"><Links /></Protected>} />
+          <Route path="/ideas" element={<Protected module="ideas"><Ideas /></Protected>} />
+          <Route path="/forms" element={<Protected module="forms"><Forms /></Protected>} />
           <Route path="/hr" element={<Protected><HR /></Protected>} />
-          <Route path="/mistakes" element={<Protected><Mistakes /></Protected>} />
+          <Route path="/mistakes" element={<Protected module="mistakes"><Mistakes /></Protected>} />
           <Route path="/notifications" element={
             <Protected>{({ refreshUnread }) => <Notifications onCountChange={refreshUnread} />}</Protected>
           } />
