@@ -16,6 +16,7 @@ import { hashPassword } from './auth/auth.service';
 import { DbService } from './db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps } from './db/schema';
 import { internalUrl, ProvisionClient } from './provision/provision.client';
+import { RolesService } from './roles/roles.service';
 
 const CODE_RE = /^[A-Za-z][A-Za-z0-9_]{1,40}$/;
 
@@ -76,12 +77,24 @@ async function relink(dbs: DbService, provisioner: ProvisionClient, companyId: s
   if (grants.length) console.log(`  ✔ ${grants.length} app access link(s) checked, ${changed} updated`);
 }
 
+/** Brings the company into the role builder (first time) and sends every app the current roles. */
+async function syncRoles(rolesSvc: RolesService, companyId: string) {
+  if (!APPS.some((a) => internalUrl(a))) return;
+  try {
+    const res = await rolesSvc.sync(companyId);
+    console.log(`  ✔ roles: ${res.imported ? 'imported from the apps, ' : ''}sent to ${Object.entries(res.push).map(([a, r]) => `${a} (${r})`).join(', ') || 'no app'}`);
+  } catch (err) {
+    console.log(`  ✖ roles: ${(err as Error).message}`);
+  }
+}
+
 async function main() {
   const [command = 'list', ...rest] = process.argv.slice(2);
   const opts = args(rest);
   const ctx = await NestFactory.createApplicationContext(AppModule, { logger: ['error'] });
   const dbs = ctx.get(DbService);
   const provisioner = ctx.get(ProvisionClient);
+  const rolesSvc = ctx.get(RolesService);
   try {
     if (command === 'list') {
       const rows = await dbs.db
@@ -98,6 +111,7 @@ async function main() {
         console.log(`${c.name} (${c.code})`);
         await setUpInApps(provisioner, c);
         await relink(dbs, provisioner, c.id);
+        await syncRoles(rolesSvc, c.id);
       }
       return;
     }
@@ -123,6 +137,7 @@ async function main() {
       console.log(`✔ ${company.name} (${company.code}) created; owner ${ownerEmail}`);
       if (generated) console.log(`  One-time password: ${password}   ← must be changed at first sign-in`);
       await setUpInApps(provisioner, company);
+      await syncRoles(rolesSvc, company.id);
       return;
     }
 

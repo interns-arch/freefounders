@@ -95,4 +95,62 @@ export class ProvisionClient {
     if (res.ok && body?.schema) return { created: Boolean(body.created), schema: body.schema };
     throw new BadGatewayException(`${app} could not set up ${company.name}: ${body?.message ?? body?.detail ?? `HTTP ${res.status}`}`);
   }
+
+  /** The permissions an app offers to the role builder. */
+  async permissions(app: AppKey, companyId: string): Promise<AppCatalogue> {
+    return this.internalJson<AppCatalogue>(app, 'GET', '/permissions', companyId);
+  }
+
+  /** The company's roles inside an app and who holds them (to bring an existing company into the role builder). */
+  async exportAccess(app: AppKey, companyId: string): Promise<AppAccessExport> {
+    return this.internalJson<AppAccessExport>(app, 'GET', '/access', companyId);
+  }
+
+  /** Sends the company's full role set, and the roles of the listed people, to an app. */
+  async pushAccess(app: AppKey, companyId: string, body: unknown): Promise<{ applied: boolean; missingPeople?: string[]; problems?: string[] }> {
+    return this.internalJson(app, 'PUT', '/access', companyId, body);
+  }
+
+  private async internalJson<T>(app: AppKey, method: string, path: string, companyId: string, body?: unknown): Promise<T> {
+    const base = internalUrl(app);
+    if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);
+    let res: Response;
+    try {
+      res = await fetch(`${base}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${await this.tokens.signService(app, companyId)}`,
+          'x-requested-with': 'XMLHttpRequest',
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (err) {
+      throw new BadGatewayException(`Could not reach ${app}: ${(err as Error).message}`);
+    }
+    const data = (await res.json().catch(() => null)) as (T & { message?: string; detail?: string }) | null;
+    if (!res.ok || data === null) throw new BadGatewayException(`${app}: ${data?.message ?? data?.detail ?? `HTTP ${res.status}`}`);
+    return data;
+  }
+}
+
+export interface CataloguePermission {
+  key: string;
+  label: string;
+  group: string;
+  /** Allowed scopes, or null for a yes/no permission. */
+  scopes: string[] | null;
+  /** Only the locked Super Admin role gets it by default (e.g. deleting admins' work). */
+  superAdminOnly?: boolean;
+}
+export interface AppCatalogue {
+  app: string;
+  scopes: string[];
+  permissions: CataloguePermission[];
+}
+export interface AppAccessExport {
+  version: number;
+  roles: Array<{ code: string; name: string; description?: string | null; level?: number; archived?: boolean; grants: Array<{ permission: string; scope?: string | null }> }>;
+  people: Array<{ personId: string; roles: string[] }>;
 }

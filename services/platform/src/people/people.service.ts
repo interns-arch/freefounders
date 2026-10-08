@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { AuthService, hashPassword } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
-import { type AppKey, APPS, companies, logins, people, personApps, PLATFORM_ROLES } from '../db/schema';
+import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, roles } from '../db/schema';
 import { ProvisionClient } from '../provision/provision.client';
 
 const optional = <T extends z.ZodTypeAny>(s: T) =>
@@ -100,10 +100,18 @@ export class PeopleService {
           .innerJoin(people, eq(people.id, personApps.personId))
           .where(eq(people.companyId, caller.companyId))
       : [];
+    const held = rows.length
+      ? await db
+          .select({ personId: personRoles.personId, roleId: personRoles.roleId })
+          .from(personRoles)
+          .innerJoin(roles, eq(roles.id, personRoles.roleId))
+          .where(and(eq(roles.companyId, caller.companyId), eq(roles.archived, false)))
+      : [];
     return rows.map((r) => ({
       ...this.view(r.person),
       login: r.hasLogin ? { username: r.username, lastLoginAt: r.lastLoginAt, locked: !!r.lockedUntil && r.lockedUntil > new Date() } : null,
       apps: grants.filter((g) => g.personId === r.person.id).map((g) => g.app),
+      roleIds: held.filter((h) => h.personId === r.person.id).map((h) => h.roleId),
     }));
   }
 

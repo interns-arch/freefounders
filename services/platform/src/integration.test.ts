@@ -9,6 +9,7 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { pbkdf2Sync } from 'node:crypto';
 import { hashPassword } from './auth/auth.service';
 import { ProvisionClient } from './provision/provision.client';
+import { RolesService } from './roles/roles.service';
 import { DbService } from './db/db.service';
 import { companies, logins, people, personApps, refreshSessions } from './db/schema';
 import { createApp } from './main';
@@ -20,6 +21,18 @@ let dbs: DbService;
 let fakeTasks: Server;
 const provisionCalls: Array<{ body: Record<string, unknown>; aud: unknown; cid: unknown; url?: string }> = [];
 const ids: Record<string, string> = {};
+// Phase 3: what the stand-in Tasks app offers to the role builder, and the roles it already has.
+const FAKE_CATALOGUE = {
+  app: 'tasks',
+  scopes: ['own', 'team', 'department', 'company'],
+  permissions: [
+    { key: 'tasks.view', label: 'See tasks', group: 'Tasks', scopes: ['own', 'team', 'department', 'company'] },
+    { key: 'tasks.assign', label: 'Give tasks', group: 'Tasks', scopes: null },
+    { key: 'tasks.delete_admin_work', label: 'Delete admin work', group: 'Tasks', scopes: null, superAdminOnly: true },
+  ],
+};
+let fakeExport: { version: number; roles: unknown[]; people: unknown[] } = { version: 0, roles: [], people: [] };
+const accessPushes: Array<{ cid: unknown; body: any }> = [];
 
 interface Res {
   status: number;
@@ -62,6 +75,19 @@ before(async () => {
       if (req.method === 'GET' && req.url?.endsWith('/roles')) {
         provisionCalls.push({ body: {}, aud: payload.aud, cid: payload.cid, url: req.url });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{ value: 'warehouse', label: 'Warehouse Team' }]));
+        return;
+      }
+      if (req.method === 'GET' && req.url?.endsWith('/permissions')) {
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(FAKE_CATALOGUE));
+        return;
+      }
+      if (req.method === 'GET' && req.url?.endsWith('/access')) {
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(fakeExport));
+        return;
+      }
+      if (req.method === 'PUT' && req.url?.endsWith('/access')) {
+        accessPushes.push({ cid: payload.cid, body: JSON.parse(raw) });
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ applied: true, problems: [] }));
         return;
       }
       if (req.method === 'POST' && req.url?.endsWith('/companies')) {
@@ -397,5 +423,119 @@ describe('multi-company (Phase 2)', () => {
     const last = provisionCalls.at(-1)!;
     assert.ok(last.url?.endsWith('/companies'));
     assert.deepEqual(last.body, { companyId: ids.acme, code: 'ACME', name: 'Acme' });
+  });
+});
+
+describe('role builder (Phase 3)', () => {
+  const roleIds: Record<string, string> = {};
+
+  test('brings a company in from its apps: locked roles, the apps roles, everyone keeps theirs', async () => {
+    fakeExport = {
+      version: 0,
+      roles: [
+        { code: 'super_admin', name: 'Super Admin', level: 3, grants: [{ permission: 'tasks.view', scope: 'company' }, { permission: 'tasks.delete_admin_work', scope: '' }] },
+        { code: 'warehouse', name: 'Warehouse Team', level: 1, grants: [{ permission: 'tasks.view', scope: 'team' }, { permission: 'gone.old', scope: '' }] },
+      ],
+      people: [{ personId: ids.member, roles: ['warehouse'] }],
+    };
+    const res = await app.get(RolesService).sync(ids.acme);
+    assert.equal(res.imported, true);
+    assert.equal(res.push.tasks, 'ok');
+    assert.equal((await app.get(RolesService).sync(ids.acme)).imported, false, 'only the first time');
+
+    const admin = await login('admin@acme.test');
+    const list = await call('GET', '/roles', { token: admin.token });
+    assert.equal(list.status, 200);
+    const byCode = Object.fromEntries(list.body.map((r: { code: string }) => [r.code, r]));
+    assert.deepEqual(Object.keys(byCode).sort(), ['ff_admin', 'ff_super_admin', 'super_admin', 'warehouse']);
+    assert.equal(byCode.super_admin.name, 'Super Admin (Tasks)', 'name clash with the locked role');
+    assert.equal(byCode.ff_super_admin.system, true);
+    const perms = (code: string) => byCode[code].grants.map((g: { permission: string; scope: string }) => `${g.permission}@${g.scope}`).sort();
+    assert.deepEqual(perms('ff_super_admin'), ['tasks.assign@', 'tasks.delete_admin_work@', 'tasks.view@company']);
+    assert.deepEqual(perms('ff_admin'), ['tasks.assign@', 'tasks.view@company'], 'Super Admin-only powers are not in Admin');
+    assert.deepEqual(perms('warehouse'), ['tasks.view@team'], 'unknown permissions are dropped');
+    Object.assign(roleIds, { super: byCode.ff_super_admin.id, admin: byCode.ff_admin.id, warehouse: byCode.warehouse.id });
+
+    const peopleList = await call('GET', '/people', { token: admin.token });
+    const person = (id: string) => peopleList.body.find((p: { id: string }) => p.id === id);
+    assert.deepEqual(person(ids.member).roleIds, [roleIds.warehouse]);
+    assert.ok(person(ids.owner).roleIds.includes(roleIds.super), 'the owner is Super Admin');
+
+    const pushed = accessPushes.at(-1)!;
+    assert.equal(pushed.cid, ids.acme, 'sent to the company');
+    assert.equal(pushed.body.roles.length, 4);
+    assert.ok(pushed.body.version > 0);
+  });
+
+  test('the catalogue comes from the apps; members cannot use the role builder', async () => {
+    const admin = await login('admin@acme.test');
+    const cat = await call('GET', '/roles/catalogue', { token: admin.token });
+    assert.equal(cat.status, 200);
+    assert.equal(cat.body[0].app, 'tasks');
+    assert.equal(cat.body[0].permissions.length, 3);
+    const created = await call('POST', '/people', { token: admin.token, body: { fullName: 'Rita Roles', email: 'rita@acme.test', login: { username: 'rita', password: PASSWORD } } });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    ids.rita = created.body.person.id;
+    const rita = await login('rita');
+    assert.equal((await call('GET', '/roles', { token: rita.token })).status, 403);
+  });
+
+  test('roles are checked against what the apps offer; locked roles stay locked', async () => {
+    const admin = await login('admin@acme.test');
+    const make = (body: unknown) => call('POST', '/roles', { token: admin.token, body });
+    const ok = await make({ name: 'Floor Lead', level: 2, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'department' }, { app: 'tasks', permission: 'tasks.assign' }] });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    roleIds.floor = ok.body.id;
+    assert.equal(ok.body.sync.tasks, 'ok');
+    assert.equal((await make({ name: 'X1', grants: [{ app: 'tasks', permission: 'tasks.fly' }] })).status, 400);
+    assert.equal((await make({ name: 'X2', grants: [{ app: 'tasks', permission: 'tasks.assign', scope: 'company' }] })).status, 400);
+    assert.equal((await make({ name: 'X3', grants: [{ app: 'tasks', permission: 'tasks.view' }] })).status, 400, 'scoped permission needs a scope');
+    assert.equal((await make({ name: 'X4', grants: [{ app: 'assets', permission: 'asset:view' }] })).status, 400, 'not in the plan');
+    assert.equal((await make({ name: 'floor lead' })).status, 409);
+    assert.equal((await call('PATCH', `/roles/${roleIds.super}`, { token: admin.token, body: { name: 'Boss' } })).status, 403);
+    assert.equal((await call('DELETE', `/roles/${roleIds.admin}`, { token: admin.token })).status, 403);
+    const copy = await call('POST', `/roles/${roleIds.floor}/duplicate`, { token: admin.token });
+    assert.equal(copy.body.name, 'Floor Lead (copy)');
+    assert.equal(copy.body.grants.length, 2);
+    roleIds.copy = copy.body.id;
+  });
+
+  test('giving roles opens the apps they need; taking them away closes the apps', async () => {
+    const admin = await login('admin@acme.test');
+    const before = await login('rita');
+    const given = await call('PUT', `/people/${ids.rita}/roles`, { token: admin.token, body: { roleIds: [roleIds.floor] } });
+    assert.equal(given.status, 200, JSON.stringify(given.body));
+    assert.deepEqual(given.body.apps, ['tasks']);
+    assert.equal(provisionCalls.at(-1)!.body.personId, ids.rita, 'the app was asked for her user');
+    const pushed = accessPushes.at(-1)!.body;
+    assert.deepEqual(pushed.people.find((p: { personId: string }) => p.personId === ids.rita).roleIds, [roleIds.floor]);
+    assert.deepEqual(decodeJwt((await login('rita')).token).apps, { tasks: '42' });
+
+    const taken = await call('PUT', `/people/${ids.rita}/roles`, { token: admin.token, body: { roleIds: [] } });
+    assert.deepEqual(taken.body.apps, []);
+    assert.deepEqual(decodeJwt((await login('rita')).token).apps, {});
+    assert.equal((await call('POST', '/auth/refresh', { cookie: before.cookie, body: {} })).status, 401, 'signed out when apps closed');
+  });
+
+  test('only an owner gives or takes Super Admin', async () => {
+    const admin = await login('admin@acme.test');
+    assert.equal((await call('PUT', `/people/${ids.rita}/roles`, { token: admin.token, body: { roleIds: [roleIds.super] } })).status, 403);
+    const owner = await login('olivia');
+    assert.equal((await call('PUT', `/people/${ids.rita}/roles`, { token: owner.token, body: { roleIds: [roleIds.super] } })).status, 200);
+    assert.equal((await call('PUT', `/people/${ids.rita}/roles`, { token: admin.token, body: { roleIds: [] } })).status, 403);
+    assert.equal((await call('PUT', `/people/${ids.rita}/roles`, { token: owner.token, body: { roleIds: [roleIds.copy] } })).status, 200);
+  });
+
+  test('archiving a role takes it from everyone and closes apps it alone gave', async () => {
+    const admin = await login('admin@acme.test');
+    const res = await call('DELETE', `/roles/${roleIds.copy}`, { token: admin.token });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const list = await call('GET', '/roles', { token: admin.token });
+    assert.ok(!list.body.some((r: { id: string }) => r.id === roleIds.copy));
+    const peopleList = await call('GET', '/people', { token: admin.token });
+    const rita = peopleList.body.find((p: { id: string }) => p.id === ids.rita);
+    assert.deepEqual(rita.roleIds, []);
+    assert.deepEqual(rita.apps, []);
+    assert.ok(!accessPushes.at(-1)!.body.roles.some((r: { id: string }) => r.id === roleIds.copy), 'the apps archive it');
   });
 });

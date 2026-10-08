@@ -23,6 +23,8 @@ export const companies = platform.table('companies', {
   name: text('name').notNull(),
   code: text('code').notNull().unique(),
   enabledApps: text('enabled_apps').array().notNull().default(sql`'{}'::text[]`),
+  /** Goes up on every role change; the apps ignore an older role set arriving late. */
+  accessVersion: integer('access_version').notNull().default(0),
   status: text('status').notNull().default('active'),
   ...timestamps,
 });
@@ -115,3 +117,61 @@ export const signingKeys = platform.table('signing_keys', {
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Roles (Phase 3, PLAN.md §15) ────────────────────────────────────────────
+
+/**
+ * A company's roles, built in the portal. Each role has permissions in one or more apps (role_grants); a person can
+ * hold several roles (person_roles). The apps get a copy on every change (/internal/access). `code` is how the apps
+ * recognise roles they already had (Tasks' built-in role codes, Assets' original role names).
+ */
+export const roles = platform.table(
+  'roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    colour: text('colour'),
+    /** 1 member, 2 manager, 3 admin. */
+    level: integer('level').notNull().default(1),
+    /** Locked roles (Super Admin, Admin): everything, cannot be edited or deleted. */
+    system: boolean('system').notNull().default(false),
+    archived: boolean('archived').notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('roles_company_code_uq').on(t.companyId, t.code),
+    uniqueIndex('roles_company_name_uq').on(t.companyId, sql`lower(${t.name})`),
+  ],
+);
+
+export const roleGrants = platform.table(
+  'role_grants',
+  {
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    app: text('app').notNull(),
+    permission: text('permission').notNull(),
+    /** own / team / department / company for permissions with scopes; '' for yes/no permissions. */
+    scope: text('scope').notNull().default(''),
+  },
+  (t) => [primaryKey({ columns: [t.roleId, t.app, t.permission] })],
+);
+
+export const personRoles = platform.table(
+  'person_roles',
+  {
+    personId: uuid('person_id')
+      .notNull()
+      .references(() => people.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.personId, t.roleId] })],
+);

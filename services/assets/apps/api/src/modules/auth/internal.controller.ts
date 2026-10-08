@@ -4,7 +4,7 @@ import type { Response } from 'express';
 import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, isNotNull, ne, notInArray, sql } from 'drizzle-orm';
-import { ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSIONS } from '@eam/shared';
+import { ADMIN_PERMISSIONS, ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSIONS } from '@eam/shared';
 import { z } from 'zod';
 import { type Actor, SYSTEM_ACTOR } from '../../common/actor';
 import { type AuthedRequest, badRequest, Public, ZodPipe } from '../../common/http';
@@ -137,7 +137,8 @@ export class InternalController {
     return {
       app: 'assets',
       scopes: [],
-      permissions: ALL_PERMISSIONS.map((key) => ({ key, label: PERMISSIONS[key], group: group.get(key) ?? 'Other', scopes: null })),
+      // The CEO-only leadership page is the one thing the Admin role does not get (ADMIN_PERMISSIONS).
+      permissions: ALL_PERMISSIONS.map((key) => ({ key, label: PERMISSIONS[key], group: group.get(key) ?? 'Other', scopes: null, superAdminOnly: !(ADMIN_PERMISSIONS as readonly string[]).includes(key) })),
     };
   }
 
@@ -193,7 +194,12 @@ export class InternalController {
           ),
         ];
         const [byId] = await db.select().from(roles).where(eq(roles.platformRoleId, r.id)).limit(1);
-        const existing = byId ?? (await db.select().from(roles).where(and(sql`lower(${roles.name}) = lower(${r.name})`, sql`${roles.platformRoleId} is null`)).limit(1))[0];
+        // Not linked yet: the role it was imported from (its original name is the code), else one with the same name.
+        const localName = r.code?.startsWith('assets:') ? r.code.slice('assets:'.length) : r.name;
+        const existing =
+          byId ??
+          (await db.select().from(roles).where(and(sql`lower(${roles.name}) = lower(${localName})`, sql`${roles.platformRoleId} is null`)).limit(1))[0] ??
+          (await db.select().from(roles).where(and(sql`lower(${roles.name}) = lower(${r.name})`, sql`${roles.platformRoleId} is null`)).limit(1))[0];
         const values = { name: r.name, description: r.description ?? null, permissions, archived: r.archived ?? false, platformRoleId: r.id, updatedAt: new Date() };
         if (existing) {
           // Another local role already has this name: keep both by marking the Platform's copy.

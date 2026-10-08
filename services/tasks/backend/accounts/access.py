@@ -36,6 +36,8 @@ CATALOGUE = [
     ("users.manage", "Manage users", "Administration", None),
     ("settings.manage", "Company settings", "Administration", None),
 ]
+# Powers only the locked Super Admin role gets by default (today: Super Admin's one extra power).
+SUPER_ADMIN_ONLY = {"tasks.delete_admin_work"}
 _BY_KEY = {key: (label, group, scopes) for key, label, group, scopes in CATALOGUE}
 # capability string -> (permission key, scope) for scoped capabilities
 _SCOPED_CAP = {cap: (key, scope) for key, _l, _g, scopes in CATALOGUE if scopes for scope, cap in scopes.items()}
@@ -44,7 +46,8 @@ _SCOPED_CAP = {cap: (key, scope) for key, _l, _g, scopes in CATALOGUE if scopes 
 def catalogue() -> list[dict]:
     """What the Platform's role builder shows for Tasks."""
     return [
-        {"key": key, "label": label, "group": group, "scopes": list(scopes) if scopes else None}
+        {"key": key, "label": label, "group": group, "scopes": list(scopes) if scopes else None,
+         "superAdminOnly": key in SUPER_ADMIN_ONLY}
         for key, label, group, scopes in CATALOGUE
     ]
 

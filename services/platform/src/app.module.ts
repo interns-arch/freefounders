@@ -10,9 +10,11 @@ import { AppsController } from './people/apps.controller';
 import { PeopleController } from './people/people.controller';
 import { PeopleService } from './people/people.service';
 import { ProvisionClient } from './provision/provision.client';
+import { RolesController } from './roles/roles.controller';
+import { RolesService } from './roles/roles.service';
 
 @Module({
-  controllers: [AuthController, PeopleController, AppsController],
-  providers: [DbService, KeysService, TokensService, AuthService, PeopleService, ProvisionClient, { provide: APP_GUARD, useClass: AuthGuard }],
+  controllers: [AuthController, PeopleController, AppsController, RolesController],
+  providers: [DbService, KeysService, TokensService, AuthService, PeopleService, ProvisionClient, RolesService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}
