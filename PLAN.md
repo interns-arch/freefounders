@@ -863,3 +863,62 @@ Notes and differences from the design above:
 
 Not done in Phase 5 (noted for later): Tasks' own "My Team" screen still lets an admin edit department / reports-to locally; the
 next directory push overwrites it, so in FreeFounders mode those fields should be edited in the portal (to be locked in Phase 6).
+
+---
+
+## 18. Phase 6 design: one web app with a redesign-proof structure (2026-10-08)
+
+Founder: "go ahead and complete phase 6". Designed by Claude from a survey of the three web apps (Tasks web ≈ 11.5k lines
+of JSX + one CSS file; Assets web ≈ 13.8k lines of TSX on React 19 / Tailwind 4 / Radix / TanStack Query; portal ≈ 2k).
+
+### 18.1 What gets built
+```
+apps/web/            the one FreeFounders web app (React 19, Vite, TypeScript, Tailwind 4, Radix, TanStack Query, React Router 7)
+  src/app/           shell: sign-in, workspace chooser, sidebar, top bar, routing, notifications bell
+  src/ui/            presentational kit only (buttons, inputs, dialogs, tables, badges…): no data, no API
+  src/features/      screens per area: admin/ tasks/ hr/ assets/ (screens call hooks from @core, never fetch)
+packages/theme/      design tokens: tokens.css (light + dark CSS variables) and tokens.ts (same values for mobile, Phase 7)
+packages/core/       platform-neutral logic, no DOM: HTTP client, Platform session, typed API functions for the
+                     Platform / Tasks / Assets, TanStack Query hooks, permission + module helpers, enums and labels
+```
+- `apps/web` takes over the portal (sign-in, chooser, People, Roles, Settings, account) **and** both apps' screens.
+- **Same URLs as today**: `/tasks/…` and `/assets/…` keep their current sub-paths (e.g. `/tasks/tasks/42`, `/tasks/hr`,
+  `/assets/requests?open=…`), so every link already sent in emails, WhatsApp and notifications keeps working.
+- Built on the Assets web stack because it already follows most of §6: its screens move across (data calls lifted into
+  `@core` hooks); Tasks screens are rebuilt in TypeScript on the same kit.
+
+### 18.2 The §6 rules, concretely
+1. Screens import data only through `@core` hooks (`useTasks`, `useCompleteTask`, `useAssets`…). A lint check fails the build if a
+   file under `src/features` or `src/ui` imports `fetch`, the HTTP client or an API module directly.
+2. Colours, radius, spacing and fonts come only from `packages/theme` tokens (Tailwind theme reads the CSS variables).
+   The company brand colour from the Settings Center overrides `--primary` at run time.
+3. **API types**: `@core` has typed functions for every endpoint the screens use. They are written by hand, not generated:
+   the Django API's custom actions and the NestJS API's handlers do not describe their responses, so generated types would be
+   mostly `any`. Instead, the parity tests call every screen against the real APIs. (Generated clients stay a Phase 9 option.)
+4. Enums, labels and permission lists come from `@core` (Assets' shared package, and the Tasks catalogues the API returns).
+5. **Parity tests** (Playwright, by role/label/text): one suite per area, `e2e/web-*.spec.ts`.
+
+### 18.3 Which screens move in Phase 6
+| Area | Screens |
+|---|---|
+| Admin (portal) | sign-in, chooser, change password, People & access, Roles (with duties), Settings (company, modules, departments) |
+| Tasks | home dashboard, all task lists and tabs, task detail (steps, comments, day log, files, change requests), to accept, requests inbox, templates + directory, groups, notices, notifications, team performance + reports, my team, task settings |
+| HR (in Tasks) | today (check-in with photo/face), my attendance, my leave, holidays, team, approvals, HR settings |
+| Assets | dashboard, leadership, priority queue, assets list/detail/labels/scan, employees + ID cards, joiners, exits, requests, tickets, maintenance, activity, settings (catalogue, departments, vendors, users, roles) |
+**Not moved in Phase 6** (switched off for new companies, §16.2): Leads, AI inbox, Payroll, Mistake register, Forms, Links, Ideas,
+SIM register, Reconciliation. They keep their current screens under **`/classic/tasks/…`** and **`/classic/assets/…`**, opened from the
+new menu ("opens the classic screen"), so CarTrends keeps every feature. They move in a later step.
+
+### 18.4 Serving it
+- Gateway: `/` and every non-API path under `/tasks/` and `/assets/` → the new web app; `/classic/tasks/*`, `/classic/assets/*` →
+  the old web apps (built with those bases). APIs unchanged.
+- The old Tasks web registered a service worker at `/tasks/`; the new app serves a `/tasks/sw.js` that unregisters itself, so
+  phones do not keep showing the old cached app.
+- Standalone installs are untouched: the old apps still build and run on their own.
+
+### 18.5 Build order
+1. Foundation: `packages/theme`, `packages/core` (client, session, platform/tasks/assets basics, permissions), `apps/web` shell, UI kit,
+   gateway + dev script, the import rule check, first parity test (sign in → chooser → shell).
+2. Areas, in parallel, each with its own parity suite: Admin · Tasks lists · Task detail · Tasks reports/home/groups/notices/settings ·
+   HR · Assets (inventory side) · Assets (people side).
+3. Switch the gateway to the new app; old e2e suites updated to the new screens; docs.
