@@ -37,7 +37,8 @@ def notice_targets(notice: Notice, user, group_ids=None) -> bool:
     if t == NoticeAudience.EVERYONE:
         return True
     if t == NoticeAudience.ROLE:
-        return v.get("role") == user.role
+        from accounts.access import role_codes
+        return v.get("role") in role_codes(user)
     if t == NoticeAudience.DEPARTMENT:
         return v.get("department") == user.department
     if t == NoticeAudience.GROUP:

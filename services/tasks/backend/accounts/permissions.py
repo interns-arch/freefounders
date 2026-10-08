@@ -124,9 +124,9 @@ class IsAdmin(BasePermission):
     message = "Admin role required."
 
     def has_permission(self, request, view):
-        from .models import is_top_admin
+        from .access import is_admin
         return bool(request.user and request.user.is_authenticated
-                    and is_top_admin(request.user.role))
+                    and is_admin(request.user))
 
 
 class HasCapability(BasePermission):

@@ -81,11 +81,16 @@ class DepartmentOption(models.Model):
 
 # The roles at the very top of the tree. Anything that means "an admin"
 # must ask this, never compare to Role.ADMIN -- Super Admin is an admin too.
+# Since the role builder (PLAN.md section 15) "top" means a role at level 3;
+# these two are the built-in ones (and the fallback before roles are seeded).
 TOP_ADMIN_ROLES = frozenset({"admin", "super_admin"})
 
 
 def is_top_admin(role) -> bool:
-    return str(role) in TOP_ADMIN_ROLES
+    """Is this role code an admin role (level 3)? For a USER ask
+    accounts.access.is_admin(user): it also counts roles from the Platform."""
+    from .access import role_codes_at_level
+    return str(role) in TOP_ADMIN_ROLES or str(role) in role_codes_at_level(3)
 
 
 ROLE_DEFAULT_DEPARTMENT = {
@@ -134,7 +139,8 @@ class User(AbstractUser):
 
     @property
     def is_admin_role(self) -> bool:
-        return is_top_admin(self.role)
+        from .access import is_admin
+        return is_admin(self)
 
     def save(self, *args, **kwargs):
         if is_top_admin(self.role):

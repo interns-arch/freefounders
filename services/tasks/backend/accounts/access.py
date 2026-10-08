@@ -21,7 +21,6 @@ CATALOGUE = [
      {"own": "tasks.view_self", "team": "tasks.view_own", "department": "tasks.view_department", "company": "tasks.view_all"}),
     ("tasks.assign", "Give tasks to others, create groups", "Tasks", None),
     ("tasks.delete_admin_work", "Delete work assigned to an admin", "Tasks", None),
-    ("tasks.admin", "Tasks administrator (everyone's delegation reports, admin inbox)", "Tasks", None),
     ("dashboard.view", "Team dashboard", "Tasks", None),
     ("notifications.view", "Notifications", "Tasks", None),
     ("leads.view", "See leads", "Leads",
@@ -159,3 +158,63 @@ def level(user) -> int:
     if not any_role:
         return max(ROLE_LEVEL.get(c, 1) for c in codes)
     return max((table[c][1] for c in codes if c in table), default=1)
+
+
+# --- questions the app asks instead of comparing role names --------------------
+
+def is_admin(user) -> bool:
+    """A company admin: any role at level 3 (built in: Admin and Super Admin)."""
+    return bool(user and getattr(user, "is_authenticated", True)) and level(user) >= 3
+
+
+def is_super_admin(user) -> bool:
+    """The one power only Super Admin has: deleting work assigned to an admin."""
+    from .permissions import has_capability
+    return has_capability(user, "tasks.delete_admin_work")
+
+
+def role_codes_with(capability: str) -> list[str]:
+    from .permissions import ROLE_CAPABILITIES
+
+    table, any_role = _roles()
+    if not any_role:
+        return [r for r, caps in ROLE_CAPABILITIES.items() if capability in caps]
+    return [code for code, (caps, _lvl) in table.items() if capability in caps]
+
+
+def role_codes_at_level(minimum: int) -> list[str]:
+    from crm.scoping import ROLE_LEVEL
+
+    table, any_role = _roles()
+    if not any_role:
+        return [r for r, lvl in ROLE_LEVEL.items() if lvl >= minimum]
+    return [code for code, (_caps, lvl) in table.items() if lvl >= minimum]
+
+
+def _holding(codes):
+    """Active users whose counting roles include one of `codes` (see role_codes)."""
+    from django.db.models import Q
+
+    from .models import User
+
+    return User.objects.filter(is_active=True).filter(
+        Q(access_roles__isnull=True, role__in=codes) | Q(access_roles__role__code__in=codes, access_roles__role__archived=False)
+    ).distinct()
+
+
+def users_with(capability: str):
+    return _holding(role_codes_with(capability))
+
+
+def users_at_level(minimum: int):
+    return _holding(role_codes_at_level(minimum))
+
+
+def role_level(code: str) -> int:
+    """Level of one role code (1 when unknown)."""
+    from crm.scoping import ROLE_LEVEL
+
+    table, any_role = _roles()
+    if not any_role:
+        return ROLE_LEVEL.get(code, 1)
+    return table[code][1] if code in table else 1

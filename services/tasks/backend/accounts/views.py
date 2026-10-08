@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .models import DepartmentOption, Role, User
+from .access import is_admin, is_super_admin, role_codes
 from .permissions import HasCapability
 from .serializers import ChangePasswordSerializer, UserSerializer, UserWriteSerializer
 
@@ -55,10 +56,10 @@ def roles(request):
     backend left it missing from every form until somebody noticed. Reading it
     from here means a new role appears everywhere the moment it exists.
     """
-    from crm.scoping import ROLE_LEVEL
+    from .access import role_level
     return Response([
-        {"value": value, "label": label, "level": ROLE_LEVEL.get(value, 1),
-         "is_manager": ROLE_LEVEL.get(value, 1) >= 2}
+        {"value": value, "label": label, "level": role_level(value),
+         "is_manager": role_level(value) >= 2}
         for value, label in Role.choices
     ])
 
@@ -104,7 +105,7 @@ def team_directory(request):
     users = User.objects.filter(is_active=True).select_related("reporting_manager")
     if has_capability(viewer, "users.manage"):
         pass                                            # whole company
-    elif viewer.role == Role.SALES_MANAGER or users.filter(reporting_manager=viewer).exists():
+    elif Role.SALES_MANAGER in role_codes(viewer) or users.filter(reporting_manager=viewer).exists():
         users = users.filter(reporting_manager=viewer)  # direct reports only
     else:
         users = users.filter(department=viewer.department)
@@ -165,7 +166,7 @@ class UserViewSet(viewsets.ModelViewSet):
           HR Manager   staff and managers only, never their own role
         """
         me = self.request.user
-        if me.role == Role.SUPER_ADMIN:
+        if is_super_admin(me):
             if (target is not None and target.role == Role.SUPER_ADMIN
                     and requested_role and requested_role != Role.SUPER_ADMIN
                     and not User.objects.filter(role=Role.SUPER_ADMIN, is_active=True)
@@ -178,7 +179,7 @@ class UserViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only a Super Admin can grant the Super Admin role.")
         if target is not None and target.role == Role.SUPER_ADMIN:
             raise PermissionDenied("Only a Super Admin can edit a Super Admin account.")
-        if me.role == Role.ADMIN:
+        if is_admin(me):
             return
         if requested_role == Role.ADMIN:
             raise PermissionDenied("Only an Admin can grant the Admin role.")

@@ -125,3 +125,131 @@ def provision(request):
 def roles(request):
     """Roles an admin can pick when giving someone Tasks access."""
     return Response([{"value": value, "label": label} for value, label in Role.choices])
+
+
+# ---------------------------------------------------------------------------
+# Roles from the FreeFounders role builder (PLAN.md section 15)
+# ---------------------------------------------------------------------------
+
+@api_view(["GET"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def permissions(request):
+    """The permissions Tasks offers to the Platform's role builder."""
+    from .access import SCOPES, catalogue
+    return Response({"app": "tasks", "scopes": list(SCOPES), "permissions": catalogue()})
+
+
+@api_view(["GET", "PUT"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def access(request):
+    """GET: the company's roles and who holds them (to bring an existing company into the role builder).
+    PUT: the Platform's full role set for the company, plus the roles of the listed people."""
+    if request.method == "GET":
+        return Response(_export_access())
+    return _import_access(request.data)
+
+
+ACCESS_VERSION_KEY = "FF_ACCESS_VERSION"
+
+
+def _access_version() -> int:
+    """The last role-set version received from the Platform (kept with the company's data)."""
+    from tenancy.models import CompanySetting
+    row = CompanySetting.objects.filter(key=ACCESS_VERSION_KEY).first()
+    return int(row.value) if row and row.value.isdigit() else 0
+
+
+def _export_access():
+    from .access import role_codes
+    from .models import AccessRole
+
+    roles = []
+    for r in AccessRole.objects.prefetch_related("grants").order_by("id"):
+        roles.append({
+            "code": r.code, "name": r.name, "description": r.description, "colour": r.colour, "level": r.level,
+            "archived": r.archived, "platformRoleId": str(r.platform_role_id) if r.platform_role_id else None,
+            "grants": [{"permission": g.permission, "scope": g.scope} for g in r.grants.all()],
+        })
+    people = [
+        {"personId": str(u.platform_person_id), "userId": u.pk, "roles": role_codes(u)}
+        for u in User.objects.filter(platform_person_id__isnull=False).order_by("id")
+    ]
+    return {"version": _access_version(), "roles": roles, "people": people}
+
+
+def _import_access(data):
+    from tenancy.models import CompanySetting
+
+    from .access import forget, valid_grant
+    from .models import AccessGrant, AccessRole, UserAccessRole
+
+    try:
+        version = int(data.get("version"))
+        roles = list(data.get("roles") or [])
+        people = list(data.get("people") or [])
+    except (TypeError, ValueError):
+        return Response({"detail": "version, roles and people are required"}, status=status.HTTP_400_BAD_REQUEST)
+    current = _access_version()
+    if version < current:
+        # An older push arriving late: keep what we have.
+        return Response({"version": current, "applied": False})
+
+    problems = []
+    with transaction.atomic():
+        by_platform_id = {}
+        for r in roles:
+            try:
+                rid = uuid.UUID(str(r.get("id")))
+            except ValueError:
+                return Response({"detail": "every role needs a UUID id"}, status=status.HTTP_400_BAD_REQUEST)
+            code = _clean(r.get("code")) or f"p-{rid.hex[:12]}"
+            role = AccessRole.objects.filter(platform_role_id=rid).first() or AccessRole.objects.filter(code=code).first()
+            if role is None:
+                role = AccessRole(code=code)
+            role.platform_role_id = rid
+            role.name = (_clean(r.get("name")) or code)[:120]
+            role.description = _clean(r.get("description"))[:300]
+            role.colour = _clean(r.get("colour"))[:20]
+            role.level = max(1, min(3, int(r.get("level") or 1)))
+            role.archived = bool(r.get("archived"))
+            role.is_system = bool(r.get("system"))
+            role.save()
+            wanted = {}
+            for g in r.get("grants") or []:
+                if g.get("app", "tasks") != "tasks":
+                    continue
+                permission, scope = _clean(g.get("permission")), _clean(g.get("scope"))
+                if valid_grant(permission, scope):
+                    wanted[permission] = scope
+                else:
+                    problems.append(f"{role.name}: {permission}{'@' + scope if scope else ''} is not a Tasks permission")
+            role.grants.exclude(permission__in=wanted).delete()
+            for permission, scope in wanted.items():
+                AccessGrant.objects.update_or_create(role=role, permission=permission, defaults={"scope": scope})
+            by_platform_id[str(rid)] = role
+        # Platform roles that are no longer sent were deleted there: archive (history keeps their name).
+        if data.get("complete", True):
+            AccessRole.objects.filter(platform_role_id__isnull=False).exclude(
+                platform_role_id__in=[uuid.UUID(k) for k in by_platform_id]).update(archived=True)
+
+        missing = []
+        for p in people:
+            user = User.objects.filter(platform_person_id=p.get("personId")).first() if p.get("personId") else None
+            if user is None:
+                missing.append(p.get("personId"))
+                continue
+            wanted_roles = [by_platform_id[str(x)] for x in p.get("roleIds") or [] if str(x) in by_platform_id]
+            UserAccessRole.objects.filter(user=user).exclude(role__in=wanted_roles).delete()
+            for role in wanted_roles:
+                UserAccessRole.objects.get_or_create(user=user, role=role)
+            # The primary role shown in the app follows the first built-in role, if there is one.
+            builtin = next((r.code for r in wanted_roles if r.code in Role.values), None)
+            if builtin and user.role != builtin:
+                user.role = builtin
+                user.save(update_fields=["role", "is_staff"])
+        CompanySetting.objects.update_or_create(key=ACCESS_VERSION_KEY, defaults={"value": str(version), "secret": False})
+    forget()
+    return Response({"version": version, "applied": True, "roles": len(by_platform_id), "people": len(people) - len(missing),
+                     "missingPeople": missing, "problems": problems})

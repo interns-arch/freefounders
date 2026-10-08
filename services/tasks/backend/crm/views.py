@@ -100,8 +100,8 @@ class LeadViewSet(viewsets.ModelViewSet):
             log(updated, EventType.FOLLOW_UP, user, body)
 
     def destroy(self, request, *args, **kwargs):
-        from accounts.models import is_top_admin
-        if not is_top_admin(request.user.role):
+        from accounts.access import is_admin
+        if not is_admin(request.user):
             raise PermissionDenied("Only an admin can delete a lead.")
         return super().destroy(request, *args, **kwargs)
 

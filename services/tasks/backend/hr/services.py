@@ -100,11 +100,9 @@ def face_distance(a, b) -> float:
 def _notify_self_enrolment(user):
     """Tell HR/Admin that a face was self-enrolled, so a wrong first capture
     (or someone enrolling on a colleague's phone) is visible immediately."""
-    from accounts.models import User
-    from accounts.permissions import ROLE_CAPABILITIES
+    from accounts.access import users_with
     from notifications.service import notify
-    hr_roles = [role for role, caps in ROLE_CAPABILITIES.items() if "hr.manage" in caps]
-    for manager in User.objects.filter(is_active=True, role__in=hr_roles).exclude(pk=user.pk):
+    for manager in users_with("hr.manage").exclude(pk=user.pk):
         notify(
             manager, "face_enrolled",
             f"Face self-enrolled: {user.get_full_name() or user.username}",

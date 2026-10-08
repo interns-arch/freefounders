@@ -609,8 +609,8 @@ Permissions that are simply yes/no (e.g. *Manage users*) have no scope. Several 
 ### 15.3 Permission catalogue (from the two apps; nothing lost)
 - **Tasks**: `tasks.view`(scoped) · `tasks.assign` · `tasks.delete_admin_work` · `leads.view`(scoped) · `leads.view_won` ·
   `leads.edit`(scoped) · `leads.assign` · `quotations.manage` · `dashboard.view` · `notifications.view` · `intake.view` ·
-  `hr.leave.approve`(scoped) · `hr.manage` · `users.manage` · `settings.manage` · plus **`tasks.admin`** (replaces the
-  "top admin" name checks) and the role **level** (Member / Lead / Manager / Admin, replaces `ROLE_LEVEL`).
+  `hr.approve` · `hr.manage` · `users.manage` · `settings.manage`, plus the role **level** (1 Member · 2 Manager ·
+  3 Admin; replaces `ROLE_LEVEL` and the "top admin" name checks: a level-3 role is an admin everywhere).
 - **Assets**: the 24 existing permissions; `asset:view`, `employee:view`, `request:view` get scopes Own / Company
   (exactly today's behaviour); Team/Department for Assets follow when Assets employees are linked to People (Phase 4).
 - **Platform**: `platform.users.manage`, `platform.roles.manage`, `platform.settings.manage` (billing later).

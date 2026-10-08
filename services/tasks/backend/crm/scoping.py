@@ -55,7 +55,9 @@ ROLE_LEVEL = {Role.SUPER_ADMIN: 3, Role.ADMIN: 3,
 
 
 def assignment_level(user) -> int:
-    return ROLE_LEVEL.get(user.role, 1)
+    """1 member, 2 manager, 3 admin -- from the user's roles in the database."""
+    from accounts.access import level
+    return level(user)
 
 
 def can_delete_task(user, task) -> bool:

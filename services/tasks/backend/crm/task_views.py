@@ -12,7 +12,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.models import User, Role, is_top_admin
+from accounts.access import is_admin, users_at_level, users_with
+from accounts.models import User, Role
 from accounts.permissions import HasCapability, has_capability
 from notifications.service import notify
 
@@ -29,7 +30,7 @@ from .models import (
 )
 from .scoping import (
     assignable_users, assignment_level, can_assign_to, can_delete_task,
-    ROLE_LEVEL, can_edit_task, delete_refusal, visible_leads, visible_tasks,
+    can_edit_task, delete_refusal, visible_leads, visible_tasks,
 )
 from .serializers import (
     HolidaySerializer, TaskActivitySerializer, TaskAttachmentSerializer,
@@ -121,9 +122,8 @@ def day_log_payload(task, user):
 
 
 def _admins():
-    from accounts.permissions import ROLE_CAPABILITIES
-    admin_roles = [r for r, caps in ROLE_CAPABILITIES.items() if "tasks.view_all" in caps]
-    return User.objects.filter(is_active=True, role__in=admin_roles)
+    from accounts.access import users_with
+    return users_with("tasks.view_all")
 
 
 def NL_JOIN(lines):
@@ -157,7 +157,7 @@ def _approvers_for(req: TaskChangeRequest):
     if req.changes.get("cancel") and task.assigned_to \
             and assignment_level(task.assigned_to) >= 3:
         supers = list(User.objects.filter(
-            is_active=True, role=Role.SUPER_ADMIN).exclude(pk=req.requested_by_id))
+            pk__in=users_with("tasks.delete_admin_work")).exclude(pk=req.requested_by_id))
         if supers:
             return supers
     if req.requested_by_id != task.created_by_id and task.created_by \
@@ -251,7 +251,7 @@ def _change_request_wa(req: TaskChangeRequest, approver):
     """The WhatsApp reminder that a request is waiting on this person. Only
     non-admins get it: admins see every request under Tasks -> Requests and
     would otherwise be pinged for the whole company."""
-    if is_top_admin(approver.role):
+    if is_admin(approver):
         return None
     task = req.task
     return ("task_change_request", [
@@ -1922,8 +1922,8 @@ class TaskViewSet(viewsets.ModelViewSet):
         month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
         me = request.user
-        is_admin = is_top_admin(me.role)
-        if is_admin:
+        sees_everyone = is_admin(me)
+        if sees_everyone:
             users = list(User.objects.filter(is_active=True))
             if p.get("department"):
                 wanted = set(p["department"].split(","))
@@ -1967,7 +1967,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 bump(given[giver], d)
             if taker in ids:
                 bump(received[taker], d)
-            if is_admin and month_start <= d <= month_end and giver in ids and taker in ids:
+            if sees_everyone and month_start <= d <= month_end and giver in ids and taker in ids:
                 pairs[(giver, taker)] = pairs.get((giver, taker), 0) + 1
 
         name_of = {u.pk: (u.get_full_name() or u.username) for u in users}
@@ -1979,7 +1979,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         total = lambda k, w: sum(r[k][w] for r in people)   # noqa: E731
         return Response({
             "date": day, "week": [week_start, week_end], "month": [month_start, month_end],
-            "everyone": is_admin,
+            "everyone": sees_everyone,
             "totals": {w: {"given": total("given", w), "self": total("self", w)}
                        for w in ("day", "week", "month", "all")},
             "people": people,
@@ -2005,7 +2005,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             uid = int(p.get("user") or me.pk)
         except ValueError:
             raise ValidationError({"user": "Pass a user id."})
-        if uid != me.pk and not is_top_admin(me.role):
+        if uid != me.pk and not is_admin(me):
             raise PermissionDenied("You can only see your own breakdown.")
         person = User.objects.filter(pk=uid).first()
         if not person:
@@ -2184,7 +2184,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             extra_links=[(f"/tasks/{task.id}?review=reject", "Send back")],
             # WhatsApp reminder for non-admin reviewers only; admins work
             # through Tasks -> To accept and would be pinged all day
-            want_whatsapp=not is_top_admin(reviewer.role),
+            want_whatsapp=not is_admin(reviewer),
             wa_template=("task_completion_review", [
                 reviewer.get_full_name() or reviewer.username,
                 task.code,
@@ -2569,9 +2569,9 @@ class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
             if has_capability(user, "tasks.delete_admin_work"):
                 # a super admin is the only one who can carry out a cancel on
                 # work assigned to an admin, so those land here whoever asked
-                admin_roles = [r for r, lvl in ROLE_LEVEL.items() if lvl >= 3]
+
                 cancels_on_admin_work = (Q(changes__cancel=True)
-                                         & Q(task__assigned_to__role__in=admin_roles))
+                                         & Q(task__assigned_to__in=users_at_level(3)))
                 qs = qs.filter(i_gave_it | from_my_report | Q(escalated=True)
                                | cancels_on_admin_work)
             elif has_capability(user, "tasks.view_all"):

@@ -38,9 +38,8 @@ def log(mistake, actor, text):
 
 
 def _admins():
-    from accounts.permissions import ROLE_CAPABILITIES
-    roles = [r for r, caps in ROLE_CAPABILITIES.items() if "tasks.view_all" in caps]
-    return User.objects.filter(is_active=True, role__in=roles)
+    from accounts.access import users_with
+    return users_with("tasks.view_all")
 
 
 def _escalation_target(mistake, level):

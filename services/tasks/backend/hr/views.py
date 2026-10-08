@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import ROLE_CAPABILITIES, HasCapability, has_capability
+from accounts.permissions import HasCapability, has_capability
 
 from . import services
 from .models import (
@@ -28,12 +28,10 @@ def can_manage_hr(user) -> bool:
     return has_capability(user, "hr.manage")
 
 
-APPROVER_ROLES = [role for role, caps in ROLE_CAPABILITIES.items() if "hr.approve" in caps]
-
-
 def other_approvers(user):
     """Everyone except `user` who could approve their request."""
-    return User.objects.filter(is_active=True, role__in=APPROVER_ROLES).exclude(pk=user.pk)
+    from accounts.access import users_with
+    return users_with("hr.approve").exclude(pk=user.pk)
 
 
 def _self_review_message(user) -> str:

@@ -18,6 +18,8 @@ urlpatterns = [
     path("auth/change-password", views.change_password),
     path("internal/provision", internal.provision),
     path("internal/roles", internal.roles),
+    path("internal/permissions", internal.permissions),
+    path("internal/access", internal.access),
     path("internal/companies", create_company),
     path("team/", views.team_directory),
     path("roles/", views.roles),
