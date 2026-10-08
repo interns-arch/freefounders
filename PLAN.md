@@ -568,7 +568,7 @@ Follow-ups for later phases: the Tasks web app still shows "Automation Task / Ca
 
 ---
 
-## 15. Phase 3 design: one role builder (DRAFT, 2026-10-08)
+## 15. Phase 3 design: one role builder (APPROVED 2026-10-08)
 
 Founder decisions (2026-10-08): **one role builder for the whole product** (not one per app), and permission
 scopes **Own · Team · Department · Company**. No "Location" scope. Attendance stays ON; saving a photo at every

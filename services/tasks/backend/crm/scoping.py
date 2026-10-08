@@ -15,6 +15,8 @@ def visible_leads(user):
         return qs
     if has_capability(user, "leads.view_department"):
         return qs.filter(department=user.department)
+    if has_capability(user, "leads.view_team"):
+        return qs.filter(Q(assigned_to=user) | Q(assigned_to__reporting_manager=user))
     if has_capability(user, "leads.view_won"):
         return qs.filter(status=LeadStatus.WON)
     if has_capability(user, "leads.view_own"):
@@ -27,6 +29,8 @@ def can_edit_lead(user, lead: Lead) -> bool:
         return True
     if has_capability(user, "leads.edit_department"):
         return lead.department == user.department
+    if has_capability(user, "leads.edit_team"):
+        return lead.assigned_to_id == user.id or bool(lead.assigned_to and lead.assigned_to.reporting_manager_id == user.id)
     if has_capability(user, "leads.edit_own"):
         return lead.assigned_to_id == user.id
     return False
@@ -110,6 +114,10 @@ def visible_tasks(user, include_deleted=False):
             | Q(assigned_to=user) | Q(created_by=user) | Q(subscribers=user)
             | Q(group__members=user) | Q(group__owner=user) | reports_clause
         ).distinct()
+    # A role scoped to strictly "own" tasks (FreeFounders role builder) does
+    # not see direct reports' tasks; every built-in role keeps seeing them.
+    if has_capability(user, "tasks.view_self") and not has_capability(user, "tasks.view_own"):
+        reports_clause = Q(pk__in=[])
     return qs.filter(
         Q(assigned_to=user) | Q(created_by=user) | Q(subscribers=user)
         | Q(group__members=user) | Q(group__owner=user) | reports_clause

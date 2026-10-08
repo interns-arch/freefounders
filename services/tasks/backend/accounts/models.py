@@ -145,3 +145,54 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
+
+
+# ---------------------------------------------------------------------------
+# FreeFounders roles (PLAN.md section 15). Roles live in the database so a
+# company admin can build their own; today's 20 roles are seeded with exactly
+# the capabilities in accounts.permissions.ROLE_CAPABILITIES. `User.role`
+# stays as the primary role; a user whose roles come from the FreeFounders
+# Platform has rows in UserAccessRole, and then only those count.
+# ---------------------------------------------------------------------------
+
+class AccessRole(models.Model):
+    code = models.CharField(max_length=60, unique=True)
+    name = models.CharField(max_length=120)
+    description = models.CharField(max_length=300, blank=True, default="")
+    colour = models.CharField(max_length=20, blank=True, default="")
+    # 1 member, 2 manager, 3 admin (as ROLE_LEVEL): decides which work is protected from deletion.
+    level = models.PositiveSmallIntegerField(default=1)
+    is_system = models.BooleanField(default=False)
+    archived = models.BooleanField(default=False)
+    # The Platform role this copy came from (None for the built-in roles).
+    platform_role_id = models.UUIDField(null=True, blank=True, unique=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class AccessGrant(models.Model):
+    """One permission of a role, with its scope (own / team / department /
+    company) when the permission has scopes; blank when it is yes/no."""
+
+    role = models.ForeignKey(AccessRole, on_delete=models.CASCADE, related_name="grants")
+    permission = models.CharField(max_length=60)
+    scope = models.CharField(max_length=20, blank=True, default="")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["role", "permission"], name="access_grant_role_permission_uq")]
+
+    def __str__(self):
+        return f"{self.role.code}: {self.permission}{'@' + self.scope if self.scope else ''}"
+
+
+class UserAccessRole(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="access_roles")
+    role = models.ForeignKey(AccessRole, on_delete=models.CASCADE, related_name="members")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "role"], name="user_access_role_uq")]

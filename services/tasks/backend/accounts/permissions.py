@@ -106,12 +106,18 @@ ROLE_CAPABILITIES = {
 }
 
 
+# ROLE_CAPABILITIES above is the STARTER TEMPLATE: the 20 built-in roles are
+# seeded from it into the database (accounts.AccessRole), and from then on the
+# database is what counts, so a company can edit roles. See accounts/access.py.
+
 def capabilities_for(user) -> list[str]:
-    return sorted(ROLE_CAPABILITIES.get(user.role, set()))
+    from .access import capabilities
+    return sorted(capabilities(user))
 
 
 def has_capability(user, capability: str) -> bool:
-    return capability in ROLE_CAPABILITIES.get(user.role, set())
+    from .access import capabilities
+    return capability in capabilities(user)
 
 
 class IsAdmin(BasePermission):
