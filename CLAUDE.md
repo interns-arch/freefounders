@@ -52,6 +52,18 @@ schema (fail closed). `npm run dev` runs in this mode: Tasks on the local Postgr
 - Assets: `migrate.js` also migrates every company schema; the seed does nothing in this mode
 - Import an existing install: `node scripts/import-company.mjs` (dry run by default; see its header)
 
+**What the Platform owns and pushes to the apps** (each push has a version; an app ignores an older one, and the Platform
+moves past an app that is ahead and resends): roles + role duties (`PUT /internal/access`, §15/§17.3), company profile =
+names/colour/logo/module switches (`PUT /internal/company`, §16), People directory = departments/reports-to/designation/
+join date/active (`PUT /internal/people`, §17.1). `npm --prefix services/platform run company -- sync` resends all of it.
+
+**Cross-app rules** (§17.4): each app writes an outbox (`ff_events` in Assets, `tenancy.OutboxEvent` in Tasks) only when
+Platform sign-in is on; the Platform reads them with its service token (`GET /internal/events?after=`) every
+`EVENT_POLL_SECONDS` (30; dev 5; 0 = off) and acts: ticket → task → ticket resolved, exit completed → person switched off.
+"Start exit" (`POST /api/platform/people/:id/exit`) and new-joiner onboarding are started by the Platform.
+Per-company settings in Tasks (HR rules, approvals, notification rules, exit checklist) live in `CompanySetting` and are edited
+on the apps' own settings screens; `company_env` reads them (standalone installs too).
+
 ## Run and test each part
 Platform (Node 22+; embedded Postgres on 5434):
 ```

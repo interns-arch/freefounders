@@ -297,11 +297,19 @@ export class InternalController {
 
     const [role] = input.appRole
       ? await db.select().from(roles).where(sql`lower(${roles.name}) = lower(${input.appRole})`).limit(1)
-      : // No role chosen: the company's FreeFounders owners/admins run Assets too.
+      : // No role chosen: the company's FreeFounders owners/admins run Assets too. Once the role builder has synced,
+        // the built-in role carries its role-builder name ("Employee (Assets)"); the person's real permissions
+        // come from the roles the Platform sends right after.
         await db
           .select()
           .from(roles)
-          .where(eq(roles.name, input.platformRole === 'owner' || input.platformRole === 'admin' ? 'Admin' : 'Employee'))
+          .where(
+            sql`lower(${roles.name}) in (${sql.join(
+              (input.platformRole === 'owner' || input.platformRole === 'admin' ? ['Admin'] : ['Employee']).flatMap((n) => [n.toLowerCase(), `${n.toLowerCase()} (assets)`]).map((n) => sql`${n}`),
+              sql`, `,
+            )})`,
+          )
+          .orderBy(sql`${roles.isSystem} desc`, sql`${roles.archived} asc`)
           .limit(1);
     if (!role) throw badRequest(input.appRole ? `No Assets role called "${input.appRole}"` : 'The Employee role is missing');
 

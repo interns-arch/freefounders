@@ -836,3 +836,30 @@ Browser: start an exit in the portal → exit case in Assets + checklist task in
 3. Role duties: Platform + portal editor; Tasks generation
 4. Events + rules: outboxes, Platform relay, exit / joiner / ticket flows, portal "Start exit"
 5. KPIs, smoke + browser, docs
+
+### 17.8 Status (2026-10-08): built and tested
+| Check | Result |
+|---|---|
+| Platform tests | 51 pass (directory, departments, loops refused, push + deactivation, import, role duties, events relay and every rule) |
+| Tasks tests | 754 pass (all earlier tests unchanged) + 40 multi-company tests on Postgres |
+| Assets tests | 79 pass |
+| Smoke (`npm run smoke`) | 10 / 10 |
+| Browser (`npm run e2e`) | 9 / 9, incl. Start exit in the portal → Assets exit case + Tasks checklist, and an Assets ticket → linked Tasks task |
+
+Notes and differences from the design above:
+- **Duties are stored on the role** (a list with lasting ids) rather than a separate table; Tasks remembers each person's task per
+  period (`DutyRun`), so nothing is ever created twice. A role's joining checklist goes only to people who get the role after
+  the duty was added (`UserAccessRole.created_at`).
+- **A ticket's task counts as finished when its work is accepted** (or at once when nobody reviews it), so a ticket is never
+  resolved by work that is later sent back.
+- **Exit checklist** = one task with the company's checklist as steps (`EXIT_CHECKLIST` setting, five sensible defaults), for the
+  leaver's manager, else the first HR administrator.
+- **New joiner**: a person with a join date today or later who is given Assets gets an onboarding case; the Assets onboarding kit
+  whose name matches one of their roles is used.
+- **IT owner** for tickets = the first person (by when their Assets user was made) who can manage tickets and has Tasks.
+- Leave approvals: default unchanged (department approvers); "manager first" is a setting. Reminders default to 24 h (0 = off).
+- Found and fixed while testing: giving someone Assets through a role-builder role failed once the role sync had renamed the
+  built-in Assets roles ("The Employee role is missing").
+
+Not done in Phase 5 (noted for later): Tasks' own "My Team" screen still lets an admin edit department / reports-to locally; the
+next directory push overwrites it, so in FreeFounders mode those fields should be edited in the portal (to be locked in Phase 6).

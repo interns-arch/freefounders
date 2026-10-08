@@ -52,7 +52,7 @@ function start(name, cmd, args, { cwd, env = {} }) {
 }
 
 const shared = { PLATFORM_JWKS_URL: JWKS, VITE_PLATFORM_LOGIN: 'true', TENANCY: 'schemas' };
-const INTERNAL = { TASKS_INTERNAL_URL: 'http://127.0.0.1:8000/api/internal', ASSETS_INTERNAL_URL: 'http://127.0.0.1:3000/api/internal' };
+const INTERNAL = { TASKS_INTERNAL_URL: 'http://127.0.0.1:8000/api/internal', ASSETS_INTERNAL_URL: 'http://127.0.0.1:3000/api/internal', EVENT_POLL_SECONDS: '5' };
 
 // One local PostgreSQL for the Platform and Tasks (Assets runs its own on :5433).
 const pg = await import(pathToFileURL(at('services/platform/scripts/pg.mjs')).href);

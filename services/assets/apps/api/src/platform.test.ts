@@ -481,3 +481,17 @@ describe('cross-app flows (Phase 5)', () => {
     assert.equal(again.body.onboardingId, res.body.onboardingId);
   });
 });
+
+describe('provision after the role builder synced (Phase 5 fix)', () => {
+  test('the built-in Employee role still works once it carries its role-builder name', async () => {
+    await dbs.root.update(roles).set({ name: 'Employee (Assets)' }).where(eq(roles.name, 'Employee'));
+    try {
+      const res = await provision({ email: 'rb-new@t.test', fullName: 'RB New' });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const [u] = await dbs.root.select({ roleName: roles.name }).from(users).innerJoin(roles, eq(roles.id, users.roleId)).where(eq(users.id, res.body.userId));
+      assert.equal(u.roleName, 'Employee (Assets)');
+    } finally {
+      await dbs.root.update(roles).set({ name: 'Employee' }).where(eq(roles.name, 'Employee (Assets)'));
+    }
+  });
+});
