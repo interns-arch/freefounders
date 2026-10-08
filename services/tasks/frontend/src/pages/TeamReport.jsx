@@ -72,6 +72,8 @@ function PersonDetail({ r, onProfile }) {
       ])}
       {block('Quality', [
         ['On-time rate', pct(r.on_time_rate)],
+        ['Attendance', pct(r.attendance_rate), r.working_days ? `Present, late or half day, of ${r.working_days} working days` : 'Pick a date range'],
+        ['Leave days', r.leave_days ?? '—'],
         ['Sent back for redo', r.rework_rejected, 'Completions an approver rejected'],
         ['Rework rate', pct(r.rework_rate)],
         ['Mistakes logged', r.mistakes],
@@ -133,13 +135,13 @@ export default function TeamReport() {
 
   const exportCSV = () => downloadCSV(
     `team-performance-${range}.csv`,
-    ['Rank', 'Name', 'Role', 'Department', 'Score', 'Change', 'On-time %',
+    ['Rank', 'Name', 'Role', 'Department', 'Score', 'Change', 'On-time %', 'Attendance %', 'Leave days',
      'Total', 'Completed', 'On time', 'Delayed', 'Pending', 'In progress',
      'Overdue', 'Time assigned', 'Time earned', 'Time spent', 'Sent back',
      'Extensions asked', 'Mistakes', 'Open now', 'Overdue now'],
     rows.map((r, i) => [
       r.score == null ? '' : i + 1, r.name, r.role, r.department,
-      r.score ?? '', r.score_delta ?? '', r.on_time_rate ?? '',
+      r.score ?? '', r.score_delta ?? '', r.on_time_rate ?? '', r.attendance_rate ?? '', r.leave_days ?? '',
       r.total, r.completed, r.in_time, r.delayed, r.pending, r.in_progress,
       r.overdue, r.time_assigned_minutes, r.time_earned_minutes,
       r.time_spent_minutes, r.rework_rejected, r.extension_requests,
@@ -229,6 +231,7 @@ export default function TeamReport() {
                   <th>Score</th>
                   <th>vs prev</th>
                   <th>On time</th>
+                  <th>Attendance</th>
                   <th>Done</th>
                   <th>Pending</th>
                   <th>Overdue</th>
@@ -254,6 +257,7 @@ export default function TeamReport() {
                       <td><ScoreRing value={r.score} /></td>
                       <td><Delta value={r.score_delta} /></td>
                       <td>{r.on_time_rate == null ? '—' : `${r.on_time_rate}%`}</td>
+                      <td>{r.attendance_rate == null ? '—' : `${r.attendance_rate}%`}</td>
                       <td>{r.completed}</td>
                       <td>{r.pending + r.in_progress}</td>
                       <td className={r.overdue ? 'late' : ''}>{r.overdue}</td>
@@ -262,7 +266,7 @@ export default function TeamReport() {
                     </tr>
                     {open === r.user && (
                       <tr>
-                        <td colSpan={10} style={{ padding: 0 }}>
+                        <td colSpan={11} style={{ padding: 0 }}>
                           <PersonDetail r={r} onProfile={setPerson} />
                         </td>
                       </tr>

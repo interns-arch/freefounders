@@ -1600,6 +1600,28 @@ class TaskViewSet(viewsets.ModelViewSet):
         from .reminders import send_weekly_overdue_email
         return Response({"sent": send_weekly_overdue_email(force=True)})
 
+    @staticmethod
+    def _attendance_kpis(ids, start, end, today):
+        """Per person: attendance % (present, late or half day / working days so far in the range) and leave days."""
+        if not start or not end:
+            return {}
+        from hr.models import Attendance, AttendanceStatus
+
+        from .reminders import is_working_day
+        last = min(end, today)
+        working = [start + timedelta(days=i) for i in range((last - start).days + 1)] if last >= start else []
+        working = [d for d in working if is_working_day(d)]
+        out = {uid: {"attendance": 0, "leave_days": 0} for uid in ids}
+        worked = (AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY)
+        for uid, status in Attendance.objects.filter(user_id__in=ids, date__in=working).values_list("user_id", "status"):
+            if status in worked:
+                out[uid]["attendance"] += 1
+            elif status == AttendanceStatus.LEAVE:
+                out[uid]["leave_days"] += 1
+        n = len(working)
+        return {uid: {"attendance_rate": round(100 * v["attendance"] / n, 1) if n else None,
+                      "leave_days": v["leave_days"], "working_days": n} for uid, v in out.items()}
+
     @action(detail=False, methods=["get"],
             permission_classes=[HasCapability.of("tasks.view_all")])
     def team_report(self, request):
@@ -1675,9 +1697,13 @@ class TaskViewSet(viewsets.ModelViewSet):
                 b["open_overdue"] += 1
             b["pending_effort_minutes"] += eff or 0
 
+        attendance = self._attendance_kpis(ids, start, end, today)
+
         for r in rows:
             uid = r["user"]
             r["role"], r["department"] = meta.get(uid, ("", ""))
+            # KPIs (PLAN.md §17.5): attendance next to the task score; null for "all time".
+            r.update(attendance.get(uid, {"attendance_rate": None, "leave_days": None, "working_days": None}))
             before = prev.get(uid)
             r["score_prev"] = before
             r["score_delta"] = (round(r["score"] - before, 1)
