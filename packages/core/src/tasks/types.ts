@@ -26,7 +26,8 @@ export interface Task {
   code: string;
   title: string;
   description: string;
-  category: number | null;
+  /** The category's NAME (the API sends a string). */
+  category: string;
   department: string;
   frequency: TaskFrequency;
   frequency_display: string;
@@ -67,9 +68,10 @@ export type TaskScope = 'my' | 'all' | 'delegated' | 'subscribed' | 'deleted';
 export interface TaskListParams {
   scope?: TaskScope;
   status?: string;
-  overdue?: '1';
+  /** The API accepts 'true' (not '1'). */
+  overdue?: 'true';
   done?: 'on_time' | 'late';
-  recurring?: string;
+  recurring?: 'true';
   range?: string;
   start?: string;
   end?: string;
