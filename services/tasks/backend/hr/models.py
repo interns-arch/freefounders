@@ -104,6 +104,9 @@ class AttendanceCorrection(models.Model):
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                     on_delete=models.SET_NULL, related_name="reviewed_corrections")
     remarks = models.CharField(max_length=300, blank=True, default="")
+    # Approval reminders (PLAN.md §17.2): when the approver was reminded, and when it went to HR.
+    reminded_at = models.DateTimeField(null=True, blank=True)
+    escalated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -181,6 +184,9 @@ class LeaveRequest(models.Model):
                                     on_delete=models.SET_NULL, related_name="reviewed_leaves")
     remarks = models.CharField(max_length=300, blank=True, default="")
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    # Approval reminders (PLAN.md §17.2): when the approver was reminded, and when it went to HR.
+    reminded_at = models.DateTimeField(null=True, blank=True)
+    escalated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

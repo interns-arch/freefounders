@@ -399,6 +399,9 @@ def send_followup_reminders(force=False) -> int:
         lead.save(update_fields=["reminded_at"])
         sent += 1
     sent += send_task_reminders()
+    from hr.approvals import remind_and_escalate
+    sent += remind_and_escalate()       # leave / corrections waiting too long (PLAN.md §17.2)
+    sent += remind_task_approvals()     # change requests / completion reviews waiting too long
     send_daily_task_digest()            # date-guarded: one per person per day
     send_day_end_digest()               # date-guarded: once a day after 7 PM
     send_weekly_overdue_email()         # week-guarded: Monday (1st working day) 10 AM
@@ -410,4 +413,55 @@ def send_followup_reminders(force=False) -> int:
         escalate_overdue_mistakes()
         send_daily_manager_summaries()      # date-guarded: once a day after 09:00
         send_weekly_founder_digest()        # date-guarded: Mondays only
+    return sent
+
+
+def remind_task_approvals() -> int:
+    """Change requests and completion reviews still waiting (PLAN.md §17.2): the approver is reminded once after
+    APPROVAL_REMIND_HOURS; after twice that the admins are told (change requests: admin_alerted_at)."""
+    from datetime import timedelta
+
+    from hr.approvals import remind_hours
+
+    from .models import ChangeRequestStatus, CompletionReviewStatus, TaskChangeRequest, TaskCompletion
+    from .task_views import _admins, _approvers_for
+
+    hours = remind_hours()
+    if not hours:
+        return 0
+    now = timezone.now()
+    first, second = now - timedelta(hours=hours), now - timedelta(hours=2 * hours)
+    sent = 0
+
+    changes = TaskChangeRequest.objects.filter(status=ChangeRequestStatus.PENDING).select_related("task", "requested_by")
+    for req in changes.filter(created_at__lte=first, reminded_at__isnull=True, escalated=False):
+        for user in _approvers_for(req):
+            notify(user, "approval_reminder", f"Waiting for you: change request on {req.task.title}",
+                   req.reason[:300], link=f"/tasks/{req.task_id}", link_label="Review it")
+            sent += 1
+        req.reminded_at = now
+        req.save(update_fields=["reminded_at"])
+    for req in changes.filter(created_at__lte=second, admin_alerted_at__isnull=True):
+        for user in _admins().exclude(pk=req.requested_by_id):
+            notify(user, "approval_escalated", f"Not reviewed for {2 * hours} hours: change request on {req.task.title}",
+                   req.reason[:300], link=f"/tasks/{req.task_id}", link_label="Review it", want_whatsapp=False)
+            sent += 1
+        req.admin_alerted_at = now
+        req.save(update_fields=["admin_alerted_at"])
+
+    reviews = TaskCompletion.objects.filter(status=CompletionReviewStatus.PENDING, approver__isnull=False).select_related("task", "approver", "submitted_by")
+    for c in reviews.filter(created_at__lte=first, reminded_at__isnull=True):
+        notify(c.approver, "approval_reminder", f"Waiting for you: accept the work on {c.task.title}",
+               c.note[:300], link=f"/tasks/{c.task_id}", link_label="Review it")
+        sent += 1
+        c.reminded_at = now
+        c.save(update_fields=["reminded_at"])
+    for c in reviews.filter(created_at__lte=second, escalated_at__isnull=True):
+        for user in _admins().exclude(pk__in=[c.approver_id, c.submitted_by_id]):
+            notify(user, "approval_escalated", f"Not reviewed for {2 * hours} hours: work on {c.task.title}",
+                   f"Waiting for {c.approver.get_full_name() or c.approver.username}", link=f"/tasks/{c.task_id}",
+                   link_label="Open it", want_whatsapp=False)
+            sent += 1
+        c.escalated_at = now
+        c.save(update_fields=["escalated_at"])
     return sent

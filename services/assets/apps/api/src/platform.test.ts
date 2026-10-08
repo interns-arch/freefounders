@@ -383,3 +383,36 @@ describe('people directory (Phase 5)', () => {
     assert.deepEqual(stale.body, { version: version + 1, applied: false });
   });
 });
+
+describe('asset requests: the manager decides (Phase 5)', () => {
+  test('a manager without the approver permission sees and decides their team’s requests only', async () => {
+    const mk = async (email: string, fullName: string) => {
+      const res = await provision({ email, fullName, appRole: 'Employee' });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const [u] = await dbs.root.select().from(users).where(eq(users.id, res.body.userId));
+      return { user: u, token: await access(u.platformPersonId!, u.id) };
+    };
+    const boss = await mk('rq-boss@t.test', 'RQ Boss');
+    const worker = await mk('rq-worker@t.test', 'RQ Worker');
+    const outsider = await mk('rq-out@t.test', 'RQ Outsider');
+    await dbs.root.update(employees).set({ managerId: boss.user.employeeId }).where(eq(employees.id, worker.user.employeeId!));
+
+    const created = await call('POST', '/requests', worker.token, { itemName: 'Headset', quantity: 1, reason: 'Calls' });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const id = created.body.id;
+
+    const bossList = await call('GET', '/requests', boss.token);
+    const row = bossList.body.items.find((r: { id: string }) => r.id === id);
+    assert.ok(row, 'the manager sees it');
+    assert.equal(row.canDecide, true);
+    assert.equal((await call('GET', '/requests', outsider.token)).body.items.some((r: { id: string }) => r.id === id), false);
+    const workerRow = (await call('GET', '/requests', worker.token)).body.items.find((r: { id: string }) => r.id === id);
+    assert.equal(workerRow.canDecide, false, 'not for their own request');
+
+    assert.equal((await call('POST', `/requests/${id}/decision`, outsider.token, { decision: 'APPROVE' })).status, 403);
+    assert.equal((await call('POST', `/requests/${id}/decision`, worker.token, { decision: 'APPROVE' })).status, 403);
+    const decided = await call('POST', `/requests/${id}/decision`, boss.token, { decision: 'APPROVE', note: 'OK' });
+    assert.equal(decided.status, 200, JSON.stringify(decided.body));
+    assert.equal(decided.body.status, 'APPROVED');
+  });
+});

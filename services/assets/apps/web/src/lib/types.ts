@@ -399,6 +399,8 @@ export interface LocationOption {
 
 export interface AssetRequest {
   id: string;
+  /** This person may approve or reject it (an approver, or the requester's manager). */
+  canDecide?: boolean;
   number: string;
   employeeId: string;
   requestedByName: string | null;

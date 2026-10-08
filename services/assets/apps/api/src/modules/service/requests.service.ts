@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { PRIORITIES, REQUEST_STATUSES, type RequestInput } from '@eam/shared';
-import { type Actor, assertCan, canAny } from '../../common/actor';
+import { type Actor, assertCan, canAny, can } from '../../common/actor';
 import { badRequest, conflict, likePattern, listFilter, listParams, notFound } from '../../common/http';
 import { DbService } from '../../db/db.service';
 import { assetCategories, assetRequests, assets, assetTypes, departments, employees } from '../../db/schema';
@@ -31,7 +31,8 @@ export class RequestsService {
     const conds: SQL[] = [];
     if (!this.seesAll(actor)) {
       if (!actor.employeeId) return { items: [], total: 0, page: p.page, pageSize: p.pageSize };
-      conds.push(eq(assetRequests.employeeId, actor.employeeId));
+      // Their own requests, and those of the people who report to them (PLAN.md §17.2).
+      conds.push(or(eq(assetRequests.employeeId, actor.employeeId), eq(employees.managerId, actor.employeeId))!);
     }
     const statuses = listFilter(q.status, REQUEST_STATUSES);
     if (statuses.length) conds.push(inArray(assetRequests.status, statuses));
@@ -53,6 +54,7 @@ export class RequestsService {
           typeName: sql<string>`coalesce(${assetTypes.name}, ${assetRequests.itemName})`,
           custom: sql<boolean>`${assetRequests.assetTypeId} is null`,
           typeIcon: assetTypes.icon,
+          managerId: employees.managerId,
           categoryName: assetCategories.name,
           fulfilledAssetTag: assets.assetTag,
           availableCount: sql<number>`(select coalesce(sum(case when a.tracking_mode = 'QUANTITY' then a.available_quantity else 1 end), 0)::int from assets a where a.asset_type_id = ${assetRequests.assetTypeId} and a.status in ('AVAILABLE', 'IN_INVENTORY') and (a.tracking_mode = 'INDIVIDUAL' or a.available_quantity > 0))`,
@@ -80,7 +82,18 @@ export class RequestsService {
         .leftJoin(assetTypes, eq(assetTypes.id, assetRequests.assetTypeId))
         .where(where),
     ]);
-    return { items: rows.map(({ request, ...rest }) => ({ ...request, ...rest })), total, page: p.page, pageSize: p.pageSize };
+    const approver = can(actor, 'request:approve');
+    return {
+      items: rows.map(({ request, managerId, ...rest }) => ({
+        ...request,
+        ...rest,
+        // Approvers decide every request; a manager decides their own team's (never their own).
+        canDecide: approver || (!!actor.employeeId && managerId === actor.employeeId && request.employeeId !== actor.employeeId),
+      })),
+      total,
+      page: p.page,
+      pageSize: p.pageSize,
+    };
   }
 
   private async load(id: string) {
@@ -121,14 +134,28 @@ export class RequestsService {
         { type: 'REQUEST_CREATED', title: `New request ${number}`, body: `${emp.fullName} needs ${input.quantity} × ${what}`, link: `/requests?open=${row.id}` },
         actor.userId,
       );
+      // The person's manager hears about it too, and may decide it.
+      const [mgr] = await db.select({ managerId: employees.managerId }).from(employees).where(eq(employees.id, employeeId));
+      if (mgr?.managerId && mgr.managerId !== actor.employeeId) {
+        await this.notifications.notifyEmployee(mgr.managerId, {
+          type: 'REQUEST_CREATED',
+          title: `${emp.fullName} asked for ${input.quantity} × ${what}`,
+          body: `Request ${number} is waiting for your decision`,
+          link: `/requests?open=${row.id}`,
+        });
+      }
       return row;
     });
   }
 
   async decide(actor: Actor, id: string, decision: 'APPROVE' | 'REJECT', note?: string | null) {
-    assertCan(actor, 'request:approve');
     return this.dbs.tx(async (db) => {
       const r = await this.load(id);
+      if (!can(actor, 'request:approve')) {
+        // Not an approver: only the requester's manager may decide (PLAN.md §17.2), never for themselves.
+        const [emp] = await db.select({ managerId: employees.managerId }).from(employees).where(eq(employees.id, r.employeeId));
+        if (!actor.employeeId || emp?.managerId !== actor.employeeId || r.employeeId === actor.employeeId) assertCan(actor, 'request:approve');
+      }
       if (r.status !== 'PENDING') throw conflict(`This request is already ${r.status.toLowerCase()}.`);
       const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
       const [row] = await db

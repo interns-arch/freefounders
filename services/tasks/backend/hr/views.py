@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from accounts.models import User
 from accounts.permissions import HasCapability, has_capability
 
-from . import services
+from . import approvals, services
 from .models import (
     Attendance, AttendanceCorrection, CorrectionStatus, FaceProfile,
     LeaveRequest, LeaveStatus, LeaveType, OfficeLocation,
@@ -43,6 +43,16 @@ def _self_review_message(user) -> str:
                 "admin) in My Team, and ask them to review it.")
     names = ", ".join(u.get_full_name() or u.username for u in other_approvers(user)[:5])
     return f"{base} Ask one of: {names}."
+
+
+def _check_reviewer(reviewer, request_obj):
+    """May this person decide this leave/correction? (PLAN.md §17.2; with the default setting: today's rule.)"""
+    if request_obj is None or not approvals.is_approver(reviewer):
+        raise PermissionDenied("You cannot review this request.")
+    if request_obj.user_id == reviewer.id:
+        raise PermissionDenied(_self_review_message(reviewer))
+    if not approvals.may_review(reviewer, request_obj.user):
+        raise PermissionDenied("You cannot review this request.")
 
 
 def managed_users(user):
@@ -188,26 +198,23 @@ class CorrectionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = AttendanceCorrection.objects.select_related("user", "reviewed_by")
-        if self.request.query_params.get("scope") == "team" and can_approve(self.request.user):
-            return qs.filter(user__in=managed_users(self.request.user))
+        if self.request.query_params.get("scope") == "team" and approvals.is_approver(self.request.user):
+            return qs.filter(user__in=approvals.reviewable_users(self.request.user))
         return qs.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        correction = serializer.save(user=self.request.user)
+        approvals.notify_submitted("correction", correction)
 
     def perform_destroy(self, instance):
         if instance.user_id != self.request.user.id or instance.status != CorrectionStatus.PENDING:
             raise PermissionDenied("Only your own pending requests can be withdrawn.")
         instance.delete()
 
-    @action(detail=True, methods=["post"], permission_classes=[HasCapability.of("hr.approve")])
+    @action(detail=True, methods=["post"])
     def review(self, request, pk=None):
-        correction = AttendanceCorrection.objects.filter(
-            pk=pk, user__in=managed_users(request.user)).first()
-        if not correction:
-            raise PermissionDenied("You cannot review this request.")
-        if correction.user_id == request.user.id:
-            raise PermissionDenied(_self_review_message(request.user))
+        correction = AttendanceCorrection.objects.select_related("user").filter(pk=pk).first()
+        _check_reviewer(request.user, correction)
         if correction.status != CorrectionStatus.PENDING:
             raise ValidationError({"detail": "This request has already been reviewed."})
         decision = request.data.get("decision")
@@ -255,8 +262,8 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = LeaveRequest.objects.select_related("user", "leave_type", "reviewed_by")
         p = self.request.query_params
-        if p.get("scope") == "team" and can_approve(self.request.user):
-            qs = qs.filter(user__in=managed_users(self.request.user))
+        if p.get("scope") == "team" and approvals.is_approver(self.request.user):
+            qs = qs.filter(user__in=approvals.reviewable_users(self.request.user))
         else:
             qs = qs.filter(user=self.request.user)
         if p.get("status"):
@@ -275,7 +282,8 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         ).exists()
         if overlap:
             raise ValidationError({"detail": "You already have a leave request covering these dates."})
-        serializer.save(user=self.request.user, days=days)
+        leave = serializer.save(user=self.request.user, days=days)
+        approvals.notify_submitted("leave", leave)
 
     def perform_update(self, serializer):
         if self.get_object().status != LeaveStatus.PENDING:
@@ -301,13 +309,10 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
             services.revoke_leave_attendance(leave)
         return Response(LeaveRequestSerializer(leave).data)
 
-    @action(detail=True, methods=["post"], permission_classes=[HasCapability.of("hr.approve")])
+    @action(detail=True, methods=["post"])
     def review(self, request, pk=None):
-        leave = LeaveRequest.objects.filter(pk=pk, user__in=managed_users(request.user)).first()
-        if not leave:
-            raise PermissionDenied("You cannot review this request.")
-        if leave.user_id == request.user.id:
-            raise PermissionDenied(_self_review_message(request.user))
+        leave = LeaveRequest.objects.select_related("user", "leave_type").filter(pk=pk).first()
+        _check_reviewer(request.user, leave)
         if leave.status != LeaveStatus.PENDING:
             raise ValidationError({"detail": "This request has already been reviewed."})
         decision = request.data.get("decision")
@@ -415,6 +420,6 @@ def hr_config(request):
         "face_enabled": conf["face_enabled"],
         "work_start": conf["work_start"], "work_end": conf["work_end"],
         "week_offs": conf["week_offs"],
-        "can_approve": can_approve(request.user),
+        "can_approve": approvals.is_approver(request.user),
         "can_manage": can_manage_hr(request.user),
     })

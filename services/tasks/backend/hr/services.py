@@ -43,6 +43,9 @@ def cfg():
         # "required" when they are set up; a standalone install keeps it off.
         "photo": _env("ATTENDANCE_PHOTO", "off").lower() if _env("ATTENDANCE_PHOTO", "off").lower() in PHOTO_MODES else "off",
         "photo_retention_days": int(_env("ATTENDANCE_PHOTO_RETENTION_DAYS", "90") or 90),
+        # Approvals (PLAN.md §17.2)
+        "leave_approval": _env("APPROVAL_LEAVE", "department") if _env("APPROVAL_LEAVE", "department") in ("department", "manager") else "department",
+        "approval_remind_hours": int(_env("APPROVAL_REMIND_HOURS", "24") or 0),
     }
 
 
@@ -65,6 +68,8 @@ EDITABLE = {
     "face_self_enroll": ("FACE_SELF_ENROLL", "bool", None),
     "photo": ("ATTENDANCE_PHOTO", "choice", PHOTO_MODES),
     "photo_retention_days": ("ATTENDANCE_PHOTO_RETENTION_DAYS", "int", (1, 3650)),
+    "leave_approval": ("APPROVAL_LEAVE", "choice", ("department", "manager")),
+    "approval_remind_hours": ("APPROVAL_REMIND_HOURS", "int", (0, 720)),
 }
 
 

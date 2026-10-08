@@ -157,7 +157,7 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
       header: '',
       cell: (r) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {r.status === 'PENDING' && can('request:approve') && (
+          {r.status === 'PENDING' && (r.canDecide ?? can('request:approve')) && (
             <>
               <Button size="xs" variant="outline" onClick={() => decide(r, 'APPROVE')}>
                 <Check /> Approve

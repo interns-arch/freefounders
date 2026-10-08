@@ -19,10 +19,15 @@ export default function HR() {
   const { can, module } = useAuth()
   const [params] = useSearchParams()
   const payroll = module('payroll')
+  // Under the "manager approves" rule a manager without hr.approve still approves their team's leave.
+  const [hrCfg, setHrCfg] = useState(null)
+  useEffect(() => { api('/api/hr/config/').then(setHrCfg).catch(() => {}) }, [])
+  const approves = can('hr.approve') || !!hrCfg?.can_approve
   const tabs = [
     ['today', 'Today'], ['history', 'My Attendance'], ['leave', 'My Leave'],
     ...(payroll ? [['salary', 'My Salary']] : []), ['holidays', 'Holidays'],
-    ...(can('hr.approve') ? [['team', 'Team'], ['approvals', 'Approvals']] : []),
+    ...(can('hr.approve') ? [['team', 'Team']] : []),
+    ...(approves ? [['approvals', 'Approvals']] : []),
     ...(can('hr.manage') ? [...(payroll ? [['payroll', 'Payroll']] : []), ['settings', 'HR Settings']] : []),
   ]
   // ?tab=settings opens a tab directly (the FreeFounders Settings page links here).
@@ -763,6 +768,14 @@ function HRPolicy({ onSaved }) {
             {s.photo.choices.map(c => <option key={c} value={c}>{PHOTO_LABELS[c] || c}</option>)}
           </select>{fieldErr('photo')}
         </div>
+        <div>
+          <label htmlFor="hr-approval">Leave and corrections are approved by</label>
+          <select id="hr-approval" value={form.leave_approval} onChange={set('leave_approval')}>
+            <option value="department">Approvers in the person’s department</option>
+            <option value="manager">The person’s manager (reports to) first</option>
+          </select>{fieldErr('leave_approval')}
+        </div>
+        <div><label htmlFor="hr-remind">Remind approvers after (hours; 0 = never)</label><input id="hr-remind" type="number" min="0" max="720" value={form.approval_remind_hours} onChange={set('approval_remind_hours')} />{fieldErr('approval_remind_hours')}</div>
         <div><label htmlFor="hr-keep">Keep photos for (days)</label><input id="hr-keep" type="number" min="1" max="3650" value={form.photo_retention_days} onChange={set('photo_retention_days')} />{fieldErr('photo_retention_days')}</div>
       </div>
       <div style={{ marginTop: 10 }}>

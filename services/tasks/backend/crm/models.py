@@ -285,6 +285,9 @@ class TaskCompletion(models.Model):
                                     on_delete=models.SET_NULL,
                                     related_name="reviewed_completions")
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    # Approval reminders (PLAN.md §17.2)
+    reminded_at = models.DateTimeField(null=True, blank=True)
+    escalated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -322,6 +325,7 @@ class TaskChangeRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     # When the admins were last nudged about this request sitting unreviewed.
     # Stamped so the reminder fires once rather than on every scheduler tick.
+    reminded_at = models.DateTimeField(null=True, blank=True)  # approver reminded (PLAN.md §17.2)
     admin_alerted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
