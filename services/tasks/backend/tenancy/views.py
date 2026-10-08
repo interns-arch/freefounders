@@ -37,6 +37,11 @@ def create_company(request):
         if row["schema"] == schema:
             return Response({"detail": f"Code already used by {row['name']}"}, status=status.HTTP_409_CONFLICT)
     created = schemas.create_company(company_id, schema, name)
+    if created:
+        from .company_settings import set_value
+
+        with schemas.use(schema):
+            set_value("ATTENDANCE_PHOTO", "required")
     return Response(
         {"companyId": company_id, "schema": schema, "created": created},
         status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,

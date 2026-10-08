@@ -100,14 +100,29 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             "face_self_enroll": conf["face_self_enroll"],
             "face_enrolled": FaceProfile.objects.filter(user=request.user).exists(),
             "work_start": conf["work_start"], "work_end": conf["work_end"],
+            "photo": conf["photo"],
         })
+
+    @action(detail=True, methods=["get"], url_path=r"photo/(?P<which>in|out)")
+    def photo(self, request, pk=None, which="in"):
+        """A punch photo: for the person themself and whoever may see their attendance."""
+        from django.http import FileResponse, Http404
+
+        rec = Attendance.objects.filter(pk=pk, user__in=managed_users(request.user)).first()
+        f = rec and (rec.check_in_photo if which == "in" else rec.check_out_photo)
+        if not f:
+            raise Http404("No photo")
+        res = FileResponse(f.open("rb"), content_type="image/jpeg")
+        res["Cache-Control"] = "private, max-age=3600"
+        res["X-Content-Type-Options"] = "nosniff"
+        return res
 
     def _mark(self, request, fn):
         ser = MarkSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
         try:
-            rec = fn(request.user, d.get("latitude"), d.get("longitude"), d.get("face_descriptor"))
+            rec = fn(request.user, d.get("latitude"), d.get("longitude"), d.get("face_descriptor"), photo=d.get("photo"))
         except services.HRError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(AttendanceSerializer(rec).data, status=http.HTTP_201_CREATED)
@@ -353,6 +368,42 @@ def face_enrolment(request, user_id):
     FaceProfile.objects.update_or_create(
         user=target, defaults={"descriptor": descriptor, "enrolled_by": request.user})
     return Response({"enrolled": True, "user": target.id})
+
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def hr_settings(request):
+    """HR rules the company edits itself (PLAN.md §16.1). GET: current values and where they come from.
+    PUT: {key: value}; a blank value goes back to the server default. HR administrators only."""
+    from tenancy.company_settings import set_value
+
+    if not can_manage_hr(request.user):
+        raise PermissionDenied("Only an HR administrator can change HR settings.")
+    if request.method == "PUT":
+        errors, clean = {}, {}
+        for key, value in (request.data or {}).items():
+            if key not in services.EDITABLE:
+                errors[key] = "Not an HR setting."
+                continue
+            try:
+                clean[key] = services.clean_setting(key, value)
+            except ValueError as exc:
+                errors[key] = str(exc)
+        if errors:
+            return Response(errors, status=400)
+        for key, text in clean.items():
+            set_value(services.EDITABLE[key][0], text)
+    from tenancy.models import CompanySetting
+
+    conf = services.cfg()
+    saved = set(CompanySetting.objects.exclude(value="").values_list("key", flat=True))
+    return Response({
+        # custom: the company saved its own value (else the server default applies)
+        key: {"value": conf[key], "custom": env in saved,
+              "kind": kind, "choices": list(extra) if kind == "choice" else None,
+              "range": list(extra) if kind in ("int", "float") else None}
+        for key, (env, kind, extra) in services.EDITABLE.items()
+    })
 
 
 @api_view(["GET"])

@@ -27,13 +27,21 @@ class AttendanceSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     location_name = serializers.CharField(source="location.name", read_only=True, default=None)
     missing_checkout = serializers.BooleanField(read_only=True)
+    has_check_in_photo = serializers.SerializerMethodField()
+    has_check_out_photo = serializers.SerializerMethodField()
+
+    def get_has_check_in_photo(self, obj):
+        return bool(obj.check_in_photo)
+
+    def get_has_check_out_photo(self, obj):
+        return bool(obj.check_out_photo)
 
     class Meta:
         model = Attendance
         fields = ["id", "user", "user_detail", "date", "check_in", "check_out",
                   "status", "status_display", "working_minutes", "is_late",
                   "is_early_checkout", "missing_checkout", "face_verified",
-                  "face_confidence", "location_name", "note"]
+                  "face_confidence", "location_name", "note", "has_check_in_photo", "has_check_out_photo"]
 
 
 class MarkSerializer(serializers.Serializer):
@@ -43,6 +51,8 @@ class MarkSerializer(serializers.Serializer):
     longitude = serializers.FloatField(required=False, allow_null=True)
     face_descriptor = serializers.ListField(
         child=serializers.FloatField(), required=False, allow_null=True, max_length=512)
+    # Punch photo as a data URL (JPEG ≤ 400 KB once decoded); kept only when the company asks for it.
+    photo = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=600_000)
 
 
 class CorrectionSerializer(serializers.ModelSerializer):

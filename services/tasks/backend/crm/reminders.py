@@ -353,8 +353,12 @@ def send_weekly_overdue_email(force=False) -> int:
         body = "\n".join(lines)
         title = (f"Overdue reminder - {len(tasks)} task(s) past due" if tasks
                  else "Weekly update - your pipeline is clear")
-        result = gmail.send_email(user.email, f"[{app_name()}] {title}", body,
-                                  link="/tasks", link_label="Open my tasks")
+        from notifications.rules import allows
+        if not allows("task_overdue_weekly", "email"):
+            result = {"channel": "email", "status": "skipped", "detail": "switched off in notification rules"}
+        else:
+            result = gmail.send_email(user.email, f"[{app_name()}] {title}", body,
+                                      link="/tasks", link_label="Open my tasks")
         Notification.objects.create(user=user, type="task_overdue_weekly",
                                     title=title, body=body, link="/tasks",
                                     channels=[result])
@@ -371,8 +375,11 @@ def send_followup_reminders(force=False) -> int:
     nuisance. Whatever is overdue is still overdue on Monday morning.
     """
     now = timezone.now()
+    from hr.services import purge_attendance_photos
+
     if not force and not is_working_day(timezone.localtime(now).date()):
         purge_expired_attachments()      # housekeeping bothers nobody
+        purge_attendance_photos()
         return 0
     # Switched-off modules (PLAN.md §16.2) send nothing: no lead follow-ups, no mistake escalations or digests.
     due = Lead.objects.none() if not module_on("leads") else (
@@ -396,6 +403,7 @@ def send_followup_reminders(force=False) -> int:
     send_day_end_digest()               # date-guarded: once a day after 7 PM
     send_weekly_overdue_email()         # week-guarded: Monday (1st working day) 10 AM
     purge_expired_attachments()
+    purge_attendance_photos()            # punch photos past the company's retention period
     from mistakes.sla import escalate_overdue_mistakes  # lazy: avoids app-load cycles
     from mistakes.digests import send_daily_manager_summaries, send_weekly_founder_digest
     if module_on("mistakes"):

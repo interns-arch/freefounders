@@ -48,6 +48,7 @@ export default function Settings() {
       )}
       <DepartmentManager onError={setErr} />
       <CategoryManager onError={setErr} />
+      <NotificationRules onError={setErr} />
       {leads && <p className="muted" style={{ marginBottom: 16 }}>
         Auto-assignment rules: when a new lead arrives without an assignee (manual entry,
         or WhatsApp/Gmail/AI intake in Phase 3), the rule for its department picks the owner.
@@ -308,6 +309,43 @@ function RuleCard({ dept, label, rule, team, onChanged, onError }) {
       {rule?.strategy === 'round_robin' && members.length > 0 && (
         <div className="small muted">Next in rotation: <strong>{members[(rule.rr_index) % members.length]?.name}</strong></div>
       )}
+    </div>
+  )
+}
+
+/* Which kinds of event also go out by email / WhatsApp (PLAN.md §16.5). In-app is always on. */
+function NotificationRules({ onError }) {
+  const [rows, setRows] = useState(null)
+  const [busy, setBusy] = useState('')
+  useEffect(() => { api('/api/notification-rules/').then(setRows).catch(e => onError(e.message)) }, [onError])
+  const toggle = async (key, channel, on) => {
+    setBusy(`${key}.${channel}`)
+    try { setRows(await api('/api/notification-rules/', { method: 'PUT', body: { [key]: { [channel]: on } } })) }
+    catch (e) { onError(errorText(e.data) || e.message) }
+    finally { setBusy('') }
+  }
+  if (!rows) return null
+  return (
+    <div className="rule-card" aria-labelledby="notif-rules">
+      <h3 id="notif-rules">Notifications</h3>
+      <p className="muted small">Everyone always sees notifications in the app. Choose which ones are also sent by email or WhatsApp.</p>
+      <table className="table">
+        <thead><tr><th>When</th><th>Email</th><th>WhatsApp</th></tr></thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.key}>
+              <td>{r.label}</td>
+              {['email', 'whatsapp'].map(c => (
+                <td key={c}>
+                  <input type="checkbox" checked={r[c]} disabled={busy === `${r.key}.${c}`}
+                    aria-label={`${c === 'email' ? 'Email' : 'WhatsApp'}: ${r.label}`}
+                    onChange={e => toggle(r.key, c, e.target.checked)} style={{ width: 'auto' }} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

@@ -5,6 +5,8 @@ optionally a face descriptor); the server decides status, lateness and
 working hours -- never the client. Approved leave writes LEAVE days into
 attendance so both modules agree on where someone was.
 """
+from datetime import date
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -35,6 +37,14 @@ class AttendanceStatus(models.TextChoices):
     WEEK_OFF = "week_off", "Week Off"
 
 
+def attendance_photo_path(instance, _filename):
+    """Punch-in photos live under private/: never served by /media/, only through the
+    permission-checked attendance photo endpoint (PLAN.md §16.4)."""
+    import uuid
+    day = instance.date or date.today()
+    return f"private/attendance/{day:%Y/%m}/{uuid.uuid4().hex}.jpg"
+
+
 class Attendance(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                              related_name="attendance")
@@ -57,6 +67,9 @@ class Attendance(models.Model):
     leave_request = models.ForeignKey("hr.LeaveRequest", null=True, blank=True,
                                       on_delete=models.SET_NULL, related_name="attendance_days")
     note = models.CharField(max_length=300, blank=True, default="")
+    # Photo taken at the punch (FreeFounders, PLAN.md §16.4); emptied after the retention period.
+    check_in_photo = models.FileField(upload_to=attendance_photo_path, blank=True, default="")
+    check_out_photo = models.FileField(upload_to=attendance_photo_path, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -5,6 +5,14 @@ from django.urls import include, path, re_path
 from django.views.static import serve as _serve
 
 
+def media(request, path):
+    """Uploaded files. Anything under private/ (punch photos) is only served by its own
+    permission-checked endpoint, never here."""
+    if "private/" in path.replace("\\", "/"):
+        raise Http404("Not found")
+    return _serve(request, path, document_root=settings.MEDIA_ROOT)
+
+
 def health(_request):
     return JsonResponse({"status": "ok", "app": "cartrends-crm"})
 
@@ -35,7 +43,7 @@ urlpatterns = [
     path("api/", include("payroll.urls")),
     path("api/", include("mistakes.urls")),
     # uploaded files (works in dev and on Render; Render's disk is ephemeral)
-    re_path(r"^media/(?P<path>.*)$", _serve, {"document_root": settings.MEDIA_ROOT}),
+    re_path(r"^media/(?P<path>.*)$", media),
     # everything else that isn't API/admin/static -> the React app
     re_path(r"^(?!api/|admin/|static/|media/|health).*$", spa),
 ]

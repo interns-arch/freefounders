@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, apiUpload, errorText } from '../api'
+import { api, apiBlobUrl, apiUpload, errorText } from '../api'
 import { useAuth } from '../auth'
 import { MySalary, PayrollAdmin } from './Payroll'
 import FaceCapture from './FaceCapture'
@@ -120,11 +120,11 @@ function Today() {
     )
   })
 
-  const send = async (which, faceDescriptor) => {
+  const send = async (which, faceDescriptor, photo) => {
     setErr(''); setMsg(''); setBusy(true)
     try {
       const pos = await getPosition()
-      const body = faceDescriptor ? { ...pos, face_descriptor: faceDescriptor } : pos
+      const body = { ...pos, ...(faceDescriptor ? { face_descriptor: faceDescriptor } : {}), ...(photo ? { photo } : {}) }
       await api(`/api/attendance/${which}/`, { method: 'POST', body })
       setMsg(which === 'check_in' ? 'Checked in ✅' : 'Checked out ✅')
       load()
@@ -133,8 +133,9 @@ function Today() {
     } finally { setBusy(false) }
   }
 
-  // With face attendance switched on, the camera step comes first.
-  const mark = (which) => (data?.face_enabled ? setFaceFor(which) : send(which))
+  // With face attendance or punch photos switched on, the camera step comes first.
+  const usesCamera = data?.face_enabled || (data?.photo && data.photo !== 'off')
+  const mark = (which) => (usesCamera ? setFaceFor(which) : send(which))
 
   if (err && !data) return <div className="err">{err}</div>
   if (!data) return <div className="center-note">Loading…</div>
@@ -165,29 +166,34 @@ function Today() {
             : data.face_self_enroll
               ? ' Face verification is ON — first time? Your face will be saved on your first check-in, just like setting up a phone face lock.'
               : ' Face verification is ON but you are not enrolled — ask an admin.')}
+          {data.photo === 'required' && ' A photo is taken at every check-in and check-out.'}
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-primary" disabled={busy || !data.can_check_in}
             onClick={() => mark('check_in')}>
-            {busy ? 'Working…' : data.face_enabled ? '📷 Check in' : 'Check in'}
+            {busy ? 'Working…' : usesCamera ? '📷 Check in' : 'Check in'}
           </button>
           <button className="btn" disabled={busy || !data.can_check_out}
             onClick={() => mark('check_out')}>
-            {data.face_enabled ? '📷 Check out' : 'Check out'}
+            {usesCamera ? '📷 Check out' : 'Check out'}
           </button>
         </div>
       </div>
 
       {faceFor && (
         <FaceCapture
-          title={faceFor === 'check_in' ? 'Check in with your face' : 'Check out with your face'}
+          face={!!data.face_enabled}
+          photo={data.photo && data.photo !== 'off'}
+          title={data.face_enabled
+            ? (faceFor === 'check_in' ? 'Check in with your face' : 'Check out with your face')
+            : (faceFor === 'check_in' ? 'Check in' : 'Check out')}
           action={faceFor === 'check_in' ? 'Check in' : 'Check out'}
           hint={data.face_enrolled ? undefined
             : data.face_self_enroll
               ? 'First time: this capture becomes your face profile. Look straight at the camera in good light, without a mask.'
               : 'Your face is not enrolled yet — ask an admin to enrol you first.'}
           onClose={() => setFaceFor(null)}
-          onCapture={(descriptor) => { const w = faceFor; setFaceFor(null); send(w, descriptor) }}
+          onCapture={(descriptor, photo) => { const w = faceFor; setFaceFor(null); send(w, descriptor, photo) }}
         />
       )}
     </div>
@@ -255,8 +261,8 @@ function MyAttendance({ userId, userName }) {
           <h3>{new Date(selected.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             {' '}<span className={`q-pill q-${selected.status}`}>{STATUS_LABEL[selected.status]}{selected.holiday ? `: ${selected.holiday}` : ''}</span>
           </h3>
-          <div className="doc-row"><span>Check in</span><strong>{fmtT(selected.check_in)}</strong></div>
-          <div className="doc-row"><span>Check out</span><strong>{fmtT(selected.check_out)}</strong></div>
+          <div className="doc-row"><span>Check in</span><strong>{fmtT(selected.check_in)} {selected.has_check_in_photo && <PunchPhoto key={`${selected.attendance_id}-in`} id={selected.attendance_id} which="in" label="Check-in photo" />}</strong></div>
+          <div className="doc-row"><span>Check out</span><strong>{fmtT(selected.check_out)} {selected.has_check_out_photo && <PunchPhoto key={`${selected.attendance_id}-out`} id={selected.attendance_id} which="out" label="Check-out photo" />}</strong></div>
           <div className="doc-row"><span>Worked</span><strong>{hrs(selected.working_minutes)}</strong></div>
           {(selected.is_late || selected.is_early_checkout || selected.missing_checkout) && (
             <div className="doc-row"><span>Flags</span>
@@ -499,8 +505,8 @@ function TeamToday() {
               <td><strong>{r.name}</strong></td>
               <td>{r.department}</td>
               <td><span className={`q-pill q-${r.status}`}>{STATUS_LABEL[r.status]}</span></td>
-              <td>{fmtT(r.check_in)}</td>
-              <td>{fmtT(r.check_out)}</td>
+              <td>{fmtT(r.check_in)} {r.has_check_in_photo && <PunchPhoto id={r.attendance_id} which="in" label={`${r.name} check-in photo`} />}</td>
+              <td>{fmtT(r.check_out)} {r.has_check_out_photo && <PunchPhoto id={r.attendance_id} which="out" label={`${r.name} check-out photo`} />}</td>
               <td>{hrs(r.working_minutes)}</td>
               <td className="row-actions">
                 <button className="btn btn-sm" onClick={() => setViewUser(r)}>History</button>
@@ -513,6 +519,35 @@ function TeamToday() {
         </tbody>
       </table>
     </div>
+  )
+}
+
+/* A punch photo: a small thumbnail that opens large. Loaded with the sign-in token. */
+function PunchPhoto({ id, which, label }) {
+  const [url, setUrl] = useState(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    let alive = true
+    let made = null
+    apiBlobUrl(`/api/attendance/${id}/photo/${which}/`).then(u => { made = u; if (alive) setUrl(u); else URL.revokeObjectURL(u) }).catch(() => {})
+    return () => { alive = false; if (made) URL.revokeObjectURL(made) }
+  }, [id, which])
+  if (!url) return null
+  return (
+    <>
+      <button className="punch-thumb" onClick={() => setOpen(true)} aria-label={label}>
+        <img src={url} alt="" />
+      </button>
+      {open && (
+        <div className="modal" onMouseDown={e => { if (e.target === e.currentTarget) setOpen(false) }}>
+          <div className="modal-card" style={{ maxWidth: 480 }}>
+            <h2>{label}</h2>
+            <img src={url} alt={label} style={{ width: '100%', borderRadius: 10 }} />
+            <div className="modal-actions"><button className="btn" onClick={() => setOpen(false)}>Close</button></div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -637,18 +672,7 @@ function HRSettings() {
   return (
     <div style={{ maxWidth: 720 }}>
       {err && <div className="err">{err}</div>}
-      <div className="dash-card" style={{ marginBottom: 14 }}>
-        <h3>Policy (from backend/.env)</h3>
-        <div className="cap-list">
-          <code>work {config.work_start}–{config.work_end}</code>
-          <code>geo-fence {config.geofence_enabled ? 'ON' : 'off'}</code>
-          <code>face {config.face_enabled ? 'ON' : 'off'}</code>
-          <code>week-offs {config.week_offs.join(',') || 'none'}</code>
-        </div>
-        <p className="muted small" style={{ marginTop: 8 }}>
-          Change these in <code>backend/.env</code> (HR_* / GEOFENCE_ENABLED / FACE_RECOGNITION_ENABLED) and restart the API.
-        </p>
-      </div>
+      <HRPolicy onSaved={load} />
 
       <div className="dash-card" style={{ marginBottom: 14 }}>
         <h3>Office locations (geo-fence)</h3>
@@ -693,6 +717,78 @@ function HRSettings() {
 }
 
 /* ---------------- Face enrolment (admin) ---------------- */
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const PHOTO_LABELS = { off: 'Off', optional: 'Optional', required: 'Required at every punch' }
+
+/* Working hours and attendance rules, saved for this company (PLAN.md §16.1). */
+function HRPolicy({ onSaved }) {
+  const [s, setS] = useState(null)
+  const [form, setForm] = useState({})
+  const [errors, setErrors] = useState({})
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const load = useCallback(() => {
+    api('/api/hr/settings/').then(d => {
+      setS(d)
+      setForm(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v.value])))
+    }).catch(e => setErrors({ _: e.message }))
+  }, [])
+  useEffect(() => { load() }, [load])
+  if (!s) return errors._ ? <div className="err">{errors._}</div> : null
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  const toggleDay = (d) => setForm(f => ({ ...f, week_offs: f.week_offs.includes(d) ? f.week_offs.filter(x => x !== d) : [...f.week_offs, d] }))
+  const save = async (e) => {
+    e.preventDefault(); setBusy(true); setErrors({}); setMsg('')
+    try {
+      await api('/api/hr/settings/', { method: 'PUT', body: form })
+      setMsg('Saved'); load(); onSaved?.()
+    } catch (ex) { setErrors(ex.data || { _: ex.message }) } finally { setBusy(false) }
+  }
+  const fieldErr = (k) => errors[k] && <div className="small" style={{ color: 'var(--red)' }}>{errors[k]}</div>
+
+  return (
+    <form className="dash-card" style={{ marginBottom: 14 }} onSubmit={save} aria-label="Attendance rules">
+      <h3>Attendance rules</h3>
+      <div className="form-grid">
+        <div><label htmlFor="hr-start">Work starts</label><input id="hr-start" type="time" value={form.work_start} onChange={set('work_start')} />{fieldErr('work_start')}</div>
+        <div><label htmlFor="hr-end">Work ends</label><input id="hr-end" type="time" value={form.work_end} onChange={set('work_end')} />{fieldErr('work_end')}</div>
+        <div><label htmlFor="hr-grace">Late after (minutes of grace)</label><input id="hr-grace" type="number" min="0" max="240" value={form.grace_minutes} onChange={set('grace_minutes')} />{fieldErr('grace_minutes')}</div>
+        <div><label htmlFor="hr-half">Half day below (hours)</label><input id="hr-half" type="number" step="0.5" min="0.5" max="24" value={form.half_day_hours} onChange={set('half_day_hours')} />{fieldErr('half_day_hours')}</div>
+        <div><label htmlFor="hr-full">Full day (hours)</label><input id="hr-full" type="number" step="0.5" min="1" max="24" value={form.full_day_hours} onChange={set('full_day_hours')} />{fieldErr('full_day_hours')}</div>
+        <div>
+          <label htmlFor="hr-photo">Photo at check-in / check-out</label>
+          <select id="hr-photo" value={form.photo} onChange={set('photo')}>
+            {s.photo.choices.map(c => <option key={c} value={c}>{PHOTO_LABELS[c] || c}</option>)}
+          </select>{fieldErr('photo')}
+        </div>
+        <div><label htmlFor="hr-keep">Keep photos for (days)</label><input id="hr-keep" type="number" min="1" max="3650" value={form.photo_retention_days} onChange={set('photo_retention_days')} />{fieldErr('photo_retention_days')}</div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Weekly off</label>
+        <div className="day-picks" role="group" aria-label="Weekly off days">
+          {WEEKDAYS.map((d, i) => (
+            <label key={d} className={'day-pick' + (form.week_offs.includes(i) ? ' on' : '')}>
+              <input type="checkbox" checked={form.week_offs.includes(i)} onChange={() => toggleDay(i)} /> {d}
+            </label>
+          ))}
+        </div>
+        {fieldErr('week_offs')}
+      </div>
+      <div className="check-list" style={{ marginTop: 10 }}>
+        <label><input type="checkbox" checked={!!form.geofence_enabled} onChange={set('geofence_enabled')} /> Check location at check-in (needs an office below)</label>
+        <label><input type="checkbox" checked={!!form.face_enabled} onChange={set('face_enabled')} /> Face check at check-in and check-out</label>
+        <label><input type="checkbox" checked={!!form.face_self_enroll} onChange={set('face_self_enroll')} disabled={!form.face_enabled} /> First face capture becomes the person’s face profile</label>
+      </div>
+      {errors._ && <div className="err">{errors._}</div>}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
+        <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save rules'}</button>
+        {msg && <span className="muted small" role="status">{msg}</span>}
+      </div>
+    </form>
+  )
+}
 
 function FaceEnrolment({ config, team }) {
   const [target, setTarget] = useState('')

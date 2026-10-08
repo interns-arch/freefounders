@@ -39,7 +39,124 @@ def cfg():
         # Phone-style enrolment: an unenrolled employee's FIRST face capture
         # becomes their profile (HR is notified and can reset it any time).
         "face_self_enroll": _env("FACE_SELF_ENROLL", "true").lower() == "true",
+        # Punch-in photo (PLAN.md §16.4): off | optional | required. FreeFounders companies get
+        # "required" when they are set up; a standalone install keeps it off.
+        "photo": _env("ATTENDANCE_PHOTO", "off").lower() if _env("ATTENDANCE_PHOTO", "off").lower() in PHOTO_MODES else "off",
+        "photo_retention_days": int(_env("ATTENDANCE_PHOTO_RETENTION_DAYS", "90") or 90),
     }
+
+
+PHOTO_MODES = ("off", "optional", "required")
+PHOTO_MAX_BYTES = 400 * 1024
+
+# Settings an HR admin edits on the HR Settings screen. Each is stored per company
+# (CompanySetting); a blank value falls back to the server's environment variable.
+#   key: (environment variable, kind, extra)
+EDITABLE = {
+    "work_start": ("HR_WORK_START", "time", None),
+    "work_end": ("HR_WORK_END", "time", None),
+    "grace_minutes": ("HR_LATE_GRACE_MINUTES", "int", (0, 240)),
+    "half_day_hours": ("HR_HALF_DAY_HOURS", "float", (0.5, 24)),
+    "full_day_hours": ("HR_FULL_DAY_HOURS", "float", (1, 24)),
+    "week_offs": ("HR_WEEK_OFF_DAYS", "days", None),
+    "geofence_enabled": ("GEOFENCE_ENABLED", "bool", None),
+    "face_enabled": ("FACE_RECOGNITION_ENABLED", "bool", None),
+    "face_threshold": ("FACE_MATCH_THRESHOLD", "float", (0.3, 0.8)),
+    "face_self_enroll": ("FACE_SELF_ENROLL", "bool", None),
+    "photo": ("ATTENDANCE_PHOTO", "choice", PHOTO_MODES),
+    "photo_retention_days": ("ATTENDANCE_PHOTO_RETENTION_DAYS", "int", (1, 3650)),
+}
+
+
+def clean_setting(key, value) -> str:
+    """The stored text for one editable setting, or ValueError with a message for the admin."""
+    env, kind, extra = EDITABLE[key]
+    if value is None or value == "":
+        return ""
+    if kind == "time":
+        text = str(value).strip()
+        h, _, m = text.partition(":")
+        if not (h.isdigit() and m.isdigit() and 0 <= int(h) < 24 and 0 <= int(m) < 60):
+            raise ValueError("Use a time like 09:30")
+        return f"{int(h):02d}:{int(m):02d}"
+    if kind in ("int", "float"):
+        try:
+            number = int(value) if kind == "int" else float(value)
+        except (TypeError, ValueError):
+            raise ValueError("Enter a number")
+        lo, hi = extra
+        if not lo <= number <= hi:
+            raise ValueError(f"Between {lo} and {hi}")
+        return str(number)
+    if kind == "bool":
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if str(value).lower() in ("true", "false"):
+            return str(value).lower()
+        raise ValueError("On or off")
+    if kind == "days":
+        days = value if isinstance(value, list) else str(value).split(",")
+        try:
+            out = sorted({int(d) for d in days if str(d).strip() != ""})
+        except ValueError:
+            raise ValueError("Days are 0 (Monday) to 6 (Sunday)")
+        if any(d < 0 or d > 6 for d in out):
+            raise ValueError("Days are 0 (Monday) to 6 (Sunday)")
+        return ",".join(map(str, out)) or "none"
+    if kind == "choice":
+        if str(value) not in extra:
+            raise ValueError(f"One of: {', '.join(extra)}")
+        return str(value)
+    raise ValueError("Unknown setting")
+
+
+def decode_photo(data) -> bytes | None:
+    """A punch photo sent as a data URL or base64. JPEG, PNG or WebP by content; at most 400 KB."""
+    import base64
+    import binascii
+
+    if not data:
+        return None
+    text = str(data)
+    if text.startswith("data:"):
+        text = text.split(",", 1)[-1]
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError):
+        raise HRError("The photo could not be read. Please try again.")
+    if len(raw) > PHOTO_MAX_BYTES:
+        raise HRError("The photo is too large. Please try again.")
+    if not (raw[:3] == b"\xff\xd8\xff" or raw[:8] == b"\x89PNG\r\n\x1a\n" or (raw[:4] == b"RIFF" and raw[8:12] == b"WEBP")):
+        raise HRError("The photo must be a JPEG, PNG or WebP image.")
+    return raw
+
+
+def _attach_photo(record, field: str, photo):
+    """Applies the company's photo rule to one punch."""
+    from django.core.files.base import ContentFile
+
+    mode = cfg()["photo"]
+    raw = decode_photo(photo) if mode != "off" else None
+    if mode == "required" and not raw:
+        raise HRError("Take a photo to mark your attendance.")
+    if raw:
+        getattr(record, field).save("punch.jpg", ContentFile(raw), save=False)
+
+
+def purge_attendance_photos() -> int:
+    """Deletes punch photos older than the company's retention period (PLAN.md §16.4). Returns how many."""
+    from django.db.models import Q
+
+    cutoff = timezone.localdate() - timedelta(days=cfg()["photo_retention_days"])
+    removed = 0
+    for rec in Attendance.objects.filter(date__lt=cutoff).filter(~Q(check_in_photo="") | ~Q(check_out_photo="")):
+        for field in ("check_in_photo", "check_out_photo"):
+            f = getattr(rec, field)
+            if f:
+                f.delete(save=False)
+                removed += 1
+        rec.save(update_fields=["check_in_photo", "check_out_photo"])
+    return removed
 
 
 def _parse_hhmm(value: str, fallback: time) -> time:
@@ -155,7 +272,7 @@ def is_holiday(day: date) -> bool:
     return Holiday.objects.filter(date=day).exists()
 
 
-def check_in(user, lat=None, lng=None, descriptor=None) -> Attendance:
+def check_in(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendance:
     conf = cfg()
     today = timezone.localdate()
     existing = Attendance.objects.filter(user=user, date=today).first()
@@ -180,11 +297,12 @@ def check_in(user, lat=None, lng=None, descriptor=None) -> Attendance:
     record.status = AttendanceStatus.LATE if late else AttendanceStatus.PRESENT
     record.face_verified = verified
     record.face_confidence = confidence
+    _attach_photo(record, "check_in_photo", photo)
     record.save()
     return record
 
 
-def check_out(user, lat=None, lng=None, descriptor=None) -> Attendance:
+def check_out(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendance:
     conf = cfg()
     today = timezone.localdate()
     record = Attendance.objects.filter(user=user, date=today).first()
@@ -209,6 +327,7 @@ def check_out(user, lat=None, lng=None, descriptor=None) -> Attendance:
         record.status = AttendanceStatus.LATE
     else:
         record.status = AttendanceStatus.PRESENT
+    _attach_photo(record, "check_out_photo", photo)
     record.save()
     return record
 
@@ -290,6 +409,9 @@ def monthly_report(user, year: int, month: int) -> dict:
                 "working_minutes": rec.working_minutes,
                 "is_late": rec.is_late, "is_early_checkout": rec.is_early_checkout,
                 "missing_checkout": rec.missing_checkout,
+                "attendance_id": rec.id,
+                "has_check_in_photo": bool(rec.check_in_photo),
+                "has_check_out_photo": bool(rec.check_out_photo),
             }
         else:
             if cur in holidays:
@@ -340,5 +462,8 @@ def today_summary(users):
             "check_in": rec.check_in if rec else None,
             "check_out": rec.check_out if rec else None,
             "working_minutes": rec.working_minutes if rec else 0,
+            "attendance_id": rec.id if rec else None,
+            "has_check_in_photo": bool(rec and rec.check_in_photo),
+            "has_check_out_photo": bool(rec and rec.check_out_photo),
         })
     return {"date": today.isoformat(), "counts": counts, "rows": rows}

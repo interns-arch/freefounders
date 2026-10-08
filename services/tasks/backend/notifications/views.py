@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import mixins, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.serializers import ModelSerializer
@@ -56,3 +57,21 @@ class NotificationViewSet(mixins.DestroyModelMixin,
             qs = qs.filter(read_at__isnull=False)
         deleted, _ = qs.delete()
         return Response({"deleted": deleted})
+
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def notification_rules(request):
+    """Which kinds of event also go out by email / WhatsApp (PLAN.md §16.5). Admins (settings.manage)."""
+    from accounts.permissions import has_capability
+
+    from . import rules
+
+    if not has_capability(request.user, "settings.manage"):
+        raise PermissionDenied("Only an admin can change notification rules.")
+    if request.method == "PUT":
+        try:
+            return Response(rules.update(request.data))
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+    return Response(rules.table())

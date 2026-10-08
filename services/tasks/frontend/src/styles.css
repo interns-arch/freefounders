@@ -1535,3 +1535,14 @@ a.stat-link:active { transform: translateY(1px); }
 
 /* FreeFounders company brand without a logo: its first letter */
 .brand-initial { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; }
+
+/* Punch photos and attendance rules (Settings Center, PLAN.md §16) */
+.punch-thumb { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; width: 28px; height: 28px; background: var(--surface-2); cursor: zoom-in; }
+.punch-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.day-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.day-pick { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 99px; font-size: 13px; cursor: pointer; }
+.day-pick.on { background: var(--accent-soft); border-color: var(--accent); }
+.day-pick input { width: auto; margin: 0; }
+.check-list { display: grid; gap: 6px; }
+.check-list label { display: flex; gap: 8px; align-items: center; font-weight: 500; }
+.check-list input { width: auto; margin: 0; }

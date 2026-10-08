@@ -49,7 +49,11 @@ def _company_values(schema: str) -> dict[str, str]:
     from .models import CompanySetting
 
     values = {}
-    for row in CompanySetting.objects.all():
+    try:
+        rows = list(CompanySetting.objects.all())
+    except Exception:  # noqa: BLE001 -- no database here (start-up, a test without one): the env var applies
+        return {}
+    for row in rows:
         if not row.value:
             continue
         try:
@@ -70,7 +74,12 @@ def forget(schema: str | None = None) -> None:
 
 
 def company_env(name: str, default: str = "") -> str:
-    schema = schemas.current() if schemas.enabled() else None
+    # Multi-company: the current company's schema. Standalone: the install's own table ("-"), so the
+    # settings screens work there too; with nothing saved it is exactly os.environ.get.
+    if schemas.enabled():
+        schema = schemas.current()
+    else:
+        schema = "-"
     if schema:
         value = _company_values(schema).get(name, "").strip()
         if value:
@@ -85,4 +94,4 @@ def set_value(name: str, value: str) -> None:
     CompanySetting.objects.update_or_create(
         key=name, defaults={"value": encrypt(value) if secret and value else value, "secret": secret}
     )
-    forget(schemas.current())
+    forget(schemas.current() if schemas.enabled() else "-")

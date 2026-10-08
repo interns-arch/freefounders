@@ -33,6 +33,11 @@ def notify(user, type_: str, title: str, body: str = "", link: str = "",
     goes as free-form text, which Meta only delivers inside a 24h
     customer-service window. want_whatsapp=False keeps it to in-app and email."""
     from tenancy.profile import app_name, brand
+
+    from .rules import allows
+    # The company's notification rules (PLAN.md §16.5) can turn off the email or WhatsApp copy.
+    want_email = want_email and allows(type_, "email")
+    want_whatsapp = want_whatsapp and allows(type_, "whatsapp")
     if link_label is None:
         # A FreeFounders company sees its own name; a standalone install keeps the original wording.
         link_label = f"Open in {app_name()}" if brand() else "Open in Automate Task"

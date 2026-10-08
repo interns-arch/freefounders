@@ -12,5 +12,6 @@ router.register("office-locations", views.OfficeLocationViewSet, basename="offic
 
 urlpatterns = [
     path("hr/config/", views.hr_config),
+    path("hr/settings/", views.hr_settings),
     path("hr/face/<int:user_id>/", views.face_enrolment),
 ] + router.urls

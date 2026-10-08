@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { describeFace, isSupported, loadFace } from '../face'
 
-/* Camera modal used for both check-in verification and admin enrolment.
-   Calls onCapture(descriptor) with 128 numbers — never an image. */
+/* A still from the camera as a JPEG data URL, at most 640 px wide. */
+function grabPhoto(video) {
+  const scale = Math.min(1, 640 / (video.videoWidth || 640))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round((video.videoWidth || 640) * scale)
+  canvas.height = Math.round((video.videoHeight || 480) * scale)
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.7)
+}
+
+/* Camera modal used for check-in/out and admin enrolment.
+   face: read the face and pass its 128-number signature (never an image).
+   photo: also take a picture (the company keeps a photo of every punch, PLAN.md §16.4).
+   Calls onCapture(descriptor | null, photo | null). */
 export default function FaceCapture({ title = 'Face verification', action = 'Capture',
-                                      hint, onCapture, onClose }) {
+                                      hint, onCapture, onClose, face = true, photo = false }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const [status, setStatus] = useState('Starting camera…')
@@ -35,8 +47,10 @@ export default function FaceCapture({ title = 'Face verification', action = 'Cap
           videoRef.current.srcObject = stream
           await videoRef.current.play().catch(() => {})
         }
-        setStatus('Loading face models…')
-        await loadFace(setStatus)
+        if (face) {
+          setStatus('Loading face models…')
+          await loadFace(setStatus)
+        }
         if (cancelled) return
         setReady(true)
         setStatus('Look straight at the camera')
@@ -48,14 +62,15 @@ export default function FaceCapture({ title = 'Face verification', action = 'Cap
       }
     })()
     return () => { cancelled = true; stop() }
-  }, [stop])
+  }, [stop, face])
 
   const capture = async () => {
-    setErr(''); setBusy(true); setStatus('Reading your face…')
+    setErr(''); setBusy(true); setStatus(face ? 'Reading your face…' : 'Taking the photo…')
     try {
-      const descriptor = await describeFace(videoRef.current)
+      const picture = photo ? grabPhoto(videoRef.current) : null
+      const descriptor = face ? await describeFace(videoRef.current) : null
       stop()
-      onCapture(descriptor)
+      onCapture(descriptor, picture)
     } catch (ex) {
       setErr(ex.message)
       setStatus('Try again')
@@ -75,7 +90,9 @@ export default function FaceCapture({ title = 'Face verification', action = 'Cap
         </div>
         {err ? <div className="err">{err}</div> : <p className="muted small">{status}</p>}
         <p className="muted small">
-          Only a numeric face signature is sent — your photo never leaves this device.
+          {photo
+            ? 'A photo is saved with your attendance. Only you and the people who manage attendance can see it.'
+            : 'Only a numeric face signature is sent — your photo never leaves this device.'}
         </p>
         <div className="modal-actions">
           <button className="btn" onClick={() => { stop(); onClose() }}>Cancel</button>

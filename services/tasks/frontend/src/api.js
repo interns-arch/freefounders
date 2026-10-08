@@ -88,6 +88,16 @@ export function errorText(data) {
     .join(' · ')
 }
 
+/* A protected file (e.g. a punch photo) as an object URL: <img> cannot send the token itself.
+   The caller revokes the URL when done. */
+export async function apiBlobUrl(path) {
+  const doSend = () => fetch(withBase(path), { headers: store.access ? { Authorization: `Bearer ${store.access}` } : {} })
+  let res = await doSend()
+  if (res.status === 401 && (PLATFORM || store.refresh) && await renewSession()) res = await doSend()
+  if (!res.ok) throw new ApiError(res.status, null)
+  return URL.createObjectURL(await res.blob())
+}
+
 export async function apiUpload(path, formData) {
   const doSend = () => fetch(withBase(path), {
     method: 'POST',
