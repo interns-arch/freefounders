@@ -101,6 +101,7 @@ export default function TaskDetailPanel({ taskId, user, team, settings,
               {t.parent_code && <span className="ai-chip">↑ sub-task of {t.parent_code}</span>}
             </div>
             {t.description && <p className="small" style={{ whiteSpace: 'pre-wrap' }}>{t.description}</p>}
+            {t.external_url && <p className="small"><a href={t.external_url}>Open what this task is about ↗</a></p>}
             <p className="small muted">
               Assigned to <strong>{t.assigned_to_detail?.name}</strong>
               {t.created_by_detail && <> by <strong>{t.created_by_detail.name}</strong></>}

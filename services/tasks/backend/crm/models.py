@@ -206,6 +206,10 @@ class Task(models.Model):
     subscribers = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="subscribed_tasks")
     status = models.CharField(max_length=15, choices=TaskStatus.choices, default=TaskStatus.OPEN)
     priority = models.CharField(max_length=10, choices=LeadPriority.choices, default=LeadPriority.NORMAL)
+    # FreeFounders (PLAN.md §17.4): what this task works on in another app, e.g. "assets:ticket:<id>",
+    # and where to open it.
+    external_ref = models.CharField(max_length=80, blank=True, default="", db_index=True)
+    external_url = models.CharField(max_length=300, blank=True, default="")
     due_at = models.DateTimeField(null=True, blank=True)
     # Recurrence stops after this date (teardown: Repeat -> End Date)
     repeat_until = models.DateField(null=True, blank=True)

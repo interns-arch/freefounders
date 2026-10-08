@@ -141,6 +141,13 @@
       "when": 1791441192300,
       "tag": "0019_user_permissions_fn",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791448875396,
+      "tag": "0020_events_outbox",
+      "breakpoints": true
     }
   ]
 }

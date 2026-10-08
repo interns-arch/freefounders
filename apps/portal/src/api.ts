@@ -110,6 +110,7 @@ export interface Person {
   designation: string | null;
   reportsTo: string | null;
   joinDate: string | null;
+  lastWorkingDate?: string | null;
 }
 
 export interface Department {

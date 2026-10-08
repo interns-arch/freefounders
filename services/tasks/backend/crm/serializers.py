@@ -158,10 +158,11 @@ class TaskSerializer(serializers.ModelSerializer):
             "progress_percent", "actual_minutes",
             "completion_note", "completed_at", "deleted_at", "subscribed",
             "pending_change_requests", "can_delete", "created_at", "updated_at",
+            "external_url",
         ]
         read_only_fields = ["assignee_estimate_minutes", "progress_percent",
                             "actual_minutes", "completion_note",
-                            "completed_at", "deleted_at", "created_at", "updated_at"]
+                            "completed_at", "deleted_at", "created_at", "updated_at", "external_url"]
 
     def get_can_delete(self, obj):
         """One answer, from the same function the delete itself asks."""

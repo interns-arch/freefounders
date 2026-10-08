@@ -9,7 +9,8 @@ type Dialog =
   | { kind: 'add' }
   | { kind: 'roles'; person: Person }
   | { kind: 'password'; person: Person; username: string | null; password: string }
-  | { kind: 'edit'; person: Person };
+  | { kind: 'edit'; person: Person }
+  | { kind: 'exit'; person: Person };
 
 export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
   const [people, setPeople] = useState<Person[] | null>(null);
@@ -119,6 +120,7 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
                   <td>
                     {LEVELS[p.platformRole]}
                     {p.status === 'inactive' && <span className="pill warn">Inactive</span>}
+                    {p.status === 'active' && p.lastWorkingDate && <span className="pill warn">Leaving {p.lastWorkingDate}</span>}
                   </td>
                   <td>
                     {p.login ? (
@@ -158,6 +160,11 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
                     <button className="btn small" onClick={() => void resetPassword(p)}>
                       {p.login ? 'Reset password' : 'Create login'}
                     </button>
+                    {p.id !== me.person.id && p.status === 'active' && (
+                      <button className="btn small" onClick={() => setDialog({ kind: 'exit', person: p })}>
+                        {p.lastWorkingDate ? 'Exit started' : 'Start exit'}
+                      </button>
+                    )}
                     {p.id !== me.person.id &&
                       (p.status === 'active' ? (
                         <button className="btn small danger" onClick={() => void setStatus(p, 'inactive')}>
@@ -186,6 +193,7 @@ export function PeoplePage({ me, onSignOut }: { me: Me; onSignOut: () => void })
           }}
         />
       )}
+      {dialog?.kind === 'exit' && <ExitForm person={dialog.person} onClose={() => setDialog(null)} onDone={load} />}
       {dialog?.kind === 'edit' && <PersonForm me={me} person={dialog.person} onClose={() => setDialog(null)} onSaved={async () => (await load(), setDialog(null))} />}
       {dialog?.kind === 'roles' && (
         <RolesDialog me={me} person={dialog.person} roles={roles} apps={apps} onClose={() => setDialog(null)} onDone={async () => (await load(), setDialog(null))} />
@@ -488,6 +496,104 @@ function RolesDialog({
           {busy ? 'Saving…' : 'Save roles'}
         </button>
       </div>
+    </Modal>
+  );
+}
+
+interface ExitResult {
+  lastWorkingDate: string;
+  assets?: { caseNumber?: string | null; url?: string | null; error?: string };
+  tasks?: { code?: string; error?: string };
+}
+
+/** Start someone's exit (PLAN.md §17.4): Assets lists the assets to recover, Tasks makes the exit checklist. */
+function ExitForm({ person, onClose, onDone }: { person: Person; onClose: () => void; onDone: () => Promise<void> | void }) {
+  const [lastWorkingDate, setDate] = useState(person.lastWorkingDate ?? '');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<ExitResult | null>(null);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      setResult(await call<ExitResult>('POST', `/people/${person.id}/exit`, { lastWorkingDate, reason: reason || null }));
+      await onDone();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Exit: ${person.fullName}`} onClose={onClose}>
+      {result ? (
+        <div className="form">
+          <p>
+            <strong>Exit started.</strong> Last working day {result.lastWorkingDate}. They stay active until the exit is complete.
+          </p>
+          <ul className="result-list">
+            {result.assets && (
+              <li>
+                Assets:{' '}
+                {result.assets.error ? (
+                  <span className="error-text">{result.assets.error}</span>
+                ) : (
+                  <>
+                    exit case {result.assets.caseNumber}
+                    {result.assets.url && (
+                      <>
+                        {' '}
+                        — <a href={result.assets.url}>open it</a>
+                      </>
+                    )}
+                    . Completing it (all assets back) switches them off everywhere.
+                  </>
+                )}
+              </li>
+            )}
+            {result.tasks && (
+              <li>
+                Tasks: {result.tasks.error ? <span className="error-text">{result.tasks.error}</span> : <>exit checklist {result.tasks.code} for their manager.</>}
+              </li>
+            )}
+            {!result.assets && !result.tasks && <li>They have neither Tasks nor Assets: deactivate them on their last day.</li>}
+          </ul>
+          <div className="actions">
+            <button className="btn primary" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form className="form" onSubmit={submit}>
+          <label className="field">
+            <span>Last working day *</span>
+            <input type="date" value={lastWorkingDate} onChange={(e) => setDate(e.target.value)} required />
+          </label>
+          <label className="field">
+            <span>Reason (optional)</span>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} />
+          </label>
+          <p className="fine">Assets opens an exit case listing what they hold; Tasks gives their manager the exit checklist.</p>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="actions">
+            <button type="button" className="btn" onClick={onClose}>
+              Cancel
+            </button>
+            <button className="btn primary" disabled={busy || !lastWorkingDate}>
+              {busy ? 'Starting…' : 'Start exit'}
+            </button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

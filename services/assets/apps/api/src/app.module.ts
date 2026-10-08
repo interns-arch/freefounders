@@ -3,6 +3,7 @@ import { asc, sql } from 'drizzle-orm';
 import { Public } from './common/http';
 import { CoreModule } from './core/core.module';
 import { ProfileService } from './core/profile.service';
+import { PlatformFlowsModule } from './modules/auth/platform-flows.module';
 import { DbService } from './db/db.service';
 import { tenancyEnabled } from './db/tenancy';
 import { companies } from './db/schema';
@@ -67,6 +68,7 @@ export class ConfigController {
     AdminModule,
     ReconciliationModule,
     OnboardingModule,
+    PlatformFlowsModule,
   ],
   controllers: [HealthController, ConfigController],
 })

@@ -430,6 +430,8 @@ export interface AssetRequest {
 
 export interface Ticket {
   id: string;
+  /** FreeFounders: the Tasks task working on it. */
+  linkedTask?: { ref: string; url: string } | null;
   number: string;
   title: string;
   description: string | null;

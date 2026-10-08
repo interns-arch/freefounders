@@ -352,6 +352,14 @@ def _advance_due(due, frequency):
     return due.replace(year=year, month=month, day=min(due.day, 28))
 
 
+def _linked_task_finished(task, remarks=""):
+    """A task linked to another app (e.g. an Assets ticket) is finished: tell the Platform (PLAN.md §17.4)."""
+    if task.external_ref:
+        from tenancy.outbox import emit
+        emit("task.completed", {"taskId": task.pk, "code": task.code, "externalRef": task.external_ref,
+                                "remarks": (remarks or task.completion_note or "")[:500]})
+
+
 def _spawn_next_occurrence(task, actor):
     """Completing a recurring task creates the next one -- unless the
     recurrence's end date (repeat_until) has been reached."""
@@ -2162,7 +2170,8 @@ class TaskViewSet(viewsets.ModelViewSet):
         for f in proof:
             act(task, request.user, f"Completion proof attached: {f.name[:120]}")
         self._after_status_change(task, request.user, old_status, task.assigned_to)
-        self._raise_completion_review(task, request.user, remarks)
+        if not self._raise_completion_review(task, request.user, remarks):
+            _linked_task_finished(task, remarks)   # nobody to accept it: finished now
         return Response(TaskSerializer(task, context={"request": request}).data)
 
     def _raise_completion_review(self, task, submitter, note):
@@ -2170,7 +2179,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         assignee must not be marked late because their manager was slow."""
         reviewer = _completion_reviewer(task, submitter)
         if not reviewer:
-            return                       # own task: nobody to ask
+            return False                 # own task: nobody to ask
         c = TaskCompletion.objects.create(
             task=task, submitted_by=submitter, approver=reviewer, note=note[:2000])
         notify(
@@ -2192,8 +2201,10 @@ class TaskViewSet(viewsets.ModelViewSet):
                 (submitter.get_full_name() or submitter.username),
             ]),
         )
+        return True
 
     @action(detail=True, methods=["get", "post"])
+
     def request_change(self, request, pk=None):
         """B2: raise a Modification Request. GET lists this task's requests."""
         task = self.get_object()
@@ -2469,6 +2480,7 @@ class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
 
         who = request.user.get_full_name() or request.user.username
         if decision == CompletionReviewStatus.APPROVED:
+            _linked_task_finished(task, task.completion_note)
             act(task, request.user, f"Completion accepted by {who}"
                                     + (f": {remarks[:180]}" if remarks else ""))
             notify(c.submitted_by, "task_completion_accepted",
@@ -2531,6 +2543,7 @@ class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
                         status=CompletionReviewStatus.APPROVED, remarks=remarks,
                         reviewed_by=user, reviewed_at=now):
                     continue
+                _linked_task_finished(c.task, c.task.completion_note)
                 act(c.task, user, f"Completion accepted by {who}"
                                   + (f": {remarks[:180]}" if remarks else ""))
                 by_submitter.setdefault(c.submitted_by_id, []).append(

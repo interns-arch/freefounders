@@ -109,6 +109,7 @@ async function syncProfile(companySvc: CompanyService, companyId: string) {
 }
 
 async function main() {
+  process.env.FF_CLI = 'true'; // no background event polling in a one-off command
   const [command = 'list', ...rest] = process.argv.slice(2);
   const opts = args(rest);
   const ctx = await NestFactory.createApplicationContext(AppModule, { logger: ['error'] });

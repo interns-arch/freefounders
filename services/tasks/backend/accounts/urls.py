@@ -4,6 +4,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from tenancy.views import create_company
 
+from crm import internal_flows
+
 from . import internal, views
 from .serializers import FlexibleLoginSerializer
 
@@ -23,6 +25,9 @@ urlpatterns = [
     path("internal/modules", internal.modules),
     path("internal/company", internal.company),
     path("internal/people", internal.people),
+    path("internal/events", internal_flows.events),
+    path("internal/tasks", internal_flows.create_task),
+    path("internal/exit-tasks", internal_flows.exit_tasks),
     path("internal/companies", create_company),
     path("team/", views.team_directory),
     path("roles/", views.roles),

@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -8,6 +9,7 @@ import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, roles } from '../db/schema';
 import { ProvisionClient } from '../provision/provision.client';
 import { DirectoryService } from './directory.service';
+import { FlowsService } from './flows.service';
 
 const optional = <T extends z.ZodTypeAny>(s: T) =>
   z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), s.nullable().optional());
@@ -74,6 +76,7 @@ export class PeopleService {
     private readonly auth: AuthService,
     private readonly provisioner: ProvisionClient,
     private readonly directory: DirectoryService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   async list(caller: Caller, search = '') {
@@ -135,6 +138,7 @@ export class PeopleService {
       designation: p.designation,
       reportsTo: p.reportsTo,
       joinDate: p.joinDate,
+      lastWorkingDate: p.lastWorkingDate,
       createdAt: p.createdAt,
     };
   }
@@ -312,6 +316,7 @@ export class PeopleService {
       .values({ personId: id, app, localUserId })
       .onConflictDoUpdate({ target: [personApps.personId, personApps.app], set: { localUserId, grantedAt: new Date() } });
     await this.directory.push(caller.companyId); // the new user gets their department and manager
+    if (app === 'assets') await this.moduleRef.get(FlowsService, { strict: false }).onboardIfJoining(caller.companyId, id);
     return { app, localUserId };
   }
 

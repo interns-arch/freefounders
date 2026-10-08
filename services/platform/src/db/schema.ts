@@ -92,6 +92,8 @@ export const people = platform.table(
     designation: text('designation'),
     reportsTo: uuid('reports_to').references((): AnyPgColumn => people.id),
     joinDate: date('join_date'),
+    /** Set by "Start exit" (Phase 5); the person stays active until the exit is complete. */
+    lastWorkingDate: date('last_working_date'),
     ...timestamps,
   },
   (t) => [
@@ -226,4 +228,18 @@ export const personRoles = platform.table(
       .references(() => roles.id, { onDelete: 'cascade' }),
   },
   (t) => [primaryKey({ columns: [t.personId, t.roleId] })],
+);
+
+/** How far the Platform has read each app's outbox, per company (cross-app rules, PLAN.md §17.4). */
+export const eventCursors = platform.table(
+  'event_cursors',
+  {
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    app: text('app').notNull(),
+    lastId: integer('last_id').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.app] })],
 );

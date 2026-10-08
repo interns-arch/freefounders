@@ -1,5 +1,6 @@
 import { ModuleRef } from '@nestjs/core';
 import { DirectoryService } from '../people/directory.service';
+import { FlowsService } from '../people/flows.service';
 import { ConflictException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
@@ -325,6 +326,7 @@ export class RolesService {
     const needed = fromRoles.map((r) => r.app as AppKey).filter((a) => enabled.includes(a));
     const have = (await db.select({ app: personApps.app }).from(personApps).where(eq(personApps.personId, personId))).map((r) => r.app as AppKey);
     const [person] = await db.select().from(people).where(eq(people.id, personId)).limit(1);
+    const opened: AppKey[] = [];
     for (const app of needed.filter((a) => !have.includes(a))) {
       if (!internalUrl(app)) continue;
       const localUserId = await this.provisioner.provision(app, companyId, {
@@ -337,6 +339,12 @@ export class RolesService {
         platformRole: person.platformRole,
       });
       await db.insert(personApps).values({ personId, app, localUserId }).onConflictDoUpdate({ target: [personApps.personId, personApps.app], set: { localUserId } });
+      if (app === 'assets') opened.push(app);
+    }
+    if (opened.length) {
+      // Roles first, so the onboarding kit can follow the person's role (PLAN.md §17.4).
+      await this.push(companyId);
+      await this.moduleRef.get(FlowsService, { strict: false }).onboardIfJoining(companyId, personId);
     }
     const lost = close ? have.filter((a) => !needed.includes(a)) : [];
     if (lost.length) {

@@ -166,6 +166,8 @@ function TicketSheet({ id, onClose }: { id: string | null; onClose: () => void }
                   { label: 'Details', value: t.description },
                   { label: 'Asset', value: t.assetId ? <Link className="text-primary hover:underline" to={`/assets/${t.assetId}`}>{t.assetTag} · {t.assetName}</Link> : null },
                   { label: 'Assignee', value: t.assigneeName },
+                  // FreeFounders: the Tasks task working on this ticket (a full page link: it is another app).
+                  ...(t.linkedTask ? [{ label: 'Task', value: <a className="text-primary hover:underline" href={t.linkedTask.url}>{t.linkedTask.ref} in Tasks</a> }] : []),
                   ...(t.resolvedAt ? [{ label: 'Resolved', value: formatDateTime(t.resolvedAt) }] : []),
                 ]}
               />

@@ -221,3 +221,6 @@ input[type='checkbox'] { width: auto; }
 .duties { margin-top: 18px; }
 .duties h3 { margin: 0 0 4px; font-size: 15px; }
 .duty textarea { width: 100%; font: inherit; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; }
+.result-list { margin: 8px 0 16px; padding-left: 18px; }
+.result-list li { margin: 4px 0; }
+.error-text { color: var(--danger); }

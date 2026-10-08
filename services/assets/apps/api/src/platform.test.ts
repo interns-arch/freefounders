@@ -9,7 +9,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { exportJWK, SignJWT } from 'jose';
 import { type Permission, SYSTEM_ROLES } from '@eam/shared';
 import { DbService } from './db/db.service';
-import { departments, employees, roles, sessions, syncState, users } from './db/schema';
+import { departments, employees, onboardingItems, onboardingKits, roles, sessions, syncState, tickets, users } from './db/schema';
 import { createApp } from './main';
 import { hashPassword } from './modules/auth/auth.service';
 
@@ -414,5 +414,70 @@ describe('asset requests: the manager decides (Phase 5)', () => {
     const decided = await call('POST', `/requests/${id}/decision`, boss.token, { decision: 'APPROVE', note: 'OK' });
     assert.equal(decided.status, 200, JSON.stringify(decided.body));
     assert.equal(decided.body.status, 'APPROVED');
+  });
+});
+
+describe('cross-app flows (Phase 5)', () => {
+  const person = async (email: string, fullName: string, appRole: string) => {
+    const res = await provision({ email, fullName, appRole });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const [u] = await dbs.root.select().from(users).where(eq(users.id, res.body.userId));
+    return { user: u, token: await access(u.platformPersonId!, u.id) };
+  };
+
+  test('a new ticket is announced with its owners; the Platform links a task and resolves it', async () => {
+    assert.equal((await call('GET', '/internal/events')).status, 401);
+    const before = (await call('GET', '/internal/events', await service())).body as Array<{ id: number }>;
+    const after = before.length ? before[before.length - 1].id : 0;
+    const it = await person('fl-it@t.test', 'FL IT', 'Admin');
+    const mia = await person('fl-mia@t.test', 'FL Mia', 'Employee');
+    const t = await call('POST', '/tickets', mia.token, { title: 'Laptop will not start', type: 'ISSUE', priority: 'HIGH' });
+    assert.equal(t.status, 201, JSON.stringify(t.body));
+
+    const evts = (await call('GET', `/internal/events?after=${after}`, await service())).body as Array<{ type: string; payload: any }>;
+    const e = evts.find((x) => x.type === 'ticket.created' && x.payload.ticketId === t.body.id)!;
+    assert.ok(e, 'ticket.created is in the outbox');
+    assert.equal(e.payload.title, 'Laptop will not start');
+    assert.ok(e.payload.ownerPersonIds.includes(it.user.platformPersonId), 'people who manage tickets are listed');
+    assert.ok(!e.payload.ownerPersonIds.includes(mia.user.platformPersonId));
+
+    const linked = await call('PUT', `/internal/tickets/${t.body.id}/link`, await service(), { assigneePersonId: it.user.platformPersonId, ref: 'T-00042', url: '/tasks/tasks/42' });
+    assert.equal(linked.status, 200, JSON.stringify(linked.body));
+    const [row] = await dbs.root.select().from(tickets).where(eq(tickets.id, t.body.id));
+    assert.deepEqual(row.linkedTask, { ref: 'T-00042', url: '/tasks/tasks/42' });
+    assert.equal(row.assigneeId, it.user.id);
+
+    const resolved = await call('POST', `/internal/tickets/${t.body.id}/resolve`, await service(), { resolution: 'Replaced the battery' });
+    assert.equal(resolved.status, 200);
+    const [done] = await dbs.root.select().from(tickets).where(eq(tickets.id, t.body.id));
+    assert.equal(done.status, 'RESOLVED');
+    assert.equal(done.resolution, 'Replaced the battery');
+    assert.equal((await call('POST', `/internal/tickets/${t.body.id}/resolve`, await service(), {})).body.already, true);
+  });
+
+  test('starting an exit puts the employee on notice with an exit case', async () => {
+    const leaver = await person('fl-leaver@t.test', 'FL Leaver', 'Employee');
+    const res = await call('POST', '/internal/exits', await service(), { personId: leaver.user.platformPersonId, lastWorkingDate: '2026-12-31', reason: 'Moving' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.match(res.body.caseNumber, /\w+/);
+    const [emp] = await dbs.root.select().from(employees).where(eq(employees.id, leaver.user.employeeId!));
+    assert.equal(emp.status, 'NOTICE_PERIOD');
+    assert.equal(emp.lastWorkingDate, '2026-12-31');
+    assert.equal((await call('POST', '/internal/exits', await service(), { personId: randomUUID(), lastWorkingDate: '2026-12-31' })).status, 404);
+  });
+
+  test('a new joiner gets an onboarding case with the kit named like their role, once', async () => {
+    await dbs.root.insert(onboardingKits).values({ name: 'FL Store Keeper', items: [{ itemName: 'Barcode scanner', quantity: 1 }] as never });
+    const joiner = await person('fl-joiner@t.test', 'FL Joiner', 'Employee');
+    const body = { personId: joiner.user.platformPersonId, joinDate: '2026-12-01', roleNames: ['fl store keeper'] };
+    const res = await call('POST', '/internal/onboarding', await service(), body);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.created, true);
+    assert.equal(res.body.kit, true);
+    const items = await dbs.root.select().from(onboardingItems).where(eq(onboardingItems.caseId, res.body.onboardingId));
+    assert.deepEqual(items.map((i) => i.itemName), ['Barcode scanner']);
+    const again = await call('POST', '/internal/onboarding', await service(), body);
+    assert.equal(again.body.created, false);
+    assert.equal(again.body.onboardingId, res.body.onboardingId);
   });
 });

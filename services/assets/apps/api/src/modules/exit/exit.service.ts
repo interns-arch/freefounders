@@ -4,6 +4,7 @@ import { EXIT_CASE_STATUSES, EXIT_ITEM_CLEARED, type ExitItemStatus, humanize } 
 import { type Actor, assertCan, can } from '../../common/actor';
 import { badRequest, likePattern, listFilter, listParams, notFound, today } from '../../common/http';
 import { DbService } from '../../db/db.service';
+import { OutboxService } from '../../core/outbox.service';
 import {
   allocations,
   assetCategories,
@@ -49,6 +50,7 @@ export class ExitService {
     private readonly allocation: AllocationService,
     private readonly lifecycle: LifecycleService,
     private readonly auth: AuthService,
+    private readonly outbox: OutboxService,
   ) {}
 
   private async lockCase(id: string): Promise<ExitCaseRow> {
@@ -433,8 +435,15 @@ export class ExitService {
       .where(eq(employees.id, c.employeeId))
       .returning();
     // The leaver's login is switched off.
-    const logins = await db.update(users).set({ isActive: false, updatedAt: new Date() }).where(eq(users.employeeId, c.employeeId)).returning({ id: users.id });
+    const logins = await db
+      .update(users)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(users.employeeId, c.employeeId))
+      .returning({ id: users.id, personId: users.platformPersonId });
     for (const u of logins) await this.auth.revokeUserSessions(u.id);
+    // FreeFounders: the Platform switches the person off in every app (PLAN.md §17.4).
+    const personIds = logins.map((u) => u.personId).filter((p): p is string => !!p);
+    if (personIds.length) await this.outbox.emit('exit.completed', { employeeId: c.employeeId, caseNumber: c.caseNumber, personIds });
 
     await this.history.recordMany(actor, [
       {

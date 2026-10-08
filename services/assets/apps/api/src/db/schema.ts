@@ -600,11 +600,21 @@ export const tickets = pgTable(
     status: text('status', { enum: TICKET_STATUSES }).notNull().default('OPEN'),
     resolution: text('resolution'),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    /** FreeFounders (PLAN.md §17.4): the Tasks task working on this ticket, e.g. {"ref":"T-00042","url":"/tasks/tasks/42"}. */
+    linkedTask: jsonb('linked_task').$type<{ ref: string; url: string } | null>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [index('tickets_status_idx').on(t.status), index('tickets_asset_idx').on(t.assetId)],
 );
+
+/** Outbox for the FreeFounders Platform (PLAN.md §17.4): it reads these to run cross-app rules. */
+export const ffEvents = pgTable('ff_events', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  type: text('type').notNull(),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  createdAt: createdAt(),
+});
 
 export const maintenanceRecords = pgTable(
   'maintenance_records',

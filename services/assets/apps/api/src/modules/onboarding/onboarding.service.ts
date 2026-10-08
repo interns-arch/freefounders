@@ -248,6 +248,37 @@ export class OnboardingService {
     });
   }
 
+  /**
+   * FreeFounders new joiner (PLAN.md §17.4): an onboarding case for an employee record that already exists
+   * (made when the person was given Assets), optionally with a kit's items. Same flow as one HR plans by hand.
+   */
+  async createForEmployee(actor: Actor, employeeId: string, joinDate: string, kitId: string | null) {
+    return this.dbs.tx(async (db) => {
+      const [emp] = await db.select({ fullName: employees.fullName }).from(employees).where(eq(employees.id, employeeId));
+      if (!emp) throw badRequest('Employee not found');
+      await db.update(employees).set({ status: 'JOINING', joinDate, updatedAt: new Date() }).where(eq(employees.id, employeeId));
+      const caseNumber = await this.sequences.next('ONB', 5);
+      const [c] = await db
+        .insert(onboardingCases)
+        .values({ caseNumber, employeeId, joinDate, notes: 'Started by FreeFounders when the person was added', createdBy: actor.userId, createdByName: actor.name })
+        .returning();
+      if (kitId) {
+        const [kit] = await db.select().from(onboardingKits).where(eq(onboardingKits.id, kitId));
+        if (kit) {
+          await this.insertItems(
+            c.id,
+            kit.items.map((k) => ({ ...k, assetTypeId: k.assetTypeId ?? undefined, itemName: k.itemName ?? undefined, notes: k.notes ?? undefined })) as OnboardingItemInput[],
+          );
+        }
+      }
+      await this.history.recordMany(actor, [
+        { entityType: 'ONBOARDING_CASE', entityId: c.id, entityLabel: caseNumber, action: 'CREATED', summary: `Onboarding planned for ${emp.fullName}, joining ${joinDate}`, employeeId },
+        { entityType: 'EMPLOYEE', entityId: employeeId, entityLabel: emp.fullName, action: 'ONBOARDING_STARTED', summary: `New joiner — onboarding ${caseNumber}` },
+      ]);
+      return { id: c.id, caseNumber };
+    });
+  }
+
   async update(actor: Actor, id: string, input: OnboardingUpdateInput) {
     assertCan(actor, 'onboarding:manage');
     return this.dbs.tx(async (db) => {

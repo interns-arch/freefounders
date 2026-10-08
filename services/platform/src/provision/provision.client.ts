@@ -144,6 +144,11 @@ export class ProvisionClient {
     return this.internalJson(app, 'PUT', '/people', companyId, body);
   }
 
+  /** Any internal endpoint of an app, for the cross-app rules (PLAN.md §17.4). */
+  async internal<T = unknown>(app: AppKey, method: string, path: string, companyId: string, body?: unknown): Promise<T> {
+    return this.internalJson<T>(app, method, path, companyId, body);
+  }
+
   private async internalJson<T>(app: AppKey, method: string, path: string, companyId: string, body?: unknown): Promise<T> {
     const base = internalUrl(app);
     if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);

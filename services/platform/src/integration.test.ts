@@ -14,6 +14,7 @@ import { CompanyService } from './company/company.service';
 import { DbService } from './db/db.service';
 import { companies, departments, logins, people, personApps, refreshSessions } from './db/schema';
 import { DirectoryService } from './people/directory.service';
+import { FlowsService } from './people/flows.service';
 import { createApp } from './main';
 
 const PASSWORD = 'Test@12345';
@@ -40,6 +41,9 @@ let fakeAccessVersion = 0;
 const companyPushes: Array<{ cid: unknown; body: any }> = [];
 const peoplePushes: Array<{ cid: unknown; body: any }> = [];
 let fakePeopleExport: { departments: unknown[]; people: unknown[] } = { departments: [], people: [] };
+/** Outbox of the fake Tasks app, and the calls its flow endpoints received (Phase 5 flows). */
+const fakeTaskEvents: Array<{ id: number; type: string; payload: unknown }> = [];
+const flowCalls: Array<{ app: string; method: string; url: string; body: any }> = [];
 let fakeProfileVersion = 0;
 const FAKE_MODULES = {
   app: 'tasks',
@@ -90,6 +94,16 @@ before(async () => {
       if (req.method === 'GET' && req.url?.endsWith('/roles')) {
         provisionCalls.push({ body: {}, aud: payload.aud, cid: payload.cid, url: req.url });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{ value: 'warehouse', label: 'Warehouse Team' }]));
+        return;
+      }
+      if (req.method === 'GET' && req.url?.includes('/events')) {
+        const after = Number(new URL(req.url, 'http://x').searchParams.get('after') ?? 0);
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(payload.cid === ids.acme ? fakeTaskEvents.filter((e) => e.id > after) : []));
+        return;
+      }
+      if (req.method === 'POST' && (req.url?.endsWith('/exit-tasks') || req.url?.endsWith('/tasks'))) {
+        flowCalls.push({ app: 'tasks', method: 'POST', url: req.url!, body: JSON.parse(raw) });
+        res.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify({ taskId: 42, code: 'T-00042', url: '/tasks/tasks/42', created: true }));
         return;
       }
       if (req.method === 'GET' && req.url?.endsWith('/people')) {
@@ -778,5 +792,101 @@ describe('role duties (Phase 5)', () => {
     assert.deepEqual(updated.body.duties.map((d: { id: string }) => d.id), duties.slice(0, 2).map((d) => d.id));
     const copy = await call('POST', `/roles/${created.body.id}/duplicate`, { token: admin.token });
     assert.notEqual(copy.body.duties[0].id, duties[0].id, 'a copy has its own duties');
+  });
+});
+
+describe('cross-app flows (Phase 5)', () => {
+  let fakeAssets: Server;
+  const assetEvents: Array<{ id: number; type: string; payload: unknown }> = [];
+
+  before(async () => {
+    fakeAssets = createServer(async (req, res) => {
+      let raw = '';
+      for await (const chunk of req) raw += chunk;
+      const url = req.url ?? '';
+      if (req.method === 'GET' && url.includes('/events')) {
+        // Like the real app: each company has its own outbox (here only Acme has events).
+        const cid = decodeJwt(String(req.headers.authorization).slice(7)).cid;
+        const after = Number(new URL(url, 'http://x').searchParams.get('after') ?? 0);
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(cid === ids.acme ? assetEvents.filter((e) => e.id > after) : []));
+        return;
+      }
+      flowCalls.push({ app: 'assets', method: req.method!, url, body: raw ? JSON.parse(raw) : null });
+      if (url.endsWith('/provision')) {
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ userId: 'a-77' }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, caseNumber: 'EXIT-00001', applied: true, version: 1 }));
+    });
+    await new Promise<void>((r) => fakeAssets.listen(0, '127.0.0.1', r));
+    process.env.ASSETS_INTERNAL_URL = `http://127.0.0.1:${(fakeAssets.address() as AddressInfo).port}/api/internal`;
+    await app.get(DbService).db.update(companies).set({ enabledApps: ['tasks', 'assets'] }).where(eq(companies.id, ids.acme));
+  });
+
+  after(async () => {
+    delete process.env.ASSETS_INTERNAL_URL;
+    await app.get(DbService).db.update(companies).set({ enabledApps: ['tasks'] }).where(eq(companies.id, ids.acme));
+    await new Promise((r) => fakeAssets.close(r));
+  });
+
+  test('a new Assets ticket becomes a task for an owner who has Tasks, linked back to the ticket', async () => {
+    const dbs = app.get(DbService);
+    await dbs.db.insert(personApps).values({ personId: ids.admin, app: 'tasks', localUserId: '7' }).onConflictDoNothing();
+    assetEvents.push({ id: 1, type: 'ticket.created', payload: { ticketId: 'tk-1', number: 'TKT-00001', title: 'Laptop dead', priority: 'HIGH', reporter: 'Mia', ownerPersonIds: [ids.otherShared, ids.admin] } });
+    const before = flowCalls.length;
+    await app.get(FlowsService).pollAll();
+    const calls = flowCalls.slice(before);
+    const made = calls.find((c) => c.app === 'tasks' && c.url.endsWith('/tasks'))!;
+    assert.equal(made.body.assigneePersonId, ids.admin, 'the first owner in this company with Tasks');
+    assert.equal(made.body.externalRef, 'assets:ticket:tk-1');
+    const link = calls.find((c) => c.app === 'assets' && c.url.endsWith('/tickets/tk-1/link'))!;
+    assert.deepEqual(link.body, { assigneePersonId: ids.admin, ref: 'T-00042', url: '/tasks/tasks/42' });
+    const again = flowCalls.length;
+    await app.get(FlowsService).pollAll();
+    assert.equal(flowCalls.length, again, 'each event is handled once');
+  });
+
+  test('completing the linked task resolves the ticket', async () => {
+    fakeTaskEvents.push({ id: 1, type: 'task.completed', payload: { externalRef: 'assets:ticket:tk-1', code: 'T-00042', remarks: 'New battery' } });
+    const before = flowCalls.length;
+    await app.get(FlowsService).pollAll();
+    const resolve = flowCalls.slice(before).find((c) => c.url.endsWith('/tickets/tk-1/resolve'))!;
+    assert.equal(resolve.body.resolution, 'New battery (T-00042 in Tasks)');
+  });
+
+  test('start exit: Assets opens the case and Tasks makes the checklist; the completed exit switches the person off', async () => {
+    const admin = await login('admin@acme.test');
+    const dbs = app.get(DbService);
+    await dbs.db.insert(personApps).values({ personId: ids.member, app: 'assets', localUserId: 'a-9' }).onConflictDoNothing();
+    const mia = await login('mia');
+    assert.equal((await call('POST', `/people/${ids.member}/exit`, { token: mia.token, body: { lastWorkingDate: '2026-12-31' } })).status, 403);
+    const res = await call('POST', `/people/${ids.member}/exit`, { token: admin.token, body: { lastWorkingDate: '2026-12-31', reason: 'Moving' } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.assets.caseNumber, 'EXIT-00001');
+    assert.equal(res.body.tasks.code, 'T-00042');
+    const [p] = await dbs.db.select().from(people).where(eq(people.id, ids.member));
+    assert.equal(p.lastWorkingDate, '2026-12-31');
+    assert.equal(p.status, 'active', 'still active until the exit is complete');
+
+    const [otherBefore] = await dbs.db.select().from(people).where(eq(people.id, ids.otherShared));
+    assetEvents.push({ id: 2, type: 'exit.completed', payload: { personIds: [ids.member, ids.otherShared] } });
+    await app.get(FlowsService).pollAll();
+    const [after] = await dbs.db.select().from(people).where(eq(people.id, ids.member));
+    assert.equal(after.status, 'inactive');
+    const [other] = await dbs.db.select().from(people).where(eq(people.id, ids.otherShared));
+    assert.equal(other.status, otherBefore.status, 'never someone from another company');
+    assert.equal((await call('POST', '/auth/login', { body: { login: 'mia', password: PASSWORD } })).status, 401);
+    await dbs.db.update(people).set({ status: 'active', lastWorkingDate: null }).where(eq(people.id, ids.member));
+  });
+
+  test('a new joiner given Assets is onboarded, with their role names for the kit', async () => {
+    const admin = await login('admin@acme.test');
+    const created = await call('POST', '/people', { token: admin.token, body: { fullName: 'Joe Joiner', email: 'joe@acme.test', joinDate: '2099-01-15' } });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const before = flowCalls.length;
+    const granted = await call('PUT', `/people/${created.body.person.id}/apps/assets`, { token: admin.token, body: {} });
+    assert.equal(granted.status, 200, JSON.stringify(granted.body));
+    const onboard = flowCalls.slice(before).find((c) => c.url.endsWith('/onboarding'))!;
+    assert.deepEqual(onboard.body, { personId: created.body.person.id, joinDate: '2099-01-15', roleNames: [] });
   });
 });

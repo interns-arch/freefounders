@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import { PRIORITIES, TICKET_STATUSES, TICKET_TYPES, type TicketInput, type TicketUpdateInput } from '@eam/shared';
 import { type Actor, assertCan, can } from '../../common/actor';
 import { badRequest, likePattern, listFilter, listParams, notFound, uuidParam } from '../../common/http';
 import { DbService } from '../../db/db.service';
+import { OutboxService } from '../../core/outbox.service';
 import { assets, tickets, users } from '../../db/schema';
 import { diffChanges, HistoryService } from '../../core/history.service';
 import { NotificationsService } from '../../core/notifications.service';
@@ -18,6 +19,7 @@ export class TicketsService {
     private readonly history: HistoryService,
     private readonly notifications: NotificationsService,
     private readonly sequences: SequenceService,
+    private readonly outbox: OutboxService,
   ) {}
 
   async list(actor: Actor, q: Record<string, string>) {
@@ -107,6 +109,23 @@ export class TicketsService {
         { type: 'TICKET_CREATED', title: `${number}: ${row.title}`, body: `${row.priority} · ${row.type}${assetLabel}`, link: `/tickets?open=${row.id}` },
         actor.userId,
       );
+      // FreeFounders: the Platform turns it into a task for the IT owner (PLAN.md §17.4).
+      const owners = await db
+        .select({ personId: users.platformPersonId })
+        .from(users)
+        .where(and(eq(users.isActive, true), isNotNull(users.platformPersonId), sql`'ticket:manage' = any(user_permissions(${users.id}))`))
+        .orderBy(asc(users.createdAt));
+      await this.outbox.emit('ticket.created', {
+        ticketId: row.id,
+        number,
+        title: row.title,
+        description: row.description,
+        priority: row.priority,
+        type: row.type,
+        asset: assetLabel.replace(/^ on /, '') || null,
+        reporter: actor.name,
+        ownerPersonIds: owners.map((o) => o.personId),
+      });
       return row;
     });
   }
