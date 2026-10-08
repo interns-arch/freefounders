@@ -12,6 +12,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -162,6 +163,10 @@ export const roles = pgTable('roles', {
   description: text('description'),
   permissions: text('permissions').array().notNull().default(sql`'{}'::text[]`),
   isSystem: boolean('is_system').notNull().default(false),
+  /** A role removed in the FreeFounders role builder: kept for history, gives no permissions. */
+  archived: boolean('archived').notNull().default(false),
+  /** The FreeFounders Platform role this copy comes from (null for roles made here). */
+  platformRoleId: uuid('platform_role_id').unique(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -189,6 +194,29 @@ export const users = pgTable('users', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`), uniqueIndex('users_email_lower_idx').on(sql`lower(${t.email})`)]);
+
+/**
+ * Roles given by the FreeFounders role builder (several per person). When a user has rows here, only these count;
+ * otherwise `users.role_id` does. Permissions are read through the SQL function user_permissions(user_id).
+ */
+export const userRoles = pgTable(
+  'user_roles',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.roleId] })],
+);
+
+/** Small key/value state kept with the company's data, e.g. the last role-set version from the Platform. */
+export const syncState = pgTable('sync_state', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
 
 export const sessions = pgTable(
   'sessions',

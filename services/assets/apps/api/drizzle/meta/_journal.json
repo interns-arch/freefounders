@@ -127,6 +127,20 @@
       "when": 1791437177651,
       "tag": "0017_drop_password_vault",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791441186475,
+      "tag": "0018_multiple_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791441192300,
+      "tag": "0019_user_permissions_fn",
+      "breakpoints": true
     }
   ]
 }

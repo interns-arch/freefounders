@@ -611,8 +611,9 @@ Permissions that are simply yes/no (e.g. *Manage users*) have no scope. Several 
   `leads.edit`(scoped) · `leads.assign` · `quotations.manage` · `dashboard.view` · `notifications.view` · `intake.view` ·
   `hr.approve` · `hr.manage` · `users.manage` · `settings.manage`, plus the role **level** (1 Member · 2 Manager ·
   3 Admin; replaces `ROLE_LEVEL` and the "top admin" name checks: a level-3 role is an admin everywhere).
-- **Assets**: the 24 existing permissions; `asset:view`, `employee:view`, `request:view` get scopes Own / Company
-  (exactly today's behaviour); Team/Department for Assets follow when Assets employees are linked to People (Phase 4).
+- **Assets**: the 24 existing permissions, as yes/no. In Assets everyone always sees their own assets, requests and
+  employee record, so "See all assets" ticked = Company, unticked = Own (exactly today's behaviour). Team/Department
+  for Assets follow when Assets employees are linked to People (Phase 4).
 - **Platform**: `platform.users.manage`, `platform.roles.manage`, `platform.settings.manage` (billing later).
 
 ### 15.4 Tasks: no behaviour change (all 688 tests unchanged)

@@ -228,3 +228,59 @@ describe('internal roles', () => {
     assert.ok(res.body.some((r: { value: string }) => r.value === 'Manager'));
   });
 });
+
+describe('roles from the FreeFounders role builder', () => {
+  const push = async (version: number, rolesIn: unknown[], people: unknown[]) =>
+    call('PUT', '/internal/access', await service(), { version, roles: rolesIn, people });
+
+  test('the catalogue and the endpoints are for the Platform only', async () => {
+    assert.equal((await call('GET', '/internal/permissions')).status, 401);
+    assert.equal((await call('PUT', '/internal/access', await access(ids.person, ids.mia), {})).status, 401);
+    const res = await call('GET', '/internal/permissions', await service());
+    assert.equal(res.status, 200);
+    assert.equal(res.body.permissions.length, 24);
+    assert.ok(res.body.permissions.some((p: { key: string; group: string }) => p.key === 'asset:view' && p.group === 'Assets'));
+  });
+
+  test('pushed roles replace the user role, add up, and can be taken away', async () => {
+    const person = randomUUID();
+    const user = await provision({ personId: person, email: 'pf-roles@t.test' });
+    const [deskId, approverId] = [randomUUID(), randomUUID()];
+    const res = await push(
+      10,
+      [
+        { id: deskId, name: 'Help desk', grants: [{ app: 'assets', permission: 'ticket:manage' }, { app: 'assets', permission: 'nonsense:x' }, { app: 'tasks', permission: 'tasks.view', scope: 'company' }] },
+        { id: approverId, name: 'Approver', grants: [{ app: 'assets', permission: 'request:approve' }] },
+      ],
+      [{ personId: person, roleIds: [deskId, approverId] }],
+    );
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.problems.length, 1);
+    const me = await call('GET', '/auth/me', await access(person, user.body.userId));
+    assert.deepEqual([...me.body.permissions].sort(), ['request:approve', 'ticket:manage']);
+
+    // An older push arriving late changes nothing.
+    assert.equal((await push(9, [], [{ personId: person, roleIds: [] }])).body.applied, false);
+    // The Platform deletes "Help desk": archived here, and its permission is gone.
+    await push(11, [{ id: approverId, name: 'Approver', grants: [{ app: 'assets', permission: 'request:approve' }] }], [{ personId: person, roleIds: [deskId, approverId] }]);
+    const after = await call('GET', '/auth/me', await access(person, user.body.userId));
+    assert.deepEqual(after.body.permissions, ['request:approve']);
+    assert.equal((await dbs.root.select().from(roles).where(eq(roles.platformRoleId, deskId)))[0].archived, true);
+    // No roles from the Platform: back to the user's own role (Employee).
+    await push(12, [], [{ personId: person, roleIds: [] }]);
+    const back = await call('GET', '/auth/me', await access(person, user.body.userId));
+    assert.deepEqual([...back.body.permissions].sort(), ['request:create', 'ticket:create']);
+  });
+
+  test('an existing role with the same name is updated in place; export lists roles and people', async () => {
+    const managerId = randomUUID();
+    await push(20, [{ id: managerId, name: 'Manager', grants: [{ permission: 'request:approve' }, { permission: 'asset:view' }] }], []);
+    const [mgr] = await dbs.root.select().from(roles).where(eq(roles.id, ids.managerRole));
+    assert.equal(mgr.platformRoleId, managerId);
+    assert.deepEqual([...mgr.permissions].sort(), ['asset:view', 'request:approve']);
+    const exported = await call('GET', '/internal/access', await service());
+    assert.equal(exported.body.version, 20);
+    assert.ok(exported.body.roles.some((r: { name: string }) => r.name === 'Manager'));
+    assert.ok(exported.body.people.some((p: { personId: string }) => p.personId === ids.person));
+  });
+});

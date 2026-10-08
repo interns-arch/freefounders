@@ -91,8 +91,8 @@ export class LeadershipService {
         from users u
         join roles r on r.id = u.role_id
         where u.is_active
-          and r.permissions && array['ticket:manage', 'asset:assign']::text[]
-          and r.name not in ('Leadership', 'Employee')
+          and user_permissions(u.id) && array['ticket:manage', 'asset:assign']::text[]
+          and not ('insights:leadership' = any(user_permissions(u.id)))
         order by u.name`),
       db.execute<{ id: string; name: string; headcount: number; on_notice: number; assets_held: number; pending_recovery: number }>(sql`select d.id, d.name,
           (select count(*)::int from employees e where e.department_id = d.id and e.status in ('ACTIVE', 'ON_LEAVE', 'NOTICE_PERIOD')) as headcount,

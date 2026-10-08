@@ -136,6 +136,7 @@ export class AdminService {
         userCount: sql<number>`(select count(*)::int from users u where u.role_id = roles.id)`,
       })
       .from(roles)
+      .where(eq(roles.archived, false))
       .orderBy(asc(roles.createdAt));
   }
 
@@ -243,7 +244,7 @@ export class DirectoryController {
       .select({ id: users.id, name: users.name, roleName: roles.name })
       .from(users)
       .innerJoin(roles, eq(roles.id, users.roleId))
-      .where(and(eq(users.isActive, true), sql`cardinality(${roles.permissions}) > 2`))
+      .where(and(eq(users.isActive, true), sql`cardinality(user_permissions(${users.id})) > 2`))
       .orderBy(asc(users.name));
   }
 }

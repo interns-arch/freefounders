@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Permission } from '@eam/shared';
 import type { Actor } from '../common/actor';
 import { DbService } from '../db/db.service';
-import { notifications, roles, users } from '../db/schema';
+import { notifications, users } from '../db/schema';
 
 export interface NotificationInput {
   type: string;
@@ -30,8 +30,7 @@ export class NotificationsService {
     const rows = await this.dbs.db
       .select({ id: users.id })
       .from(users)
-      .innerJoin(roles, eq(roles.id, users.roleId))
-      .where(and(eq(users.isActive, true), sql`${permission} = any(${roles.permissions})`));
+      .where(and(eq(users.isActive, true), sql`${permission} = any(user_permissions(${users.id}))`));
     await this.notifyUsers(
       rows.map((r) => r.id).filter((id) => id !== excludeUserId),
       n,

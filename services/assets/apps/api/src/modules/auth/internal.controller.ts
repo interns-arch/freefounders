@@ -1,16 +1,17 @@
-import { Body, ConflictException, Controller, Get, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, ConflictException, Controller, Get, HttpCode, Post, Put, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { Response } from 'express';
 import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, ne, notInArray, sql } from 'drizzle-orm';
+import { ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSIONS } from '@eam/shared';
 import { z } from 'zod';
 import { type Actor, SYSTEM_ACTOR } from '../../common/actor';
 import { type AuthedRequest, badRequest, Public, ZodPipe } from '../../common/http';
 import { HistoryService } from '../../core/history.service';
 import { SequenceService } from '../../core/sequence.service';
 import { DbService } from '../../db/db.service';
-import { employees, roles, users } from '../../db/schema';
+import { employees, roles, sessions, syncState, userRoles, users } from '../../db/schema';
 import { ensureRegistry, listCompanies, migrateCompanySchema, registerCompany, schemaFor, schemaForCode, tenancyEnabled } from '../../db/tenancy';
 import { createSystemRoles, setUpCompany } from '../../seed/company-setup';
 import { CatalogService } from '../catalog/catalog.service';
@@ -29,6 +30,22 @@ const provisionSchema = z.object({
   platformRole: z.preprocess(blank, z.string().trim().max(20).nullable().optional()),
 });
 type ProvisionInput = z.infer<typeof provisionSchema>;
+const ACCESS_VERSION_KEY = 'ff_access_version';
+const accessSchema = z.object({
+  version: z.number().int().min(0),
+  complete: z.boolean().optional(),
+  roles: z.array(
+    z.object({
+      id: z.string().uuid(),
+      code: z.string().max(60).nullable().optional(),
+      name: z.string().trim().min(1).max(120),
+      description: z.string().max(300).nullable().optional(),
+      archived: z.boolean().optional(),
+      grants: z.array(z.object({ app: z.string().optional(), permission: z.string().max(60), scope: z.string().max(20).nullable().optional() })),
+    }).passthrough(),
+  ),
+  people: z.array(z.object({ personId: z.string().uuid(), roleIds: z.array(z.string().uuid()) })),
+});
 const companySchema = z.object({
   companyId: z.string().uuid(),
   code: z.string().trim().min(1).max(50),
@@ -107,8 +124,118 @@ export class InternalController {
   @Get('roles')
   async roles(@Req() req: AuthedRequest) {
     await this.requireService(req);
-    const rows = await this.dbs.db.select({ name: roles.name, description: roles.description }).from(roles).orderBy(asc(roles.name));
+    const rows = await this.dbs.db.select({ name: roles.name, description: roles.description }).from(roles).where(eq(roles.archived, false)).orderBy(asc(roles.name));
     return rows.map((r) => ({ value: r.name, label: r.name, description: r.description }));
+  }
+
+  /** The permissions Assets offers to the FreeFounders role builder. */
+  @Public()
+  @Get('permissions')
+  async permissions(@Req() req: AuthedRequest) {
+    await this.requireService(req);
+    const group = new Map(PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => [p, g.label] as const)));
+    return {
+      app: 'assets',
+      scopes: [],
+      permissions: ALL_PERMISSIONS.map((key) => ({ key, label: PERMISSIONS[key], group: group.get(key) ?? 'Other', scopes: null })),
+    };
+  }
+
+  /** The company's roles and who holds them, so an existing company can be brought into the role builder. */
+  @Public()
+  @Get('access')
+  async exportAccess(@Req() req: AuthedRequest) {
+    await this.requireService(req);
+    const db = this.dbs.db;
+    const roleRows = await db.select().from(roles).orderBy(asc(roles.createdAt));
+    const people = await db
+      .select({ personId: users.platformPersonId, userId: users.id, roleName: roles.name, extra: sql<string[]>`(select coalesce(array_agg(r2.name order by r2.name), '{}') from user_roles ur join roles r2 on r2.id = ur.role_id where ur.user_id = ${users.id})` })
+      .from(users)
+      .innerJoin(roles, eq(roles.id, users.roleId))
+      .where(isNotNull(users.platformPersonId));
+    return {
+      version: await this.accessVersion(),
+      roles: roleRows.map((r) => ({
+        code: r.name,
+        name: r.name,
+        description: r.description,
+        archived: r.archived,
+        system: r.isSystem,
+        platformRoleId: r.platformRoleId,
+        grants: r.permissions.map((permission) => ({ permission, scope: '' })),
+      })),
+      people: people.map((p) => ({ personId: p.personId, userId: p.userId, roles: p.extra.length ? p.extra : [p.roleName] })),
+    };
+  }
+
+  /**
+   * The Platform's full role set for the company, plus the roles of the listed people. Roles are matched by their
+   * Platform id, else by name; roles the Platform no longer sends are archived. Older versions are ignored.
+   */
+  @Public()
+  @Put('access')
+  async importAccess(@Req() req: AuthedRequest, @Body() raw: unknown) {
+    await this.requireService(req);
+    const input = new ZodPipe(accessSchema).transform(raw);
+    const valid = new Set<string>(ALL_PERMISSIONS);
+    return this.dbs.tx(async (db) => {
+      const current = await this.accessVersion();
+      if (input.version < current) return { version: current, applied: false };
+      const problems: string[] = [];
+      const byPlatformId = new Map<string, string>();
+      for (const r of input.roles) {
+        const permissions = [
+          ...new Set(
+            r.grants
+              .filter((g) => (g.app ?? 'assets') === 'assets')
+              .filter((g) => (valid.has(g.permission) ? true : (problems.push(`${r.name}: ${g.permission} is not an Assets permission`), false)))
+              .map((g) => g.permission),
+          ),
+        ];
+        const [byId] = await db.select().from(roles).where(eq(roles.platformRoleId, r.id)).limit(1);
+        const existing = byId ?? (await db.select().from(roles).where(and(sql`lower(${roles.name}) = lower(${r.name})`, sql`${roles.platformRoleId} is null`)).limit(1))[0];
+        const values = { name: r.name, description: r.description ?? null, permissions, archived: r.archived ?? false, platformRoleId: r.id, updatedAt: new Date() };
+        if (existing) {
+          // Another local role already has this name: keep both by marking the Platform's copy.
+          const [clash] = await db.select({ id: roles.id }).from(roles).where(and(sql`lower(${roles.name}) = lower(${r.name})`, ne(roles.id, existing.id))).limit(1);
+          await db.update(roles).set(clash ? { ...values, name: `${r.name} (FreeFounders)` } : values).where(eq(roles.id, existing.id));
+          byPlatformId.set(r.id, existing.id);
+        } else {
+          const [created] = await db.insert(roles).values({ ...values, isSystem: false }).returning({ id: roles.id });
+          byPlatformId.set(r.id, created.id);
+        }
+      }
+      if (input.complete !== false) {
+        const keep = [...byPlatformId.keys()];
+        await db
+          .update(roles)
+          .set({ archived: true, updatedAt: new Date() })
+          .where(and(isNotNull(roles.platformRoleId), keep.length ? notInArray(roles.platformRoleId, keep) : sql`true`));
+      }
+      const missingPeople: string[] = [];
+      for (const p of input.people) {
+        const [user] = await db.select({ id: users.id }).from(users).where(eq(users.platformPersonId, p.personId)).limit(1);
+        if (!user) {
+          missingPeople.push(p.personId);
+          continue;
+        }
+        await db.delete(userRoles).where(eq(userRoles.userId, user.id));
+        const roleIds = p.roleIds.map((id) => byPlatformId.get(id)).filter((id): id is string => Boolean(id));
+        if (roleIds.length) await db.insert(userRoles).values(roleIds.map((roleId) => ({ userId: user.id, roleId }))).onConflictDoNothing();
+        // Permissions changed: sessions built on the old ones end (the web app gets a new one from its token).
+        await db.delete(sessions).where(eq(sessions.userId, user.id));
+      }
+      await db
+        .insert(syncState)
+        .values({ key: ACCESS_VERSION_KEY, value: String(input.version) })
+        .onConflictDoUpdate({ target: syncState.key, set: { value: String(input.version) } });
+      return { version: input.version, applied: true, roles: byPlatformId.size, people: input.people.length - missingPeople.length, missingPeople, problems };
+    });
+  }
+
+  private async accessVersion(): Promise<number> {
+    const [row] = await this.dbs.db.select({ value: syncState.value }).from(syncState).where(eq(syncState.key, ACCESS_VERSION_KEY)).limit(1);
+    return row ? Number(row.value) || 0 : 0;
   }
 
   private async requireService(req: AuthedRequest) {

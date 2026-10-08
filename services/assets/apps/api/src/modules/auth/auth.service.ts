@@ -127,7 +127,7 @@ export class AuthService {
         email: users.email,
         employeeId: users.employeeId,
         roleName: roles.name,
-        permissions: roles.permissions,
+        permissions: sql<string[]>`user_permissions(${users.id})`,
       })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
@@ -175,7 +175,7 @@ export class AuthService {
         email: users.email,
         employeeId: users.employeeId,
         roleName: roles.name,
-        permissions: roles.permissions,
+        permissions: sql<string[]>`user_permissions(${users.id})`,
       })
       .from(users)
       .innerJoin(roles, eq(roles.id, users.roleId))
