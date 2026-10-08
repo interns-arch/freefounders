@@ -30,7 +30,7 @@ Later phases add `apps/web`, `apps/mobile`, `packages/*` (see PLAN.md §8).
 ```
 npm run setup        # once: npm ci everywhere + Tasks venv
 npm run dev          # everything on http://localhost:8080 — sign in: owner / Demo@1234
-npm run smoke        # end-to-end API check against the running suite (9 steps)
+npm run smoke        # end-to-end API check against the running suite (10 steps, incl. the cross-company check)
 npm run e2e          # browser tests against the running suite (first time: npx --prefix e2e playwright install chromium)
 npm run rehearse-import   # CarTrends import rehearsal on demo data, against the running suite
 ```
@@ -39,7 +39,8 @@ Routes on :8080: `/` portal · `/api/platform/*` Platform (:4000) · `/tasks/` w
 Single login is a build/env switch, off by default so each app still runs standalone:
 - web: `VITE_PLATFORM_LOGIN=true` + `VITE_BASE=/tasks/` or `/assets/` (see `src/platform.js`, `src/lib/platform.ts`)
 - APIs: `PLATFORM_JWKS_URL` (Tasks, Assets); Platform: `TASKS_INTERNAL_URL`, `ASSETS_INTERNAL_URL`, `PLATFORM_SECRET`
-How it fits: PLAN.md §13.
+How it fits: PLAN.md §13. Tasks uses the Platform token directly (Bearer); Assets exchanges it for
+a 15-minute cookie session (`/api/auth/platform-session`) so photos/downloads keep working.
 
 **Multi-company mode** (PLAN.md §14): `TENANCY=schemas` in Tasks and Assets, one Postgres schema per company
 (`co_<code>`), picked per request from the token's `cid`; without a company the search path is the empty `ff_none`
@@ -49,8 +50,7 @@ schema (fail closed). `npm run dev` runs in this mode: Tasks on the local Postgr
 - Tasks: `manage.py migrate_companies` (deploy), `run_worker` (jobs; web uses `NOTIF_SCHEDULER=false`),
   `company_setting <code> <NAME> <value>` (per-company HR/WhatsApp/Gmail/AI values)
 - Assets: `migrate.js` also migrates every company schema; the seed does nothing in this mode
-- Import an existing install: `node scripts/import-company.mjs` (dry run by default; see its header) Tasks uses the Platform token directly (Bearer); Assets exchanges it for
-a 15-minute cookie session (`/api/auth/platform-session`) so photos/downloads keep working.
+- Import an existing install: `node scripts/import-company.mjs` (dry run by default; see its header)
 
 ## Run and test each part
 Platform (Node 22+; embedded Postgres on 5434):
