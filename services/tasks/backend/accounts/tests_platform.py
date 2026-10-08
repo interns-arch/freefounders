@@ -150,6 +150,15 @@ class ProvisionTests(TestCase):
         self.assertEqual(u.username, "nina-2")
         self.assertEqual(u.role, Role.SALES_EXECUTIVE)
 
+    def test_company_owners_and_admins_become_super_admins_when_no_role_is_chosen(self):
+        for platform_role, expected in (("owner", Role.SUPER_ADMIN), ("admin", Role.SUPER_ADMIN), ("member", Role.SALES_EXECUTIVE)):
+            with self.subTest(platform_role):
+                res = self.provision(username=None, email=f"{platform_role}@pr.test", platformRole=platform_role)
+                self.assertEqual(User.objects.get(pk=res.data["userId"]).role, expected)
+        # A role the admin chose always wins.
+        res = self.provision(username=None, email="chosen@pr.test", platformRole="owner", appRole="warehouse_manager")
+        self.assertEqual(User.objects.get(pk=res.data["userId"]).role, "warehouse_manager")
+
     def test_bad_input(self):
         self.assertEqual(self.provision(personId="not-a-uuid").status_code, 400)
         self.assertEqual(self.provision(fullName="  ").status_code, 400)

@@ -26,6 +26,7 @@ const provisionSchema = z.object({
   mobile: z.preprocess(blank, z.string().trim().max(30).nullable().optional()),
   username: z.preprocess(blank, z.string().trim().max(50).nullable().optional()),
   appRole: z.preprocess(blank, z.string().trim().max(60).nullable().optional()),
+  platformRole: z.preprocess(blank, z.string().trim().max(20).nullable().optional()),
 });
 type ProvisionInput = z.infer<typeof provisionSchema>;
 const companySchema = z.object({
@@ -145,7 +146,12 @@ export class InternalController {
 
     const [role] = input.appRole
       ? await db.select().from(roles).where(sql`lower(${roles.name}) = lower(${input.appRole})`).limit(1)
-      : await db.select().from(roles).where(eq(roles.name, 'Employee')).limit(1);
+      : // No role chosen: the company's FreeFounders owners/admins run Assets too.
+        await db
+          .select()
+          .from(roles)
+          .where(eq(roles.name, input.platformRole === 'owner' || input.platformRole === 'admin' ? 'Admin' : 'Employee'))
+          .limit(1);
     if (!role) throw badRequest(input.appRole ? `No Assets role called "${input.appRole}"` : 'The Employee role is missing');
 
     // Everyone with a login is on the employee list, except leadership (same rule as adding a user in Admin).

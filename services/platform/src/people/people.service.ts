@@ -271,6 +271,7 @@ export class PeopleService {
       mobile: p.mobile,
       username: login?.username ?? null,
       appRole,
+      platformRole: p.platformRole,
     });
     await this.dbs.db
       .insert(personApps)

@@ -2,18 +2,19 @@
 //   npm run company -- list
 //   npm run company -- create --name "Acme Pvt Ltd" --code ACME --owner-name "Asha Rao" --owner-email asha@acme.in
 //                              [--owner-login asha] [--owner-password ...] [--apps tasks,assets]
-//   npm run company -- sync    set up every active company in each app it has (safe to repeat)
+//   npm run company -- sync    set up every active company in each app it has, and re-link people who
+//                              already have an app (safe to repeat)
 // In multi-company mode each app keeps a company's data in its own schema; `create` and `sync` ask the apps
 // (TASKS_INTERNAL_URL, ASSETS_INTERNAL_URL) to create it. Without a password one is generated, printed once,
 // and must be changed at first sign-in.
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { NestFactory } from '@nestjs/core';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { AppModule } from './app.module';
 import { hashPassword } from './auth/auth.service';
 import { DbService } from './db/db.service';
-import { type AppKey, APPS, companies, logins, people } from './db/schema';
+import { type AppKey, APPS, companies, logins, people, personApps } from './db/schema';
 import { internalUrl, ProvisionClient } from './provision/provision.client';
 
 const CODE_RE = /^[A-Za-z][A-Za-z0-9_]{1,40}$/;
@@ -39,6 +40,42 @@ async function setUpInApps(provisioner: ProvisionClient, company: { id: string; 
   }
 }
 
+/**
+ * Provisions every person who already has an app again and stores the app's user id. Provisioning finds the
+ * person's existing user first, so this changes nothing when all is well, and repairs the links after an app's
+ * data moved (e.g. switching an install to multi-company mode, or the CarTrends import).
+ */
+async function relink(dbs: DbService, provisioner: ProvisionClient, companyId: string) {
+  const grants = await dbs.db
+    .select({ personId: people.id, fullName: people.fullName, email: people.email, employeeCode: people.employeeCode, mobile: people.mobile, platformRole: people.platformRole, username: logins.username, app: personApps.app, localUserId: personApps.localUserId })
+    .from(personApps)
+    .innerJoin(people, eq(people.id, personApps.personId))
+    .leftJoin(logins, eq(logins.personId, people.id))
+    .where(eq(people.companyId, companyId));
+  let changed = 0;
+  for (const g of grants) {
+    if (!(APPS as readonly string[]).includes(g.app) || !internalUrl(g.app as AppKey)) continue;
+    try {
+      const localUserId = await provisioner.provision(g.app as AppKey, companyId, {
+        personId: g.personId,
+        fullName: g.fullName,
+        email: g.email,
+        employeeCode: g.employeeCode,
+        mobile: g.mobile,
+        username: g.username,
+        platformRole: g.platformRole,
+      });
+      if (localUserId !== g.localUserId) {
+        await dbs.db.update(personApps).set({ localUserId }).where(and(eq(personApps.personId, g.personId), eq(personApps.app, g.app)));
+        changed++;
+      }
+    } catch (err) {
+      console.log(`  ✖ ${g.fullName} in ${g.app}: ${(err as Error).message}`);
+    }
+  }
+  if (grants.length) console.log(`  ✔ ${grants.length} app access link(s) checked, ${changed} updated`);
+}
+
 async function main() {
   const [command = 'list', ...rest] = process.argv.slice(2);
   const opts = args(rest);
@@ -60,6 +97,7 @@ async function main() {
       for (const c of rows) {
         console.log(`${c.name} (${c.code})`);
         await setUpInApps(provisioner, c);
+        await relink(dbs, provisioner, c.id);
       }
       return;
     }

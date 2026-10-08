@@ -94,7 +94,10 @@ def provision(request):
                 )
             user = match
         if user is None:
-            role = data.get("appRole") if data.get("appRole") in Role.values else Role.SALES_EXECUTIVE
+            role = data.get("appRole") if data.get("appRole") in Role.values else None
+            if role is None:
+                # No role chosen: the company's FreeFounders owners/admins run Tasks too.
+                role = Role.SUPER_ADMIN if data.get("platformRole") in ("owner", "admin") else Role.SALES_EXECUTIVE
             first, _, last = full_name.partition(" ")
             user = User(
                 username=_free_username(username, email.split("@")[0] if email else "", code, full_name.replace(" ", ".").lower()),

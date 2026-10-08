@@ -2,10 +2,16 @@
 // Talks to http://localhost:8080 exactly like the browser does: cookies, CSRF header, Bearer tokens.
 // Safe to run repeatedly: it creates people with unique names.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 
 const BASE = process.env.FF_URL ?? 'http://localhost:8080';
 const OWNER = { login: process.env.FF_OWNER ?? 'owner', password: process.env.FF_OWNER_PASSWORD ?? 'Demo@1234' };
 const run = Date.now().toString(36);
+const PLATFORM_DIR = path.resolve(import.meta.dirname, '../services/platform');
+const INTERNAL = { TASKS_INTERNAL_URL: 'http://127.0.0.1:8000/api/internal', ASSETS_INTERNAL_URL: 'http://127.0.0.1:3000/api/internal' };
+// A second company for the cross-company checks; created on first run through the company CLI.
+const BETA = { code: 'SMOKEBETA', email: 'owner@smokebeta.test', password: 'Beta@12345' };
 
 /** A tiny browser: keeps cookies per path like a real one would send them. */
 class Browser {
@@ -123,6 +129,58 @@ await step('…and Assets (token exchanged for a short session cookie)', async (
   assert.equal(me.status, 200);
   assert.equal(me.body.role.name, 'Admin');
   assert.equal((await owner.fetch('GET', '/assets/api/assets')).status, 200);
+});
+
+
+let acmeTaskTitle;
+await step('a second company sees none of the first company\'s Tasks or Assets data', async () => {
+  // The first company writes something only it should see.
+  acmeTaskTitle = `Smoke secret ${run}`;
+  const ownerToken = await owner.token();
+  const tme = await owner.fetch('GET', '/tasks/api/auth/me', { token: ownerToken });
+  const created = await owner.fetch('POST', '/tasks/api/tasks/', {
+    token: ownerToken,
+    body: { title: acmeTaskTitle, assigned_to: tme.body.id, priority: 'low', effort_minutes: 15, due_at: new Date(Date.now() + 86_400_000).toISOString() },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+
+  // The second company (created once, through the platform owner's CLI).
+  const list = execFileSync(process.execPath, ['dist/companies.js', 'list'], { cwd: PLATFORM_DIR, encoding: 'utf8' });
+  if (!list.split('\n').some((l) => l.startsWith(BETA.code))) {
+    execFileSync(
+      process.execPath,
+      ['dist/companies.js', 'create', '--name', 'Smoke Beta Pvt Ltd', '--code', BETA.code, '--owner-name', 'Beta Owner', '--owner-email', BETA.email, '--owner-password', BETA.password],
+      { cwd: PLATFORM_DIR, env: { ...process.env, ...INTERNAL }, stdio: 'ignore' },
+    );
+  }
+  const beta = new Browser();
+  await beta.signIn(BETA.email, BETA.password);
+  const betaMe = await beta.fetch('GET', '/api/platform/auth/me', { token: await beta.token() });
+  assert.notEqual(betaMe.body.company.id, (await owner.fetch('GET', '/api/platform/auth/me', { token: await owner.token() })).body.company.id);
+  for (const [app, appRole] of [['tasks', 'super_admin'], ['assets', 'Admin']]) {
+    const g = await beta.fetch('PUT', `/api/platform/people/${betaMe.body.person.id}/apps/${app}`, { token: await beta.token(), body: { appRole } });
+    assert.equal(g.status, 200, `${app}: ${JSON.stringify(g.body)}`);
+  }
+
+  // Tasks: Beta's task list and team never show the first company's task or people.
+  const betaTasks = await beta.fetch('GET', '/tasks/api/tasks/?page_size=500', { token: await beta.token() });
+  assert.equal(betaTasks.status, 200, JSON.stringify(betaTasks.body));
+  const rows = Array.isArray(betaTasks.body) ? betaTasks.body : betaTasks.body.results;
+  assert.ok(!rows.some((t) => t.title === acmeTaskTitle), 'first company task visible to the second company');
+  const ownerRows = await owner.fetch('GET', '/tasks/api/tasks/?page_size=500', { token: await owner.token() });
+  const ownerList = Array.isArray(ownerRows.body) ? ownerRows.body : ownerRows.body.results;
+  assert.ok(ownerList.some((t) => t.title === acmeTaskTitle), 'first company sees its own task');
+
+  // Assets: Beta's company name and user list are its own.
+  assert.equal((await beta.fetch('POST', '/assets/api/auth/platform-session', { token: await beta.token() })).status, 200);
+  assert.equal((await beta.fetch('GET', '/assets/api/config')).body.companyName, 'Smoke Beta Pvt Ltd');
+  const betaUsers = await beta.fetch('GET', '/assets/api/users?pageSize=100');
+  assert.equal(betaUsers.status, 200, JSON.stringify(betaUsers.body));
+  assert.ok(betaUsers.body.items.every((u) => u.name !== 'Demo Owner'), 'first company user visible to the second company');
+
+  // Without a company nothing is reachable.
+  assert.equal((await new Browser().fetch('GET', '/tasks/api/tasks/')).status, 401);
+  assert.equal((await new Browser().fetch('GET', '/assets/api/users')).status, 401);
 });
 
 const member = new Browser();

@@ -1,11 +1,14 @@
-// `npm run dev` (repo root): the whole FreeFounders suite on http://localhost:8080 with single login.
+// `npm run dev` (repo root): the whole FreeFounders suite on http://localhost:8080 with single login,
+// in multi-company mode (one schema per company in Tasks and Assets, PLAN.md §14).
 //
-// Starts: Platform API (:4000), Tasks API (:8000) + web (:5174), Assets API (:3000) + web (:5173),
-// Portal (:5175) and the gateway (:8080) that puts them on one address. Ctrl+C stops everything.
+// Starts: PostgreSQL (:5434, Platform + Tasks), Platform API (:4000), Tasks API (:8000) + worker + web (:5174),
+// Assets API (:3000) + web (:5173), Portal (:5175) and the gateway (:8080) that puts them on one address.
+// Once everything answers, every company is set up in its apps (`company sync`). Ctrl+C stops everything.
 // First time: `npm run setup` (installs every part's dependencies).
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { startGateway } from '../infra/gateway/dev-gateway.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -25,8 +28,9 @@ if (missing.length || !existsSync(TASKS_PY)) {
   process.exit(1);
 }
 
-const COLORS = { platform: 35, tasks: 32, 'tasks-web': 92, assets: 33, portal: 36 };
+const COLORS = { platform: 35, tasks: 32, 'tasks-job': 32, 'tasks-web': 92, assets: 33, portal: 36 };
 const children = [];
+let stopping = false;
 
 function start(name, cmd, args, { cwd, env = {} }) {
   const child = spawn(cmd, args, { cwd: at(cwd), env: { ...process.env, ...env }, shell: WIN && !cmd.endsWith('.exe'), stdio: ['ignore', 'pipe', 'pipe'] });
@@ -47,28 +51,63 @@ function start(name, cmd, args, { cwd, env = {} }) {
   return child;
 }
 
-const shared = { PLATFORM_JWKS_URL: JWKS, VITE_PLATFORM_LOGIN: 'true' };
+const shared = { PLATFORM_JWKS_URL: JWKS, VITE_PLATFORM_LOGIN: 'true', TENANCY: 'schemas' };
+const INTERNAL = { TASKS_INTERNAL_URL: 'http://127.0.0.1:8000/api/internal', ASSETS_INTERNAL_URL: 'http://127.0.0.1:3000/api/internal' };
 
-start('platform', 'npm', ['run', 'dev'], {
-  cwd: 'services/platform',
-  env: { TASKS_INTERNAL_URL: 'http://127.0.0.1:8000/api/internal', ASSETS_INTERNAL_URL: 'http://127.0.0.1:3000/api/internal' },
-});
+// One local PostgreSQL for the Platform and Tasks (Assets runs its own on :5433).
+const pg = await import(pathToFileURL(at('services/platform/scripts/pg.mjs')).href);
+const postgres = await pg.startPostgres();
+await pg.ensureDatabase('ff_tasks');
 
-const djangoEnv = { ...shared, DATABASE_URL: '', DEBUG: 'true', ALLOWED_HOSTS: 'localhost,127.0.0.1', NOTIF_SCHEDULER: 'false', PYTHONUNBUFFERED: '1' };
-execFileSync(TASKS_PY, ['manage.py', 'migrate', '--noinput'], { cwd: at('services/tasks/backend'), env: { ...process.env, ...djangoEnv }, stdio: 'ignore' });
+start('platform', 'npm', ['run', 'dev'], { cwd: 'services/platform', env: INTERNAL });
+
+const djangoEnv = {
+  ...shared,
+  DATABASE_URL: pg.localUrl('ff_tasks'),
+  DB_SSLMODE: 'disable',
+  DEBUG: 'true',
+  ALLOWED_HOSTS: 'localhost,127.0.0.1',
+  NOTIF_SCHEDULER: 'false',
+  PYTHONUNBUFFERED: '1',
+};
+console.log('• Migrating Tasks (every company)…');
+execFileSync(TASKS_PY, ['manage.py', 'migrate_companies'], { cwd: at('services/tasks/backend'), env: { ...process.env, ...djangoEnv }, stdio: 'ignore' });
 start('tasks', TASKS_PY, ['manage.py', 'runserver', '127.0.0.1:8000'], { cwd: 'services/tasks/backend', env: djangoEnv });
+start('tasks-job', TASKS_PY, ['manage.py', 'run_worker'], { cwd: 'services/tasks/backend', env: djangoEnv });
 start('tasks-web', 'npx', ['vite', '--host', '127.0.0.1', '--port', '5174', '--strictPort'], { cwd: 'services/tasks/frontend', env: { ...shared, VITE_BASE: '/tasks/' } });
 start('assets', 'npm', ['run', 'dev'], { cwd: 'services/assets', env: { ...shared, VITE_BASE: '/assets/', PUBLIC_URL: process.env.PUBLIC_URL ?? 'http://localhost:8080' } });
 start('portal', 'npx', ['vite', '--host', '127.0.0.1'], { cwd: 'apps/portal' });
 
 await startGateway(8080);
+
+// Every company gets its schema in each app, and existing app access is re-linked (safe to repeat).
+async function up(url) {
+  for (let i = 0; i < 240; i++) {
+    if (stopping) return false;
+    try {
+      if ((await fetch(url)).ok) return true;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+const ready = await Promise.all(['http://127.0.0.1:4000/api/platform/health', 'http://127.0.0.1:8000/health', 'http://127.0.0.1:3000/api/health'].map(up));
+if (ready.every(Boolean)) {
+  try {
+    execFileSync(process.execPath, ['dist/companies.js', 'sync'], { cwd: at('services/platform'), env: { ...process.env, ...INTERNAL }, stdio: 'inherit' });
+  } catch {
+    console.error('✖ Could not set up the companies in Tasks/Assets (see above). Retry: npm --prefix services/platform run company -- sync');
+  }
+} else if (!stopping) {
+  console.error('✖ Not every service started; companies were not synced.');
+}
 console.log(`
   ✔ FreeFounders is starting on  http://localhost:8080
     Sign in as  owner  /  Demo@1234  (first run: give yourself Tasks and Assets in People & access)
+    Multi-company mode: each company's Tasks and Assets data lives in its own schema.
     Ctrl+C stops everything.
 `);
 
-let stopping = false;
 function stop() {
   if (stopping) return;
   stopping = true;
@@ -78,7 +117,10 @@ function stop() {
     if (WIN) spawn('taskkill', ['/pid', String(c.pid), '/T', '/F'], { stdio: 'ignore' });
     else c.kill('SIGINT');
   }
-  setTimeout(() => process.exit(0), 1500);
+  setTimeout(async () => {
+    await postgres.stop().catch(() => {});
+    process.exit(0);
+  }, 1500);
 }
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

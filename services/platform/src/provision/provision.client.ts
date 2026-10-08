@@ -11,6 +11,8 @@ export interface ProvisionInput {
   username: string | null;
   /** App-specific role name/code chosen by the admin; the app applies its default when absent. */
   appRole?: string;
+  /** owner / admin / member. When no appRole is given, an app makes owners and admins its own admins. */
+  platformRole?: string;
 }
 
 /** Base URL of each app's internal API, e.g. http://localhost:8000/api/internal. */

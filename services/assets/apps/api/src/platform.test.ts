@@ -203,6 +203,16 @@ describe('provision', () => {
     assert.equal((await dbs.root.select().from(users).where(eq(users.id, ceo.body.userId)))[0].employeeId, null);
   });
 
+  test('company owners and admins become Admins when no role is chosen', async () => {
+    const adminRole = (await dbs.root.select().from(roles).where(eq(roles.name, 'Admin')))[0];
+    const owner = await provision({ email: 'pf-owner@t.test', platformRole: 'owner' });
+    assert.equal((await dbs.root.select().from(users).where(eq(users.id, owner.body.userId)))[0].roleId, adminRole.id);
+    const member = await provision({ email: 'pf-member@t.test', platformRole: 'member' });
+    assert.notEqual((await dbs.root.select().from(users).where(eq(users.id, member.body.userId)))[0].roleId, adminRole.id);
+    const chosen = await provision({ email: 'pf-chosen@t.test', platformRole: 'owner', appRole: 'manager' });
+    assert.equal((await dbs.root.select().from(users).where(eq(users.id, chosen.body.userId)))[0].roleId, ids.managerRole);
+  });
+
   test('bad input is refused', async () => {
     assert.equal((await call('POST', '/internal/provision', await service(), { personId: 'nope', fullName: 'X' })).status, 400);
     assert.equal((await call('POST', '/internal/provision', await service(), { personId: randomUUID(), fullName: ' ' })).status, 400);
