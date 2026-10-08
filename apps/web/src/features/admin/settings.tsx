@@ -1,0 +1,361 @@
+import { errorMessage } from '@freefounders/core';
+import {
+  APP_NAMES,
+  APP_SETTINGS_LINKS,
+  type CompanySettings,
+  DEFAULT_BRAND_COLOUR,
+  LOGO_MAX_BYTES,
+  type SyncResult,
+  useCompanySettings,
+  useCreateDepartment,
+  useDepartments,
+  useRemoveLogo,
+  useSetModule,
+  useUpdateCompany,
+  useUpdateDepartment,
+  useUploadLogo,
+} from '@freefounders/core/admin';
+import { ChevronRight, ImageIcon } from 'lucide-react';
+import { type ChangeEvent, type FormEvent, useRef, useState } from 'react';
+import { Link } from 'react-router';
+import { Field } from '@/components/common/form';
+import { ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { Button } from '@/components/ui/button';
+import { Input, Label } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Switch } from '@/components/ui/primitives';
+import { AppChip, ErrorNote, Pill, SyncNote } from './parts';
+
+/** Settings Center (PLAN.md §16): company name and look, module switches, departments, links to each app's own settings. */
+export function SettingsPage() {
+  const company = useCompanySettings();
+
+  return (
+    <div className="space-y-5">
+      <PageHeader title="Settings" description="Your company’s name and look, and which parts of each app are switched on." />
+      {company.isLoading ? (
+        <PageLoader />
+      ) : company.error && !company.data ? (
+        <Card>
+          <ErrorState error={company.error} onRetry={() => void company.refetch()} />
+        </Card>
+      ) : company.data ? (
+        <div className="grid gap-5">
+          <ProfileCard key={company.data.id} company={company.data} />
+          <ModulesCard company={company.data} />
+          <DepartmentsCard />
+          <Card role="region" aria-labelledby="app-settings">
+            <CardHeader className="flex-col gap-1">
+              <CardTitle id="app-settings" className="text-base">
+                App settings
+              </CardTitle>
+              <CardDescription>Each app keeps its own detailed settings. These open in the app.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              {company.data.apps.flatMap((app) =>
+                APP_SETTINGS_LINKS[app].map((s) => (
+                  <Link key={s.href} to={s.href} className="group flex items-start gap-3 rounded-lg border p-3 transition hover:border-primary/40 hover:bg-accent/40">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <AppChip app={app} />
+                      <p className="text-sm font-medium">{s.label}</p>
+                      <p className="text-xs text-muted-foreground">{s.blurb}</p>
+                    </div>
+                    <ChevronRight className="mt-1 size-4 text-muted-foreground transition group-hover:translate-x-0.5" aria-hidden />
+                  </Link>
+                )),
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error('Could not read the file'));
+    r.readAsDataURL(file);
+  });
+}
+
+function ProfileCard({ company }: { company: CompanySettings }) {
+  const [name, setName] = useState(company.name);
+  const [shortName, setShortName] = useState(company.shortName ?? '');
+  const [colour, setColour] = useState(company.colour ?? '');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [sync, setSync] = useState<SyncResult>();
+  const save = useUpdateCompany();
+  const upload = useUploadLogo();
+  const remove = useRemoveLogo();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const fail = (err: unknown) => setError(errorMessage(err));
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    save.mutate(
+      { name, shortName: shortName || null, colour: colour || null },
+      {
+        onSuccess: (res) => {
+          setSync(res.sync);
+          setMessage('Saved');
+        },
+        onError: fail,
+      },
+    );
+  };
+
+  const pick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError('');
+    if (file.size > LOGO_MAX_BYTES) return setError('The logo must be at most 512 KB');
+    let image: string;
+    try {
+      image = await readAsDataUrl(file);
+    } catch (err) {
+      return fail(err);
+    }
+    upload.mutate(image, { onSuccess: (res) => setSync(res.sync), onError: fail });
+  };
+
+  return (
+    <Card role="region" aria-labelledby="company-profile">
+      <CardHeader className="flex-col gap-1">
+        <CardTitle id="company-profile" className="text-base">
+          Company
+        </CardTitle>
+        <CardDescription>The name and look people see in every app.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="grid gap-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Company name" htmlFor="co-name">
+              <Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} />
+            </Field>
+            <Field label="Short name (menus and titles)" htmlFor="co-short">
+              <Input id="co-short" value={shortName} onChange={(e) => setShortName(e.target.value)} maxLength={40} placeholder={name} />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label id="brand-colour-label">Brand colour</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  aria-labelledby="brand-colour-label"
+                  className="h-9 w-12 shrink-0 cursor-pointer rounded-md border bg-card p-1"
+                  value={colour || DEFAULT_BRAND_COLOUR}
+                  onChange={(e) => setColour(e.target.value)}
+                />
+                <Input aria-label="Brand colour code" value={colour} onChange={(e) => setColour(e.target.value)} placeholder="Default" pattern="#[0-9a-fA-F]{6}" className="max-w-40" />
+                {colour && (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setColour('')}>
+                    Default
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Logo</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                {company.logoUrl ? (
+                  <img className="h-10 max-w-32 rounded-md border bg-card object-contain p-1" src={company.logoUrl} alt="Company logo" />
+                ) : (
+                  <span className="flex h-10 items-center gap-1.5 rounded-md border border-dashed px-3 text-xs text-muted-foreground">
+                    <ImageIcon className="size-4" aria-hidden /> No logo
+                  </span>
+                )}
+                <Button type="button" variant="outline" size="sm" loading={upload.isPending} onClick={() => fileRef.current?.click()}>
+                  {company.logoUrl ? 'Change' : 'Upload'}
+                </Button>
+                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => void pick(e)} hidden aria-label="Upload logo" />
+                {company.logoUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    loading={remove.isPending}
+                    onClick={() => {
+                      setError('');
+                      remove.mutate(undefined, { onSuccess: (res) => setSync(res.sync), onError: fail });
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">PNG, JPEG or WebP, up to 512 KB.</p>
+            </div>
+          </div>
+          <ErrorNote>{error}</ErrorNote>
+          <SyncNote sync={sync} />
+          <div className="flex items-center justify-end gap-3">
+            {message && (
+              <span role="status" className="text-sm text-success">
+                {message}
+              </span>
+            )}
+            <Button type="submit" loading={save.isPending}>
+              Save company
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ModulesCard({ company }: { company: CompanySettings }) {
+  const [error, setError] = useState('');
+  const [sync, setSync] = useState<SyncResult>();
+  const setModule = useSetModule();
+  const busyKey = setModule.isPending && setModule.variables ? `${setModule.variables.app}.${setModule.variables.key}` : '';
+
+  return (
+    <Card role="region" aria-labelledby="modules">
+      <CardHeader className="flex-col gap-1">
+        <CardTitle id="modules" className="text-base">
+          Modules
+        </CardTitle>
+        <CardDescription>Switch off what your company does not use: it leaves the menus and its reminders stop. Nothing is deleted.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <ErrorNote>{error}</ErrorNote>
+        <SyncNote sync={sync} />
+        {company.modules.length === 0 && <p className="text-sm text-muted-foreground">No app is connected.</p>}
+        {company.modules.map((a) => (
+          <div key={a.app} className="space-y-2">
+            <AppChip app={a.app} />
+            <ul className="divide-y rounded-lg border">
+              {a.modules.map((m) => {
+                const label = `${APP_NAMES[a.app]}: ${m.label}`;
+                return (
+                  <li key={m.key} className="flex items-center justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{m.label}</p>
+                      <p className="text-xs text-muted-foreground">{m.description}</p>
+                    </div>
+                    <Switch
+                      aria-label={label}
+                      checked={m.on}
+                      disabled={busyKey === `${a.app}.${m.key}`}
+                      onCheckedChange={(on) => {
+                        setError('');
+                        setModule.mutate({ app: a.app, key: m.key, on }, { onSuccess: (res) => setSync(res.sync), onError: (err) => setError(errorMessage(err)) });
+                      }}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** One department list for every app (PLAN.md §17.1). Codes never change, so renaming is safe. */
+function DepartmentsCard() {
+  const list = useDepartments();
+  const create = useCreateDepartment();
+  const update = useUpdateDepartment();
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const fail = (err: unknown) => setError(errorMessage(err));
+
+  return (
+    <Card role="region" aria-labelledby="departments">
+      <CardHeader className="flex-col gap-1">
+        <CardTitle id="departments" className="text-base">
+          Departments
+        </CardTitle>
+        <CardDescription>Used by People, approvals and the Department scope of roles, in every app.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <ErrorNote>{error || (list.error ? errorMessage(list.error) : '')}</ErrorNote>
+        <ul className="divide-y rounded-lg border">
+          {list.data?.length === 0 && <li className="px-4 py-3 text-sm text-muted-foreground">No departments yet.</li>}
+          {list.isLoading && <li className="px-4 py-3 text-sm text-muted-foreground">Loading…</li>}
+          {list.data?.map((d) => (
+            <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+              {editing?.id === d.id ? (
+                <form
+                  className="flex flex-1 flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setError('');
+                    update.mutate({ id: d.id, name: editing.name }, { onSuccess: () => setEditing(null), onError: fail });
+                  }}
+                >
+                  <Input
+                    aria-label={`New name for ${d.name}`}
+                    value={editing.name}
+                    onChange={(e) => setEditing({ id: d.id, name: e.target.value })}
+                    autoFocus
+                    className="max-w-xs flex-1"
+                  />
+                  <Button type="submit" size="sm" loading={update.isPending}>
+                    Save
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditing(null)}>
+                    Cancel
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                      {d.name}
+                      {!d.active && <Pill>Inactive</Pill>}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {d.people} {d.people === 1 ? 'person' : 'people'}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="xs" aria-label={`Rename ${d.name}`} onClick={() => setEditing({ id: d.id, name: d.name })}>
+                      Rename
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      aria-label={`${d.active ? 'Deactivate' : 'Activate'} ${d.name}`}
+                      onClick={() => {
+                        setError('');
+                        update.mutate({ id: d.id, active: !d.active }, { onError: fail });
+                      }}
+                    >
+                      {d.active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError('');
+            create.mutate(name.trim(), { onSuccess: () => setName(''), onError: fail });
+          }}
+        >
+          <Input aria-label="New department" placeholder="New department" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} className="max-w-xs flex-1" />
+          <Button type="submit" disabled={!name.trim()} loading={create.isPending}>
+            Add department
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
