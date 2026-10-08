@@ -1,0 +1,17 @@
+{
+  "name": "@freefounders/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FreeFounders shared logic for the web and mobile apps: HTTP client, sign-in session, typed APIs, data hooks, permissions. No DOM, no UI.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./admin": "./src/admin/index.ts",
+    "./tasks": "./src/tasks/index.ts",
+    "./hr": "./src/hr/index.ts",
+    "./assets": "./src/assets/index.ts"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5",
+    "react": "^19"
+  }
+}

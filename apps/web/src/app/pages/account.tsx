@@ -1,0 +1,91 @@
+import { ApiError, errorMessage, useChangePassword, usePlatformMe } from '@freefounders/core';
+import { Loader2 } from 'lucide-react';
+import { type FormEvent, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
+import { Button } from '@/components/ui/button';
+import { Input, Label } from '@/components/ui/input';
+import { Logo } from '../shell-parts';
+import { safeNext } from '../session-guard';
+
+/** Change password; forced on first sign-in when an admin set it (PLAN.md §13). */
+export function AccountPage() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const me = usePlatformMe();
+  const change = useChangePassword();
+  const first = params.has('first') || !!me.data?.mustChangePassword;
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [again, setAgain] = useState('');
+  const [problem, setProblem] = useState('');
+  const [done, setDone] = useState(false);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setProblem('');
+    if (next.length < 8) return setProblem('Use at least 8 characters.');
+    if (next !== again) return setProblem('The new passwords do not match.');
+    change.mutate(
+      { currentPassword: current, newPassword: next },
+      {
+        onSuccess: () => {
+          setDone(true);
+          setCurrent('');
+          setNext('');
+          setAgain('');
+          if (first) navigate(safeNext(params.get('next')) ?? '/', { replace: true });
+        },
+        onError: (err) => setProblem(err instanceof ApiError && err.errors ? Object.values(err.errors)[0] : errorMessage(err)),
+      },
+    );
+  };
+
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
+      <Logo />
+      <form onSubmit={submit} className="w-full max-w-sm space-y-5 rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="pw-title">
+        <div className="space-y-1">
+          <h1 id="pw-title" className="text-xl font-semibold">
+            {first ? 'Choose a new password' : 'Change password'}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {first ? 'Your password was set by an admin. Pick your own before you continue.' : 'Your other devices will be signed out; this one stays signed in.'}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="pw-current">Current password</Label>
+          <Input id="pw-current" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="pw-new">New password</Label>
+          <Input id="pw-new" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="pw-again">New password again</Label>
+          <Input id="pw-again" type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
+        </div>
+        {problem && (
+          <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {problem}
+          </p>
+        )}
+        {done && !first && (
+          <p role="status" className="rounded-md bg-success/10 px-3 py-2 text-sm text-success">
+            Password changed.
+          </p>
+        )}
+        <div className="flex gap-2">
+          {!first && (
+            <Button type="button" variant="outline" className="flex-1" onClick={() => navigate(-1)}>
+              Back
+            </Button>
+          )}
+          <Button type="submit" className="flex-1" disabled={change.isPending}>
+            {change.isPending && <Loader2 className="size-4 animate-spin" />}
+            Save password
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}

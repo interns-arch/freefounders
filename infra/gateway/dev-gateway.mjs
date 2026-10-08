@@ -1,13 +1,15 @@
 // Development gateway: everything on one address (http://localhost:8080), routed by path, exactly like
 // production (see Caddyfile). One origin means no CORS and first-party cookies for every app.
 //
-//   /api/platform/*  → Platform API          (path kept)
-//   /tasks/api/*     → Tasks API (Django)    (/tasks stripped)
-//   /media/*         → Tasks uploads (Django)
-//   /tasks/*         → Tasks web (Vite)      (path kept; built with base /tasks/)
-//   /assets/api/*    → Assets API (NestJS)   (/assets stripped)
-//   /assets/*        → Assets web (Vite)     (path kept; built with base /assets/)
-//   everything else  → Portal web (Vite)
+//   /api/platform/*         → Platform API          (path kept)
+//   /tasks/api/*            → Tasks API (Django)    (/tasks stripped)
+//   /media/*                → Tasks uploads (Django)
+//   /assets/api/*           → Assets API (NestJS)   (/assets stripped)
+//   /classic/tasks/api/*    → Tasks API             (/classic/tasks stripped)  ┐ the old screens, for modules not
+//   /classic/tasks/*        → old Tasks web (Vite)  (base /classic/tasks/)     │ moved to the new app yet
+//   /classic/assets/api/*   → Assets API            (/classic/assets stripped) │ (PLAN.md §18.3)
+//   /classic/assets/*       → old Assets web (Vite) (base /classic/assets/)    ┘
+//   everything else         → FreeFounders web app (Vite, apps/web): /, /tasks/…, /assets/…, /people …
 import http from 'node:http';
 import net from 'node:net';
 
@@ -15,10 +17,12 @@ export const ROUTES = [
   { prefix: '/api/platform/', port: 4000 },
   { prefix: '/tasks/api/', port: 8000, strip: '/tasks' },
   { prefix: '/media/', port: 8000 },
-  { prefix: '/tasks/', port: 5174 },
   { prefix: '/assets/api/', port: 3000, strip: '/assets' },
-  { prefix: '/assets/', port: 5173 },
-  { prefix: '/', port: 5175 },
+  { prefix: '/classic/tasks/api/', port: 8000, strip: '/classic/tasks' },
+  { prefix: '/classic/tasks/', port: 5174 },
+  { prefix: '/classic/assets/api/', port: 3000, strip: '/classic/assets' },
+  { prefix: '/classic/assets/', port: 5173 },
+  { prefix: '/', port: 5176 },
 ];
 
 export function route(url) {

@@ -1,0 +1,10 @@
+{
+  "name": "@freefounders/theme",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FreeFounders design tokens: one source for the web app (CSS variables) and the mobile app (Phase 7)",
+  "exports": {
+    ".": "./src/tokens.ts",
+    "./tokens.css": "./tokens.css"
+  }
+}

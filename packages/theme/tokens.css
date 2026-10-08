@@ -1,0 +1,72 @@
+/*
+ * FreeFounders design tokens (PLAN.md §6 rule 2, §18). The ONLY place colours, radius and fonts are defined.
+ * The web app maps these to Tailwind (apps/web/src/index.css); the mobile app reads the same values from
+ * src/tokens.ts. Change the look of the whole product here. A company's brand colour (Settings Center) overrides
+ * --primary at run time.
+ */
+:root {
+  --radius: 0.625rem;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, monospace;
+
+  --background: oklch(0.985 0.003 250);
+  --foreground: oklch(0.21 0.02 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 260);
+  --primary: oklch(0.52 0.2 262);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.006 255);
+  --secondary-foreground: oklch(0.26 0.02 260);
+  --muted: oklch(0.965 0.005 255);
+  --muted-foreground: oklch(0.53 0.018 258);
+  --accent: oklch(0.955 0.014 262);
+  --accent-foreground: oklch(0.26 0.03 262);
+  --destructive: oklch(0.58 0.21 27);
+  --success: oklch(0.6 0.15 155);
+  --warning: oklch(0.72 0.15 70);
+  --info: oklch(0.6 0.13 235);
+  --border: oklch(0.915 0.008 255);
+  --input: oklch(0.885 0.01 255);
+  --ring: oklch(0.52 0.2 262);
+  --sidebar: oklch(0.975 0.004 255);
+  --sidebar-foreground: oklch(0.3 0.02 260);
+  --sidebar-accent: oklch(0.93 0.016 262);
+  --sidebar-border: oklch(0.92 0.008 255);
+  /* App accents: how Tasks and Assets are told apart (chips, switcher). */
+  --app-tasks: oklch(0.58 0.14 165);
+  --app-assets: oklch(0.65 0.16 55);
+  --app-admin: oklch(0.55 0.17 300);
+}
+
+.dark {
+  --background: oklch(0.16 0.01 260);
+  --foreground: oklch(0.95 0.005 255);
+  --card: oklch(0.2 0.012 260);
+  --card-foreground: oklch(0.95 0.005 255);
+  --popover: oklch(0.21 0.012 260);
+  --popover-foreground: oklch(0.95 0.005 255);
+  --primary: oklch(0.68 0.17 262);
+  --primary-foreground: oklch(0.15 0.02 262);
+  --secondary: oklch(0.26 0.014 260);
+  --secondary-foreground: oklch(0.93 0.005 255);
+  --muted: oklch(0.24 0.012 260);
+  --muted-foreground: oklch(0.69 0.015 258);
+  --accent: oklch(0.28 0.03 262);
+  --accent-foreground: oklch(0.95 0.005 255);
+  --destructive: oklch(0.66 0.19 25);
+  --success: oklch(0.7 0.14 155);
+  --warning: oklch(0.78 0.14 75);
+  --info: oklch(0.7 0.12 235);
+  --border: oklch(0.29 0.014 260);
+  --input: oklch(0.34 0.016 260);
+  --ring: oklch(0.68 0.17 262);
+  --sidebar: oklch(0.18 0.011 260);
+  --sidebar-foreground: oklch(0.86 0.01 255);
+  --sidebar-accent: oklch(0.26 0.022 262);
+  --sidebar-border: oklch(0.27 0.014 260);
+  --app-tasks: oklch(0.72 0.13 165);
+  --app-assets: oklch(0.76 0.14 60);
+  --app-admin: oklch(0.7 0.15 300);
+}

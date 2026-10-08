@@ -10,7 +10,8 @@ const run = (cmd, args, cwd) => {
   execFileSync(cmd, args, { cwd: path.join(ROOT, cwd), stdio: 'inherit', shell: WIN });
 };
 
-for (const dir of ['services/platform', 'services/assets', 'services/tasks/frontend', 'apps/portal']) run('npm', ['ci', '--no-audit', '--no-fund'], dir);
+// '.' = the root workspace: the web app (apps/web) and the shared packages (packages/*).
+for (const dir of ['.', 'services/platform', 'services/assets', 'services/tasks/frontend']) run('npm', ['ci', '--no-audit', '--no-fund'], dir);
 
 const backend = 'services/tasks/backend';
 const venvPy = path.join(ROOT, backend, WIN ? '.venv/Scripts/python.exe' : '.venv/bin/python');
