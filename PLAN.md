@@ -73,7 +73,7 @@
          https://api.freefounders.*   (gateway / reverse proxy)
      ┌────────────┼─────────────────┬──────────────────┐
   Platform     Tasks API          Assets API        Workers
-  (NestJS)     (Django)           (NestJS)          (Celery + BullMQ)
+  (NestJS)     (Django)           (NestJS)          (worker process)
   login,       tasks, HR,         assets,           reminders, WhatsApp,
   companies,   notices            onboarding/exit,  email, push, recurring
   people,                         tickets           duties
@@ -81,7 +81,7 @@
   settings,
   billing
      └────────────┴──── PostgreSQL (schemas: platform, tasks, assets) ──┘
-                         every row has company_id + Row-Level Security
+                         one schema per company in Tasks and Assets (§14)
                          Redis · S3 (ap-south-1) · Sentry
 ```
 
@@ -96,8 +96,10 @@ Assets already has the session/role/permission code we need in TypeScript, and s
 5. Logout / password change / deactivation revokes refresh tokens everywhere.
 
 ### Multi-company (tenancy)
-- `company_id` column on every table in all three databases' schemas.
-- Postgres **Row-Level Security**: the API sets `app.company_id` per request. Even a buggy query cannot read another company's rows.
+- **One Postgres schema per company** in Tasks and Assets (decided 2026-10-08, replaces the earlier
+  `company_id` + Row-Level Security idea). Each request is pinned to its company's schema; a query
+  cannot reach another company's tables because they are not on its search path. Details: §14.
+- Platform tables are shared and carry `company_id` (they already do).
 - Remove single-company assumptions:
   - Assets: `defaultCompanyId()`, `defaultStoreId()`
   - Tasks: `TaskSettings` singleton, HR env vars
@@ -282,7 +284,7 @@ Each phase ends with: all tests green, deployed to staging, founder sign-off.
 |---|---|---|---|
 | 0 | **Clean-up & new repo** | Push commits, save WIP, remove `.pem`, fix `.env.example`. New repo with copied code, CI, `CLAUDE.md`, staging environment | S |
 | 1 | **Platform core** | Platform service, companies, People directory, single login (web), app chooser + switcher, both backends accept the platform token | L |
-| 2 | **Multi-company + CarTrends migration** | `company_id` + RLS everywhere, remove single-company code, drop password vault, jobs moved to Celery/BullMQ, cross-company leak tests. **Migrate live CarTrends data with a dry run first** | L |
+| 2 | **Multi-company + CarTrends migration** | One schema per company, remove single-company code, drop password vault, jobs moved to a worker process, cross-company leak tests. **Migrate live CarTrends data with a dry run first** | L |
 | 3 | **Dynamic roles** | DB roles (642 tests unchanged), unified permission catalogue with scopes, multiple roles per user, role builder UI | M |
 | 4 | **Settings Center + module switches** | Section 5 launch items; launch-scope modules switched off | M |
 | 5 | **Responsibilities & cross-app rules** | Recurring duties, role checklists, KPIs, approval chains, 3 built-in rules | M |
@@ -446,3 +448,89 @@ Differences from the design above (deliberate):
 Follow-ups noted for later phases: expired Assets session rows are not cleaned up yet; the CarTrends
 rollout (linking existing people to Platform people) belongs to Phase 2's migration; mobile (Phase 7) will use
 the `client: mobile` login, which already returns the refresh token in the body.
+
+---
+
+## 14. Phase 2 design: many companies + CarTrends migration (decided 2026-10-08)
+
+Founder decisions (2026-10-08): **one Postgres schema per company** (not `company_id` + RLS), and
+**a separate worker process without Redis** (not Celery/BullMQ). Based on a survey of both apps:
+Tasks has 49 models, 271 query sites, 2 singletons and about 15 global unique rules; Assets has 28 tables
+and about 20 global unique rules. With a schema per company all of these stay correct as they are.
+
+### 14.1 How a request finds its company
+```
+Platform token (cid = company id)  →  app looks up cid in its registry  →  search_path = co_<code>
+```
+- Each app keeps a **registry** outside the company schemas: `public.ff_companies` (Tasks) and
+  `ff.companies` (Assets): company_id, schema, name, created_at.
+- Schema name = `co_` + the Platform company code (lower-case, `[a-z0-9_]`, checked before any SQL use).
+- **Fails closed.** In multi-company mode the default search path is an empty `ff_none` schema, so any
+  query without a company errors instead of reading someone's data.
+- The search path holds **only** the company schema (not `public`), so Django/Drizzle cannot see another
+  schema's tables.
+- Multi-company mode is a switch, `TENANCY=schemas` (needs Postgres). Off by default, so each app runs
+  standalone exactly as before and the existing tests (SQLite for Tasks) are untouched.
+
+### 14.2 Tasks (Django)
+- Middleware reads the Platform token (or the internal service token), sets the schema for the whole
+  request and resets it afterwards (connections are reused).
+- In multi-company mode the legacy username/password login and SimpleJWT are refused: there is no
+  company to pick. Public endpoints with no company (web forms, WhatsApp webhook) belong to modules
+  that are OFF at launch; they get company-specific URLs when switched on.
+- Commands: `company_create` (create schema + migrate + register), `migrate_companies` (deploy step:
+  migrate every company), `run_worker` (see 14.4).
+- Uploaded files go under `c/<schema>/…` so two companies' files never share a path.
+- Company-specific settings that are env vars today (HR hours/geofence/face, WhatsApp, Gmail, AI keys)
+  move to a per-company settings table, falling back to the env var. Secrets are encrypted with
+  `SETTINGS_KEY`. The admin screen for them is Phase 4.
+
+### 14.3 Assets (NestJS)
+- Express middleware picks the company (Platform Bearer token, internal service token, or the company
+  prefix of the platform-session cookie), takes one pool connection, sets its search path, and binds it
+  to the request (AsyncLocalStorage, which `DbService.db` already uses). The connection is reset on release.
+- Own migrator for company schemas: the existing Drizzle SQL files, with `"public".` rewritten to the
+  company schema, and history kept per schema. Standalone mode keeps the Drizzle migrator.
+- `defaultCompanyId()` / `defaultStoreId()` stay; inside a company schema they mean "this company".
+- **Password vault removed**: `GET /users/:id/password`, the 3 `password_saved*` columns, the
+  `credential_key` row, the vault service and the Password column on the Users screen. The one-time
+  password shown on creation stays.
+
+### 14.4 Worker (Tasks)
+- `manage.py run_worker`: every 5 minutes, takes a Postgres advisory lock (only one worker runs), then for
+  each company runs the same reminder/digest routine the thread runs today, plus the Gmail poll where
+  enabled. A failure in one company is logged and the next company still runs.
+- The in-process thread stays for standalone mode (`NOTIF_SCHEDULER`), so the web server can run many
+  workers in FreeFounders mode.
+- Assets has no background jobs today, so nothing to move.
+
+### 14.5 Platform
+- `POST /companies` (platform owner only, plus a CLI `npm run company -- create`): creates the
+  company, and for each enabled app calls `POST /api/internal/companies` so the app creates its schema.
+- Service tokens to the apps carry `cid`, so provision and roles act inside the right company.
+- **Passwords from Tasks keep working**: imported Django PBKDF2 hashes are accepted once, then re-hashed
+  to argon2id on the next successful sign-in. No password is ever stored reversibly.
+
+### 14.6 CarTrends migration (dry run first)
+1. Founder takes a `pg_dump` of the live Tasks DB (and Assets DB, if in use). Claude never touches EC2.
+2. `scripts/import-company`: restores each dump into a scratch DB, renames `public` → `co_cartrends`,
+   copies it into FreeFounders' Postgres, registers it and runs the newer migrations.
+3. People matching across Tasks and Assets: by employee code, then email, then mobile. Creates Platform
+   people + logins (Tasks password hash kept) + app links. Anything unclear goes on a review list (CSV) for the founder.
+4. `--dry-run` (default) changes nothing and prints counts, matches and the review list. `--apply` does it.
+5. Rehearsed on a copy of demo data in CI-like conditions before the real run. CarTrends stays on EC2 until
+   the founder signs off on the result (answers open question 2).
+
+### 14.7 Tests
+- Tasks and Assets: new tenancy tests on Postgres (two companies, same usernames/codes in both, no data
+  visible across, fail-closed without a company, worker runs per company). Existing tests unchanged,
+  except Assets' saved-password test, which goes with the vault.
+- Smoke + browser: two companies through the gateway; company B cannot see company A's tasks or assets.
+- Migration dry run on demo data.
+
+### 14.8 Build order
+1. Tasks: tenancy switch, registry, middleware, commands, worker, file paths, per-company settings, tests
+2. Assets: tenancy switch, middleware, migrator, internal endpoints, vault removal, tests
+3. Platform: companies endpoint + CLI, `cid` in service tokens, PBKDF2 import, tests
+4. Dev suite on Postgres with two demo companies; smoke + e2e leak tests; CI Postgres jobs
+5. Import tool + dry run on demo data; docs
