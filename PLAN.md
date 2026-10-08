@@ -1066,4 +1066,5 @@ Each block below lists what it shows and where the data comes from (all already 
    - Then all suites: rules + typecheck + build, e2e, smoke, Platform/Tasks/Assets.
 8. Update docs/UI-FUNCTIONALITY.md (portal, attendance URLs) and screenshots (desktop + 360 px) for the founder's review.
 
-Phase 7 (the phone app) starts after this. It reuses this portal as its home screen.
+**The web app is finalized first** (founder, 2026-10-08): a very good, user-friendly UI in this theme and colour scheme on every
+screen, reviewed and signed off by the founder. Only then does Phase 7 (the phone app) start; it reuses this portal as its home screen.
