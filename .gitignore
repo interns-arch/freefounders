@@ -29,3 +29,6 @@ staticfiles/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Import reports list real people (names, emails): never commit
+import-report-*/
