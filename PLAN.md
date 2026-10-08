@@ -184,6 +184,7 @@ The final list is built by reading every existing check in both codebases. Nothi
 | Task categories, priorities, completion evidence rules | ✅ | Custom statuses |
 | Custom fields on Assets (exists) | ✅ | On Tasks, People |
 | HR rules: hours, grace, week-offs, holidays, geofence, face check | ✅ | |
+| Attendance: company punch-in locations, **photo saved at every punch-in** and shown in the records (founder, 2026-10-08) | ✅ | |
 | Approval chains | ✅ | |
 | Notification rules (in-app / email / WhatsApp / push per event) | ✅ | |
 | Branding: logo, colours, name on labels/PDFs | ✅ | Custom domain |
@@ -564,3 +565,90 @@ For the founder (the real CarTrends move):
 Follow-ups for later phases: the Tasks web app still shows "Automation Task / CarTrends" in its sidebar
 (per-company branding is a Settings Center item, Phase 4); per-company settings have no screen yet (Phase 4;
 `manage.py company_setting` until then); expired Assets session rows are still not cleaned up.
+
+---
+
+## 15. Phase 3 design: one role builder (DRAFT, 2026-10-08)
+
+Founder decisions (2026-10-08): **one role builder for the whole product** (not one per app), and permission
+scopes **Own · Team · Department · Company**. No "Location" scope. Attendance stays ON; saving a photo at every
+punch-in is added to Phase 4 (§5).
+
+Based on a survey of both apps (2026-10-08):
+| | Tasks | Assets |
+|---|---|---|
+| Roles | 20 hard-coded (`Role` choices), 1 per user (`User.role`) | DB table, 6 system roles, 1 per user (`users.role_id`) |
+| Permissions | 21 capabilities in a dict (`ROLE_CAPABILITIES`) | 24 strings, editable per role |
+| Scope today | built into names: `tasks.view_all / view_department / view_own`, same for leads | none: "only my own" when a permission is missing |
+| Checks by role **name** | ~33 places (top admin, `ROLE_LEVEL`, sales manager, approver lists…) | 7 places ('Admin', 'Employee', 'Leadership') |
+| Role screen | none (only a read-only list) | Roles page (Admin only) |
+
+### 15.1 Where roles live
+```
+Portal: Roles + People  →  Platform (source of truth)  →  pushes a copy to each app  →  app checks locally
+```
+- **Platform** stores, per company: `roles` (name, description, colour, level, system/archived),
+  `role_permissions` (role, app, permission, scope) and `person_roles` (person, role); **a person can have several roles**.
+- **Each app keeps a synced copy** in the company's schema (`ff_roles`, `ff_role_permissions`, `ff_user_roles`), so every
+  check stays local and fast, and background jobs (reminders, approver lists) can still ask "who may approve?" in SQL.
+- Sync: on any change the Platform calls `PUT /api/internal/access` on the app with the company's full role set and the
+  role list of each person. A version number (`pv`) in the access token lets an app notice it is behind and re-fetch.
+- Each app **publishes its own permission catalogue** (`GET /api/internal/permissions`: key, label, group, allowed scopes),
+  just as it publishes its roles today, so the Platform never hard-codes another app's permissions (§6 rule 4).
+
+### 15.2 Scopes
+| Scope | Means | Tasks today |
+|---|---|---|
+| Own | my records | `view_own` |
+| Team | mine + people who report to me (reporting manager chain, one level) | part of `view_department` |
+| Department | everyone in my department, plus my team | `view_department` |
+| Company | everyone | `view_all` |
+Permissions that are simply yes/no (e.g. *Manage users*) have no scope. Several roles: permissions add up and the
+**widest** scope wins.
+
+### 15.3 Permission catalogue (from the two apps; nothing lost)
+- **Tasks**: `tasks.view`(scoped) · `tasks.assign` · `tasks.delete_admin_work` · `leads.view`(scoped) · `leads.view_won` ·
+  `leads.edit`(scoped) · `leads.assign` · `quotations.manage` · `dashboard.view` · `notifications.view` · `intake.view` ·
+  `hr.leave.approve`(scoped) · `hr.manage` · `users.manage` · `settings.manage` · plus **`tasks.admin`** (replaces the
+  "top admin" name checks) and the role **level** (Member / Lead / Manager / Admin, replaces `ROLE_LEVEL`).
+- **Assets**: the 24 existing permissions; `asset:view`, `employee:view`, `request:view` get scopes Own / Company
+  (exactly today's behaviour); Team/Department for Assets follow when Assets employees are linked to People (Phase 4).
+- **Platform**: `platform.users.manage`, `platform.roles.manage`, `platform.settings.manage` (billing later).
+
+### 15.4 Tasks: no behaviour change (all 688 tests unchanged)
+1. New tables + a data migration that seeds **exactly** today's 20 roles from `ROLE_CAPABILITIES` (codes = today's role values,
+   levels from `ROLE_LEVEL`). The dicts stay as the starter-template source (tests pin them).
+2. `has_capability()` / `capabilities_for()` read the DB (cached per request): union of `User.role` (kept as the primary role)
+   and any extra roles. `/api/auth/me` still returns the same capability strings (`tasks.view` at Company → `tasks.view_all`),
+   so the web app needs no change.
+3. Replace the ~33 role-name checks with permission / level checks, file by file, tests run after each.
+4. `crm/scoping.py`, HR, mistakes, workspace read the scope instead of three capability names; same results.
+5. Assets: `user_roles` table next to `users.role_id` (kept as primary); permissions = union; 7 name checks → permissions.
+
+### 15.5 Role builder (portal)
+- **Roles** page: list, create, edit, duplicate, archive. One screen per role with a matrix grouped by app
+  (Tasks · Leads · HR · Assets · Administration), a scope picker per permission, colour and level.
+- **People** page: a person gets one or more roles (replaces the per-app "role on first access" dropdown); the role's apps
+  decide which apps they can open, still within the company's plan.
+- **Locked system roles**: Super Admin (= today's owner) and Admin: everything, cannot be edited or deleted. A company always
+  keeps an active Super Admin (today's owner rules).
+- **Starter templates** for every new company: today's 20 Tasks roles and 6 Assets roles, merged where they are the same job.
+- **CarTrends / existing companies**: each person's current Tasks role and Assets role become roles in the builder, so nobody's
+  access changes; the admin can merge them later.
+
+### 15.6 Tests
+- Tasks + Assets: **existing suites unchanged**, plus: seeded roles equal the old dicts permission for permission; every scope gives
+  the same visible rows as before; several roles add up; sync endpoint (auth, idempotent, version).
+- Platform: role CRUD, locked roles, at least one Super Admin, sync calls with the company id, `pv` in tokens.
+- Smoke + browser: admin creates a role in the portal, gives it to a person, the person's access changes in both apps.
+
+### 15.7 Build order
+1. Tasks: DB roles seeded from the dicts, `has_capability` from the DB, scopes; tests unchanged
+2. Tasks: replace the ~33 name checks; internal permissions + access endpoints
+3. Assets: multiple roles, scopes, name checks, internal endpoints
+4. Platform: roles, person_roles, catalogue, sync, `pv`
+5. Portal: Roles page + roles on People; smoke + e2e; docs
+
+### 15.8 Out of scope
+Responsibilities, recurring duties, approval chains (Phase 5) · Location scope (dropped) · punch-in photo (Phase 4) ·
+custom statuses/fields (Phase 4).
