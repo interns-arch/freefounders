@@ -949,3 +949,121 @@ Notes and differences:
 - Task settings: departments are shown read-only with a link to Settings (Platform-owned since §17.1).
 - Not ported (small): the AI proofreading box on notices (the task form keeps it).
 - `apps/portal` is no longer served (the new app replaced it); it stays in the repo until Phase 9 clean-up.
+
+---
+
+## 19. Phase 6b design: the new look, the Workspace Portal and a separate Attendance app (2026-10-08, draft for approval)
+
+The founder sent two mockups (web and phone) of a **Workspace Portal**: the first screen after sign-in, with one card per
+workspace (Attendance & Shifts, Tasks & Automations, Assets & Inventory) and an admin row (People & access, Roles & duties,
+Settings). Asked for:
+1. that portal on web and on phones;
+2. **punch in straight from the portal**, so marking attendance is one tap after signing in;
+3. Attendance as its **own workspace** (today it is the HR page inside Tasks);
+4. Tasks and Assets keep every function (docs/UI-FUNCTIONALITY.md) but use the **same look and colours** as the portal.
+
+### 19.1 The look (from the mockups)
+- Light grey-blue page, white cards with a thin border and soft radius, a faint tint in the corner of each workspace card.
+- Deep indigo for primary buttons; a company's own brand colour still replaces it (§0.3 of the UI document).
+- Accents per workspace: Attendance violet, Tasks blue, Assets green. Admin stays neutral.
+- Inter for text; a monospace font for times, codes, counts and the small uppercase labels ("SHIFT WINDOW").
+- Status pills ("Not checked in", "Recurring active", "Synchronized") and small count boxes (Active / Overdue / To accept).
+- Dark mode to match.
+- All of this lives in `packages/theme` (tokens.css + tokens.ts), so the web app and the Phase 7 phone app change together.
+- Screens keep reading colours only from the tokens, as §18.2 requires.
+
+### 19.2 Workspace Portal (replaces the chooser at `/`)
+Each block below lists what it shows and where the data comes from (all already in `packages/core`).
+
+- **Header**
+  - Company logo and short name, with a "Workspace Portal" tag.
+  - Links: Workspaces · Directory · Audit logs (see 19.6).
+  - Light/dark switch, the notifications bell, your name and access level, and Exit (sign out).
+- **Greeting**
+  - "Good morning/afternoon/evening, {first name}" and "Choose where you want to work today."
+  - A **shift window** box with the company's work hours (`work_start`–`work_end` from the HR config).
+  - An attendance chip: checked in at 09:31 / not checked in / on leave / holiday / week off.
+- **Status strip**
+  - Nearest office and whether you are inside its radius. Your browser or phone compares your location with the office
+    list; every person can already read the office list.
+  - Face check: ready / not set up (when the company uses it).
+  - Selfie at punch: required / optional / off.
+- **Attendance & Shifts card**
+  - Live clock, office proximity, face state, and the top two leave balances.
+  - One main button that changes with the day: "Punch in" → "Punch out" → "Done for today · 8h 05m".
+  - "Open Attendance & Leave", with "{n} approvals pending" for approvers.
+- **Tasks & Automations card**
+  - Counts: Active, Overdue (shown as an alert when above 0), To accept.
+  - "Enter Task Workspace" and "Open dashboard".
+- **Assets & Inventory card**
+  - Counts: In custody, Exit hold, Open tickets, plus your first asset (e.g. "MacBook Pro M3 Max #AST-0994").
+  - "Open Assets" and "Scan QR / Barcode", which opens `/assets/scan`.
+- **Admin row** (owners/admins only)
+  - People & access, with the number of people.
+  - Roles & duties, with the number of roles.
+  - Settings, with the number of modules switched on.
+- **What each person sees**
+  - A person sees only the cards for apps they have.
+  - A switched-off module hides its parts.
+  - The page works while one service is down: that card shows "Unavailable" and the others keep working.
+- **Phones (up to 640 px)**
+  - Cards stack in this order: Attendance first, then Tasks, Assets and Admin.
+  - A bottom bar: Home · Tasks · Workspaces · People (People only for admins).
+  - "Remember my choice on this device" opens that workspace straight after the next sign-in. The portal stays one tap away.
+
+### 19.3 Punch in from the portal
+- The portal uses the **same check-in flow** as the Today screen; it is moved into one shared component.
+  - The location check, the face check and the punch photo (the camera dialog) all run only when the company turned them on.
+  - The server decides every rule. Nothing about the rules changes; only where the button lives.
+- On success the card switches to "Checked in at 09:31".
+- On failure the server's reason is shown on the card, e.g. "You are 240 m from the office".
+- A link to request a correction is shown alongside that reason.
+- On phones, location and camera prompts come up at the moment you tap the button, not when the page opens.
+
+### 19.4 Attendance as its own workspace
+- New area `/attendance` with Today · My attendance · Leave · Holidays · Team · Approvals · Settings.
+  These are the existing HR screens, moved and restyled; no function changes.
+- Old links keep working: `/tasks/hr?tab=x` redirects to the matching `/attendance/…` page.
+- Backend unchanged: the Django `hr` app keeps all data, rules and approvals. No data moves.
+- **Who can open it (decision needed, 19.7):**
+  - **A (recommended now):** Attendance is a separate workspace on screen; access follows Tasks access. No backend change.
+  - **B (with subscriptions, Phase 8):** Attendance becomes its own app in the Platform, so a company can buy Attendance
+    without Tasks. Needs a Platform app key, plans, and HR endpoints that accept people who don't use Tasks. Build it then.
+
+### 19.5 Tasks, Assets and Admin in the new look
+- They get the same header as the portal, a menu per workspace in that workspace's accent colour, and the new tokens.
+- Cards, tables, pills and count boxes are restyled to match.
+- Every function, URL and visible name in docs/UI-FUNCTIONALITY.md stays. Renamed names are updated in the e2e tests in the
+  same change.
+- The classic screens (`/classic/…`) are not restyled.
+
+### 19.6 Things in the mockups that are not real data today (founder to confirm)
+| Mockup | Proposal |
+|---|---|
+| Mesh SSID, gateway latency, "SOC2 Type II", "Global v4.12" | leave out (we have no such data; showing made-up values would mislead) |
+| "Token expires 14m 58s" | leave out: sign-in lasts a year and the short token renews itself silently |
+| "Directory" link | a read-only people directory (name, department, designation, manager), from the Platform People list |
+| "Audit logs" link | owners/admins: Assets already has an activity log; a Platform-wide audit log (who changed roles, people, settings) is new work: build later or hide for now |
+| Marketing lines on cards ("Linear-style workflow engine…") | short plain descriptions of what the workspace does |
+
+### 19.7 Decisions for the founder (first thing tomorrow)
+1. Attendance access: A now (recommended), B later?
+2. Directory: build it now? Audit logs: hide for now, or build the Platform audit log?
+3. "Remember my choice": open that workspace automatically, or only highlight it?
+4. Exact colours: use the mockup's colours as read from the image, or will you send hex codes?
+5. Phone bottom bar: confirm the four tabs (the mockup says Cockpit · Tasks · Workspaces · Personnel).
+
+### 19.8 Work plan for 2026-10-09
+1. Go through the 19.7 decisions with the founder.
+2. **Theme**: new tokens (light + dark), fonts, per-workspace accents; check that the brand colour override still works.
+3. **Shared check-in component**: lift the check-in flow out of the Today screen; add an office-distance helper in
+   `packages/core`.
+4. **Workspace Portal** at `/` (desktop + phone), with the punch-in card and the counts from the existing hooks.
+5. **Attendance workspace** `/attendance/*` plus redirects from `/tasks/hr?tab=…`; Attendance menu.
+6. **Restyle** the shell and shared parts for Tasks, Assets and Admin.
+7. **Tests**:
+   - e2e: punch in from the portal, the old HR links redirect, one test per card with the right access, and a phone-width run.
+   - Then all suites: rules + typecheck + build, e2e, smoke, Platform/Tasks/Assets.
+8. Update docs/UI-FUNCTIONALITY.md (portal, attendance URLs) and screenshots (desktop + 360 px) for the founder's review.
+
+Phase 7 (the phone app) starts after this. It reuses this portal as its home screen.
