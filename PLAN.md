@@ -762,3 +762,77 @@ Notes and differences from the design above:
   with nothing saved it reads the environment exactly as before.
 - `/api/leads/assignees/` stays available with Leads off: Groups, templates and settings use it as the team list.
 - Found while testing: the Tasks menu checked Leads permissions directly, so the Leads link ignored the switch (fixed).
+
+---
+
+## 17. Phase 5 design: one People directory, approvals, role duties, cross-app rules (2026-10-08)
+
+Made by Claude from a survey of all three services (founder asked to build every phase without stopping; any of it can be changed).
+What the survey found:
+- **Approvers are chosen three different ways.** Leave and attendance corrections go to anyone with `hr.approve` in the same department;
+  task changes and completions go to the task giver, then the reporting manager, then admins; Assets asset requests go to anyone with
+  `request:approve`. Leave requests and corrections notify nobody when submitted. Nothing reminds or escalates a pending approval
+  (`admin_alerted_at` exists but is unused).
+- **"Reports to" and departments live in each app separately** (Tasks `reporting_manager` + department codes; Assets `manager_id` +
+  department ids, display only), and **not in the Platform**.
+- **Deactivating someone in the Platform does not reach the apps**: their app users stay active (only sign-in is refused).
+- **No per-role duties or checklists.** Recurring tasks are created when the previous one is completed; no job creates them.
+- **Apps cannot tell the Platform anything** (only Platform → app calls exist).
+
+### 17.1 One People directory (Platform)
+- `people` gets **department, designation, reports_to (a person), join_date**. `departments` table per company (name, code, active).
+- People screen: these fields in the add/edit form; a Departments list on the Settings page.
+- **Pushed to the apps** (`PUT /api/internal/people`, same version/recovery rule as roles): Tasks sets `department`, `reporting_manager`,
+  and its department list; Assets sets `department_id` (created by code if missing), `manager_id`, `designation`, `join_date`.
+- **Deactivation reaches the apps**: Tasks user `is_active=false`; Assets login deactivated and its sessions ended (the Assets
+  *employee* record is only closed by the exit process, which also checks the assets came back).
+- Existing companies (CarTrends): the first sync **imports** departments and "reports to" from Tasks, so nothing changes for anyone.
+- Team and Department scopes (Phase 3) now follow the directory everywhere.
+
+### 17.2 Approvals
+One rule per kind of request, chosen on the Settings page (Tasks → Automation settings → Approvals):
+| Request | Who approves (default = today) | Option |
+|---|---|---|
+| Leave, attendance correction | `hr.approve` holders in the department | **Reports-to manager first**, then department approvers |
+| Task change request / completion | giver → reports-to → admins (unchanged) | — |
+| Asset request (Assets) | `request:approve` holders | **Requester's manager may approve** (and is notified) |
+- **The approver is notified when a leave or correction is submitted** (today: nobody).
+- **Reminders and escalation** (worker): a request still pending after the company's limit (default 24 working hours) reminds the
+  approver once; after twice the limit it goes to the admins / HR managers (`admin_alerted_at` now used). Applies to leave, corrections,
+  task change requests and completion reviews.
+
+### 17.3 Role duties (responsibilities)
+- In the role editor (portal): **duties** = title, optional description and checklist steps, and when: **daily, weekly (day),
+  monthly (date), or once when someone gets the role** (joining checklist).
+- Pushed with the roles. The Tasks worker creates each period's task for every active holder (one per person per period, never twice;
+  not on week-offs/holidays for daily duties), with the role's checklist; "once" duties are created when the role is first given.
+- Team Performance shows duties done on time like any task.
+
+### 17.4 Cross-app rules
+- **Events, pulled by the Platform**: each app keeps an outbox (`ff_events`: id, type, payload, created_at). The Platform polls every app
+  with its service token (`GET /api/internal/events?after=<id>`) every 30 s and runs the rules. No new kind of credential is needed, and
+  an app being down only delays rules.
+- **Exit**: portal People → "Start exit" (last working day, reason) → Assets opens the exit case (the employee goes on notice; the
+  assets they hold are listed) and Tasks creates the exit checklist tasks (company's exit checklist, assigned to the person's manager,
+  else HR). When Assets completes the exit, the Platform deactivates the person everywhere.
+- **New joiner**: adding a person with a join date (and roles) → Assets opens an onboarding case for that employee with the role's kit
+  (if the role has one) and Tasks creates the role's "once" duties.
+- **Asset ticket → task**: a new Assets ticket creates a Tasks task for the IT owner (the company setting "IT owner", else Assets
+  `ticket:manage` holders' first linked person), with a link to the ticket; the ticket shows the task. Completing the task resolves the
+  ticket (with the completion remarks).
+
+### 17.5 KPIs
+Team Performance adds **attendance %** (present + late + half-day ÷ working days) and **leave days** for the period, next to on-time %.
+
+### 17.6 Tests
+Platform: directory fields, departments, push + deactivation, import, events relay and each rule (fake apps).
+Tasks: people push, approval routing options, reminders/escalation, duties generation (no duplicates, week-offs), exit/joiner/ticket
+endpoints, KPIs; all earlier tests unchanged. Assets: people push, manager approval, exit/onboarding/ticket internal endpoints, outbox.
+Browser: start an exit in the portal → exit case in Assets + checklist task in Tasks.
+
+### 17.7 Build order
+1. Directory: Platform fields + departments + push + deactivation + import; apps' `/internal/people`; portal forms
+2. Approvals: Tasks routing option, notify on submit, reminders/escalation; Assets manager approval
+3. Role duties: Platform + portal editor; Tasks generation
+4. Events + rules: outboxes, Platform relay, exit / joiner / ticket flows, portal "Start exit"
+5. KPIs, smoke + browser, docs
