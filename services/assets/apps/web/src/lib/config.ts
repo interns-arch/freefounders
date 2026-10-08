@@ -7,6 +7,31 @@ export interface AppConfig {
   publicUrl: string | null;
   /** The main company, shown on the login screen and sidebar. */
   companyName: string | null;
+  /** FreeFounders Settings Center: the company's short name, colour and logo (null when standalone). */
+  brand?: { shortName: string | null; colour: string | null; logoUrl: string | null } | null;
+  /** Which switchable modules are on (null before sign-in in multi-company mode). */
+  modules?: Record<string, boolean> | null;
+}
+
+/** On unless the company switched it off (PLAN.md §16.2). */
+export function useModules() {
+  const q = useAppConfig();
+  return (key: string) => q.data?.modules?.[key] !== false;
+}
+
+/** The company's brand colour replaces the primary colour (light and dark). */
+export function useBrandColour() {
+  const colour = useAppConfig().data?.brand?.colour ?? null;
+  useEffect(() => {
+    const root = document.documentElement.style;
+    if (colour) {
+      root.setProperty('--primary', colour);
+      root.setProperty('--ring', colour);
+    } else {
+      root.removeProperty('--primary');
+      root.removeProperty('--ring');
+    }
+  }, [colour]);
 }
 
 export function useAppConfig() {
@@ -23,9 +48,10 @@ export function shortCompanyName(name: string | null | undefined): string | null
 export function useCompanyName() {
   const q = useAppConfig();
   const full = q.data?.companyName ?? null;
-  const short = shortCompanyName(full);
+  const brand = q.data?.brand ?? null;
+  const short = brand?.shortName || shortCompanyName(full);
   useEffect(() => {
-    document.title = short ? `${short} · Asset Portal` : 'Asset Portal';
-  }, [short]);
-  return { full, short };
+    document.title = short ? `${short} · ${brand ? 'Assets' : 'Asset Portal'}` : 'Asset Portal';
+  }, [short, brand]);
+  return { full, short, brand };
 }

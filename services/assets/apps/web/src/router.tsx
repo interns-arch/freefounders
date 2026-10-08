@@ -7,6 +7,7 @@ import { MAIN_NAV, navVisible } from '@/components/layout/nav';
 import { Button } from '@/components/ui/button';
 import { QuickAddProvider } from '@/features/quick-add/quick-add';
 import { useAuth } from '@/lib/auth';
+import { useModules } from '@/lib/config';
 import { BASE, goToPortal, PLATFORM } from '@/lib/platform';
 
 const LoginPage = lazy(() => import('@/features/auth/login-page'));
@@ -14,9 +15,16 @@ const DashboardPage = lazy(() => import('@/features/dashboard/dashboard-page'));
 
 function HomeRoute() {
   const { can } = useAuth();
-  if (navVisible(MAIN_NAV[0], can)) return <DashboardPage />;
-  const first = MAIN_NAV.find((n) => navVisible(n, can));
+  const moduleOn = useModules();
+  if (navVisible(MAIN_NAV[0], can, moduleOn)) return <DashboardPage />;
+  const first = MAIN_NAV.find((n) => navVisible(n, can, moduleOn));
   return <Navigate to={first?.to ?? '/employees'} replace />;
+}
+
+/** Pages of a module the company switched off send people home. */
+function ModuleRoute({ module, children }: { module: string; children: React.ReactNode }) {
+  const moduleOn = useModules();
+  return moduleOn(module) ? <>{children}</> : <Navigate to="/" replace />;
 }
 const AssetsPage = lazy(() => import('@/features/assets/assets-page'));
 const AssetDetailPage = lazy(() => import('@/features/assets/asset-detail-page'));
@@ -123,12 +131,12 @@ export const router = createBrowserRouter([
           { path: 'requests', element: <RequestsPage /> },
           { path: 'tickets', element: <TicketsPage /> },
           { path: 'queue', element: <QueuePage /> },
-          { path: 'sims', element: <SimsPage /> },
+          { path: 'sims', element: <ModuleRoute module="sims"><SimsPage /></ModuleRoute> },
           { path: 'leadership', element: <LeadershipPage /> },
           { path: 'onboarding', element: <OnboardingPage /> },
           { path: 'onboarding/:id', element: <OnboardingDetailPage /> },
-          { path: 'reconciliation', element: <ReconciliationPage /> },
-          { path: 'reconciliation/:id', element: <ReconRunPage /> },
+          { path: 'reconciliation', element: <ModuleRoute module="sims"><ReconciliationPage /></ModuleRoute> },
+          { path: 'reconciliation/:id', element: <ModuleRoute module="sims"><ReconRunPage /></ModuleRoute> },
           { path: 'maintenance', element: <MaintenancePage /> },
           { path: 'activity', element: <ActivityPage /> },
           { path: 'settings/catalog', element: <CatalogPage /> },

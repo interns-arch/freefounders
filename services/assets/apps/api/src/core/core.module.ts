@@ -3,12 +3,13 @@ import { DbService } from '../db/db.service';
 import { HistoryController, NotificationsController } from './core.controller';
 import { HistoryService } from './history.service';
 import { NotificationsService } from './notifications.service';
+import { ModuleGuard, ProfileService } from './profile.service';
 import { SequenceService } from './sequence.service';
 
 @Global()
 @Module({
-  providers: [DbService, HistoryService, SequenceService, NotificationsService],
+  providers: [DbService, HistoryService, SequenceService, NotificationsService, ProfileService, ModuleGuard],
   controllers: [HistoryController, NotificationsController],
-  exports: [DbService, HistoryService, SequenceService, NotificationsService],
+  exports: [DbService, HistoryService, SequenceService, NotificationsService, ProfileService, ModuleGuard],
 })
 export class CoreModule {}

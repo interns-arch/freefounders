@@ -40,6 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [qc]);
 
   const me = query.data ?? null;
+  // Multi-company mode: the company (its brand and modules) is only known once signed in.
+  const signedIn = me !== null;
+  useEffect(() => {
+    void qc.invalidateQueries({ queryKey: ['config'] });
+  }, [signedIn, qc]);
   const perms = useMemo(() => new Set(me?.permissions ?? []), [me]);
   const can = useCallback((...permissions: Permission[]) => permissions.some((p) => perms.has(p)), [perms]);
 

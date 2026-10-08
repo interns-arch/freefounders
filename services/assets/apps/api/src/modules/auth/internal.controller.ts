@@ -11,6 +11,7 @@ import { type AuthedRequest, badRequest, Public, ZodPipe } from '../../common/ht
 import { HistoryService } from '../../core/history.service';
 import { SequenceService } from '../../core/sequence.service';
 import { DbService } from '../../db/db.service';
+import { MODULES, ProfileService, profilePushSchema } from '../../core/profile.service';
 import { employees, roles, sessions, syncState, userRoles, users } from '../../db/schema';
 import { ensureRegistry, listCompanies, migrateCompanySchema, registerCompany, schemaFor, schemaForCode, tenancyEnabled } from '../../db/tenancy';
 import { createSystemRoles, setUpCompany } from '../../seed/company-setup';
@@ -65,7 +66,24 @@ export class InternalController {
     private readonly history: HistoryService,
     private readonly sequences: SequenceService,
     private readonly moduleRef: ModuleRef,
+    private readonly profile: ProfileService,
   ) {}
+
+  /** The modules Assets can switch on or off, with their defaults for a new company (PLAN.md §16.2). */
+  @Public()
+  @Get('modules')
+  async modules(@Req() req: AuthedRequest) {
+    await this.requireService(req);
+    return { app: 'assets', modules: MODULES };
+  }
+
+  /** The company's names, colour, logo address and module switches from the Settings Center. */
+  @Public()
+  @Put('company')
+  async company(@Req() req: AuthedRequest, @Body() raw: unknown) {
+    await this.requireService(req);
+    return this.profile.apply(new ZodPipe(profilePushSchema).transform(raw));
+  }
 
   /**
    * Multi-company mode: the Platform sets up a company in Assets. Creates its schema (or brings it up to date),

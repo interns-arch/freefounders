@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { reconUploadSchema, type ReconUploadInput } from '@eam/shared';
 import type { Actor } from '../../common/actor';
 import { CurrentActor, RequirePermissions, ZodPipe } from '../../common/http';
+import { RequireModule } from '../../core/profile.service';
 import { AssetsModule } from '../assets/assets.module';
 import { ReconciliationService } from './reconciliation.service';
 
@@ -10,6 +11,7 @@ const addSimsSchema = z.object({ keys: z.array(z.string().min(1).max(40)).min(1)
 
 @Controller('reconciliations')
 @RequirePermissions('asset:assign', 'employee:manage')
+@RequireModule('sims')
 export class ReconciliationController {
   constructor(private readonly recon: ReconciliationService) {}
 

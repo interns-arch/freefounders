@@ -2,6 +2,7 @@ import { Controller, Get, Module } from '@nestjs/common';
 import { asc, sql } from 'drizzle-orm';
 import { Public } from './common/http';
 import { CoreModule } from './core/core.module';
+import { ProfileService } from './core/profile.service';
 import { DbService } from './db/db.service';
 import { tenancyEnabled } from './db/tenancy';
 import { companies } from './db/schema';
@@ -31,16 +32,24 @@ export class HealthController {
 
 @Controller('config')
 export class ConfigController {
-  constructor(private readonly dbs: DbService) {}
+  constructor(
+    private readonly dbs: DbService,
+    private readonly profile: ProfileService,
+  ) {}
 
-  /** Public app settings: the address printed into QR codes and the company shown on screens. */
+  /**
+   * Public app settings: the address printed into QR codes, the company shown on screens, and (FreeFounders) the
+   * company's brand and which modules are on. No company is known before sign-in in multi-company mode.
+   */
   @Public()
   @Get()
   async config() {
-    // Multi-company mode before sign-in: no company yet, so no company name.
-    if (tenancyEnabled() && !this.dbs.companySchema) return { publicUrl: process.env.PUBLIC_URL?.replace(/\/+$/, '') || null, companyName: null };
+    const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, '') || null;
+    if (tenancyEnabled() && !this.dbs.companySchema) return { publicUrl, companyName: null, brand: null, modules: null };
     const [company] = await this.dbs.db.select({ name: companies.name }).from(companies).orderBy(asc(companies.createdAt)).limit(1);
-    return { publicUrl: process.env.PUBLIC_URL?.replace(/\/+$/, '') || null, companyName: company?.name ?? null };
+    const profile = await this.profile.get();
+    const brand = profile?.name ? { shortName: profile.shortName, colour: profile.colour, logoUrl: profile.logoUrl } : null;
+    return { publicUrl, companyName: profile?.name || company?.name || null, brand, modules: await this.profile.modules() };
   }
 }
 

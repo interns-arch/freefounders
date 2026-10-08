@@ -27,7 +27,7 @@ import { useQuickAdd } from '@/features/quick-add/quick-add';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useHotkeys, useScannerInput } from '@/lib/hotkeys';
-import { useCompanyName } from '@/lib/config';
+import { useBrandColour, useCompanyName, useModules } from '@/lib/config';
 import { APP_LINKS, PLATFORM, platformApps, withBase } from '@/lib/platform';
 import { resolveCode } from '@/lib/scan';
 import { cn } from '@/lib/utils';
@@ -52,6 +52,25 @@ function useTheme() {
 
 function Brand() {
   const company = useCompanyName();
+  useBrandColour();
+  if (company.brand) {
+    // A FreeFounders company: its own logo (or first letter) and short name.
+    return (
+      <div className="flex items-center gap-2 px-1">
+        {company.brand.logoUrl ? (
+          <img src={company.brand.logoUrl} alt="" className="h-9 max-w-16 shrink-0 object-contain" />
+        ) : (
+          <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary font-bold text-primary-foreground">
+            {(company.short ?? 'A').slice(0, 1).toUpperCase()}
+          </span>
+        )}
+        <span className="min-w-0 border-l pl-2 leading-tight">
+          <span className="block truncate text-sm font-semibold">{company.short}</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assets</span>
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-2 px-1">
       <img src={withBase('/logo.webp')} alt={company.full ?? 'Car Trends'} className="h-11 w-auto shrink-0" />
@@ -90,7 +109,8 @@ function AppSwitcher() {
 
 function NavSection({ title, items, onNavigate }: { title?: string; items: NavItem[]; onNavigate?: () => void }) {
   const { can } = useAuth();
-  const visible = items.filter((i) => navVisible(i, can));
+  const moduleOn = useModules();
+  const visible = items.filter((i) => navVisible(i, can, moduleOn));
   if (!visible.length) return null;
   return (
     <div className="space-y-0.5">

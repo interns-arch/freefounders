@@ -33,9 +33,14 @@ export interface NavItem {
   /** Or a rule of its own, so each role (IT, HR, Manager, CEO, Employee) gets only what it uses. */
   show?: (can: Can) => boolean;
   shortcut?: string;
+  /** Belongs to a module the company can switch off (FreeFounders Settings Center). */
+  module?: string;
 }
 
-export const navVisible = (item: Pick<NavItem, 'perms' | 'show'>, can: Can) => (item.show ? item.show(can) : !item.perms || can(...item.perms));
+type ModuleOn = (key: string) => boolean;
+
+export const navVisible = (item: Pick<NavItem, 'perms' | 'show' | 'module'>, can: Can, moduleOn: ModuleOn = () => true) =>
+  (!item.module || moduleOn(item.module)) && (item.show ? item.show(can) : !item.perms || can(...item.perms));
 
 // Who is who: IT/Admin hand out assets; staff (HR, Manager, CEO) can see people; plain employees can't.
 const isIT = (can: Can) => can('asset:assign');
@@ -46,14 +51,14 @@ export const MAIN_NAV: NavItem[] = [
   { label: 'Leadership', to: '/leadership', icon: LineChart, perms: ['insights:leadership'] },
   { label: 'Priority queue', to: '/queue', icon: ListOrdered, shortcut: 'G Q', show: isIT },
   { label: 'Assets', to: '/assets', icon: Boxes, shortcut: 'G A', show: (can) => isIT(can) || isEmployeeOnly(can) },
-  { label: 'SIM cards', to: '/sims', icon: CardSim, show: isIT },
+  { label: 'SIM cards', to: '/sims', icon: CardSim, show: isIT, module: 'sims' },
   { label: 'Employees', to: '/employees', icon: Users, perms: ['employee:view'], shortcut: 'G E' },
   { label: 'New joiners', to: '/onboarding', icon: UserPlus, show: (can) => can('onboarding:manage') && !isIT(can) },
   { label: 'Exits', to: '/exits', icon: LogOut, shortcut: 'G X', show: (can) => can('exit:manage', 'employee:status') },
   { label: 'Requests', to: '/requests', icon: ClipboardList, shortcut: 'G R', show: (can) => can('request:approve', 'request:fulfil') || isEmployeeOnly(can) },
   { label: 'Tickets', to: '/tickets', icon: LifeBuoy, shortcut: 'G T', show: (can) => can('ticket:manage') || isEmployeeOnly(can) },
   { label: 'Maintenance', to: '/maintenance', icon: Wrench, perms: ['maintenance:manage'], shortcut: 'G M' },
-  { label: 'Reconciliation', to: '/reconciliation', icon: GitCompareArrows, show: isIT },
+  { label: 'Reconciliation', to: '/reconciliation', icon: GitCompareArrows, show: isIT, module: 'sims' },
   { label: 'Activity log', to: '/activity', icon: Activity, perms: ['history:view'] },
   { label: 'Scan', to: '/scan', icon: ScanLine, shortcut: 'G S', show: isIT },
 ];

@@ -9,7 +9,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { exportJWK, SignJWT } from 'jose';
 import { type Permission, SYSTEM_ROLES } from '@eam/shared';
 import { DbService } from './db/db.service';
-import { employees, roles, sessions, users } from './db/schema';
+import { employees, roles, sessions, syncState, users } from './db/schema';
 import { createApp } from './main';
 import { hashPassword } from './modules/auth/auth.service';
 
@@ -282,5 +282,63 @@ describe('roles from the FreeFounders role builder', () => {
     assert.equal(exported.body.version, 20);
     assert.ok(exported.body.roles.some((r: { name: string }) => r.name === 'Manager'));
     assert.ok(exported.body.people.some((p: { personId: string }) => p.personId === ids.person));
+  });
+});
+
+describe('settings center (Phase 4)', () => {
+  const clear = () => dbs.root.delete(syncState).where(inArray(syncState.key, ['ff_profile', 'ff_profile_version']));
+
+  test('the module list and the profile need the Platform', async () => {
+    assert.equal((await call('GET', '/internal/modules')).status, 401);
+    assert.equal((await call('PUT', '/internal/company', await access(ids.person, ids.mia), { version: 1 })).status, 401);
+    const cat = await call('GET', '/internal/modules', await service());
+    assert.equal(cat.status, 200);
+    assert.deepEqual(cat.body.modules.map((m: { key: string; default: boolean }) => [m.key, m.default]), [['sims', false]]);
+  });
+
+  test('without a profile everything is on and /config is unbranded', async () => {
+    await clear();
+    const cfg = await call('GET', '/config');
+    assert.equal(cfg.body.brand, null);
+    assert.deepEqual(cfg.body.modules, { sims: true });
+  });
+
+  test('switching SIMs off closes reconciliation; branding reaches /config; older pushes are ignored', async () => {
+    const [adminRole] = await dbs.root.select().from(roles).where(eq(roles.name, 'Admin'));
+    const [admin] = await dbs.root
+      .insert(users)
+      .values({ email: 'pf-admin@t.test', name: 'PF Admin', passwordHash: await hashPassword('Test@12345'), roleId: adminRole.id, platformPersonId: randomUUID() })
+      .returning();
+    const token = await access(admin.platformPersonId!, admin.id);
+    try {
+      assert.equal((await call('GET', '/reconciliations', token)).status, 200);
+      const pushed = await call('PUT', '/internal/company', await service(), {
+        version: 3, name: 'Acme Industries', shortName: 'Acme', colour: '#0f7b5f', logoUrl: '/api/platform/brand/x/logo?v=3', modules: { sims: false, rockets: true },
+      });
+      assert.deepEqual(pushed.body, { version: 3, applied: true });
+      const off = await call('GET', '/reconciliations', token);
+      assert.equal(off.status, 404);
+      assert.equal(off.body.message, 'This module is switched off');
+      assert.equal((await call('GET', '/assets', token)).status, 200, 'the rest of Assets stays on');
+      const cfg = await call('GET', '/config');
+      assert.equal(cfg.body.companyName, 'Acme Industries');
+      assert.deepEqual(cfg.body.brand, { shortName: 'Acme', colour: '#0f7b5f', logoUrl: '/api/platform/brand/x/logo?v=3' });
+      assert.deepEqual(cfg.body.modules, { sims: false });
+
+      const late = await call('PUT', '/internal/company', await service(), { version: 2, name: 'Old', modules: {} });
+      assert.deepEqual(late.body, { version: 3, applied: false });
+      assert.equal((await call('GET', '/reconciliations', token)).status, 404);
+
+      const unsafe = await call('PUT', '/internal/company', await service(), { version: 4, name: 'Acme', colour: 'red', logoUrl: '//evil.example/x.png', modules: {} });
+      assert.equal(unsafe.body.applied, true);
+      const cfg2 = await call('GET', '/config');
+      assert.equal(cfg2.body.brand.colour, null);
+      assert.equal(cfg2.body.brand.logoUrl, null);
+      assert.equal((await call('GET', '/reconciliations', token)).status, 200, 'switched back on');
+    } finally {
+      await clear();
+      await dbs.root.delete(sessions).where(eq(sessions.userId, admin.id));
+      await dbs.root.delete(users).where(eq(users.id, admin.id));
+    }
   });
 });
