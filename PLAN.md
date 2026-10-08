@@ -668,3 +668,79 @@ Found and fixed while testing:
   Platform's counter ends up behind (e.g. the Platform database restored from a backup), every later change was ignored.
   Now the Platform moves past the app's version and resends once.
 - Role pushes write only what changed (dozens of roles stay fast).
+
+---
+
+## 16. Phase 4 design: Settings Center + module switches (2026-10-08)
+
+The founder asked to build all phases without stopping, so this design was made by Claude from a survey of both apps
+(2026-10-08). The founder can change any of it.
+
+### 16.1 Where each setting lives
+| Setting | Owner | Edited in |
+|---|---|---|
+| Company name, short name, logo, brand colour | **Platform** (pushed to the apps) | Portal → Settings |
+| Module switches (which parts of each app are on) | **Platform** (pushed to the apps) | Portal → Settings |
+| Task completion evidence, departments, task categories | Tasks (exists) | Tasks → Automation settings |
+| HR rules: hours, grace, half/full day, week-offs, geofence, face check | Tasks (today `.env` only) | Tasks → HR → Settings (**made editable**) |
+| Punch-in locations | Tasks (`OfficeLocation`, exists) | Tasks → HR → Settings |
+| **Punch-in photo** (founder) + how long photos are kept | Tasks (new) | Tasks → HR → Settings |
+| Leave types, holidays | Tasks (exist) | Tasks → HR |
+| Notification rules (email / WhatsApp per kind of event) | Tasks (new) | Tasks → Automation settings |
+| Asset catalogue, custom fields, departments, vendors | Assets (exist) | Assets → Settings |
+
+The portal's Settings page shows the company-wide part and links to each app's settings pages.
+
+### 16.2 Module switches
+| App | Module | Launch default (new companies) |
+|---|---|---|
+| Tasks | Tasks, Template directory, Groups, Notices, Attendance & leave | always on |
+| Tasks | Leads (+ quotations, assignment rules), AI inbox, Payroll, Mistake register, Forms, Links, Idea board | **off** |
+| Assets | Assets, people, onboarding/exit, requests, tickets, maintenance | always on |
+| Assets | SIM register + reconciliation | **off** |
+- **Enforced on the server**: a switched-off module's API answers `404 {"detail":"This module is switched off"}`; its pages leave the
+  menus; its reminders/digests do not run.
+- `/api/auth/me` (Tasks) and `/api/config` (Assets) tell the web app which modules are on.
+- **Standalone apps and existing companies are unchanged**: no switch values = everything on. CarTrends is imported with
+  everything on (it uses Leads, Payroll, Mistakes; answers open question 4: payroll stays on for CarTrends).
+
+### 16.3 Branding
+- Platform: `companies.short_name`, `brand_colour` (#rrggbb), `logo` (PNG/JPEG/WebP ≤ 512 KB, checked by magic bytes, stored in the DB),
+  `profile_version`. Logo served at `GET /api/platform/brand/:companyId/logo?v=N` (public, cached).
+- Push: `PUT /api/internal/company` on each app with `{version, name, shortName, colour, logoUrl, modules}`; same stale-version rule
+  and recovery as roles (§15.9).
+- Tasks: sidebar, login fallback, page title, email subject prefix and the "Open in…" link use the company's names; the brand colour
+  overrides the `--primary` colour. Assets: `companyName`, title and the ID cards use the name; colour overrides its primary token.
+- With no profile (standalone), both apps look exactly as today.
+
+### 16.4 Attendance photo (founder, 2026-10-08)
+- Setting `ATTENDANCE_PHOTO` = off · optional · **required** (FreeFounders default: required; standalone default: off).
+- Check-in and check-out send a JPEG (resized in the browser to ≤ 640 px, ≤ 300 KB); stored under the company's file path
+  (`c/<schema>/attendance/…`), linked from `Attendance.check_in_photo` / `check_out_photo`.
+- Shown in "Team today", the monthly view and the corrections review, to the person themself, `hr.approve` (their department) and
+  `hr.manage`. Served through an authenticated endpoint, never a public URL.
+- `ATTENDANCE_PHOTO_RETENTION_DAYS` (default 90): the worker deletes older photos (DPDP: keep only as long as needed).
+- When the face check is on, the same camera frame is used for both, so the person is photographed once.
+
+### 16.5 Notification rules
+- One setting per **kind of event** (≈12 groups: task given, task done/review, change requests, comments & progress,
+  due & overdue reminders, daily/day-end digests, leave & attendance, notices, mistakes, leads, …), each with Email on/off
+  and WhatsApp on/off. In-app notifications are always on.
+- `notify()` looks up the rule for its type; anything not listed keeps today's behaviour. Push (mobile) joins in Phase 7.
+
+### 16.6 Moved to Phase 5
+Approval chains (they need departments and reports-to in the Platform's People directory) and one shared department list.
+
+### 16.7 Tests
+- Platform: profile + logo validation, module switches only within the plan, push + version recovery, admin-only.
+- Tasks: module gate (each switched-off route group answers 404; standalone unaffected), worker skips switched-off modules,
+  HR settings API, photo required/optional/off, photo access rules, retention purge, notification rules; **all existing tests unchanged**.
+- Assets: SIM/reconciliation gate, profile applied to `/config`; existing tests unchanged.
+- Browser: admin switches Leads on/off in the portal and the Tasks menu follows; brand name shows in Tasks; check-in with a photo.
+
+### 16.8 Build order
+1. Platform: profile, logo, modules, push; portal Settings page
+2. Tasks: receive profile; module gate + menus; branding; worker
+3. Assets: receive profile; SIM/reconciliation gate; branding
+4. Tasks: editable HR settings, attendance photo, retention; notification rules
+5. Smoke + browser tests; docs

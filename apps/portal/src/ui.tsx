@@ -30,7 +30,10 @@ export function TopBar({ me, onSignOut, children }: { me: Me; onSignOut: () => v
       <div className="topbar-right">
         <span className="who">
           <strong>{me.person.fullName}</strong>
-          <small>{me.company.name}</small>
+          <small>
+            {me.company.logoUrl && <img className="company-logo" src={me.company.logoUrl} alt="" />}
+            {me.company.shortName || me.company.name}
+          </small>
         </span>
         <button className="btn ghost" onClick={() => navigate('/account')}>
           Change password
@@ -43,9 +46,11 @@ export function TopBar({ me, onSignOut, children }: { me: Me; onSignOut: () => v
   );
 }
 
-/** Admin pages: People and Roles. */
-export function PageNav({ current }: { current: 'people' | 'roles' }) {
-  const link = (to: 'people' | 'roles', label: string) => (
+type AdminPage = 'people' | 'roles' | 'settings';
+
+/** Admin pages: People, Roles and Settings. */
+export function PageNav({ current }: { current: AdminPage }) {
+  const link = (to: AdminPage, label: string) => (
     <a
       href={`/${to}`}
       className={`tab${current === to ? ' on' : ''}`}
@@ -65,6 +70,7 @@ export function PageNav({ current }: { current: 'people' | 'roles' }) {
       </a>
       {link('people', 'People & access')}
       {link('roles', 'Roles')}
+      {link('settings', 'Settings')}
     </nav>
   );
 }

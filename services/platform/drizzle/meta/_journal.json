@@ -15,6 +15,13 @@
       "when": 1791441835059,
       "tag": "0001_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791445678765,
+      "tag": "0002_company_profile",
+      "breakpoints": true
     }
   ]
 }

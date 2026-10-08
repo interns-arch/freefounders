@@ -192,3 +192,27 @@ input[type='checkbox'] { width: auto; }
   .tabs .tab { padding: 6px 8px; font-size: 13px; }
   .matrix-row { align-items: flex-start; flex-direction: column; gap: 6px; padding: 6px 0; }
 }
+
+/* Settings Center (Phase 4) */
+.settings-card { padding: 20px 22px; margin-bottom: 18px; }
+.settings-card h2 { margin: 0 0 6px; font-size: 17px; }
+.settings-card > .muted { margin-top: 0; }
+.colour-row, .logo-row { display: flex; align-items: center; gap: 8px; }
+.colour-row input[type='color'] { width: 42px; height: 38px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
+.colour-row .input { max-width: 140px; }
+.logo-preview { height: 40px; max-width: 160px; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px; background: var(--surface); }
+.logo-empty { color: var(--muted); font-size: 13px; }
+.form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.module-group + .module-group { margin-top: 14px; }
+.module-group h3 { margin: 14px 0 6px; font-size: 14px; }
+.module-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.module-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; }
+.module-list li + li { border-top: 1px solid var(--line); }
+.module-list small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.link-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 10px; }
+.link-tile { display: block; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--ink); text-decoration: none; background: var(--surface); }
+.link-tile:hover { border-color: var(--brand); }
+.link-tile strong { display: block; margin-top: 6px; }
+.link-tile small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.company-logo { height: 14px; max-width: 48px; object-fit: contain; vertical-align: -2px; margin-right: 5px; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }

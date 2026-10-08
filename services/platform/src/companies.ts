@@ -16,6 +16,7 @@ import { hashPassword } from './auth/auth.service';
 import { DbService } from './db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps } from './db/schema';
 import { internalUrl, ProvisionClient } from './provision/provision.client';
+import { CompanyService } from './company/company.service';
 import { RolesService } from './roles/roles.service';
 
 const CODE_RE = /^[A-Za-z][A-Za-z0-9_]{1,40}$/;
@@ -88,6 +89,13 @@ async function syncRoles(rolesSvc: RolesService, companyId: string) {
   }
 }
 
+/** Sends every app the company's names, colour, logo address and module switches. */
+async function syncProfile(companySvc: CompanyService, companyId: string) {
+  if (!APPS.some((a) => internalUrl(a))) return;
+  const res = await companySvc.push(companyId);
+  console.log(`  ✔ profile: sent to ${Object.entries(res).map(([a, r]) => `${a} (${r})`).join(', ') || 'no app'}`);
+}
+
 async function main() {
   const [command = 'list', ...rest] = process.argv.slice(2);
   const opts = args(rest);
@@ -95,6 +103,7 @@ async function main() {
   const dbs = ctx.get(DbService);
   const provisioner = ctx.get(ProvisionClient);
   const rolesSvc = ctx.get(RolesService);
+  const companySvc = ctx.get(CompanyService);
   try {
     if (command === 'list') {
       const rows = await dbs.db
@@ -112,6 +121,7 @@ async function main() {
         await setUpInApps(provisioner, c);
         await relink(dbs, provisioner, c.id);
         await syncRoles(rolesSvc, c.id);
+        await syncProfile(companySvc, c.id);
       }
       return;
     }
@@ -137,7 +147,12 @@ async function main() {
       console.log(`✔ ${company.name} (${company.code}) created; owner ${ownerEmail}`);
       if (generated) console.log(`  One-time password: ${password}   ← must be changed at first sign-in`);
       await setUpInApps(provisioner, company);
+      if (APPS.some((a) => internalUrl(a))) {
+        // A new company starts with the launch modules only (PLAN.md §16.2); an admin switches the rest on.
+        await companySvc.applyLaunchDefaults(company.id);
+      }
       await syncRoles(rolesSvc, company.id);
+      await syncProfile(companySvc, company.id);
       return;
     }
 

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, customType, index, integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 /** Everything the Platform owns lives in its own Postgres schema. */
 export const platform = pgSchema('platform');
@@ -12,6 +12,11 @@ export const PLATFORM_ROLES = ['owner', 'admin', 'member'] as const;
 export type PlatformRole = (typeof PLATFORM_ROLES)[number];
 
 export const PERSON_STATUSES = ['active', 'inactive'] as const;
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+
+/** Per app, module key -> on/off. A module missing here counts as on (existing companies are unchanged). */
+export type ModuleSwitches = Partial<Record<AppKey, Record<string, boolean>>>;
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -26,6 +31,14 @@ export const companies = platform.table('companies', {
   /** Goes up on every role change; the apps ignore an older role set arriving late. */
   accessVersion: integer('access_version').notNull().default(0),
   status: text('status').notNull().default('active'),
+  // Settings Center (Phase 4): branding and module switches, pushed to the apps (PUT /internal/company).
+  shortName: text('short_name'),
+  brandColour: text('brand_colour'),
+  logo: bytea('logo'),
+  logoType: text('logo_type'),
+  modules: jsonb('modules').$type<ModuleSwitches>().notNull().default({}),
+  /** Goes up on every profile change; like accessVersion, the apps ignore an older profile arriving late. */
+  profileVersion: integer('profile_version').notNull().default(0),
   ...timestamps,
 });
 

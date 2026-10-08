@@ -6,6 +6,7 @@ import { LoginPage } from './pages/Login';
 import { navigate, remember, rememberedApp, usePath } from './nav';
 import { PeoplePage } from './pages/People';
 import { RolesPage } from './pages/Roles';
+import { SettingsPage } from './pages/Settings';
 
 /** Only ever send people back into one of their own apps on this site. */
 function safeNext(apps: AppInfo[]): string | null {
@@ -82,6 +83,10 @@ export function App() {
   }
   if (path === '/roles' && isAdmin(me)) {
     return <RolesPage me={me} onSignOut={signOut} />;
+  }
+  if (path === '/settings' && isAdmin(me)) {
+    const reloadMe = () => void call<Me>('GET', '/auth/me').then((fresh) => setState({ phase: 'ready', me: fresh }));
+    return <SettingsPage me={me} onSignOut={signOut} onBrandChange={reloadMe} />;
   }
   return <ChooserPage me={me} onSignOut={signOut} />;
 }

@@ -10,6 +10,7 @@ import { pbkdf2Sync } from 'node:crypto';
 import { hashPassword } from './auth/auth.service';
 import { ProvisionClient } from './provision/provision.client';
 import { RolesService } from './roles/roles.service';
+import { CompanyService } from './company/company.service';
 import { DbService } from './db/db.service';
 import { companies, logins, people, personApps, refreshSessions } from './db/schema';
 import { createApp } from './main';
@@ -35,6 +36,15 @@ let fakeExport: { version: number; roles: unknown[]; people: unknown[] } = { ver
 const accessPushes: Array<{ cid: unknown; body: any }> = [];
 /** The role-set version the fake app last applied; a lower one is refused as stale, like the real apps do. */
 let fakeAccessVersion = 0;
+const companyPushes: Array<{ cid: unknown; body: any }> = [];
+let fakeProfileVersion = 0;
+const FAKE_MODULES = {
+  app: 'tasks',
+  modules: [
+    { key: 'leads', label: 'Leads', description: 'Sales pipeline', default: false },
+    { key: 'payroll', label: 'Payroll', description: 'Salary runs', default: false },
+  ],
+};
 
 interface Res {
   status: number;
@@ -77,6 +87,21 @@ before(async () => {
       if (req.method === 'GET' && req.url?.endsWith('/roles')) {
         provisionCalls.push({ body: {}, aud: payload.aud, cid: payload.cid, url: req.url });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{ value: 'warehouse', label: 'Warehouse Team' }]));
+        return;
+      }
+      if (req.method === 'GET' && req.url?.endsWith('/modules')) {
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(FAKE_MODULES));
+        return;
+      }
+      if (req.method === 'PUT' && req.url?.endsWith('/company')) {
+        const body = JSON.parse(raw);
+        companyPushes.push({ cid: payload.cid, body });
+        if (body.version < fakeProfileVersion) {
+          res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ version: fakeProfileVersion, applied: false }));
+          return;
+        }
+        fakeProfileVersion = body.version;
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ version: body.version, applied: true }));
         return;
       }
       if (req.method === 'GET' && req.url?.endsWith('/permissions')) {
@@ -558,5 +583,73 @@ describe('role builder (Phase 3)', () => {
     assert.equal(sent.length, 2, 'refused once as stale, then resent');
     assert.ok(sent[1] > sent[0] && sent[1] >= fakeAccessVersion - 0, 'the resend is past the app version');
     assert.deepEqual(accessPushes.at(-1)!.body.people.find((p: { personId: string }) => p.personId === ids.rita).roleIds, [roleIds.floor]);
+  });
+});
+
+describe('settings center (Phase 4)', () => {
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex');
+
+  test('members cannot see or change the company settings', async () => {
+    const mia = await login('mia');
+    assert.equal((await call('GET', '/company', { token: mia.token })).status, 403);
+    assert.equal((await call('PATCH', '/company', { token: mia.token, body: { shortName: 'X' } })).status, 403);
+  });
+
+  test('admins rename the company and set its colour; the apps get it', async () => {
+    const admin = await login('admin@acme.test');
+    const res = await call('PATCH', '/company', { token: admin.token, body: { name: 'Acme Industries', shortName: 'Acme', colour: '#0F7B5F' } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.colour, '#0f7b5f');
+    assert.equal(res.body.sync.tasks, 'ok');
+    const pushed = companyPushes.at(-1)!;
+    assert.equal(pushed.cid, ids.acme);
+    assert.deepEqual({ name: pushed.body.name, shortName: pushed.body.shortName, colour: pushed.body.colour }, { name: 'Acme Industries', shortName: 'Acme', colour: '#0f7b5f' });
+    assert.equal((await call('PATCH', '/company', { token: admin.token, body: { colour: 'green' } })).status, 400);
+    const me = await call('GET', '/auth/me', { token: admin.token });
+    assert.equal(me.body.company.shortName, 'Acme');
+  });
+
+  test('logo: images only, checked by content; served publicly; removable', async () => {
+    const admin = await login('admin@acme.test');
+    const bad = await call('PUT', '/company/logo', { token: admin.token, body: { image: `data:image/png;base64,${Buffer.from('<svg onload=alert(1)>').toString('base64')}` } });
+    assert.equal(bad.status, 400);
+    const ok = await call('PUT', '/company/logo', { token: admin.token, body: { image: `data:image/png;base64,${PNG.toString('base64')}` } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.ok(ok.body.logoUrl.startsWith(`/api/platform/brand/${ids.acme}/logo?v=`), ok.body.logoUrl);
+    assert.equal(companyPushes.at(-1)!.body.logoUrl, ok.body.logoUrl);
+    const img = await fetch(`${base}/brand/${ids.acme}/logo`);
+    assert.equal(img.status, 200);
+    assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await img.arrayBuffer()), PNG);
+    const gone = await call('DELETE', '/company/logo', { token: admin.token });
+    assert.equal(gone.body.logoUrl, null);
+    assert.equal((await fetch(`${base}/brand/${ids.acme}/logo`)).status, 404);
+  });
+
+  test('modules come from the apps; only offered modules in apps of the plan can be switched', async () => {
+    const admin = await login('admin@acme.test');
+    const before = await call('GET', '/company', { token: admin.token });
+    const tasks = before.body.modules.find((m: { app: string }) => m.app === 'tasks');
+    assert.deepEqual(tasks.modules.map((m: { key: string; on: boolean }) => [m.key, m.on]), [['leads', true], ['payroll', true]], 'nothing set = on (existing companies)');
+    const res = await call('PUT', '/company/modules', { token: admin.token, body: { tasks: { payroll: false } } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual(companyPushes.at(-1)!.body.modules, { payroll: false });
+    assert.equal((await call('PUT', '/company/modules', { token: admin.token, body: { tasks: { rockets: true } } })).status, 400);
+    assert.equal((await call('PUT', '/company/modules', { token: admin.token, body: { assets: { sims: true } } })).status, 400, 'Acme has no Assets');
+  });
+
+  test('a new company starts with the launch defaults', async () => {
+    const [c] = await app.get(DbService).db.insert(companies).values({ name: 'Newco', code: 'NEWCO', enabledApps: ['tasks'] }).returning();
+    await app.get(CompanyService).applyLaunchDefaults(c.id);
+    const [row] = await app.get(DbService).db.select({ modules: companies.modules }).from(companies).where(eq(companies.id, c.id));
+    assert.deepEqual(row.modules, { tasks: { leads: false, payroll: false } });
+  });
+
+  test('an app ahead of the Platform still gets the profile', async () => {
+    const admin = await login('admin@acme.test');
+    fakeProfileVersion += 500;
+    const res = await call('PATCH', '/company', { token: admin.token, body: { shortName: 'ACME' } });
+    assert.equal(res.body.sync.tasks, 'ok');
+    assert.ok(companyPushes.at(-1)!.body.version >= fakeProfileVersion);
   });
 });

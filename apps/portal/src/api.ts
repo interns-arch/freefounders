@@ -90,7 +90,7 @@ export interface AppInfo {
 
 export interface Me {
   person: { id: string; fullName: string; email: string | null; employeeCode: string | null; role: PlatformRole };
-  company: { id: string; name: string };
+  company: { id: string; name: string; shortName: string | null; colour: string | null; logoUrl: string | null };
   apps: AppInfo[];
   mustChangePassword: boolean;
 }
@@ -147,6 +147,27 @@ export interface AppCatalogue {
 }
 
 export const APP_NAMES: Record<AppKey, string> = { tasks: 'Tasks', assets: 'Assets' };
+
+// Settings Center (Phase 4)
+export interface ModuleState {
+  key: string;
+  label: string;
+  description: string;
+  default: boolean;
+  on: boolean;
+}
+
+export interface CompanySettings {
+  id: string;
+  name: string;
+  code: string;
+  shortName: string | null;
+  colour: string | null;
+  logoUrl: string | null;
+  apps: AppKey[];
+  modules: Array<{ app: AppKey; modules: ModuleState[] }>;
+  sync?: Record<string, string>;
+}
 
 export interface AppRole {
   value: string;

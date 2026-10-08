@@ -58,6 +58,15 @@ export function ChooserPage({ me, onSignOut }: { me: Me; onSignOut: () => void }
               <span className="tile-blurb">What each role can do in Tasks and Assets</span>
             </button>
           )}
+          {isAdmin(me) && (
+            <button className="tile tile-admin" onClick={() => navigate('/settings')}>
+              <span className="tile-icon" aria-hidden>
+                ☰
+              </span>
+              <span className="tile-name">Settings</span>
+              <span className="tile-blurb">Company name, logo, colour and which modules are on</span>
+            </button>
+          )}
         </div>
 
         {me.apps.length > 1 && (

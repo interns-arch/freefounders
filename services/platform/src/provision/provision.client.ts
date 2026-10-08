@@ -16,6 +16,19 @@ export interface ProvisionInput {
 }
 
 /** Base URL of each app's internal API, e.g. http://localhost:8000/api/internal. */
+export interface AppModule {
+  key: string;
+  label: string;
+  description: string;
+  /** On for a new company unless switched off. */
+  default: boolean;
+}
+
+export interface AppModules {
+  app: AppKey;
+  modules: AppModule[];
+}
+
 export function internalUrl(app: AppKey): string | undefined {
   const url = process.env[`${app.toUpperCase()}_INTERNAL_URL`]?.trim();
   return url ? url.replace(/\/+$/, '') : undefined;
@@ -109,6 +122,16 @@ export class ProvisionClient {
   /** Sends the company's full role set, and the roles of the listed people, to an app. */
   async pushAccess(app: AppKey, companyId: string, body: unknown): Promise<{ applied: boolean; version?: number; missingPeople?: string[]; problems?: string[] }> {
     return this.internalJson(app, 'PUT', '/access', companyId, body);
+  }
+
+  /** The modules an app can switch on or off, with their launch defaults. */
+  async modules(app: AppKey, companyId: string): Promise<AppModules> {
+    return this.internalJson<AppModules>(app, 'GET', '/modules', companyId);
+  }
+
+  /** Sends the company's profile (names, colour, logo address, module switches) to an app. */
+  async pushCompany(app: AppKey, companyId: string, body: unknown): Promise<{ applied: boolean; version?: number }> {
+    return this.internalJson(app, 'PUT', '/company', companyId, body);
   }
 
   private async internalJson<T>(app: AppKey, method: string, path: string, companyId: string, body?: unknown): Promise<T> {

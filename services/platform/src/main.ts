@@ -20,7 +20,7 @@ export async function createApp() {
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(cookieParser());
-  app.useBodyParser('json', { limit: '256kb' });
+  app.useBodyParser('json', { limit: '1mb' }); // room for a 512 KB logo, base64-encoded
 
   // CSRF defence (same rule as Assets): a custom header cannot be sent cross-site without a CORS preflight,
   // and the refresh cookie is SameSite=Lax.

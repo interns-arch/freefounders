@@ -3,6 +3,7 @@ import { hash, verify } from '@node-rs/argon2';
 import { createHash, pbkdf2, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { badRequest, type Caller } from '../common/http';
+import { CompanyService } from '../company/company.service';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, type PlatformRole, refreshSessions } from '../db/schema';
 import { ACCESS_TTL_SECONDS, TokensService } from '../keys/tokens.service';
@@ -218,7 +219,13 @@ export class AuthService {
   async me(caller: Caller) {
     const db = this.dbs.db;
     const [row] = await db
-      .select({ person: people, company: { id: companies.id, name: companies.name }, mustChangePassword: logins.mustChangePassword })
+      .select({
+        person: people,
+        company: { id: companies.id, name: companies.name, shortName: companies.shortName, colour: companies.brandColour },
+        hasLogo: sql<boolean>`${companies.logo} is not null`,
+        profileVersion: companies.profileVersion,
+        mustChangePassword: logins.mustChangePassword,
+      })
       .from(people)
       .innerJoin(companies, eq(companies.id, people.companyId))
       .leftJoin(logins, eq(logins.personId, people.id))
@@ -234,7 +241,7 @@ export class AuthService {
         employeeCode: row.person.employeeCode,
         role: row.person.platformRole,
       },
-      company: row.company,
+      company: { ...row.company, logoUrl: CompanyService.logoUrl({ id: row.company.id, hasLogo: row.hasLogo, profileVersion: row.profileVersion }) },
       apps: (Object.keys(current.apps) as AppKey[]).map((app) => ({ app, ...APP_INFO[app] })),
       mustChangePassword: row.mustChangePassword ?? false,
     };
