@@ -55,9 +55,10 @@ test('start an exit in the portal: Assets opens the exit case, Tasks gives the m
     await page.goto('/people');
     await page.getByLabel('Search people').fill(person.name);
     const row = page.getByRole('row', { name: new RegExp(person.name) });
-    await row.getByRole('button', { name: 'Start exit' }).click();
+    await row.getByRole('button', { name: `More actions for ${person.name}` }).click();
+    await page.getByRole('menuitem', { name: 'Start exit' }).click();
     const dialog = page.getByRole('dialog', { name: `Exit: ${person.name}` });
-    await dialog.getByLabel('Last working day *').fill('2026-12-31');
+    await dialog.getByLabel(/^Last working day/).fill('2026-12-31');
     await dialog.getByLabel('Reason (optional)').fill('Moving cities');
     await dialog.getByRole('button', { name: 'Start exit' }).click();
     await expect(dialog.getByText('Exit started.')).toBeVisible();
@@ -65,7 +66,7 @@ test('start an exit in the portal: Assets opens the exit case, Tasks gives the m
     await expect(dialog.getByText(/exit checklist T-\d+/)).toBeVisible();
     await shot(page, '13-start-exit');
     await dialog.getByRole('button', { name: 'Done' }).click();
-    await expect(row.getByText('Leaving 2026-12-31')).toBeVisible();
+    await expect(row.getByText(/Leaving 2026-12-31/)).toBeVisible();
 
     // Assets: the exit case is there.
     await page.goto('/assets/exits');

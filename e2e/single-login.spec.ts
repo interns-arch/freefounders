@@ -25,38 +25,39 @@ test('one sign-in opens Tasks and Assets, switch between them, sign out', async 
   await expect(page.getByRole('button', { name: /People & access/ })).toBeVisible();
   await shot(page, '2-choose-workspace');
 
+  // One web app (Phase 6): the workspace switcher in the sidebar moves between Tasks and Assets, no second sign-in.
   await page.getByRole('button', { name: /^Tasks/ }).click();
-  await expect(page).toHaveURL(/\/tasks\/$/);
-  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 20_000 });
-  const switcher = page.getByRole('navigation', { name: 'Switch app' });
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByRole('navigation', { name: 'Tasks menu' }).getByRole('link', { name: 'Home' })).toBeVisible({ timeout: 20_000 });
+  const switcher = page.getByRole('navigation', { name: 'Workspaces' });
   await expect(switcher.getByRole('link', { name: 'Assets' })).toBeVisible();
   await shot(page, '3-tasks');
 
   await switcher.getByRole('link', { name: 'Assets' }).click();
-  await expect(page).toHaveURL(/\/assets\/$/);
-  const assetsSwitch = page.getByRole('navigation', { name: 'Switch app' });
-  await expect(assetsSwitch.getByRole('link', { name: 'Tasks' })).toBeVisible({ timeout: 20_000 });
+  await expect(page).toHaveURL(/\/assets$/);
+  await expect(page.getByRole('navigation', { name: 'Assets menu' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
   await shot(page, '4-assets');
 
-  await assetsSwitch.getByRole('link', { name: 'Tasks' }).click();
-  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 20_000 });
+  await switcher.getByRole('link', { name: 'Tasks' }).click();
+  await expect(page.getByRole('navigation', { name: 'Tasks menu' })).toBeVisible({ timeout: 20_000 });
 
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole('button', { name: 'Your account' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-  await expect(page).toHaveURL(/localhost:8080\/(\?.*)?$/);
+  await expect(page).toHaveURL(/\/login/);
 });
 
 test('opening an app while signed out goes to sign-in, then back to that app', async ({ page }) => {
-  await page.goto('/assets/');
+  await page.goto('/assets/employees');
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible({ timeout: 20_000 });
-  expect(new URL(page.url()).searchParams.get('next')).toBe('/assets/');
+  expect(new URL(page.url()).searchParams.get('next')).toBe('/assets/employees');
   await signIn(page);
-  await expect(page).toHaveURL(/\/assets\/$/);
-  await expect(page.getByRole('navigation', { name: 'Switch app' })).toBeVisible({ timeout: 20_000 });
+  await expect(page).toHaveURL(/\/assets\/employees$/);
+  await expect(page.getByRole('navigation', { name: 'Workspaces' })).toBeVisible({ timeout: 20_000 });
 });
 
-test('admins manage people from the portal', async ({ page }) => {
+test('admins manage people', async ({ page }) => {
   await page.goto('/?choose');
   await signIn(page);
   await page.getByRole('button', { name: /People & access/ }).click();
@@ -65,7 +66,7 @@ test('admins manage people from the portal', async ({ page }) => {
   await expect(page.getByRole('cell', { name: 'Roles of Demo Owner' })).toContainText('Super Admin');
   await expect(page.getByRole('cell', { name: 'Apps of Demo Owner' })).toContainText('Tasks');
   await shot(page, '5-people');
-  await page.getByRole('button', { name: '+ Add person' }).click();
+  await page.getByRole('button', { name: 'Add person' }).click();
   await expect(page.getByRole('dialog', { name: 'Add person' })).toBeVisible();
   await shot(page, '6-add-person');
 });
@@ -113,7 +114,7 @@ test('a second company sees none of the first company\'s tasks or people', async
   await expect(page.getByText('Demo Owner')).toHaveCount(0);
 
   await page.goto('/tasks/tasks');
-  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('navigation', { name: 'Tasks menu' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(secret)).toHaveCount(0);
   await shot(page, '5-second-company-tasks');
 });
@@ -126,9 +127,9 @@ test('admins build a role and give it to someone; it reaches Tasks', async ({ pa
   await signIn(page);
   await page.getByRole('button', { name: /^Roles/ }).click();
   await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible();
-  await expect(page.getByRole('row', { name: /Super Admin Locked/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Super Admin.*Locked/ })).toBeVisible();
 
-  await page.getByRole('button', { name: '+ New role' }).click();
+  await page.getByRole('button', { name: 'New role' }).click();
   const editor = page.getByRole('dialog', { name: 'New role' });
   await editor.getByLabel('Name').fill(roleName);
   await editor.getByRole('checkbox', { name: 'Tasks: See tasks' }).check();
@@ -146,7 +147,7 @@ test('admins build a role and give it to someone; it reaches Tasks', async ({ pa
   });
   expect(created.status()).toBe(201);
 
-  await page.getByRole('link', { name: 'People & access' }).click();
+  await page.getByRole('navigation', { name: 'Admin menu' }).getByRole('link', { name: 'People & access' }).click();
   await page.getByLabel('Search people').fill(`E2E Person ${stamp}`);
   const row = page.getByRole('row', { name: new RegExp(`E2E Person ${stamp}`) });
   await row.getByRole('button', { name: 'Change roles' }).click();

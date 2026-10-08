@@ -40,19 +40,21 @@ test('admins brand the company and switch modules; Tasks follows', async ({ page
     await shot(page, '9-settings');
 
     // Tasks shows the company's name and the Leads menu.
-    await page.goto('/tasks/');
+    await page.goto('/tasks');
     const sidebar = page.getByRole('complementary');
     await expect(sidebar.getByText('Demo Co')).toBeVisible();
-    await expect(sidebar.getByRole('link', { name: 'Leads' })).toBeVisible();
+    // Leads is not moved to the new app yet: its menu item opens the classic screen.
+    await expect(page.getByRole('navigation', { name: 'Tasks menu' }).getByRole('link', { name: /^Leads/ })).toBeVisible();
 
     // Switched off: gone from the menu, and the API refuses it.
     await page.goto('/settings');
     // The switch follows the saved value, so click and wait for the server's answer.
     await page.getByRole('switch', { name: 'Tasks: Leads & quotations' }).click();
     await expect(page.getByRole('switch', { name: 'Tasks: Leads & quotations' })).not.toBeChecked();
-    await page.goto('/tasks/');
-    await expect(page.getByRole('complementary').getByRole('link', { name: 'Tasks' })).toBeVisible();
-    await expect(page.getByRole('complementary').getByRole('link', { name: 'Leads' })).toHaveCount(0);
+    await page.goto('/tasks');
+    const menu = page.getByRole('navigation', { name: 'Tasks menu' });
+    await expect(menu.getByRole('link', { name: 'Tasks', exact: true })).toBeVisible();
+    await expect(menu.getByRole('link', { name: /^Leads/ })).toHaveCount(0);
     const res = await request.get('/tasks/api/leads/', { headers: auth(await token(request)) });
     expect(res.status()).toBe(404);
     await shot(page, '10-tasks-without-leads');
@@ -95,7 +97,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     const page = await context.newPage();
     await page.goto('/');
     await signIn(page, login, password);
-    await page.waitForURL(/\/tasks\//); // one app: the portal opens it directly
+    await page.waitForURL(/\/tasks/); // one app: sign-in opens it directly
     await page.goto('/tasks/hr');
     await page.getByRole('button', { name: /Check in/ }).click();
     const camera = page.getByRole('dialog', { name: 'Check in' });
