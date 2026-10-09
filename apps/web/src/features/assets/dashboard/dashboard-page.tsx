@@ -159,12 +159,12 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
                       <Link to={`/assets/exits/${x.id}`} className="block rounded-lg border p-3 transition hover:border-primary/40">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-sm font-medium">{x.employeeName}</span>
-                          <span className={cn('text-xs font-medium', days < 0 ? 'text-red-600' : days <= 3 ? 'text-amber-600' : 'text-muted-foreground')}>
+                          <span className={cn('text-xs font-medium', days < 0 ? 'text-destructive' : days <= 3 ? 'text-warning' : 'text-muted-foreground')}>
                             {days < 0 ? `${-days}d overdue` : days === 0 ? 'Last day today' : `${days}d left`}
                           </span>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
-                          <Progress value={x.total ? (done / x.total) * 100 : 100} className="h-1.5" indicatorClassName={x.pending ? 'bg-amber-500' : 'bg-emerald-500'} />
+                          <Progress value={x.total ? (done / x.total) * 100 : 100} className="h-1.5" indicatorClassName={x.pending ? 'bg-warning' : 'bg-success'} />
                           <span className="shrink-0 text-xs tabular text-muted-foreground">
                             {done}/{x.total}
                           </span>
@@ -194,7 +194,7 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
                   <Link to={`/assets/assets?assetTypeId=${ty.id}&status=AVAILABLE`} className="flex items-center gap-3 text-sm hover:text-primary">
                     <AssetIcon icon={ty.icon} color="indigo" size="sm" />
                     <span className="min-w-0 flex-1 truncate">{ty.name}</span>
-                    <span className={cn('tabular font-medium', ty.available === 0 && 'text-red-600')}>{ty.available}</span>
+                    <span className={cn('tabular font-medium', ty.available === 0 && 'text-destructive')}>{ty.available}</span>
                     <span className="w-12 text-right tabular text-xs text-muted-foreground">of {ty.total}</span>
                   </Link>
                 </li>
@@ -239,7 +239,7 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
                 {data.expiring.map((a) => (
                   <li key={a.id}>
                     <Link to={`/assets/assets/${a.id}`} className="flex items-center gap-2 py-2 text-sm hover:text-primary">
-                      <AlertTriangle className="size-4 shrink-0 text-amber-500" />
+                      <AlertTriangle className="size-4 shrink-0 text-warning" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{a.name}</span>
                         <span className="block truncate text-xs text-muted-foreground">
@@ -288,7 +288,7 @@ function RequestProgress({ status }: { status: PersonalDashboard['requests'][num
     <div className="flex items-center gap-1.5" aria-label={`Step ${reached + 1} of 3: ${REQUEST_STEPS[reached]}`}>
       {REQUEST_STEPS.map((step, i) => (
         <div key={step} className="flex flex-1 flex-col gap-1">
-          <span className={cn('h-1.5 rounded-full', i <= reached ? (reached === 2 ? 'bg-emerald-500' : 'bg-primary') : 'bg-muted')} />
+          <span className={cn('h-1.5 rounded-full', i <= reached ? (reached === 2 ? 'bg-success' : 'bg-primary') : 'bg-muted')} />
           <span className={cn('text-[10px]', i === reached ? 'font-medium text-foreground' : 'text-muted-foreground')}>{step}</span>
         </div>
       ))}
@@ -306,16 +306,16 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
   return (
     <div className="mx-auto max-w-3xl space-y-4 sm:space-y-5">
       {/* Welcome */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20 sm:p-6">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-app-attendance p-5 text-white shadow-lg shadow-primary/20 sm:p-6">
         <div className="absolute -top-16 -right-10 size-48 rounded-full bg-white/10 blur-2xl" />
         <div className="relative flex items-start gap-4">
           <div className="min-w-0 flex-1">
-            {company.short && <p className="text-xs font-medium tracking-wide text-indigo-100 uppercase">{company.short}</p>}
+            {company.short && <p className="text-xs font-medium tracking-wide text-primary uppercase">{company.short}</p>}
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">
               {greeting()}
               {name ? `, ${name}` : ''}
             </h1>
-            <p className="mt-1 text-sm text-indigo-100">
+            <p className="mt-1 text-sm text-primary">
               {data.myAssets.length ? `You have ${plural(data.myAssets.length, 'item')} from the company.` : 'No company items are assigned to you.'}
             </p>
             {me?.employee && <span className="mt-3 inline-block rounded-md bg-white/15 px-2 py-0.5 font-mono text-xs">{me.employee.employeeCode}</span>}
@@ -323,7 +323,7 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
           {me?.employee && links.ready && (
             <Link to={`/assets/employees/${me.employee.id}`} className="shrink-0 rounded-xl bg-white p-1.5 shadow-md transition active:scale-95" aria-label="Open my QR">
               <QRCode value={links.person(me.employee.employeeCode)} size={64} />
-              <span className="block pt-0.5 text-center text-[10px] font-semibold text-indigo-700">My QR</span>
+              <span className="block pt-0.5 text-center text-[10px] font-semibold text-primary">My QR</span>
             </Link>
           )}
         </div>
@@ -332,7 +332,7 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
       {data.openExit && (
         <Link
           to={`/assets/exits/${data.openExit.id}`}
-          className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+          className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning/8 p-4 text-warning"
         >
           <LogOut className="size-5 shrink-0" />
           <span className="flex-1 text-sm">
@@ -360,9 +360,9 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
         <button
           type="button"
           onClick={() => quickAdd.open('ticket')}
-          className="flex cursor-pointer flex-col items-start gap-3 rounded-2xl border bg-card p-4 text-left shadow-xs transition hover:border-amber-400/50 hover:shadow-sm active:scale-[0.98]"
+          className="flex cursor-pointer flex-col items-start gap-3 rounded-2xl border bg-card p-4 text-left shadow-xs transition hover:border-warning/50 hover:shadow-sm active:scale-[0.98]"
         >
-          <span className="flex size-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-warning/12 text-warning">
             <LifeBuoy className="size-5" />
           </span>
           <span>

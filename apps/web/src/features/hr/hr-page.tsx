@@ -1,11 +1,11 @@
 /**
- * /tasks/hr — Attendance & leave (old pages/HR.jsx). ?tab= opens a tab directly: today, history, leave, holidays,
- * team, approvals, settings. Salary and payroll stay on the classic screen (Payroll is not moved yet, PLAN.md §18.3).
+ * /attendance — the Attendance workspace (old pages/HR.jsx; PLAN.md §19.4). /attendance/<tab> opens a section directly:
+ * history, leave, holidays, team, approvals, settings (old /tasks/hr?tab= links redirect here). Salary and payroll stay on the classic screen (Payroll is not moved yet, PLAN.md §18.3).
  */
 import { useAccess } from '@freefounders/core';
 import { useHrConfig } from '@freefounders/core/hr';
 import { ExternalLink } from 'lucide-react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { PageHeader, PageLoader } from '@/components/common/page';
 import { cn } from '@/lib/utils';
 import { MonthView } from './attendance';
@@ -19,7 +19,8 @@ type Tab = 'today' | 'history' | 'leave' | 'salary' | 'holidays' | 'team' | 'app
 export function HrPage() {
   const access = useAccess();
   const cfg = useHrConfig();
-  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { tab: asked } = useParams();
   if (!access.tasks.me) return <PageLoader />;
 
   const can = access.tasks.can;
@@ -38,12 +39,8 @@ export function HrPage() {
       ? ([...(payroll ? [['payroll', 'Payroll', '/classic/tasks/hr?tab=payroll']] : []), ['settings', 'HR Settings']] as Array<[Tab, string, string?]>)
       : []),
   ];
-  const asked = params.get('tab');
   const tab: Tab = (tabs.find(([v, , href]) => v === asked && !href)?.[0] ?? 'today') as Tab;
-  const choose = (v: Tab) => {
-    params.set('tab', v);
-    setParams(params, { replace: true });
-  };
+  const choose = (v: Tab) => navigate(v === 'today' ? '/attendance' : `/attendance/${v}`);
 
   return (
     <div className="space-y-4">

@@ -103,7 +103,7 @@ export default function EmployeesPage() {
           <div className="flex flex-col gap-0.5">
             <EmployeeStatusBadge status={e.status} />
             {e.status === 'NOTICE_PERIOD' && e.lastWorkingDate && (
-              <span className={cn('text-[11px]', d !== null && d <= 3 ? 'font-medium text-amber-600' : 'text-muted-foreground')}>LWD {formatDate(e.lastWorkingDate)}</span>
+              <span className={cn('text-[11px]', d !== null && d <= 3 ? 'font-medium text-warning' : 'text-muted-foreground')}>LWD {formatDate(e.lastWorkingDate)}</span>
             )}
           </div>
         );
@@ -115,7 +115,7 @@ export default function EmployeesPage() {
       cell: (e) => (
         <span className={cn('tabular', e.assetCount === 0 ? 'text-muted-foreground' : 'font-medium')}>
           {e.assetCount}
-          {e.status === 'NOTICE_PERIOD' && e.assetCount > 0 && <span className="ml-1 text-xs font-normal text-amber-600">to recover</span>}
+          {e.status === 'NOTICE_PERIOD' && e.assetCount > 0 && <span className="ml-1 text-xs font-normal text-warning">to recover</span>}
         </span>
       ),
     },

@@ -20,13 +20,13 @@ test('one sign-in opens Tasks and Assets, switch between them, sign out', async 
 
   await signIn(page);
   await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Tasks/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Assets/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Open Tasks/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Open Assets/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /People & access/ })).toBeVisible();
   await shot(page, '2-choose-workspace');
 
   // One web app (Phase 6): the workspace switcher in the sidebar moves between Tasks and Assets, no second sign-in.
-  await page.getByRole('button', { name: /^Tasks/ }).click();
+  await page.getByRole('button', { name: /^Open Tasks/ }).click();
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByRole('navigation', { name: 'Tasks menu' }).getByRole('link', { name: 'Home' })).toBeVisible({ timeout: 20_000 });
   const switcher = page.getByRole('navigation', { name: 'Workspaces' });

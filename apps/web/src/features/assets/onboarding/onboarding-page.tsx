@@ -19,7 +19,7 @@ import { cn, daysUntil, formatDate } from '@/lib/utils';
 export function JoinsIn({ date, className }: { date: string; className?: string }) {
   const d = daysUntil(date) ?? 0;
   return (
-    <span className={cn('whitespace-nowrap text-xs font-medium', d < 0 ? 'text-red-600' : d <= 3 ? 'text-amber-600' : 'text-muted-foreground', className)}>
+    <span className={cn('whitespace-nowrap text-xs font-medium', d < 0 ? 'text-destructive' : d <= 3 ? 'text-warning' : 'text-muted-foreground', className)}>
       {d < 0 ? `was due ${-d} day${d === -1 ? '' : 's'} ago` : d === 0 ? 'Joins today' : d === 1 ? 'Joins tomorrow' : `Joins in ${d} days`}
     </span>
   );
@@ -73,7 +73,7 @@ export function OnboardingTable({ tabs, defaultStatus, empty }: { tabs: { value:
             <div className="mb-1 text-xs text-muted-foreground">
               {o.itemsIssued} of {o.itemsTotal - o.itemsSkipped} assigned
             </div>
-            <Progress value={(done / o.itemsTotal) * 100} indicatorClassName={done === o.itemsTotal ? 'bg-emerald-500' : undefined} />
+            <Progress value={(done / o.itemsTotal) * 100} indicatorClassName={done === o.itemsTotal ? 'bg-success' : undefined} />
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">Nothing listed yet</span>

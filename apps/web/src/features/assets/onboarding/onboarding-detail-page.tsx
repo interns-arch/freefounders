@@ -218,7 +218,7 @@ export default function OnboardingDetailPage() {
           )}
         </CardContent>
         {o.status === 'DRAFT' && o.returnNote && (
-          <div className="flex items-start gap-2 border-t bg-amber-50 px-5 py-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="flex items-start gap-2 border-t bg-warning/8 px-5 py-3 text-sm text-warning">
             <MessageSquareWarning className="mt-0.5 size-4 shrink-0" />
             <span>
               <span className="font-medium">IT sent this back:</span> {o.returnNote}
@@ -235,7 +235,7 @@ export default function OnboardingDetailPage() {
             <div className="mb-1.5 text-xs text-muted-foreground">
               {o.counts.issued} of {o.counts.total - o.counts.skipped} assigned{o.approvedByName ? ` · approved by ${o.approvedByName}` : ''}
             </div>
-            <Progress value={(done / o.counts.total) * 100} indicatorClassName={done === o.counts.total ? 'bg-emerald-500' : undefined} />
+            <Progress value={(done / o.counts.total) * 100} indicatorClassName={done === o.counts.total ? 'bg-success' : undefined} />
           </div>
         )}
       </Card>
@@ -331,7 +331,7 @@ export default function OnboardingDetailPage() {
 function Check({ ok, label, action, neutral }: { ok: boolean; label: string; action?: React.ReactNode; neutral?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      {ok ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" /> : <Circle className={cn('size-4 shrink-0', neutral ? 'text-muted-foreground' : 'text-amber-500')} />}
+      {ok ? <CheckCircle2 className="size-4 shrink-0 text-success" /> : <Circle className={cn('size-4 shrink-0', neutral ? 'text-muted-foreground' : 'text-warning')} />}
       <span className="min-w-0 flex-1">{label}</span>
       {action}
     </div>

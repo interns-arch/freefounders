@@ -116,8 +116,8 @@ export function Tile({
   const body = (
     <Card className={cn('flex h-full items-start justify-between gap-3 p-4', alert && 'border-destructive/40 bg-destructive/5', to && 'transition hover:border-primary/40 hover:shadow-sm')}>
       <div className="min-w-0">
-        <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-        <p className={cn('mt-1 text-2xl font-semibold tracking-tight tabular-nums', alert && 'text-destructive')}>{value}</p>
+        <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{label}</p>
+        <p className={cn('mt-1.5 font-mono text-2xl font-semibold tracking-tight tabular-nums', alert && 'text-destructive')}>{value}</p>
         {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
       </div>
       {Icon && (

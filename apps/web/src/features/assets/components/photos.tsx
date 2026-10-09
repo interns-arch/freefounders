@@ -101,7 +101,7 @@ export function PhotoStrip({ photos, className, size = 'md' }: { photos: Allocat
           >
             <img src={photoUrl(p)} alt="" loading="lazy" className="size-full object-cover" />
             {p.kind !== 'ASSET' && (
-              <span className={cn('absolute inset-x-0 bottom-0 text-center text-[9px] font-semibold leading-3 text-white', p.kind === 'HANDOVER' ? 'bg-blue-600/80' : 'bg-emerald-600/80')}>
+              <span className={cn('absolute inset-x-0 bottom-0 text-center text-[9px] font-semibold leading-3 text-white', p.kind === 'HANDOVER' ? 'bg-info/80' : 'bg-success/80')}>
                 {size === 'md' ? (p.kind === 'HANDOVER' ? 'OUT' : 'IN') : ''}
               </span>
             )}

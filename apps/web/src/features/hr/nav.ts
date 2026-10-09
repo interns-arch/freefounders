@@ -1,5 +1,16 @@
-import { CalendarCheck } from 'lucide-react';
+import { CalendarCheck, CalendarDays, CalendarHeart, ClipboardCheck, Clock, Settings2, Users } from 'lucide-react';
 import type { NavItem } from '@/app/nav';
 
-/** HR lives in the Tasks workspace (attendance, leave, approvals, HR settings). */
-export const HR_NAV: NavItem[] = [{ label: 'Attendance & leave', to: '/tasks/hr', icon: CalendarCheck, group: 'People' }];
+/** The Tasks menu keeps a way into Attendance, where the old app had it (People section). */
+export const HR_NAV: NavItem[] = [{ label: 'Attendance & leave', to: '/attendance', icon: CalendarCheck, group: 'People' }];
+
+/** Attendance workspace (PLAN.md §19.4): the HR screens, one entry per section. Same rules as the tabs on the page. */
+export const ATTENDANCE_NAV: NavItem[] = [
+  { label: 'Today', to: '/attendance', icon: Clock, end: true },
+  { label: 'My attendance', to: '/attendance/history', icon: CalendarDays },
+  { label: 'My leave', to: '/attendance/leave', icon: CalendarCheck },
+  { label: 'Holidays', to: '/attendance/holidays', icon: CalendarHeart },
+  { label: 'Team', to: '/attendance/team', icon: Users, group: 'Manage', show: (a) => a.tasks.can('hr.approve') },
+  { label: 'Approvals', to: '/attendance/approvals', icon: ClipboardCheck, group: 'Manage', show: (a) => a.tasks.can('hr.approve') || a.tasks.can('tasks.view_department') },
+  { label: 'HR settings', to: '/attendance/settings', icon: Settings2, group: 'Manage', show: (a) => a.tasks.can('hr.manage') },
+];

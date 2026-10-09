@@ -16,15 +16,16 @@ export interface NavItem {
   group?: string;
 }
 
-export type Workspace = 'tasks' | 'assets' | 'admin';
+export type Workspace = 'attendance' | 'tasks' | 'assets' | 'admin';
 
 /** Which workspace a path belongs to. */
 export function workspaceOf(pathname: string): Workspace | null {
+  if (pathname === '/attendance' || pathname.startsWith('/attendance/')) return 'attendance';
   if (pathname === '/tasks' || pathname.startsWith('/tasks/')) return 'tasks';
   if (pathname === '/assets' || pathname.startsWith('/assets/')) return 'assets';
   if (['/people', '/roles', '/settings', '/account'].some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'admin';
   return null;
 }
 
-export const WORKSPACE_NAMES: Record<Workspace, string> = { tasks: 'Tasks', assets: 'Assets', admin: 'Admin' };
-export const WORKSPACE_HOME: Record<Workspace, string> = { tasks: '/tasks', assets: '/assets', admin: '/people' };
+export const WORKSPACE_NAMES: Record<Workspace, string> = { attendance: 'Attendance', tasks: 'Tasks', assets: 'Assets', admin: 'Admin' };
+export const WORKSPACE_HOME: Record<Workspace, string> = { attendance: '/attendance', tasks: '/tasks', assets: '/assets', admin: '/people' };

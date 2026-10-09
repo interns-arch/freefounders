@@ -20,7 +20,7 @@ export default function ActivityPage() {
         title="Activity log"
         description={
           <span className="inline-flex items-center gap-1.5">
-            <ShieldCheck className="size-4 text-emerald-600" /> Immutable: the database rejects any edit or deletion of history.
+            <ShieldCheck className="size-4 text-success" /> Immutable: the database rejects any edit or deletion of history.
           </span>
         }
       />

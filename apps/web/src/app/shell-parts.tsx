@@ -9,7 +9,7 @@ import { Avatar } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
 /** FreeFounders mark, or the company's logo and short name (Settings Center). */
-export function Logo({ company, inverted = false, compact = false }: { company?: Access['brand']; inverted?: boolean; compact?: boolean }) {
+export function Logo({ company, inverted = false, compact = false, subtitle }: { company?: Access['brand']; inverted?: boolean; compact?: boolean; subtitle?: string }) {
   return (
     <span className="flex min-w-0 items-center gap-2.5">
       {company?.logoUrl ? (
@@ -25,7 +25,12 @@ export function Logo({ company, inverted = false, compact = false }: { company?:
           {company ? company.shortName.slice(0, 1).toUpperCase() : 'FF'}
         </span>
       )}
-      {!compact && <span className="truncate text-[15px] font-semibold tracking-tight">{company?.shortName ?? 'FreeFounders'}</span>}
+      {!compact && (
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate text-[15px] font-semibold tracking-tight">{company?.shortName ?? 'FreeFounders'}</span>
+          {subtitle && <span className="block truncate font-mono text-[10px] tracking-wider text-muted-foreground uppercase">{subtitle}</span>}
+        </span>
+      )}
     </span>
   );
 }
@@ -43,6 +48,16 @@ export function useTheme() {
     }
   };
   return { dark, toggle };
+}
+
+/** Light / dark switch for the header. */
+export function ThemeToggle() {
+  const theme = useTheme();
+  return (
+    <Button variant="ghost" size="icon" onClick={theme.toggle} aria-label={theme.dark ? 'Light mode' : 'Dark mode'} title={theme.dark ? 'Light mode' : 'Dark mode'}>
+      {theme.dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
+    </Button>
+  );
 }
 
 const timeAgo = (iso: string) => {

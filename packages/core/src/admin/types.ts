@@ -184,7 +184,7 @@ export interface CompanyProfileInput {
 export const APP_SETTINGS_LINKS: Record<AppKey, Array<{ label: string; href: string; blurb: string }>> = {
   tasks: [
     { label: 'Task rules', href: '/tasks/settings', blurb: 'Completion evidence, departments, task categories, notifications' },
-    { label: 'HR settings', href: '/tasks/hr?tab=settings', blurb: 'Working hours, week-offs, punch-in locations and photo, face check, leave types' },
+    { label: 'HR settings', href: '/attendance/settings', blurb: 'Working hours, week-offs, punch-in locations and photo, face check, leave types' },
   ],
   assets: [
     { label: 'Asset catalogue', href: '/assets/settings/catalog', blurb: 'Categories, asset types and custom fields' },

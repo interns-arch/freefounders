@@ -11,6 +11,12 @@ layer and should follow the same design).
 Generated from the code on 2026-10-08. Source of truth if anything here disagrees with the app: the app.
 
 
+> **Update 2026-10-09 (PLAN.md §19):** the "Workspace chooser" is now the **Workspace Portal** (same URL `/`, heading
+> "Choose your workspace" kept) with an Attendance card that punches in/out directly ("Punch in" / "Punch out"), and the
+> HR screens moved to their own **Attendance** workspace: `/attendance` (Today) and `/attendance/history|leave|holidays|
+> team|approvals|settings`. Old `/tasks/hr?tab=x` links redirect there. Portal buttons: "Open Tasks", "Open Assets",
+> "Open Attendance & Leave". A Tasks-only person now lands on the portal instead of going straight into Tasks.
+
 ## Contents
 0. Ground rules for the new design (what can change, what must stay, theme, permission model, journeys, classic screens, test names)
 1. App frame: sign in, workspace chooser, account, shell, notifications, errors

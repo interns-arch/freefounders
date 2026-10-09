@@ -34,6 +34,8 @@ Phase 7 adds `apps/mobile`.
 `src/features` get data only from `@freefounders/core` hooks (no fetch, no HTTP client) and use theme colours only (no
 hex/rgb/oklch). Each area owns `src/features/<area>/` and `packages/core/src/<area>/`. Same URLs as the old apps
 (`/tasks/…`, `/assets/…`); any path not built in the new app opens the classic screen at `/classic/…`.
+Attendance is its own workspace at `/attendance/<tab>` (HR screens; `/tasks/hr?tab=` redirects), and `/` is the Workspace
+Portal with punch-in (PLAN.md §19). Theme colours only: fixed Tailwind palette classes (blue-700…) are refused too.
 
 ## Whole suite with single login (usual way to work)
 ```

@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
 /* Every colour, radius and font comes from the theme package (PLAN.md §6 rule 2). */
 @import '@freefounders/theme/tokens.css';
 
@@ -37,6 +38,7 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-border: var(--sidebar-border);
+  --color-app-attendance: var(--app-attendance);
   --color-app-tasks: var(--app-tasks);
   --color-app-assets: var(--app-assets);
   --color-app-admin: var(--app-admin);

@@ -1,7 +1,7 @@
 import { createBrowserRouter, type RouteObject } from 'react-router';
 import { adminRoutes } from '@/features/admin/routes';
 import { assetsRoutes } from '@/features/assets/routes';
-import { hrRoutes } from '@/features/hr/routes';
+import { attendanceRoutes, hrRoutes } from '@/features/hr/routes';
 import { tasksRoutes } from '@/features/tasks/routes';
 import { ClassicRedirect } from './classic';
 import { AccountPage } from './pages/account';
@@ -34,6 +34,7 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           ...adminRoutes,
+          { path: 'attendance', children: attendanceRoutes },
           { path: 'tasks', children: area('tasks', [...tasksRoutes, ...hrRoutes]) },
           { path: 'assets', children: area('assets', assetsRoutes) },
           { path: '*', element: <NotFound /> },

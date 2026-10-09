@@ -160,7 +160,7 @@ export default function AssetDetailPage() {
 
       {/* Alerts */}
       {a.openExits.map((x) => (
-        <Link key={x.id} to={`/assets/exits/${x.id}`} className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition hover:border-amber-300 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        <Link key={x.id} to={`/assets/exits/${x.id}`} className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning/8 px-4 py-3 text-sm text-warning transition hover:border-warning/40">
           <LogOut className="size-4 shrink-0" />
           <span className="flex-1">
             <span className="font-medium">{x.employeeName}</span> is on notice — this asset is on exit checklist {x.caseNumber} (last working day {formatDate(x.lastWorkingDate)}).
@@ -169,7 +169,7 @@ export default function AssetDetailPage() {
         </Link>
       ))}
       {a.openMaintenance.map((m) => (
-        <div key={m.id} className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        <div key={m.id} className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning/8 px-4 py-3 text-sm text-warning">
           <Wrench className="size-4 shrink-0" />
           <span className="flex-1">
             <span className="font-medium">{m.number}</span> {m.status === 'SCHEDULED' ? `scheduled${m.scheduledDate ? ` for ${formatDate(m.scheduledDate)}` : ''}` : 'in progress'}: {m.title}
@@ -180,7 +180,7 @@ export default function AssetDetailPage() {
         </div>
       ))}
       {a.status === 'LOST' && (
-        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+        <div className="flex items-center gap-3 rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive">
           <AlertTriangle className="size-4 shrink-0" /> This asset is marked lost. Mark it found if it turns up, or dispose of it to write it off.
         </div>
       )}
@@ -197,7 +197,7 @@ export default function AssetDetailPage() {
                   <span
                     className={cn(
                       'flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-semibold',
-                      current ? (a.status === 'LOST' ? 'border-red-500 bg-red-500 text-white' : 'border-primary bg-primary text-primary-foreground') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
+                      current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white' : 'border-primary bg-primary text-primary-foreground') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
                     )}
                   >
                     {done ? <Check className="size-3" /> : i + 1}
@@ -246,7 +246,7 @@ export default function AssetDetailPage() {
                   {
                     label: 'Warranty / expiry',
                     value: a.warrantyExpiry && (
-                      <span className={cn(warrantyDays !== null && warrantyDays < 0 && 'text-muted-foreground', warrantyDays !== null && warrantyDays >= 0 && warrantyDays <= 30 && 'font-medium text-amber-600')}>
+                      <span className={cn(warrantyDays !== null && warrantyDays < 0 && 'text-muted-foreground', warrantyDays !== null && warrantyDays >= 0 && warrantyDays <= 30 && 'font-medium text-warning')}>
                         {formatDate(a.warrantyExpiry)} {warrantyDays !== null && <span className="text-xs">({warrantyDays < 0 ? 'expired' : `${warrantyDays} days left`})</span>}
                       </span>
                     ),
@@ -298,7 +298,7 @@ export default function AssetDetailPage() {
                       <span className="text-2xl font-semibold tabular">{a.availableQuantity}</span>
                       <span className="text-xs text-muted-foreground">{consumable ? `left of ${a.quantity}` : `of ${a.quantity} available`}</span>
                     </div>
-                    <Progress value={a.quantity ? (a.availableQuantity / a.quantity) * 100 : 0} className="mt-2" indicatorClassName="bg-emerald-500" />
+                    <Progress value={a.quantity ? (a.availableQuantity / a.quantity) * 100 : 0} className="mt-2" indicatorClassName="bg-success" />
                   </div>
                   {a.activeAllocations.length === 0 ? (
                     <p className="text-sm text-muted-foreground">{consumable ? 'Given items are kept by the person — see Assignments for who got one.' : 'No units issued.'}</p>

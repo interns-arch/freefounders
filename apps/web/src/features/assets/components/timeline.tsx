@@ -24,20 +24,20 @@ import { cn, formatDateTime, relativeTime } from '@/lib/utils';
 import { EmptyState } from '@/components/common/page';
 
 const ACTION_STYLE: { match: RegExp; icon: React.ComponentType<{ className?: string }>; tone: string }[] = [
-  { match: /^CREATED|ITEM_ADDED/, icon: CirclePlus, tone: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
-  { match: /ASSIGNED|FULFILLED/, icon: UserPlus, tone: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
-  { match: /TRANSFER/, icon: ArrowLeftRight, tone: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
-  { match: /RETURNED/, icon: Undo2, tone: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' },
-  { match: /MAINTENANCE|REPAIR/, icon: Wrench, tone: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
-  { match: /LOST|MISSING|UNITS_LOST/, icon: SearchX, tone: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' },
-  { match: /DISPOSED|DELETED/, icon: Trash2, tone: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' },
-  { match: /RETIRED|ARCHIVED|CANCELLED|REJECTED/, icon: Archive, tone: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' },
-  { match: /INVENTORY|LOCATION/, icon: MapPin, tone: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300' },
-  { match: /COMPLETED|RESOLVED|APPROVED|MADE_AVAILABLE|FOUND|RECEIVED|REINSTATED/, icon: CheckCircle2, tone: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
-  { match: /EXIT|OVERRIDDEN/, icon: LogOut, tone: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
-  { match: /ITEM_/, icon: ClipboardCheck, tone: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300' },
+  { match: /^CREATED|ITEM_ADDED/, icon: CirclePlus, tone: 'bg-success/12 text-success' },
+  { match: /ASSIGNED|FULFILLED/, icon: UserPlus, tone: 'bg-info/12 text-info' },
+  { match: /TRANSFER/, icon: ArrowLeftRight, tone: 'bg-primary/12 text-primary' },
+  { match: /RETURNED/, icon: Undo2, tone: 'bg-warning/12 text-warning' },
+  { match: /MAINTENANCE|REPAIR/, icon: Wrench, tone: 'bg-warning/12 text-warning' },
+  { match: /LOST|MISSING|UNITS_LOST/, icon: SearchX, tone: 'bg-destructive/12 text-destructive' },
+  { match: /DISPOSED|DELETED/, icon: Trash2, tone: 'bg-border text-foreground' },
+  { match: /RETIRED|ARCHIVED|CANCELLED|REJECTED/, icon: Archive, tone: 'bg-border text-foreground' },
+  { match: /INVENTORY|LOCATION/, icon: MapPin, tone: 'bg-app-attendance/12 text-app-attendance' },
+  { match: /COMPLETED|RESOLVED|APPROVED|MADE_AVAILABLE|FOUND|RECEIVED|REINSTATED/, icon: CheckCircle2, tone: 'bg-success/12 text-success' },
+  { match: /EXIT|OVERRIDDEN/, icon: LogOut, tone: 'bg-warning/12 text-warning' },
+  { match: /ITEM_/, icon: ClipboardCheck, tone: 'bg-info/12 text-info' },
   { match: /UPDATED|STATUS_CHANGED/, icon: Pencil, tone: 'bg-muted text-muted-foreground' },
-  { match: /TICKET/, icon: XCircle, tone: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' },
+  { match: /TICKET/, icon: XCircle, tone: 'bg-destructive/12 text-destructive' },
   { match: /./, icon: PackageCheck, tone: 'bg-muted text-muted-foreground' },
 ];
 

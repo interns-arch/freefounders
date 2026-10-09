@@ -67,7 +67,7 @@ export function StatusDialog({ employee, open, onOpenChange }: { employee: Emplo
                   <span className="block text-sm font-medium">{o.label}</span>
                   <span className="text-xs text-muted-foreground">{o.text}</span>
                 </span>
-                {o.value === 'NOTICE_PERIOD' && <LogOut className="size-4 text-amber-600" />}
+                {o.value === 'NOTICE_PERIOD' && <LogOut className="size-4 text-warning" />}
               </button>
             ))}
           </div>
@@ -81,7 +81,7 @@ export function StatusDialog({ employee, open, onOpenChange }: { employee: Emplo
                   <Input type="date" value={lwd} onChange={(e) => setLwd(e.target.value)} />
                 </Field>
               </div>
-              <div className="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="flex gap-2.5 rounded-lg border border-warning/25 bg-warning/8 p-3 text-sm text-warning">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                 <p>
                   {employee.assets.length > 0 ? (

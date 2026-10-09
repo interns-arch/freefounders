@@ -1,49 +1,17 @@
-/** HR → Today: check in / check out (GPS, face check and/or punch photo, per company setting). Built for phones. */
-import { errorMessage } from '@freefounders/core';
-import { useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
+/** Attendance → Today: check in / check out (GPS, face check and/or punch photo, per company setting). Built for phones. */
 import { Camera, LogIn, LogOut, MapPin, ScanFace } from 'lucide-react';
-import { useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
 import { ErrorNote, OkNote, Panel, Tile, fmtTime } from '../tasks/general/parts';
-import { currentPosition } from './face';
-import { FaceCapture } from './face-capture';
 import { AttendanceChip, hrs } from './parts';
-
-type Which = 'check_in' | 'check_out';
+import { usePunch } from './punch';
 
 export function TodayTab() {
-  const q = useAttendanceToday();
-  const mark = useMarkAttendance();
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
-  const [camFor, setCamFor] = useState<Which | null>(null);
-  const [locating, setLocating] = useState(false);
-
-  const send = async (which: Which, faceDescriptor?: number[] | null, photo?: string | null) => {
-    setErr('');
-    setMsg('');
-    setLocating(true);
-    const pos = await currentPosition();
-    setLocating(false);
-    mark.mutate(
-      { which, ...pos, ...(faceDescriptor ? { face_descriptor: faceDescriptor } : {}), ...(photo ? { photo } : {}) },
-      {
-        onSuccess: () => setMsg(which === 'check_in' ? 'Checked in ✅' : 'Checked out ✅'),
-        onError: (e) => setErr(errorMessage(e)),
-      },
-    );
-  };
-
-  const data = q.data;
-  if (q.error && !data) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
+  const p = usePunch();
+  const data = p.data;
+  if (p.query.error && !data) return <ErrorState error={p.query.error} onRetry={() => p.query.refetch()} />;
   if (!data) return <Skeleton className="h-64 max-w-2xl" />;
-
-  // With face attendance or punch photos switched on, the camera step comes first.
-  const usesCamera = data.face_enabled || (!!data.photo && data.photo !== 'off');
-  const markIt = (which: Which) => (usesCamera ? setCamFor(which) : send(which));
-  const busy = mark.isPending || locating;
   const a = data.attendance;
 
   return (
@@ -54,12 +22,12 @@ export function TodayTab() {
         <Tile label="Worked" value={hrs(a?.working_minutes)} />
         <Tile label="Status" value={a ? <AttendanceChip status={a.status} /> : '—'} alert={!!a?.is_late} />
       </div>
-      <ErrorNote>{err}</ErrorNote>
-      <OkNote className="text-base">{msg}</OkNote>
+      <ErrorNote>{p.err}</ErrorNote>
+      <OkNote className="text-base">{p.msg}</OkNote>
       <Panel title="Mark attendance">
-        <ul className="mb-4 space-y-1 text-sm text-muted-foreground">
+        <ul className="mb-4 space-y-1.5 text-sm text-muted-foreground">
           <li>
-            Office hours {data.work_start}–{data.work_end}.
+            Office hours <span className="font-mono text-foreground">{data.work_start}–{data.work_end}</span>.
           </li>
           <li className="flex items-center gap-1.5">
             <MapPin className="size-3.5" />
@@ -82,36 +50,21 @@ export function TodayTab() {
           )}
         </ul>
         <div className="grid grid-cols-2 gap-3">
-          <Button size="lg" className="h-14 text-base" disabled={busy || !data.can_check_in} loading={busy && !camFor} onClick={() => markIt('check_in')}>
-            {usesCamera ? <Camera /> : <LogIn />} Check in
+          <Button
+            size="lg"
+            className="h-14 text-base"
+            disabled={p.busy || !data.can_check_in}
+            loading={p.busy && !p.waitingForCamera}
+            onClick={() => p.markIt('check_in')}
+          >
+            {p.usesCamera ? <Camera /> : <LogIn />} Check in
           </Button>
-          <Button size="lg" variant="outline" className="h-14 text-base" disabled={busy || !data.can_check_out} onClick={() => markIt('check_out')}>
-            {usesCamera ? <Camera /> : <LogOut />} Check out
+          <Button size="lg" variant="outline" className="h-14 text-base" disabled={p.busy || !data.can_check_out} onClick={() => p.markIt('check_out')}>
+            {p.usesCamera ? <Camera /> : <LogOut />} Check out
           </Button>
         </div>
       </Panel>
-
-      {camFor && (
-        <FaceCapture
-          face={!!data.face_enabled}
-          photo={!!data.photo && data.photo !== 'off'}
-          title={data.face_enabled ? (camFor === 'check_in' ? 'Check in with your face' : 'Check out with your face') : camFor === 'check_in' ? 'Check in' : 'Check out'}
-          action={camFor === 'check_in' ? 'Check in' : 'Check out'}
-          hint={
-            data.face_enabled && !data.face_enrolled
-              ? data.face_self_enroll
-                ? 'First time: this capture becomes your face profile. Look straight at the camera in good light, without a mask.'
-                : 'Your face is not enrolled yet — ask an admin to enrol you first.'
-              : undefined
-          }
-          onClose={() => setCamFor(null)}
-          onCapture={(descriptor, photo) => {
-            const w = camFor;
-            setCamFor(null);
-            void send(w, descriptor, photo);
-          }}
-        />
-      )}
+      {p.camera}
     </div>
   );
 }

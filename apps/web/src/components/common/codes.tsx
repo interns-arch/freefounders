@@ -28,7 +28,7 @@ export function LocalQrWarning({ className }: { className?: string }) {
   const links = useQrLinks();
   if (!links.ready || !links.localOnly) return null;
   return (
-    <p className={cn('rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200', className)}>
+    <p className={cn('rounded-lg border border-warning/25 bg-warning/8 px-3 py-2 text-xs text-warning', className)}>
       These QR codes point to <span className="font-mono">{links.base}</span>, which a phone can’t open. Start the app with <span className="font-mono">npm run dev</span> (it
       uses this PC’s Wi-Fi address) or set <span className="font-mono">PUBLIC_URL</span> to the server’s address, then print again.
     </p>

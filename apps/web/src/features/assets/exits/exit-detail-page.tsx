@@ -22,10 +22,10 @@ import { cn, formatDate, formatDateTime } from '@/lib/utils';
 import { DaysLeft } from './exits-page';
 
 const ITEM_BUTTON: Record<ExitItemStatus, string> = {
-  PENDING: 'data-[on=true]:bg-amber-100 data-[on=true]:text-amber-800 dark:data-[on=true]:bg-amber-950 dark:data-[on=true]:text-amber-300',
-  RETURNED: 'data-[on=true]:bg-emerald-100 data-[on=true]:text-emerald-800 dark:data-[on=true]:bg-emerald-950 dark:data-[on=true]:text-emerald-300',
-  DAMAGED: 'data-[on=true]:bg-orange-100 data-[on=true]:text-orange-800 dark:data-[on=true]:bg-orange-950 dark:data-[on=true]:text-orange-300',
-  MISSING: 'data-[on=true]:bg-red-100 data-[on=true]:text-red-800 dark:data-[on=true]:bg-red-950 dark:data-[on=true]:text-red-300',
+  PENDING: 'data-[on=true]:bg-warning/12 data-[on=true]:text-warning dark:data-[on=true]:bg-warning/15 dark:data-[on=true]:text-warning',
+  RETURNED: 'data-[on=true]:bg-success/12 data-[on=true]:text-success dark:data-[on=true]:bg-success/15 dark:data-[on=true]:text-success',
+  DAMAGED: 'data-[on=true]:bg-warning/12 data-[on=true]:text-warning dark:data-[on=true]:bg-warning/15 dark:data-[on=true]:text-warning',
+  MISSING: 'data-[on=true]:bg-destructive/12 data-[on=true]:text-destructive dark:data-[on=true]:bg-destructive/15 dark:data-[on=true]:text-destructive',
 };
 
 export default function ExitDetailPage() {
@@ -167,7 +167,7 @@ export default function ExitDetailPage() {
       </div>
 
       {x.status === 'COMPLETED' && (
-        <div className={cn('flex gap-3 rounded-xl border px-4 py-3 text-sm', x.overridden ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200' : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200')}>
+        <div className={cn('flex gap-3 rounded-xl border px-4 py-3 text-sm', x.overridden ? 'border-destructive/25 bg-destructive/8 text-destructive' : 'border-success/25 bg-success/8 text-success')}>
           {x.overridden ? <ShieldAlert className="mt-0.5 size-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" />}
           <div>
             <p className="font-medium">
@@ -195,12 +195,12 @@ export default function ExitDetailPage() {
             </div>
             <span className="text-2xl font-semibold tabular text-muted-foreground">{pct}%</span>
           </div>
-          <Progress value={pct} className="mt-3 h-2" indicatorClassName={blocking ? 'bg-amber-500' : 'bg-emerald-500'} />
+          <Progress value={pct} className="mt-3 h-2" indicatorClassName={blocking ? 'bg-warning' : 'bg-success'} />
         </Card>
         {(['RETURNED', 'DAMAGED', 'PENDING', 'MISSING'] as const).map((s) => (
           <Card key={s} className={cn('p-4', s === 'RETURNED' && 'hidden lg:block')}>
             <p className="text-[13px] font-medium text-muted-foreground">{humanize(s)}</p>
-            <p className={cn('mt-1 text-2xl font-semibold tabular', s === 'MISSING' && x.counts.missing && 'text-red-600', s === 'PENDING' && x.counts.pending && 'text-amber-600')}>
+            <p className={cn('mt-1 text-2xl font-semibold tabular', s === 'MISSING' && x.counts.missing && 'text-destructive', s === 'PENDING' && x.counts.pending && 'text-warning')}>
               {x.counts[s.toLowerCase() as 'returned']}
             </p>
           </Card>
@@ -335,14 +335,14 @@ export default function ExitDetailPage() {
               {open ? (
                 <>
                   {blocking > 0 ? (
-                    <div className="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    <div className="flex gap-2.5 rounded-lg border border-warning/25 bg-warning/8 p-3 text-sm text-warning">
                       <Lock className="mt-0.5 size-4 shrink-0" />
                       <p>
                         Blocked: <span className="font-semibold">{x.counts.pending}</span> pending and <span className="font-semibold">{x.counts.missing}</span> missing. Recover them, or record an authorised override.
                       </p>
                     </div>
                   ) : (
-                    <div className="flex gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                    <div className="flex gap-2.5 rounded-lg border border-success/25 bg-success/8 p-3 text-sm text-success">
                       <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
                       <p>All assets are cleared. You can complete the exit.</p>
                     </div>

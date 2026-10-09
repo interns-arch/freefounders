@@ -1068,3 +1068,20 @@ Each block below lists what it shows and where the data comes from (all already 
 
 **The web app is finalized first** (founder, 2026-10-08): a very good, user-friendly UI in this theme and colour scheme on every
 screen, reviewed and signed off by the founder. Only then does Phase 7 (the phone app) start; it reuses this portal as its home screen.
+
+### 19.9 Status (2026-10-09): first slice built and tested
+Founder: "start with the web, make it perfect, same as the old application but in the same theme and colour scheme".
+Defaults taken for §19.7 (founder can change them): Attendance access follows Tasks (A); Directory and Audit logs not
+shown yet; "Remember my choice" keeps working as before (opens that workspace next time); colours read from the mockups.
+
+| Built | Notes |
+|---|---|
+| Theme | indigo primary, grey-blue page, white cards, 12 px radius, JetBrains Mono for labels/numbers, accents per workspace (`--app-attendance` new); light + dark; choice remembered per device |
+| Fixed colours removed | every Tailwind palette colour in screens (copied from the old Assets app) now uses theme colours; `check-web-rules` refuses new ones (category colours people pick are kept) |
+| Workspace Portal at `/` | greeting, shift window + live clock, attendance checks strip, cards for Attendance / Tasks / Assets with live counts, admin row with counts, phone bottom bar |
+| Punch in from the portal | shared `usePunch` (same flow as Today); one-app Tasks people now land on the portal instead of going straight to Tasks (behaviour change, on purpose) |
+| Attendance workspace | `/attendance`, `/attendance/<tab>`; `/tasks/hr?tab=x` redirects; Tasks menu keeps "Attendance & leave" |
+| Frame | same sidebar layout as the old apps, header with "Workspace portal" back link, light/dark switch, bell; phone bottom bar (first 4 menu entries + More) |
+
+Checks: rules + typecheck + build pass; e2e **34 / 34** (new: punch in/out from the portal + old HR link redirect); smoke 10/10.
+Next: screen-by-screen polish against the old apps (Tasks workspace, HR tabs, Assets detail pages), founder review.

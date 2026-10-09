@@ -95,6 +95,38 @@ test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, r
   }
 });
 
+test('punch in and out from the Workspace Portal (PLAN.md §19.3); old /tasks/hr links open Attendance', async ({ browser, request }) => {
+  const owner = await token(request);
+  const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: false, face_enabled: false } })).ok()).toBeTruthy();
+  const person = await newPerson(request, owner, 'Portal');
+  try {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto('/');
+    await signIn(page, person.login, person.password);
+    await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
+    const card = page.getByRole('region', { name: 'Attendance & Shifts' });
+    await expect(card.getByText('Not checked in')).toBeVisible();
+    await card.getByRole('button', { name: 'Punch in' }).click();
+    await expect(card.getByText('Checked in ✅')).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Punch out' })).toBeVisible();
+    await shot(page, 'web-portal-punched-in');
+    await card.getByRole('button', { name: 'Punch out' }).click();
+    await expect(card.getByText('Checked out ✅')).toBeVisible();
+    await expect(card.getByRole('button', { name: /Done for today/ })).toBeVisible();
+
+    await page.goto('/tasks/hr?tab=leave');
+    await expect(page).toHaveURL(/\/attendance\/leave$/);
+    await expect(page.getByRole('navigation', { name: 'Attendance menu' }).getByRole('link', { name: 'My leave' })).toHaveAttribute('aria-current', 'page');
+    await context.close();
+  } finally {
+    const restore = Object.fromEntries(['photo', 'geofence_enabled', 'face_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+    await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
+    await person.remove();
+  }
+});
+
 test('leave is applied for and approved in Approvals', async ({ browser, request }) => {
   const owner = await token(request);
   const typeName = `E2E Leave ${Date.now().toString(36)}`;

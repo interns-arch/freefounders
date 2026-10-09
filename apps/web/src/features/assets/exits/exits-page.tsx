@@ -21,7 +21,7 @@ const TABS = [
 export function DaysLeft({ date, className }: { date: string; className?: string }) {
   const d = daysUntil(date) ?? 0;
   return (
-    <span className={cn('whitespace-nowrap text-xs font-medium', d < 0 ? 'text-red-600' : d <= 3 ? 'text-amber-600' : 'text-muted-foreground', className)}>
+    <span className={cn('whitespace-nowrap text-xs font-medium', d < 0 ? 'text-destructive' : d <= 3 ? 'text-warning' : 'text-muted-foreground', className)}>
       {d < 0 ? `${-d} day${d === -1 ? '' : 's'} overdue` : d === 0 ? 'Last day today' : `${d} day${d === 1 ? '' : 's'} left`}
     </span>
   );
@@ -85,7 +85,7 @@ export default function ExitsPage() {
                 {x.missing > 0 && <Badge tone="red">{x.missing} missing</Badge>}
               </span>
             </div>
-            <Progress value={x.total ? (cleared / x.total) * 100 : 100} className="mt-1.5" indicatorClassName={x.pending + x.missing ? 'bg-amber-500' : 'bg-emerald-500'} />
+            <Progress value={x.total ? (cleared / x.total) * 100 : 100} className="mt-1.5" indicatorClassName={x.pending + x.missing ? 'bg-warning' : 'bg-success'} />
           </div>
         );
       },
@@ -96,7 +96,7 @@ export default function ExitsPage() {
       cell: (x) => (
         <div className="flex flex-col gap-0.5">
           <EnumBadge value={x.status} tones={EXIT_CASE_TONE} />
-          {x.overridden && <span className="text-[11px] text-red-600">Overridden</span>}
+          {x.overridden && <span className="text-[11px] text-destructive">Overridden</span>}
         </div>
       ),
     },

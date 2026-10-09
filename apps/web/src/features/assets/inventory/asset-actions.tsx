@@ -116,7 +116,7 @@ function AssignBody({ dialog, onClose, onDone }: { dialog: Extract<AssetDialog, 
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-4">
-        {give && <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">One-time item — it’s theirs to keep. Stock goes down; nothing to return.</p>}
+        {give && <p className="rounded-md bg-success/8 px-3 py-2 text-xs text-success">One-time item — it’s theirs to keep. Stock goes down; nothing to return.</p>}
         <Field label={transfer ? 'Transfer to' : give ? 'Give to' : 'Assign to'} required error={error ?? undefined}>
           <HolderPicker
             holderType={holderType}

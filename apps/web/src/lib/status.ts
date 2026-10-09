@@ -75,14 +75,14 @@ export const PRIORITY_TONE: Record<Priority, BadgeTone> = { LOW: 'gray', MEDIUM:
 
 /** Solid colours for charts / status bars. */
 export const ASSET_STATUS_BAR: Record<AssetStatus, string> = {
-  PURCHASED: 'bg-zinc-400',
-  RECEIVED: 'bg-cyan-500',
-  IN_INVENTORY: 'bg-violet-500',
-  AVAILABLE: 'bg-emerald-500',
-  ASSIGNED: 'bg-blue-500',
-  IN_MAINTENANCE: 'bg-amber-500',
-  RETURNED: 'bg-orange-500',
-  RETIRED: 'bg-zinc-300 dark:bg-zinc-600',
-  DISPOSED: 'bg-zinc-200 dark:bg-zinc-700',
-  LOST: 'bg-red-500',
+  PURCHASED: 'bg-muted-foreground',
+  RECEIVED: 'bg-info',
+  IN_INVENTORY: 'bg-app-attendance',
+  AVAILABLE: 'bg-success',
+  ASSIGNED: 'bg-info',
+  IN_MAINTENANCE: 'bg-warning',
+  RETURNED: 'bg-warning',
+  RETIRED: 'bg-border',
+  DISPOSED: 'bg-border',
+  LOST: 'bg-destructive',
 };

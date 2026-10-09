@@ -97,7 +97,8 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     const page = await context.newPage();
     await page.goto('/');
     await signIn(page, login, password);
-    await page.waitForURL(/\/tasks/); // one app: sign-in opens it directly
+    // Tasks only: sign-in opens the Workspace Portal (punch in from the first page, PLAN.md §19.3).
+    await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
     await page.goto('/tasks/hr');
     await page.getByRole('button', { name: /Check in/ }).click();
     const camera = page.getByRole('dialog', { name: 'Check in' });

@@ -13,12 +13,12 @@ import { cn, formatDate, relativeTime } from '@/lib/utils';
 
 const ORDER: Priority[] = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
 const LABEL: Record<Priority, string> = { URGENT: 'Urgent', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
-const BAR: Record<Priority, string> = { URGENT: 'bg-red-500', HIGH: 'bg-orange-500', MEDIUM: 'bg-blue-500', LOW: 'bg-zinc-300 dark:bg-zinc-600' };
+const BAR: Record<Priority, string> = { URGENT: 'bg-destructive', HIGH: 'bg-warning', MEDIUM: 'bg-info', LOW: 'bg-border' };
 const TILE: Record<Priority, string> = {
-  URGENT: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
-  HIGH: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300',
-  MEDIUM: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300',
-  LOW: 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-300',
+  URGENT: 'border-destructive/25 bg-destructive/8 text-destructive',
+  HIGH: 'border-warning/25 bg-warning/8 text-warning',
+  MEDIUM: 'border-info/25 bg-info/8 text-info',
+  LOW: 'border-border bg-muted text-foreground',
 };
 const STATUS_TEXT: Record<string, string> = { OPEN: 'Open', IN_PROGRESS: 'In progress', PENDING: 'Needs approval', APPROVED: 'Ready to fulfil' };
 const JOINER_TEXT: Record<string, string> = { SUBMITTED: 'Approve items', APPROVED: 'Assign items' };
@@ -148,7 +148,7 @@ function QueueRow({ item, compact }: { item: QueueItem; compact?: boolean }) {
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         <EnumBadge value={item.priority} tones={PRIORITY_TONE} dot={false} />
-        <span className={cn('whitespace-nowrap text-[11px]', item.overdue ? 'font-semibold text-red-600' : 'text-muted-foreground')}>
+        <span className={cn('whitespace-nowrap text-[11px]', item.overdue ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
           {item.overdue ? `Overdue · ${item.kind === 'ONBOARDING' ? 'joined' : 'needed'} ${formatDate(item.dueDate)}` : item.dueDate ? `${item.kind === 'ONBOARDING' ? 'Joins' : 'Needed'} ${formatDate(item.dueDate)}` : relativeTime(item.createdAt)}
         </span>
       </div>
@@ -194,7 +194,7 @@ export function QueueCard() {
       ) : (
         <CardContent>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckCircle2 className="size-4 text-emerald-600" /> All clear — nothing waiting.
+            <CheckCircle2 className="size-4 text-success" /> All clear — nothing waiting.
           </p>
         </CardContent>
       )}

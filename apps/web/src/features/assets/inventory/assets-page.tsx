@@ -136,7 +136,7 @@ export default function AssetsPage() {
       cell: (a) => {
         const d = daysUntil(a.warrantyExpiry);
         if (d === null) return <span className="text-muted-foreground">—</span>;
-        return <span className={cn('whitespace-nowrap', d < 0 ? 'text-muted-foreground line-through' : d <= 30 ? 'font-medium text-amber-600' : '')}>{formatDate(a.warrantyExpiry)}</span>;
+        return <span className={cn('whitespace-nowrap', d < 0 ? 'text-muted-foreground line-through' : d <= 30 ? 'font-medium text-warning' : '')}>{formatDate(a.warrantyExpiry)}</span>;
       },
     },
     { key: 'updated', header: 'Updated', sortKey: 'updatedAt', hideOnMobile: true, cell: (a) => <span className="whitespace-nowrap text-muted-foreground">{relativeTime(a.updatedAt)}</span> },

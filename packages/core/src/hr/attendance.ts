@@ -194,3 +194,29 @@ export function usePunchPhoto(attendanceId: number | null | undefined, which: 'i
     retry: false,
   });
 }
+
+/** Metres between two points (haversine). */
+export function distanceMetres(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.latitude - a.latitude);
+  const dLon = rad(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLon / 2) ** 2;
+  return Math.round(2 * 6_371_000 * Math.asin(Math.sqrt(h)));
+}
+
+/**
+ * The closest active office to a position, how far it is and whether that is inside its radius (PLAN.md §19.2).
+ * Only a hint for the screen: the server decides the location check at punch time.
+ */
+export function nearestOffice<O extends { name: string; latitude: number; longitude: number; radius_m: number; active: boolean }>(
+  pos: { latitude: number; longitude: number },
+  offices: O[],
+): { office: O; metres: number; inside: boolean } | null {
+  let best: { office: O; metres: number; inside: boolean } | null = null;
+  for (const o of offices) {
+    if (!o.active) continue;
+    const metres = distanceMetres(pos, o);
+    if (!best || metres < best.metres) best = { office: o, metres, inside: metres <= o.radius_m };
+  }
+  return best;
+}

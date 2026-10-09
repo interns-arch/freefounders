@@ -173,7 +173,7 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
           <EnumBadge value={r.status} tones={REQUEST_TONE} />
           {r.status === 'FULFILLED' && r.fulfilledAssetTag && <span className="font-mono text-[11px] text-muted-foreground">{r.fulfilledAssetTag}</span>}
           {(r.status === 'PENDING' || r.status === 'APPROVED') && (
-            <span className={cn('text-[11px]', r.custom ? 'text-muted-foreground' : r.availableCount ? 'text-emerald-600' : 'text-red-600')}>{r.custom ? 'Not in catalog' : `${r.availableCount} in stock`}</span>
+            <span className={cn('text-[11px]', r.custom ? 'text-muted-foreground' : r.availableCount ? 'text-success' : 'text-destructive')}>{r.custom ? 'Not in catalog' : `${r.availableCount} in stock`}</span>
           )}
         </div>
       ),

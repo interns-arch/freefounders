@@ -46,12 +46,12 @@ export default function LabelsPage() {
       </div>
       <div className={cn('grid gap-3', size === 'md' ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-3 sm:grid-cols-4')}>
         {items.map((a) => (
-          <div key={a.id} className="flex break-inside-avoid items-center gap-3 rounded-lg border border-zinc-300 bg-white p-3 text-black">
+          <div key={a.id} className="flex break-inside-avoid items-center gap-3 rounded-lg border border-border bg-white p-3 text-black">
             <QRCode value={links.asset(a.qrCode)} size={size === 'md' ? 84 : 64} />
             <div className="min-w-0 flex-1">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Company property · {a.typeName}</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Company property · {a.typeName}</p>
               <p className="truncate font-mono text-sm font-bold">{a.assetTag}</p>
-              <p className="truncate text-[11px] text-zinc-700">{a.name}</p>
+              <p className="truncate text-[11px] text-foreground">{a.name}</p>
               <Barcode value={a.assetTag} height={size === 'md' ? 22 : 16} className="mt-1" />
             </div>
           </div>

@@ -70,8 +70,8 @@ export function EmptyState({
 export function ErrorState({ error, onRetry, className }: { error: unknown; onRetry?: () => void; className?: string }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-12 text-center', className)}>
-      <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-950/40">
-        <AlertTriangle className="size-5 text-red-600 dark:text-red-400" />
+      <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-destructive/8">
+        <AlertTriangle className="size-5 text-destructive" />
       </div>
       <p className="text-sm font-medium">Couldn’t load this</p>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">{errorMessage(error)}</p>
@@ -117,17 +117,17 @@ export function StatCard({
 }) {
   const toneClass = {
     default: 'bg-muted text-muted-foreground',
-    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300',
-    green: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
-    red: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
-    violet: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+    blue: 'bg-info/12 text-info',
+    green: 'bg-success/12 text-success',
+    amber: 'bg-warning/12 text-warning',
+    red: 'bg-destructive/12 text-destructive',
+    violet: 'bg-app-attendance/12 text-app-attendance',
   }[tone];
   const body = (
     <Card className={cn('flex items-start justify-between gap-3 p-4', to && 'transition hover:border-primary/40 hover:shadow-sm')}>
       <div className="min-w-0">
-        <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-        {loading ? <Skeleton className="mt-2 h-7 w-16" /> : <p className="mt-1 text-2xl font-semibold tracking-tight tabular">{value}</p>}
+        <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{label}</p>
+        {loading ? <Skeleton className="mt-2 h-7 w-16" /> : <p className="mt-1.5 font-mono text-2xl font-semibold tracking-tight tabular">{value}</p>}
         {hint && <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>}
       </div>
       {Icon && (

@@ -71,9 +71,9 @@ export function CameraScanner({ onCode, className }: { onCode: (code: string) =>
       <div className="relative aspect-square overflow-hidden rounded-xl border bg-black sm:aspect-video">
         <video ref={video} className="size-full object-cover" muted playsInline />
         {state !== 'on' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950 text-zinc-300">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-foreground text-muted-foreground/60">
             {state === 'starting' ? <Loader2 className="size-7 animate-spin" /> : <Camera className="size-8 opacity-70" />}
-            {error && <p className="text-sm text-red-300">{error}</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button size="lg" variant="secondary" onClick={start} disabled={state === 'starting'}>
               {state === 'error' ? 'Try again' : 'Start camera'}
             </Button>
@@ -154,7 +154,7 @@ export default function ScanPage() {
               <Search /> Find
             </Button>
           </form>
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
+          {error && <p className="rounded-md bg-destructive/8 px-3 py-2 text-sm text-destructive">{error}</p>}
           <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-2 rounded-lg border p-2.5">
               <IdCard className="size-4 shrink-0 text-primary" /> Person ID card → their assets

@@ -115,7 +115,7 @@ export default function LeadershipPage() {
                     <div className="text-xs text-muted-foreground">{m.roleName}</div>
                   </TD>
                   <TD className="text-right tabular">{m.ticketsResolved}</TD>
-                  <TD className={cn('text-right tabular', m.ticketsOpen > 5 && 'font-medium text-amber-600')}>{m.ticketsOpen}</TD>
+                  <TD className={cn('text-right tabular', m.ticketsOpen > 5 && 'font-medium text-warning')}>{m.ticketsOpen}</TD>
                   <TD className="text-right tabular">{hours(m.avgResolutionHours)}</TD>
                   <TD className="text-right tabular">{m.handovers}</TD>
                   <TD className="text-right tabular">{m.returns}</TD>
@@ -156,7 +156,7 @@ export default function LeadershipPage() {
                   <TD className="text-right tabular">{d.headcount}</TD>
                   <TD className="text-right tabular">{d.assetsHeld}</TD>
                   <TD className="text-right tabular">{d.onNotice || '—'}</TD>
-                  <TD className={cn('text-right tabular', d.pendingRecovery > 0 && 'font-medium text-amber-600')}>{d.pendingRecovery || '—'}</TD>
+                  <TD className={cn('text-right tabular', d.pendingRecovery > 0 && 'font-medium text-warning')}>{d.pendingRecovery || '—'}</TD>
                 </TR>
               ))}
             </TBody>
@@ -181,7 +181,7 @@ function Metric({ icon: Icon, title, value, lines, warn }: { icon: typeof Users;
           {l}
         </p>
       ))}
-      {warn && <p className="mt-1 text-xs font-medium text-amber-600">{warn}</p>}
+      {warn && <p className="mt-1 text-xs font-medium text-warning">{warn}</p>}
     </div>
   );
 }

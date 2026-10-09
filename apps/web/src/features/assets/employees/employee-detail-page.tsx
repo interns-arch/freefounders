@@ -129,7 +129,7 @@ export default function EmployeeDetailPage() {
             { label: 'Reports to', value: e.managerName },
             { label: 'Joined', value: e.joinDate && formatDate(e.joinDate) },
             ...(e.noticeDate ? [{ label: 'Notice given', value: formatDate(e.noticeDate) }] : []),
-            ...(e.lastWorkingDate ? [{ label: 'Last working day', value: <span className={cn(lwd !== null && lwd <= 3 && 'font-medium text-amber-600')}>{formatDate(e.lastWorkingDate)}</span> }] : []),
+            ...(e.lastWorkingDate ? [{ label: 'Last working day', value: <span className={cn(lwd !== null && lwd <= 3 && 'font-medium text-warning')}>{formatDate(e.lastWorkingDate)}</span> }] : []),
             ...(e.exitDate ? [{ label: 'Exited on', value: formatDate(e.exitDate) }] : []),
             ...(e.notes ? [{ label: 'Notes', value: e.notes }] : []),
           ]}
@@ -211,7 +211,7 @@ export default function EmployeeDetailPage() {
       {e.status === 'JOINING' && e.onboarding && (
         <Link
           to={`/assets/onboarding/${e.onboarding.id}`}
-          className="flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 transition hover:border-violet-300 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200"
+          className="flex items-center gap-3 rounded-xl border border-app-attendance/25 bg-app-attendance/8 px-4 py-3 text-sm text-app-attendance transition hover:border-app-attendance/40"
         >
           <UserPlus className="size-4 shrink-0" />
           <span className="flex-1">
@@ -223,7 +223,7 @@ export default function EmployeeDetailPage() {
       {e.openExitCase && (
         <Link
           to={`/assets/exits/${e.openExitCase.id}`}
-          className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition hover:border-amber-300 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+          className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning/8 px-4 py-3 text-sm text-warning transition hover:border-warning/40"
         >
           <LogOut className="size-4 shrink-0" />
           <span className="flex-1">
@@ -242,7 +242,7 @@ export default function EmployeeDetailPage() {
             <CardHeader className="flex-wrap">
               <div>
                 <CardTitle className="text-base">{self ? 'My assets' : 'Assets held'} ({e.assets.length})</CardTitle>
-                <p className={cn('mt-0.5 flex items-center gap-1 text-xs', e.assetsVerifiedAt ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground')}>
+                <p className={cn('mt-0.5 flex items-center gap-1 text-xs', e.assetsVerifiedAt ? 'text-success' : 'text-muted-foreground')}>
                   {e.assetsVerifiedAt ? (
                     <>
                       <CheckCircle2 className="size-3.5" />

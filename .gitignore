@@ -35,3 +35,6 @@ import-report-*/
 
 # Claude Code worktrees (other sessions)
 .claude/worktrees/
+
+# Browser-test screenshots when Playwright runs from the repo root
+/screenshots/

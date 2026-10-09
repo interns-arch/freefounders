@@ -47,12 +47,12 @@ export default function IdCardsPage() {
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 print:grid-cols-4">
         {people.map((p) => (
-          <div key={p.id} className="flex break-inside-avoid flex-col items-center rounded-xl border border-zinc-300 bg-white px-3 pt-3 pb-4 text-center text-black">
-            <p className="w-full truncate text-[9px] font-semibold tracking-wider text-zinc-500 uppercase">{p.companyName ?? 'Employee ID'}</p>
+          <div key={p.id} className="flex break-inside-avoid flex-col items-center rounded-xl border border-border bg-white px-3 pt-3 pb-4 text-center text-black">
+            <p className="w-full truncate text-[9px] font-semibold tracking-wider text-muted-foreground uppercase">{p.companyName ?? 'Employee ID'}</p>
             <QRCode value={links.person(p.employeeCode)} size={112} className="my-2" />
             <p className="w-full truncate text-sm leading-tight font-bold">{p.fullName}</p>
             <p className="font-mono text-xs font-semibold">{p.employeeCode}</p>
-            <p className="mt-0.5 w-full truncate text-[11px] text-zinc-600">{[p.designation, p.departmentName].filter(Boolean).join(' · ')}</p>
+            <p className="mt-0.5 w-full truncate text-[11px] text-muted-foreground">{[p.designation, p.departmentName].filter(Boolean).join(' · ')}</p>
           </div>
         ))}
       </div>

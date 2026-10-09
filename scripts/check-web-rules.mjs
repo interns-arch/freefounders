@@ -1,6 +1,7 @@
 // The redesign rules of the web app (PLAN.md §6, §18.2), checked before every typecheck/build:
 //   1. Screens (src/app, src/features) get data only through @freefounders/core hooks: no fetch, no HTTP client.
-//   2. Screens use theme colours only: no hex / rgb / hsl / oklch colour literals.
+//   2. Screens use theme colours only: no hex / rgb / hsl / oklch colour literals, no fixed Tailwind palette colours
+//      (blue-700, emerald-50…; PLAN.md §19.1), so the brand colour and dark mode reach every screen.
 // A redesign then only touches screens and the theme, never the logic.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -15,6 +16,10 @@ const RULES = [
   { re: /from ['"][^'"]*packages\/core\/src/, why: 'imports core internals — import from @freefounders/core(/area)' },
   { re: /(['"`\s(:])#[0-9a-fA-F]{3,8}\b/, why: 'hard-codes a colour — use a theme colour (e.g. text-primary, bg-success)' },
   { re: /\b(rgba?|hsla?|oklch)\(\s*\d/, why: 'hard-codes a colour — use a theme colour' },
+  {
+    re: /(?<![\w/-])(?:[a-z0-9-]+:)*(?:bg|text|border(?:-[trblxy])?|ring|from|to|via|fill|stroke|outline|divide)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/,
+    why: 'uses a fixed Tailwind colour — use a theme colour (text-info, bg-success/10, border-warning/40…)',
+  },
 ];
 
 function* files(dir) {
