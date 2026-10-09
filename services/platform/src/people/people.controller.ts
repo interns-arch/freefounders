@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { AdminOnly, type Caller, CurrentCaller, uuidParam, ZodPipe } from '../common/http';
-import { grantSchema, type PersonCreate, personCreateSchema, type PersonUpdate, personUpdateSchema, PeopleService, setLoginSchema } from './people.service';
+import { deletePersonSchema, grantSchema, type PersonCreate, personCreateSchema, type PersonUpdate, personUpdateSchema, PeopleService, setLoginSchema } from './people.service';
 
 @AdminOnly()
 @Controller('people')
@@ -21,6 +21,13 @@ export class PeopleController {
   @Patch(':id')
   update(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(personUpdateSchema)) body: PersonUpdate) {
     return this.people.update(caller, uuidParam(id), body);
+  }
+
+  /** Deletes the person and their records in every app (PLAN.md §19.12). Body: { confirm: "<their full name>" }. */
+  @Delete(':id')
+  @HttpCode(200)
+  remove(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(deletePersonSchema)) body: z.infer<typeof deletePersonSchema>) {
+    return this.people.deletePerson(caller, uuidParam(id), body.confirm);
   }
 
   @Put(':id/login')

@@ -58,6 +58,25 @@ export interface LoginReset {
   generatedPassword?: string;
 }
 
+/** PUT /people/:id/login. No password: one is generated and returned once. */
+export interface ResetLoginInput {
+  /** Needed only when the person has no login and no email or employee ID to sign in with. */
+  username?: string;
+  /** At least PLATFORM_PASSWORD_MIN characters. */
+  password?: string;
+  /** Default true: they choose their own password at their next sign-in. */
+  mustChangePassword?: boolean;
+}
+
+/** The shortest password the Platform accepts (founder's choice, PLAN.md §19.12). */
+export const PLATFORM_PASSWORD_MIN = 6;
+
+/** DELETE /people/:id: how many records each app removed. */
+export interface DeletedPerson {
+  deleted: true;
+  apps: Partial<Record<AppKey, Record<string, number>>>;
+}
+
 export interface ExitResult {
   lastWorkingDate: string;
   assets?: { caseNumber?: string | null; url?: string | null; error?: string };

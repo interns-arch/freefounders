@@ -45,6 +45,9 @@ let fakePeopleExport: { departments: unknown[]; people: unknown[] } = { departme
 const fakeTaskEvents: Array<{ id: number; type: string; payload: unknown }> = [];
 const flowCalls: Array<{ app: string; method: string; url: string; body: any }> = [];
 let fakeProfileVersion = 0;
+/** Permanent delete (§19.12): what the fake apps answer to DELETE /internal/people/<id>, and the calls they got. */
+const deleteCalls: Array<{ app: string; cid: unknown; url: string }> = [];
+let fakeTasksDelete: { status: number; body: unknown } = { status: 200, body: { deleted: true, counts: { tasks: 3, comments: 1 } } };
 const FAKE_MODULES = {
   app: 'tasks',
   modules: [
@@ -114,6 +117,11 @@ before(async () => {
         const body = JSON.parse(raw);
         peoplePushes.push({ cid: payload.cid, body });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ version: body.version, applied: true }));
+        return;
+      }
+      if (req.method === 'DELETE' && /\/people\/[0-9a-f-]{36}$/.test(req.url ?? '')) {
+        deleteCalls.push({ app: 'tasks', cid: payload.cid, url: req.url! });
+        res.writeHead(fakeTasksDelete.status, { 'content-type': 'application/json' }).end(JSON.stringify(fakeTasksDelete.body));
         return;
       }
       if (req.method === 'GET' && req.url?.endsWith('/modules')) {
@@ -888,5 +896,163 @@ describe('cross-app flows (Phase 5)', () => {
     assert.equal(granted.status, 200, JSON.stringify(granted.body));
     const onboard = flowCalls.slice(before).find((c) => c.url.endsWith('/onboarding'))!;
     assert.deepEqual(onboard.body, { personId: created.body.person.id, joinDate: '2099-01-15', roleNames: [] });
+  });
+});
+
+describe('reset with a chosen password (§19.12)', () => {
+  test('at least 6 characters; "ask them to change it" is on unless turned off', async () => {
+    const admin = await login('admin@acme.test');
+    const short = await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'abcde' } });
+    assert.equal(short.status, 400);
+    assert.match(short.body.message, /at least 6/);
+
+    const keep = await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'abc123', mustChangePassword: false } });
+    assert.equal(keep.status, 200, JSON.stringify(keep.body));
+    assert.equal(keep.body.generatedPassword, undefined, 'a typed password is never sent back');
+    const first = await call('POST', '/auth/login', { body: { login: 'mia', password: 'abc123' } });
+    assert.equal(first.status, 200);
+    assert.equal(first.body.mustChangePassword, false);
+
+    const ask = await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'abc1234' } });
+    assert.equal(ask.status, 200);
+    assert.equal((await call('POST', '/auth/login', { body: { login: 'mia', password: 'abc1234' } })).body.mustChangePassword, true);
+    const [row] = await dbs.db.select().from(logins).where(eq(logins.personId, ids.member));
+    assert.match(row.passwordHash, /^\$argon2id\$/, 'hashed only');
+
+    // Changing your own password also accepts 6 characters.
+    const mia = await login('mia', 'abc1234');
+    assert.equal((await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: 'abc1234', newPassword: 'short' } })).status, 400);
+    assert.equal((await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: 'abc1234', newPassword: 'six666' } })).status, 200);
+    await dbs.db.update(logins).set({ passwordHash: await hashPassword(PASSWORD), mustChangePassword: false }).where(eq(logins.personId, ids.member));
+  });
+});
+
+describe('delete a person permanently (§19.12)', () => {
+  let fakeAssets: Server;
+  let assetsDelete: { status: number; body: unknown } = { status: 200, body: { deleted: true, counts: { requests: 2 } } };
+  const add = async (fullName: string, extra: Partial<typeof people.$inferInsert> = {}) => {
+    const [p] = await dbs.db.insert(people).values({ companyId: ids.acme, fullName, ...extra }).returning();
+    return p.id;
+  };
+
+  before(async () => {
+    fakeAssets = createServer(async (req, res) => {
+      for await (const chunk of req) void chunk;
+      const url = req.url ?? '';
+      if (req.method === 'DELETE') {
+        deleteCalls.push({ app: 'assets', cid: decodeJwt(String(req.headers.authorization).slice(7)).cid, url });
+        res.writeHead(assetsDelete.status, { 'content-type': 'application/json' }).end(JSON.stringify(assetsDelete.body));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ applied: true, version: 1 }));
+    });
+    await new Promise<void>((r) => fakeAssets.listen(0, '127.0.0.1', r));
+    process.env.ASSETS_INTERNAL_URL = `http://127.0.0.1:${(fakeAssets.address() as AddressInfo).port}/api/internal`;
+    await dbs.db.update(companies).set({ enabledApps: ['tasks', 'assets'] }).where(eq(companies.id, ids.acme));
+  });
+
+  after(async () => {
+    delete process.env.ASSETS_INTERNAL_URL;
+    await dbs.db.update(companies).set({ enabledApps: ['tasks'] }).where(eq(companies.id, ids.acme));
+    await new Promise((r) => fakeAssets.close(r));
+  });
+
+  test('who may delete whom', async () => {
+    const admin = await login('admin@acme.test');
+    const owner = await login('olivia');
+    const mia = await login('mia');
+    const other = await add('Alan Otheradmin', { platformRole: 'admin' });
+    const before = deleteCalls.length;
+    assert.equal((await call('DELETE', `/people/${ids.admin}`, { token: mia.token, body: { confirm: 'Adam Admin' } })).status, 403, 'members delete nobody');
+    assert.equal((await call('DELETE', `/people/${ids.admin}`, { token: admin.token, body: { confirm: 'Adam Admin' } })).status, 400, 'not yourself');
+    assert.equal((await call('DELETE', `/people/${ids.owner}`, { token: admin.token, body: { confirm: 'Olivia Owner' } })).status, 403, 'never the owner');
+    assert.equal((await call('DELETE', `/people/${ids.owner}`, { token: owner.token, body: { confirm: 'Olivia Owner' } })).status, 400, 'the owner is themselves');
+    assert.equal((await call('DELETE', `/people/${other}`, { token: admin.token, body: { confirm: 'Alan Otheradmin' } })).status, 403, 'admins do not delete admins');
+    assert.equal((await call('DELETE', `/people/${ids.otherShared}`, { token: owner.token, body: { confirm: 'Sam Shared' } })).status, 404, 'other companies are invisible');
+    assert.equal(deleteCalls.length, before, 'no app was called');
+    const [still] = await dbs.db.select().from(people).where(eq(people.id, other));
+    assert.equal(still.status, 'active');
+    const done = await call('DELETE', `/people/${other}`, { token: owner.token, body: { confirm: 'Alan Otheradmin' } });
+    assert.equal(done.status, 200, 'the owner deletes an admin: ' + JSON.stringify(done.body));
+  });
+
+  test('the full name must be typed (case and spaces do not matter)', async () => {
+    const admin = await login('admin@acme.test');
+    const id = await add('Nora Name');
+    const wrong = await call('DELETE', `/people/${id}`, { token: admin.token, body: { confirm: 'Nora' } });
+    assert.equal(wrong.status, 400);
+    assert.equal((await call('DELETE', `/people/${id}`, { token: admin.token, body: {} })).status, 400);
+    const [p] = await dbs.db.select().from(people).where(eq(people.id, id));
+    assert.equal(p.status, 'active', 'nothing happens on a mismatch');
+    assert.equal((await call('DELETE', `/people/${id}`, { token: admin.token, body: { confirm: '  nora   NAME ' } })).status, 200);
+  });
+
+  test('an app that cannot delete stops everything: they stay switched off, the admin can retry', async () => {
+    const admin = await login('admin@acme.test');
+    const created = await call('POST', '/people', { token: admin.token, body: { fullName: 'Dora Delete', email: 'dora@acme.test', login: { username: 'dora', password: 'dora12' } } });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const dora = created.body.person.id as string;
+    await dbs.db.insert(personApps).values([
+      { personId: dora, app: 'tasks', localUserId: '91' },
+      { personId: dora, app: 'assets', localUserId: 'a-91' },
+    ]);
+    const report = await add('Rex Report', { reportsTo: dora });
+    const session = await login('dora', 'dora12');
+
+    assetsDelete = { status: 409, body: { message: 'They still hold 2 assets on an open exit' } };
+    const blocked = await call('DELETE', `/people/${dora}`, { token: admin.token, body: { confirm: 'Dora Delete' } });
+    assert.equal(blocked.status, 502);
+    assert.equal(blocked.body.message, 'Assets could not delete their data: They still hold 2 assets on an open exit');
+    const [kept] = await dbs.db.select().from(people).where(eq(people.id, dora));
+    assert.equal(kept.status, 'inactive', 'switched off');
+    assert.equal((await dbs.db.select().from(logins).where(eq(logins.personId, dora))).length, 1, 'login kept');
+    assert.equal((await call('POST', '/auth/refresh', { cookie: session.cookie })).status, 401, 'sessions ended');
+    assert.equal((await call('POST', '/auth/login', { body: { login: 'dora', password: 'dora12' } })).status, 401);
+
+    fakeTasksDelete = { status: 500, body: { detail: 'boom' } };
+    assetsDelete = { status: 200, body: { deleted: true, counts: { requests: 2 } } };
+    const down = await call('DELETE', `/people/${dora}`, { token: admin.token, body: { confirm: 'Dora Delete' } });
+    assert.equal(down.status, 502);
+    assert.equal(down.body.message, 'Tasks could not delete their data: boom');
+    fakeTasksDelete = { status: 200, body: { deleted: true, counts: { tasks: 3, comments: 1 } } };
+
+    const before = deleteCalls.length;
+    const pushesBefore = peoplePushes.length;
+    const ok = await call('DELETE', `/people/${dora}`, { token: admin.token, body: { confirm: 'Dora Delete' } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.deepEqual(
+      { deleted: ok.body.deleted, apps: ok.body.apps },
+      { deleted: true, apps: { tasks: { tasks: 3, comments: 1 }, assets: { requests: 2 } } },
+    );
+    assert.deepEqual(
+      deleteCalls.slice(before).map((c) => [c.app, c.cid, c.url]),
+      [
+        ['tasks', ids.acme, `/api/internal/people/${dora}`],
+        ['assets', ids.acme, `/api/internal/people/${dora}`],
+      ],
+    );
+    assert.equal((await dbs.db.select().from(people).where(eq(people.id, dora))).length, 0);
+    assert.equal((await dbs.db.select().from(logins).where(eq(logins.personId, dora))).length, 0);
+    assert.equal((await dbs.db.select().from(personApps).where(eq(personApps.personId, dora))).length, 0);
+    assert.equal((await dbs.db.select().from(refreshSessions).where(eq(refreshSessions.personId, dora))).length, 0);
+    const [rex] = await dbs.db.select().from(people).where(eq(people.id, report));
+    assert.equal(rex.reportsTo, null, 'nobody reports to a deleted person');
+    const push = peoplePushes.slice(pushesBefore).at(-1);
+    assert.ok(push && !push.body.people.some((x: { personId: string }) => x.personId === dora), 'the directory is pushed without them');
+    assert.equal((await call('POST', '/auth/login', { body: { login: 'dora', password: 'dora12' } })).status, 401);
+  });
+
+  test('an app that never had them is fine; apps outside the plan are not called', async () => {
+    const admin = await login('admin@acme.test');
+    await dbs.db.update(companies).set({ enabledApps: ['tasks'] }).where(eq(companies.id, ids.acme));
+    fakeTasksDelete = { status: 200, body: { deleted: false } };
+    const id = await add('Paula Plain');
+    const before = deleteCalls.length;
+    const res = await call('DELETE', `/people/${id}`, { token: admin.token, body: { confirm: 'Paula Plain' } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual(res.body.apps, { tasks: {} });
+    assert.deepEqual(deleteCalls.slice(before).map((c) => c.app), ['tasks']);
+    fakeTasksDelete = { status: 200, body: { deleted: true, counts: { tasks: 3, comments: 1 } } };
+    await dbs.db.update(companies).set({ enabledApps: ['tasks', 'assets'] }).where(eq(companies.id, ids.acme));
   });
 });

@@ -38,7 +38,7 @@ export async function seed(bootstrap = false) {
       .filter(([k, v]) => !v && k !== 'ownerLogin')
       .map(([k]) => k);
     if (missing.length) throw new Error(`Bootstrap needs: ${missing.join(', ')}`);
-    if (cfg.ownerPassword!.length < 8) throw new Error('OWNER_PASSWORD must be at least 8 characters');
+    if (cfg.ownerPassword!.length < 6) throw new Error('OWNER_PASSWORD must be at least 6 characters');
 
     const apps = (env('COMPANY_APPS') ?? 'tasks,assets').split(',').map((a) => a.trim()).filter((a) => (schema.APPS as readonly string[]).includes(a));
     await db.transaction(async (tx) => {

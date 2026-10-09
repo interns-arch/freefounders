@@ -1112,3 +1112,47 @@ Backend: in multi-company mode the public form page names its company (`/f/<toke
 
 Checks: rules + typecheck + build; e2e **44 / 44** (10 new tests across 4 specs); smoke 10/10; Tasks backend 755 + tenancy
 27 (+1 new) pass. `apps/portal` and the old frontends are Phase 9 clean-up candidates.
+
+### 19.12 People: reset with a chosen password, permanent delete (2026-10-09)
+Founder asked for two things on Admin → People & access: set a password of the admin's choice, and delete a person with
+everything about them ("delete everything").
+
+**Reset with a chosen password**
+- `PUT /api/platform/people/:id/login` takes `{ username?, password?, mustChangePassword? }`. No password: one is generated
+  and returned once (as before). `mustChangePassword` defaults to true. Sessions are ended either way.
+- **Platform passwords need at least 6 characters** (founder's choice; was 8), everywhere one is set: add person, reset /
+  create login, `/auth/change-password` (incl. the first-sign-in change), the `company create --owner-password` CLI and the seed.
+  Passwords of the Assets app's own users (standalone) are unchanged.
+- Screen: "⋯ → Reset password" (or "Create login", which also asks for a username) opens "Reset password — {name}": "Type a
+  password" (with show/hide and a live "At least 6 characters" hint) or "Generate one", and "Ask them to change it at next
+  sign-in" (on by default). After saving, the password is shown once with Copy and "Share on WhatsApp" (`wa.me` link); it is
+  never stored readable. "Login ready" after Add person is unchanged.
+
+**Delete permanently** — `DELETE /api/platform/people/:id`, body `{ confirm: "<full name>" }` (trimmed, case-insensitive).
+
+| Caller \ target | member | admin | owner | themselves |
+|---|---|---|---|---|
+| owner | yes | yes | — | no (400) |
+| admin | yes | no (403) | no (403) | no (400) |
+| member | no (403) | no (403) | no (403) | no |
+
+Order: (a) the person is switched off and every session ended; (b) each app in the company's plan deletes its records
+(`DELETE {APP}_INTERNAL_URL/people/<personId>`, service token, company from `cid`; `{deleted:false}` = never had them); the
+first app that is unreachable or answers anything but 200 stops it with **502 "<App> could not delete their data: …"**:
+nothing is deleted in the Platform, the person stays switched off, the admin can try again (the apps' deletes are repeatable);
+(c) the Platform deletes their login, sessions, roles, app links and the person, and clears other people's "reports to" that
+pointed at them (exit/onboarding state lives on the person row and in the apps); (d) the People directory is pushed again.
+Answer: `{ deleted: true, apps: { tasks: counts, assets: counts }, sync }`.
+Screen: "⋯ → Delete permanently" (after a separator; hidden for yourself, the owner, and admins unless you are the owner) asks
+to type the full name, lists what goes (sign-in and roles; tasks, comments, attendance, leave, salary records, leads, mistakes,
+forms, ideas; requests, tickets, asset history; held assets go back to stock) and warns that reports for past months change.
+
+**Not built: viewing saved passwords.** The founder also asked for admins to be able to see people's passwords. That needs a
+readable copy of every password, which the project's rule forbids ("Platform passwords are hashed only; never add a reversible
+copy"); passwords stay argon2id hashes only. Pending the founder's explicit confirmation. Today's answer: set a new one
+(shown once, with Copy / WhatsApp).
+
+Checks: Platform 56 tests (5 new: chosen password + 6-character minimum + mustChangePassword, who may delete whom, name
+confirm, fake apps called then rows removed, 502 leaves the person switched off, apps outside the plan not called); web
+rules + typecheck; e2e `web-admin` + `single-login` 11 / 11 (2 new: reset with a typed password → they sign in in a fresh
+browser → delete permanently → row gone, sign-in refused; owner/self cannot be deleted), against the real Tasks and Assets.

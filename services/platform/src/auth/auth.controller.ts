@@ -17,7 +17,7 @@ const loginSchema = z.object({
 const refreshSchema = z.object({ refreshToken: z.string().max(200).optional() });
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
-  newPassword: z.string().min(8, 'Use at least 8 characters').max(200),
+  newPassword: z.string().min(6, 'Use at least 6 characters').max(200),
 });
 
 function cookieOptions() {

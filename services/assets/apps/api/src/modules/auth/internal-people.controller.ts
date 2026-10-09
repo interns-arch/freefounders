@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Put, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Put, Req, UnauthorizedException } from '@nestjs/common';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type AuthedRequest, Public, ZodPipe } from '../../common/http';
 import { DbService } from '../../db/db.service';
 import { departments, employees, sessions, syncState, users } from '../../db/schema';
+import { deletePerson, removeFiles } from './person-delete';
 import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-token';
 
 const PEOPLE_VERSION_KEY = 'ff_people_version';
@@ -136,5 +137,19 @@ export class InternalPeopleController {
         .onConflictDoUpdate({ target: syncState.key, set: { value: String(input.version) } });
       return { version: input.version, applied: true, people: input.people.length - missingPeople.length, missingPeople };
     });
+  }
+
+  /**
+   * Delete this person completely (Admin -> People & access): the login, the employee record and everything about
+   * them; assets they hold go back to stock. 200 {deleted:false} when there is no such person here. See person-delete.ts.
+   */
+  @Public()
+  @Delete(':personId')
+  async remove(@Req() req: AuthedRequest, @Param('personId') personId: string) {
+    await this.requireService(req);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(personId)) throw new BadRequestException('personId must be a UUID');
+    const { result, files } = await this.dbs.tx((db) => deletePerson(db, personId.toLowerCase()));
+    await removeFiles(files);
+    return result;
   }
 }

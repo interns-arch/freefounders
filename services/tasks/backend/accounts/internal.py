@@ -394,3 +394,20 @@ def _import_access(data):
     forget()
     return Response({"version": version, "applied": True, "roles": len(by_platform_id), "people": len(people) - len(missing),
                      "missingPeople": missing, "problems": problems})
+
+
+# ---------------------------------------------------------------------------
+# Delete a person completely (Admin -> People & access; see people_delete.py)
+# ---------------------------------------------------------------------------
+
+@api_view(["DELETE"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def delete_person(request, person_id):
+    """The person and every record of theirs in this company. 200 {"deleted": false} when there is no such person."""
+    from .people_delete import delete_person as run
+    try:
+        pid = uuid.UUID(str(person_id))
+    except ValueError:
+        return Response({"detail": "person id must be a UUID"}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(run(pid))

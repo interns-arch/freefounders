@@ -161,4 +161,26 @@ describe('multi-company mode', () => {
   test('company schemas get the same database rules (history cannot be edited)', async () => {
     await assert.rejects(dbs.pool.query(`update "${ACME.schema}".history_events set summary = 'x'`), /append-only|not allowed|immutable|cannot/i);
   });
+
+  test('deleting a person works in the company of the token only', async () => {
+    const person = randomUUID();
+    for (const c of [ACME, BETA]) {
+      const res = await call('POST', '/internal/provision', {
+        token: await service(c.companyId),
+        body: { personId: person, fullName: 'Del Twin', email: 'del.twin@x.test', employeeCode: 'E-DEL', appRole: 'Employee' },
+      });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+    }
+    assert.equal((await call('DELETE', `/internal/people/${person}`, { token: await service() })).status, 401);
+    const res = await call('DELETE', `/internal/people/${person}`, { token: await service(ACME.companyId) });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.deleted, true);
+    const count = async (schema: string) =>
+      (await dbs.pool.query(`select (select count(*)::int from "${schema}".users where platform_person_id = $1) as users,
+        (select count(*)::int from "${schema}".employees where lower(employee_code) = 'e-del') as employees`, [person])).rows[0];
+    assert.deepEqual(await count(ACME.schema), { users: 0, employees: 0 });
+    assert.deepEqual(await count(BETA.schema), { users: 1, employees: 1 });
+    // History stays append-only in the company schema afterwards.
+    await assert.rejects(dbs.pool.query(`delete from "${ACME.schema}".history_events`), /append-only|not allowed/i);
+  });
 });

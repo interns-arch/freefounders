@@ -9,14 +9,19 @@ import {
   type Role,
   roleApps,
   SUPER_ADMIN_ROLE,
+  PLATFORM_PASSWORD_MIN,
   useCreatePerson,
+  useDeletePerson,
   useDepartments,
   usePeople,
+  useResetLogin,
   useSetPersonRoles,
   useStartExit,
   useUpdatePerson,
 } from '@freefounders/core/admin';
+import { Check, Copy, Eye, EyeOff, Share2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { toast } from 'sonner';
 import { Field, FormSection } from '@/components/common/form';
 import { FormSheet } from '@/components/common/form-sheet';
 import { Button } from '@/components/ui/button';
@@ -368,6 +373,249 @@ export function ExitDialog({ person, onClose }: { person: Person; onClose: () =>
             </DialogFooter>
           </form>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Reset password / create login ───────────────────────────────────────
+
+const sameName = (a: string, b: string) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * "⋯ → Reset password" (or "Create login"): the admin types a password or has one generated (PLAN.md §19.12).
+ * The password is shown once, right after saving; the Platform keeps only its hash.
+ */
+export function ResetPasswordDialog({ person, onClose }: { person: Person; onClose: () => void }) {
+  const creating = !person.login;
+  const [mode, setMode] = useState<'type' | 'generate'>('type');
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const [username, setUsername] = useState('');
+  const [mustChange, setMustChange] = useState(true);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState<{ username: string; password: string; mustChange: boolean } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const reset = useResetLogin();
+  const longEnough = password.length >= PLATFORM_PASSWORD_MIN;
+  const needsUsername = creating && !person.email && !person.employeeCode;
+  const title = `${creating ? 'Create login' : 'Reset password'} — ${person.fullName}`;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (mode === 'type' && !longEnough) return setError(`Use at least ${PLATFORM_PASSWORD_MIN} characters.`);
+    const typed = mode === 'type' ? password : undefined;
+    reset.mutate(
+      { id: person.id, password: typed, mustChangePassword: mustChange, ...(creating && username.trim() ? { username: username.trim() } : {}) },
+      {
+        onSuccess: (res) => {
+          setDone({ username: res.username ?? person.email ?? person.employeeCode ?? '', password: typed ?? res.generatedPassword ?? '', mustChange });
+          setPassword('');
+        },
+        onError: (err) => setError(err instanceof ApiError && err.errors ? Object.values(err.errors)[0] : errorMessage(err)),
+      },
+    );
+  };
+
+  const copy = async () => {
+    if (!done) return;
+    try {
+      await navigator.clipboard.writeText(done.password);
+      setCopied(true);
+    } catch {
+      setError('Could not copy. Select the password and copy it yourself.');
+    }
+  };
+
+  const share = done
+    ? `https://wa.me/?text=${encodeURIComponent(`Your FreeFounders sign-in: username ${done.username} password ${done.password} ${window.location.origin}`)}`
+    : '';
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            {done
+              ? done.mustChange
+                ? 'They will choose their own password the first time they sign in.'
+                : 'They can keep using this password.'
+              : 'They will be signed out everywhere.'}
+          </DialogDescription>
+        </DialogHeader>
+        {done ? (
+          <>
+            <dl className="grid gap-3 rounded-lg border border-primary/20 bg-accent/40 p-4 text-sm">
+              <div className="grid gap-1">
+                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Sign in with</dt>
+                <dd className="font-mono font-semibold break-all">{done.username}</dd>
+              </div>
+              <div className="grid gap-1">
+                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Password</dt>
+                <dd>
+                  <code data-testid="new-password" className="block rounded-md border bg-card px-3 py-2 font-mono text-xl font-semibold tracking-wide break-all select-all">
+                    {done.password}
+                  </code>
+                </dd>
+              </div>
+            </dl>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => void copy()}>
+                {copied ? <Check /> : <Copy />} {copied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button asChild variant="outline">
+                <a href={share} target="_blank" rel="noopener noreferrer">
+                  <Share2 /> Share on WhatsApp
+                </a>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground" role="note">
+              {"Copy it now — it can't be shown again. You can always set a new one."}
+            </p>
+            <ErrorNote>{error}</ErrorNote>
+            <DialogFooter>
+              <Button onClick={onClose}>Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <form className="grid gap-4" onSubmit={submit}>
+            {creating && (
+              <Field
+                label={needsUsername ? 'Username' : 'Username (optional)'}
+                required={needsUsername}
+                htmlFor="rp-username"
+                hint={needsUsername ? undefined : 'Blank = they sign in with their email or employee ID'}
+              >
+                <Input id="rp-username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" required={needsUsername} maxLength={50} />
+              </Field>
+            )}
+            <fieldset className="grid gap-2.5">
+              <legend className="sr-only">Password</legend>
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium">
+                <input type="radio" name="rp-mode" className="size-4 accent-primary" checked={mode === 'type'} onChange={() => setMode('type')} />
+                Type a password
+              </label>
+              {mode === 'type' && (
+                <div className="grid gap-1.5 pl-6.5">
+                  <Label htmlFor="rp-password">New password</Label>
+                  <div className="relative">
+                    <Input
+                      id="rp-password"
+                      type={show ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="new-password"
+                      className="pr-10 font-mono"
+                      aria-describedby="rp-password-hint"
+                      maxLength={200}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="absolute top-1/2 right-1.5 -translate-y-1/2"
+                      aria-label="Show password"
+                      aria-pressed={show}
+                      onClick={() => setShow((s) => !s)}
+                    >
+                      {show ? <EyeOff /> : <Eye />}
+                    </Button>
+                  </div>
+                  <p id="rp-password-hint" aria-live="polite" className={cn('flex items-center gap-1 text-xs', longEnough ? 'font-medium text-success' : 'text-muted-foreground')}>
+                    {longEnough && <Check className="size-3.5" aria-hidden />}
+                    At least {PLATFORM_PASSWORD_MIN} characters
+                  </p>
+                </div>
+              )}
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium">
+                <input type="radio" name="rp-mode" className="size-4 accent-primary" checked={mode === 'generate'} onChange={() => setMode('generate')} />
+                Generate one
+              </label>
+            </fieldset>
+            <div className="flex items-start gap-2.5">
+              <Checkbox id="rp-must-change" checked={mustChange} onCheckedChange={(v) => setMustChange(v === true)} className="mt-0.5" />
+              <Label htmlFor="rp-must-change" className="text-sm leading-snug font-normal">
+                Ask them to change it at next sign-in
+              </Label>
+            </div>
+            <ErrorNote>{error}</ErrorNote>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={reset.isPending} disabled={(mode === 'type' && !longEnough) || (needsUsername && !username.trim())}>
+                Save password
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Delete permanently ───────────────────────────────────────────────────
+
+/** "⋯ → Delete permanently": the person and every record about them in every app (PLAN.md §19.12). */
+export function DeletePersonDialog({ person, onClose }: { person: Person; onClose: () => void }) {
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState<{ message: string; retry: boolean } | null>(null);
+  const remove = useDeletePerson();
+  const matches = sameName(typed, person.fullName);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!matches) return;
+    setError(null);
+    remove.mutate(
+      { id: person.id, confirm: typed },
+      {
+        onSuccess: () => {
+          toast.success(`${person.fullName} deleted`);
+          onClose();
+        },
+        onError: (err) => setError({ message: errorMessage(err), retry: err instanceof ApiError && err.status === 502 }),
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !remove.isPending && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete {person.fullName} permanently?</DialogTitle>
+          <DialogDescription>Everything about them is removed from every app:</DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={submit}>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            <li>their sign-in and roles</li>
+            <li>their tasks, comments, attendance, leave, salary records, leads, mistakes, forms and ideas</li>
+            <li>their requests, tickets and asset history</li>
+            <li>assets they hold go back to stock</li>
+          </ul>
+          <p role="note" className="rounded-md border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm font-medium text-destructive">
+            This cannot be undone. Reports for past months will change.
+          </p>
+          <Field label="Type their full name to confirm" htmlFor="del-confirm" hint={person.fullName}>
+            <Input id="del-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} maxLength={200} />
+          </Field>
+          {error && (
+            <div role="alert" className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+              <p>{error.message}</p>
+              {error.retry && <p className="mt-1 text-foreground">They stay deactivated; you can try again.</p>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={remove.isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="destructive" loading={remove.isPending} disabled={!matches}>
+              Delete permanently
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

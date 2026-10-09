@@ -144,6 +144,32 @@ export class ProvisionClient {
     return this.internalJson(app, 'PUT', '/people', companyId, body);
   }
 
+  /**
+   * Permanently deletes a person's records in an app (PLAN.md §19.12): `DELETE /internal/people/<personId>`.
+   * `{ deleted: false }` means the app never had them. Anything other than a 200 (unreachable, 401, 400, 409, 5xx)
+   * throws a 502 "<App> could not delete their data: …" so the caller stops before deleting anything in the Platform.
+   */
+  async deletePerson(app: AppKey, companyId: string, personId: string): Promise<{ deleted: boolean; counts?: Record<string, number> }> {
+    const label = app === 'tasks' ? 'Tasks' : 'Assets';
+    const fail = (reason: string) => new BadGatewayException(`${label} could not delete their data: ${reason}`);
+    const base = internalUrl(app);
+    if (!base) throw fail(`${label} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);
+    let res: Response;
+    try {
+      res = await fetch(`${base}/people/${encodeURIComponent(personId)}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${await this.tokens.signService(app, companyId)}`, 'x-requested-with': 'XMLHttpRequest' },
+        signal: AbortSignal.timeout(120_000),
+      });
+    } catch (err) {
+      throw fail(`could not reach it (${(err as Error).message})`);
+    }
+    const body = (await res.json().catch(() => null)) as { deleted?: boolean; counts?: Record<string, number>; message?: string | string[]; detail?: string } | null;
+    if (res.status === 200 && body && typeof body.deleted === 'boolean') return { deleted: body.deleted, counts: body.counts };
+    const message = Array.isArray(body?.message) ? body.message.join(' · ') : body?.message;
+    throw fail(message ?? body?.detail ?? `HTTP ${res.status}`);
+  }
+
   /** Any internal endpoint of an app, for the cross-app rules (PLAN.md §17.4). */
   async internal<T = unknown>(app: AppKey, method: string, path: string, companyId: string, body?: unknown): Promise<T> {
     return this.internalJson<T>(app, method, path, companyId, body);

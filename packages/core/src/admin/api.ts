@@ -9,12 +9,14 @@ import type {
   CompanyProfileInput,
   CompanySettings,
   CreatedPerson,
+  DeletedPerson,
   Department,
   ExitResult,
   LoginReset,
   NewPerson,
   Person,
   PersonFields,
+  ResetLoginInput,
   Role,
   RoleInput,
   SyncResult,
@@ -36,7 +38,8 @@ export const adminApi = {
   people: (search = '') => platformApi.get<Person[]>('/people', { search }),
   createPerson: (body: NewPerson) => platformApi.post<CreatedPerson>('/people', body),
   updatePerson: (id: string, body: Partial<PersonFields> & { status?: Person['status'] }) => platformApi.patch<Person>(`/people/${id}`, body),
-  resetLogin: (id: string) => platformApi.put<LoginReset>(`/people/${id}/login`, {}),
+  resetLogin: (id: string, body: ResetLoginInput = {}) => platformApi.put<LoginReset>(`/people/${id}/login`, body),
+  deletePerson: (id: string, confirm: string) => platformApi.del<DeletedPerson>(`/people/${id}`, { confirm }),
   setPersonRoles: (id: string, roleIds: string[]) => platformApi.put<unknown>(`/people/${id}/roles`, { roleIds }),
   startExit: (id: string, body: { lastWorkingDate: string; reason: string | null }) => platformApi.post<ExitResult>(`/people/${id}/exit`, body),
   apps: () => platformApi.get<AppInfo[]>('/apps'),
@@ -102,10 +105,18 @@ export function useUpdatePerson() {
     onSuccess: invalidate,
   });
 }
-/** Creates a login, or sets a new generated password (signs them out everywhere). */
+/** Creates a login, or sets a new password: the admin's own or a generated one (signs them out everywhere). */
 export function useResetLogin() {
   const invalidate = useInvalidateAdmin();
-  return useMutation({ mutationFn: adminApi.resetLogin, onSuccess: invalidate });
+  return useMutation({ mutationFn: ({ id, ...body }: ResetLoginInput & { id: string }) => adminApi.resetLogin(id, body), onSuccess: invalidate });
+}
+/**
+ * Deletes a person and every record about them in all apps (PLAN.md §19.12). `confirm` is their full name.
+ * A 502 means an app could not delete: they stay switched off and it can be tried again.
+ */
+export function useDeletePerson() {
+  const invalidate = useInvalidateAdmin();
+  return useMutation({ mutationFn: ({ id, confirm }: { id: string; confirm: string }) => adminApi.deletePerson(id, confirm), onSuccess: invalidate });
 }
 export function useSetPersonRoles() {
   const invalidate = useInvalidateAdmin();

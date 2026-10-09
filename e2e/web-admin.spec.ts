@@ -1,6 +1,6 @@
 // Phase 6 parity tests for the Admin area of the new web app (PLAN.md §18): People & access, Roles (with duties) and
 // Settings (company, modules, departments). Elements are found by role / label / text only. Everything a test creates is
-// switched off or put back at the end (the Platform has no hard delete for people or departments).
+// switched off or put back at the end (departments have no delete; people are deleted only by the permanent-delete test, §19.12).
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test';
 
 const OWNER = { login: process.env.FF_OWNER ?? 'owner', password: process.env.FF_OWNER_PASSWORD ?? 'Demo@1234' };
@@ -273,4 +273,111 @@ test('people who are not admins cannot open the admin screens', async ({ page, r
   } finally {
     await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
   }
+});
+
+test('People: reset with a typed password (shown once), they sign in with it, then delete them permanently', async ({ page, request, browser }) => {
+  const owner = await token(request);
+  const s = stamp();
+  const name = `E2E Web Delete ${s}`;
+  const login = `e2e-web-del-${s}`;
+  const chosen = `pw${s}`.slice(0, 10); // 6+ characters, the new minimum
+  const created = await request.post('/api/platform/people', {
+    headers: auth(owner),
+    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login } },
+  });
+  expect(created.status()).toBe(201);
+  const personId = (await created.json()).person.id as string;
+  let deleted = false;
+
+  try {
+    await openSignedIn(page, '/people');
+    await page.getByLabel('Search people').fill(s);
+    const row = page.getByRole('row', { name: new RegExp(name) });
+    await expect(row).toBeVisible();
+
+    // ⋯ → Reset password: type one, untick "Ask them to change it".
+    await row.getByRole('button', { name: `More actions for ${name}` }).click();
+    await page.getByRole('menuitem', { name: 'Reset password' }).click();
+    const reset = page.getByRole('dialog', { name: `Reset password — ${name}` });
+    await expect(reset.getByLabel('Type a password')).toBeChecked();
+    await expect(reset.getByRole('button', { name: 'Save password' })).toBeDisabled();
+    await reset.getByLabel('New password').fill('abc12');
+    await expect(reset.getByText('At least 6 characters')).toBeVisible();
+    await expect(reset.getByRole('button', { name: 'Save password' })).toBeDisabled();
+    await reset.getByLabel('New password').fill(chosen);
+    await expect(reset.getByLabel('New password')).toHaveAttribute('type', 'password');
+    await reset.getByRole('button', { name: 'Show password' }).click();
+    await expect(reset.getByLabel('New password')).toHaveAttribute('type', 'text');
+    const ask = reset.getByLabel('Ask them to change it at next sign-in');
+    await expect(ask).toBeChecked();
+    await ask.click();
+    await expect(ask).not.toBeChecked();
+    await reset.getByRole('button', { name: 'Save password' }).click();
+
+    // Shown once: the password, Copy, Share on WhatsApp, the note.
+    await expect(reset.getByTestId('new-password')).toHaveText(chosen);
+    await expect(reset.getByRole('button', { name: 'Copy' })).toBeVisible();
+    const share = await reset.getByRole('link', { name: 'Share on WhatsApp' }).getAttribute('href');
+    expect(share).toContain('https://wa.me/?text=');
+    expect(decodeURIComponent(share!.split('text=')[1])).toContain(`username ${login} password ${chosen}`);
+    await expect(reset.getByText("Copy it now — it can't be shown again. You can always set a new one.")).toBeVisible();
+    await reset.getByRole('button', { name: 'Done' }).click();
+    await expect(reset).toBeHidden();
+    // Opening it again shows a fresh form, not the password.
+    await row.getByRole('button', { name: `More actions for ${name}` }).click();
+    await page.getByRole('menuitem', { name: 'Reset password' }).click();
+    await expect(reset.getByText(chosen)).toHaveCount(0);
+    await reset.getByRole('button', { name: 'Cancel' }).click();
+
+    // They sign in with it in a fresh browser, and are not asked to change it.
+    const ctx = await browser.newContext();
+    try {
+      const them = await ctx.newPage();
+      await openSignedIn(them, '/', login, chosen);
+      await expect(them).toHaveURL((url) => url.pathname === '/');
+      await expect(them.getByLabel('Email, username or employee ID')).toHaveCount(0);
+      await expect(them.getByRole('heading', { name: 'Choose a new password' })).toHaveCount(0);
+    } finally {
+      await ctx.close();
+    }
+
+    // ⋯ → Delete permanently: enabled only once their full name is typed.
+    await row.getByRole('button', { name: `More actions for ${name}` }).click();
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click();
+    const del = page.getByRole('dialog', { name: `Delete ${name} permanently?` });
+    await expect(del.getByText('This cannot be undone. Reports for past months will change.')).toBeVisible();
+    const go = del.getByRole('button', { name: 'Delete permanently' });
+    await expect(go).toBeDisabled();
+    await del.getByLabel('Type their full name to confirm').fill(name.slice(0, -1));
+    await expect(go).toBeDisabled();
+    await del.getByLabel('Type their full name to confirm').fill(name.toLowerCase());
+    await expect(go).toBeEnabled();
+    await go.click();
+    await expect(page.getByText(`${name} deleted`)).toBeVisible();
+    deleted = true;
+    await expect(del).toBeHidden();
+    await expect(row).toHaveCount(0);
+
+    // Gone from the Platform, and their sign-in fails.
+    const left = (await (await request.get('/api/platform/people', { headers: auth(owner), params: { search: s } })).json()) as PersonRow[];
+    expect(left.some((p) => p.id === personId)).toBe(false);
+    const signIn = await request.post('/api/platform/auth/login', { data: { login, password: chosen, client: 'mobile' }, headers: XRW });
+    expect(signIn.status()).toBe(401);
+  } finally {
+    if (!deleted) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
+  }
+});
+
+test('People: the owner and yourself cannot be deleted', async ({ page, request }) => {
+  const owner = await token(request);
+  const me = await (await request.get('/api/platform/auth/me', { headers: auth(owner) })).json();
+  await openSignedIn(page, '/people');
+  await page.getByLabel('Search people').fill(me.person.fullName);
+  const row = page.getByRole('row', { name: new RegExp(me.person.fullName) }).first();
+  await row.getByRole('button', { name: `More actions for ${me.person.fullName}` }).click();
+  await expect(page.getByRole('menuitem', { name: 'Reset password' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Delete permanently' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  const res = await request.delete(`/api/platform/people/${me.person.id}`, { headers: auth(owner), data: { confirm: me.person.fullName } });
+  expect(res.status()).toBe(400);
 });

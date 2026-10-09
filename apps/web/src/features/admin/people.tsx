@@ -4,7 +4,6 @@ import {
   type Person,
   usePeople,
   usePlatformApps,
-  useResetLogin,
   useRoles,
   useUpdatePerson,
 } from '@freefounders/core/admin';
@@ -19,13 +18,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Avatar, Card } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill } from './parts';
-import { ExitDialog, PersonRolesDialog, PersonSheet } from './people-dialogs';
+import { DeletePersonDialog, ExitDialog, PersonRolesDialog, PersonSheet, ResetPasswordDialog } from './people-dialogs';
 
 type Open =
   | { kind: 'add' }
   | { kind: 'edit'; person: Person }
   | { kind: 'roles'; person: Person }
   | { kind: 'exit'; person: Person }
+  | { kind: 'reset'; person: Person }
+  | { kind: 'delete'; person: Person }
   | { kind: 'password'; person: Person; username: string | null; password: string };
 
 /** Everyone at the company: their login, level, roles and the apps the roles open (PLAN.md §13, §15, §17). */
@@ -42,26 +43,15 @@ export function PeoplePage() {
   const roles = useRoles();
   const apps = usePlatformApps();
   const update = useUpdatePerson();
-  const reset = useResetLogin();
   const confirm = useConfirm();
   const [open, setOpen] = useState<Open | null>(null);
   const [error, setError] = useState('');
   const roleById = useMemo(() => new Map((roles.data ?? []).map((r) => [r.id, r])), [roles.data]);
   const loadError = people.error ?? roles.error ?? apps.error;
 
-  const resetPassword = async (p: Person) => {
-    setError('');
-    const ok = await confirm({
-      title: p.login ? 'Reset password?' : 'Create login?',
-      description: `Set a new password for ${p.fullName}? They will be signed out everywhere.`,
-      confirmText: p.login ? 'Reset password' : 'Create login',
-    });
-    if (!ok.confirmed) return;
-    reset.mutate(p.id, {
-      onSuccess: (res) => setOpen({ kind: 'password', person: p, username: res.username, password: res.generatedPassword ?? '' }),
-      onError: (err) => setError(errorMessage(err)),
-    });
-  };
+  const myRole = me?.person.role ?? 'member';
+  /** Never yourself, never the owner; only the owner deletes admins (PLAN.md §19.12). */
+  const canDelete = (p: Person) => p.id !== me?.person.id && p.platformRole !== 'owner' && (p.platformRole !== 'admin' || myRole === 'owner');
 
   const setStatus = async (p: Person, status: Person['status']) => {
     setError('');
@@ -172,7 +162,7 @@ export function PeoplePage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => void resetPassword(p)}>{p.login ? 'Reset password' : 'Create login'}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setOpen({ kind: 'reset', person: p })}>{p.login ? 'Reset password' : 'Create login'}</DropdownMenuItem>
                 {!self && p.status === 'active' && (
                   <DropdownMenuItem onSelect={() => setOpen({ kind: 'exit', person: p })}>{p.lastWorkingDate ? 'Exit started' : 'Start exit'}</DropdownMenuItem>
                 )}
@@ -186,6 +176,14 @@ export function PeoplePage() {
                     ) : (
                       <DropdownMenuItem onSelect={() => void setStatus(p, 'active')}>Activate</DropdownMenuItem>
                     )}
+                  </>
+                )}
+                {canDelete(p) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem destructive onSelect={() => setOpen({ kind: 'delete', person: p })}>
+                      Delete permanently
+                    </DropdownMenuItem>
                   </>
                 )}
               </DropdownMenuContent>
@@ -246,6 +244,8 @@ export function PeoplePage() {
         <PersonRolesDialog person={open.person} roles={roles.data} apps={apps.data ?? []} myRole={me?.person.role ?? 'member'} onClose={() => setOpen(null)} />
       )}
       {open?.kind === 'exit' && <ExitDialog person={open.person} onClose={() => setOpen(null)} />}
+      {open?.kind === 'reset' && <ResetPasswordDialog key={open.person.id} person={open.person} onClose={() => setOpen(null)} />}
+      {open?.kind === 'delete' && <DeletePersonDialog key={open.person.id} person={open.person} onClose={() => setOpen(null)} />}
       <Dialog open={open?.kind === 'password'} onOpenChange={(o) => !o && setOpen(null)}>
         <DialogContent className="max-w-md">
           {open?.kind === 'password' && (

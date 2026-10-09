@@ -151,7 +151,7 @@ async function main() {
       if (!CODE_RE.test(code)) throw new Error('--code: letters, digits and _ only, starting with a letter (2-41 characters)');
       const generated = !opts['owner-password'];
       const password = opts['owner-password'] ?? randomBytes(9).toString('base64url');
-      if (password.length < 8) throw new Error('--owner-password must be at least 8 characters');
+      if (password.length < 6) throw new Error('--owner-password must be at least 6 characters');
 
       const company = await dbs.db.transaction(async (tx) => {
         const [c] = await tx.insert(companies).values({ name, code, enabledApps: apps }).returning();

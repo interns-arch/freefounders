@@ -25,6 +25,7 @@ urlpatterns = [
     path("internal/modules", internal.modules),
     path("internal/company", internal.company),
     path("internal/people", internal.people),
+    path("internal/people/<str:person_id>", internal.delete_person),
     path("internal/events", internal_flows.events),
     path("internal/tasks", internal_flows.create_task),
     path("internal/exit-tasks", internal_flows.exit_tasks),

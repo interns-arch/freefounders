@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { AuthService, hashPassword } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
-import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, roles } from '../db/schema';
+import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
 import { ProvisionClient } from '../provision/provision.client';
 import { DirectoryService } from './directory.service';
 import { FlowsService } from './flows.service';
@@ -20,7 +20,7 @@ export const loginIdSchema = z
   .min(3, 'Use at least 3 characters')
   .max(50)
   .regex(/^[A-Za-z0-9._-]+$/, 'Letters, numbers, dot, dash and underscore only');
-export const passwordSchema = z.string().min(8, 'Use at least 8 characters').max(200);
+export const passwordSchema = z.string().min(6, 'Use at least 6 characters').max(200);
 
 const personFields = {
   fullName: z.string().trim().min(1, 'Name is required').max(120),
@@ -55,7 +55,13 @@ export const personUpdateSchema = z.object({
   fullName: personFields.fullName.optional(),
   status: z.enum(['active', 'inactive']).optional(),
 });
-export const setLoginSchema = z.object({ username: optional(loginIdSchema), password: passwordSchema.optional() });
+export const setLoginSchema = z.object({
+  username: optional(loginIdSchema),
+  password: passwordSchema.optional(),
+  /** Default true: they pick their own password at their next sign-in. */
+  mustChangePassword: z.boolean().optional(),
+});
+export const deletePersonSchema = z.object({ confirm: z.string().max(200, 'Too long') });
 export const grantSchema = z.object({ appRole: z.string().trim().max(60).optional() });
 
 export type PersonCreate = z.infer<typeof personCreateSchema>;
@@ -71,6 +77,8 @@ function generatePassword(): string {
 
 @Injectable()
 export class PeopleService {
+  private readonly log = new Logger('People');
+
   constructor(
     private readonly dbs: DbService,
     private readonly auth: AuthService,
@@ -264,7 +272,10 @@ export class PeopleService {
     if (!other) throw badRequest('A company needs at least one active owner');
   }
 
-  /** Creates or resets a person's login. A generated password is returned once; they must change it at first sign-in. */
+  /**
+   * Creates or resets a person's login, with the admin's own password or a generated one (returned once, never stored
+   * readable). They must change it at their next sign-in unless the admin turns that off.
+   */
   async setLogin(caller: Caller, id: string, input: z.infer<typeof setLoginSchema>) {
     const p = await this.get(caller, id);
     if (p.platformRole === 'owner' && caller.role !== 'owner' && caller.personId !== id) {
@@ -278,7 +289,7 @@ export class PeopleService {
     }
     let generatedPassword: string | undefined;
     const password = input.password ?? (generatedPassword = generatePassword());
-    const values = { username, passwordHash: await hashPassword(password), mustChangePassword: true, failedLogins: 0, lockedUntil: null, passwordChangedAt: new Date(), updatedAt: new Date() };
+    const values = { username, passwordHash: await hashPassword(password), mustChangePassword: input.mustChangePassword ?? true, failedLogins: 0, lockedUntil: null, passwordChangedAt: new Date(), updatedAt: new Date() };
     if (existing) await this.dbs.db.update(logins).set(values).where(eq(logins.personId, id));
     else await this.dbs.db.insert(logins).values({ personId: id, ...values });
     await this.auth.revokeAll(id);
@@ -292,6 +303,55 @@ export class PeopleService {
     await this.dbs.db.delete(logins).where(eq(logins.personId, id));
     await this.auth.revokeAll(id);
     return { ok: true };
+  }
+
+  /**
+   * Deletes a person and every record about them in every app (PLAN.md §19.12). The owner cannot be deleted, nobody
+   * deletes themselves, and only the owner deletes an admin. The caller types the person's full name to confirm.
+   * Order: switch them off and end their sessions; each app the company has deletes its records (any failure stops
+   * here with a 502: they stay switched off and the admin can retry); then the Platform rows; then the directory push.
+   */
+  async deletePerson(caller: Caller, id: string, confirm: string) {
+    if (caller.role !== 'owner' && caller.role !== 'admin') throw new ForbiddenException('Only admins can delete people');
+    const p = await this.get(caller, id);
+    if (id === caller.personId) throw badRequest('You cannot delete yourself');
+    if (p.platformRole === 'owner') throw new ForbiddenException('The owner cannot be deleted');
+    if (p.platformRole === 'admin' && caller.role !== 'owner') throw new ForbiddenException('Only the owner can delete an admin');
+    const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!confirm || norm(confirm) !== norm(p.fullName)) {
+      throw badRequest('Type their full name exactly to confirm', { confirm: 'Does not match their name' });
+    }
+
+    // (a) Off everywhere first, so nothing new is written about them while the apps delete.
+    if (p.status !== 'inactive') await this.dbs.db.update(people).set({ status: 'inactive', updatedAt: new Date() }).where(eq(people.id, id));
+    await this.auth.revokeAll(id);
+
+    // (b) Every app the company has; the first one that cannot delete stops everything (throws 502).
+    const [company] = await this.dbs.db.select({ apps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
+    const appResults: Partial<Record<AppKey, Record<string, number>>> = {};
+    for (const app of (company?.apps ?? []).filter((a): a is AppKey => (APPS as readonly string[]).includes(a))) {
+      try {
+        const res = await this.provisioner.deletePerson(app, caller.companyId, id);
+        appResults[app] = res.deleted ? (res.counts ?? {}) : {};
+      } catch (err) {
+        this.log.warn(`Delete person ${id} stopped at ${app}: ${(err as Error).message}`);
+        throw err;
+      }
+    }
+
+    // (c) The Platform's own rows.
+    await this.dbs.tx(async (tx) => {
+      await tx.update(people).set({ reportsTo: null, updatedAt: new Date() }).where(eq(people.reportsTo, id));
+      await tx.delete(logins).where(eq(logins.personId, id));
+      await tx.delete(refreshSessions).where(eq(refreshSessions.personId, id));
+      await tx.delete(personRoles).where(eq(personRoles.personId, id));
+      await tx.delete(personApps).where(eq(personApps.personId, id));
+      await tx.delete(people).where(and(eq(people.id, id), eq(people.companyId, caller.companyId)));
+    });
+
+    // (d) The apps get the directory without them (and with nobody reporting to them).
+    const sync = await this.directory.push(caller.companyId);
+    return { deleted: true, apps: appResults, sync };
   }
 
   /** Gives a person an app: the app finds or creates their user there, and we remember that user's id. */

@@ -5,11 +5,28 @@ import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import type { INestApplication } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { exportJWK, SignJWT } from 'jose';
 import { type Permission, SYSTEM_ROLES } from '@eam/shared';
 import { DbService } from './db/db.service';
-import { departments, employees, onboardingItems, onboardingKits, roles, sessions, syncState, tickets, users } from './db/schema';
+import {
+  allocations,
+  assetCategories,
+  assetRequests,
+  assets,
+  assetTypes,
+  departments,
+  employees,
+  ffEvents,
+  historyEvents,
+  onboardingItems,
+  onboardingKits,
+  roles,
+  sessions,
+  syncState,
+  tickets,
+  users,
+} from './db/schema';
 import { createApp } from './main';
 import { hashPassword } from './modules/auth/auth.service';
 
@@ -497,5 +514,84 @@ describe('provision after the role builder synced (Phase 5 fix)', () => {
     } finally {
       await dbs.root.update(roles).set({ name: 'Employee' }).where(eq(roles.name, 'Employee (Assets)'));
     }
+  });
+});
+
+describe('delete a person completely', () => {
+  test('the person and everything about them go; what they hold goes back to stock', async () => {
+    const mk = async (email: string, fullName: string) => {
+      const res = await provision({ email, fullName, appRole: 'Employee' });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const [u] = await dbs.root.select().from(users).where(eq(users.id, res.body.userId));
+      return { user: u, token: await access(u.platformPersonId!, u.id) };
+    };
+    const leaver = await mk('del-leaver@t.test', 'Del Leaver');
+    const other = await mk('del-other@t.test', 'Del Other');
+    const E = leaver.user.employeeId!;
+    assert.ok(E, 'the leaver has an employee record');
+    await dbs.root.update(employees).set({ managerId: E }).where(eq(employees.id, other.user.employeeId!));
+
+    // A laptop they hold.
+    const suffix = randomUUID().slice(0, 8);
+    const [cat] = await dbs.root.insert(assetCategories).values({ name: `Del cat ${suffix}`, code: `DC${suffix}` }).returning();
+    const [type] = await dbs.root.insert(assetTypes).values({ categoryId: cat.id, name: 'Laptop', code: `DT${suffix}` }).returning();
+    const [laptop] = await dbs.root
+      .insert(assets)
+      .values({ assetTag: `DEL-${suffix}`, qrCode: `q-${suffix}`, name: 'Del laptop', categoryId: cat.id, assetTypeId: type.id, status: 'ASSIGNED', holderType: 'EMPLOYEE', holderId: E, holderName: 'Del Leaver', assignedAt: new Date() })
+      .returning();
+    await dbs.root.insert(allocations).values({ assetId: laptop.id, holderType: 'EMPLOYEE', employeeId: E, holderName: 'Del Leaver', assignedBy: other.user.id });
+    await dbs.root.insert(historyEvents).values({ actorName: 'IT', entityType: 'ASSET', entityId: laptop.id, action: 'ASSIGNED', summary: 'Assigned to Del Leaver', assetId: laptop.id, employeeId: E });
+    await dbs.root.insert(historyEvents).values({ actorId: leaver.user.id, actorName: 'Del Leaver', entityType: 'ASSET', entityId: laptop.id, action: 'EDITED', summary: 'Edited', assetId: laptop.id });
+
+    // A request and a ticket of theirs; another person's ticket assigned to them.
+    const request = await call('POST', '/requests', leaver.token, { itemName: 'Mouse', quantity: 1, reason: 'Broken' });
+    assert.equal(request.status, 201, JSON.stringify(request.body));
+    const ticket = await call('POST', '/tickets', leaver.token, { title: 'Screen flickers', type: 'ISSUE', priority: 'LOW' });
+    assert.equal(ticket.status, 201, JSON.stringify(ticket.body));
+    const otherTicket = await call('POST', '/tickets', other.token, { title: 'Keyboard sticky', type: 'ISSUE', priority: 'LOW' });
+    await dbs.root.update(tickets).set({ assigneeId: leaver.user.id }).where(eq(tickets.id, otherTicket.body.id));
+
+    const url = `/internal/people/${leaver.user.platformPersonId}`;
+    assert.equal((await call('DELETE', url)).status, 401);
+    assert.equal((await call('DELETE', url, leaver.token)).status, 401);
+    assert.equal((await call('DELETE', '/internal/people/not-a-uuid', await service())).status, 400);
+
+    const res = await call('DELETE', url, await service());
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.deleted, true);
+    assert.equal(res.body.counts.users, 1);
+    assert.equal(res.body.counts.employees, 1);
+    assert.equal(res.body.counts.allocations, 1);
+    assert.equal(res.body.counts.asset_requests, 1);
+    assert.equal(res.body.counts.tickets, 1);
+    assert.equal(res.body.counts.assets_returned_to_stock, 1);
+
+    assert.equal((await dbs.root.select().from(users).where(eq(users.id, leaver.user.id))).length, 0);
+    assert.equal((await dbs.root.select().from(employees).where(eq(employees.id, E))).length, 0);
+    assert.equal((await dbs.root.select().from(allocations).where(eq(allocations.assetId, laptop.id))).length, 0);
+    assert.equal((await dbs.root.select().from(assetRequests).where(eq(assetRequests.id, request.body.id))).length, 0);
+    assert.equal((await dbs.root.select().from(tickets).where(eq(tickets.id, ticket.body.id))).length, 0);
+    assert.equal((await dbs.root.select().from(ffEvents).where(sql`${ffEvents.payload}->>'ticketId' = ${ticket.body.id}`)).length, 0);
+    const [back] = await dbs.root.select().from(assets).where(eq(assets.id, laptop.id));
+    assert.equal(back.status, 'AVAILABLE');
+    assert.equal(back.holderId, null);
+    assert.equal(back.holderName, null);
+    const history = await dbs.root.select().from(historyEvents).where(eq(historyEvents.assetId, laptop.id));
+    assert.deepEqual(history.map((h) => [h.action, h.actorId, h.actorName]), [['EDITED', null, 'Deleted user']]);
+
+    // Other people's rows stay, without the pointer to them.
+    const [kept] = await dbs.root.select().from(tickets).where(eq(tickets.id, otherTicket.body.id));
+    assert.equal(kept.assigneeId, null);
+    const [otherEmp] = await dbs.root.select().from(employees).where(eq(employees.id, other.user.employeeId!));
+    assert.equal(otherEmp.managerId, null);
+    assert.equal((await call('GET', '/auth/me', other.token)).status, 200);
+
+    // The history table is append-only again afterwards.
+    await assert.rejects(dbs.root.delete(historyEvents).where(eq(historyEvents.assetId, laptop.id)));
+
+    // Idempotent: the Platform may retry.
+    const again = await call('DELETE', url, await service());
+    assert.equal(again.status, 200);
+    assert.deepEqual(again.body, { deleted: false });
   });
 });

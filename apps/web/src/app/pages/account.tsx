@@ -23,7 +23,7 @@ export function AccountPage() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setProblem('');
-    if (next.length < 8) return setProblem('Use at least 8 characters.');
+    if (next.length < 6) return setProblem('Use at least 6 characters.');
     if (next !== again) return setProblem('The new passwords do not match.');
     change.mutate(
       { currentPassword: current, newPassword: next },

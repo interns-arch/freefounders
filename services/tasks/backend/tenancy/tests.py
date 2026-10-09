@@ -177,6 +177,30 @@ class MultiCompanyTests(SimpleTestCase):
         res = self.api(service()).post("/api/internal/provision", {"personId": str(uuid.uuid4()), "fullName": "X"}, format="json")
         self.assertEqual(res.status_code, 401)
 
+    def test_delete_person_stays_in_the_tokens_company(self):
+        person = uuid.uuid4()
+        with schemas.use(ACME):
+            gone = User.objects.create_user("del_me", "d@x.com", "pass@12345", role=Role.ADMIN, platform_person_id=person)
+            Task.objects.create(title="Acme leaver task", assigned_to=gone, created_by=gone)
+        with schemas.use(BETA):
+            kept = User.objects.create_user("del_me", "d@x.com", "pass@12345", role=Role.ADMIN, platform_person_id=person)
+            Task.objects.create(title="Beta same-person task", assigned_to=kept, created_by=kept)
+        try:
+            self.assertEqual(self.api(service()).delete(f"/api/internal/people/{person}").status_code, 401)
+            res = self.api(service(ACME_ID)).delete(f"/api/internal/people/{person}")
+            self.assertEqual(res.status_code, 200, res.content)
+            self.assertTrue(res.json()["deleted"])
+            with schemas.use(ACME):
+                self.assertFalse(User.objects.filter(platform_person_id=person).exists())
+                self.assertFalse(Task.objects.filter(title="Acme leaver task").exists())
+            with schemas.use(BETA):
+                self.assertTrue(User.objects.filter(platform_person_id=person).exists())
+                self.assertTrue(Task.objects.filter(title="Beta same-person task").exists())
+            self.assertEqual(self.api(service(ACME_ID)).delete(f"/api/internal/people/{person}").json(), {"deleted": False})
+        finally:
+            with schemas.use(BETA):
+                User.objects.filter(platform_person_id=person).delete()
+
     def test_create_company_is_idempotent_and_checks_codes(self):
         client = self.api(service())
         res = client.post("/api/internal/companies", {"companyId": ACME_ID, "code": "acme_t", "name": "Acme Ltd"}, format="json")
