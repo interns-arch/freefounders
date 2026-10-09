@@ -1,36 +1,20 @@
 /**
- * Workspace Portal (PLAN.md §19.2): the first screen after sign-in. One card per workspace with live numbers, punch in /
- * out right here (§19.3), and the admin row. Replaces the plain "Choose your workspace" list; same URL (/ and /?choose).
+ * Workspace Portal (PLAN.md §19.2): the first screen after sign-in. Built to be quick: one greeting line, punch in / out
+ * right here (§19.3), one card per workspace that opens with a click anywhere on it (or the keys 1, 2, 3), and a short
+ * admin row. Same URL as the old chooser (/ and /?choose); the same names the tests use.
  */
-import { type Access, type AppKey, useAccess, useSignOut } from '@freefounders/core';
+import { type Access, useAccess, useSignOut } from '@freefounders/core';
 import { useAssetsDashboard } from '@freefounders/core/assets';
-import { usePeople, useRoles, useCompanySettings } from '@freefounders/core/admin';
 import { nearestOffice, useHrConfig, useLeaveBalances, useOfficeLocations, usePendingCorrections, usePendingLeaves } from '@freefounders/core/hr';
 import { useMyTaskTiles, useWaitingCounts } from '@freefounders/core/tasks';
-import {
-  ArrowRight,
-  Camera,
-  ChevronRight,
-  Clock,
-  Fingerprint,
-  Home,
-  KeyRound,
-  LogIn,
-  LogOut,
-  MapPin,
-  ScanFace,
-  ScanLine,
-  Settings2,
-  ShieldCheck,
-  Users,
-} from 'lucide-react';
+import { ArrowRight, Camera, Fingerprint, Home, KeyRound, LogIn, LogOut, MapPin, ScanFace, ScanLine, Settings2, ShieldCheck, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Avatar, Checkbox, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
-import { AttendanceChip, hrs } from '@/features/hr/parts';
+import { hrs } from '@/features/hr/parts';
 import { usePunch } from '@/features/hr/punch';
 import { currentPosition } from '@/features/hr/face';
 import { type Workspace, WORKSPACE_HOME, WORKSPACE_NAMES } from '../nav';
@@ -54,8 +38,8 @@ const greeting = () => {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 };
-const today = () => new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-const clock = (d: Date) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+const today = () => new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+const clock = (d: Date) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 const timeOf = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
 const ampm = (hhmm: string | undefined) => {
@@ -66,12 +50,13 @@ const ampm = (hhmm: string | undefined) => {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
-function useNow(everyMs = 1000) {
+/** The time to the minute (no per-second re-renders). */
+function useNow() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), everyMs);
+    const t = setInterval(() => setNow(new Date()), 15_000);
     return () => clearInterval(t);
-  }, [everyMs]);
+  }, []);
   return now;
 }
 
@@ -96,6 +81,8 @@ function useKnownPosition(wanted: boolean) {
   return pos;
 }
 
+const TITLES: Record<Exclude<Workspace, 'admin'>, string> = { attendance: 'Attendance & Shifts', tasks: 'Tasks & Automations', assets: 'Assets & Inventory' };
+
 export function ChooserPage() {
   const access = useAccess();
   const navigate = useNavigate();
@@ -114,14 +101,8 @@ export function ChooserPage() {
     document.title = short ? `${short} · Workspaces` : 'FreeFounders · Workspaces';
   }, [access.brand?.shortName]);
 
-  if (!access.platform) return <PageLoader />;
-  const workspaces = workspacesFor(access.apps, access.isAdmin);
-  if (!choosing && !next) {
-    const saved = remembered();
-    if (saved && workspaces.includes(saved)) return <Navigate to={WORKSPACE_HOME[saved]} replace />;
-    // Only Assets (no attendance to mark here, no admin row): straight in.
-    if (workspaces.length === 1 && workspaces[0] === 'assets') return <Navigate to="/assets" replace />;
-  }
+  const workspaces = access.platform ? workspacesFor(access.apps, access.isAdmin) : [];
+  const cards = workspaces.filter((w): w is Exclude<Workspace, 'admin'> => w !== 'admin');
 
   const open = (w: Workspace, to = WORKSPACE_HOME[w]) => {
     try {
@@ -132,66 +113,91 @@ export function ChooserPage() {
     }
     navigate(to);
   };
+
+  // Keys 1, 2, 3 open the workspaces in the order shown (not while typing in a field).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= cards.length) {
+        e.preventDefault();
+        open(cards[n - 1]);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards.join(','), keep]);
+
+  if (!access.platform) return <PageLoader />;
+  if (!choosing && !next) {
+    const saved = remembered();
+    if (saved && workspaces.includes(saved)) return <Navigate to={WORKSPACE_HOME[saved]} replace />;
+    // Only Assets (no attendance to mark here, no admin row): straight in.
+    if (workspaces.length === 1 && workspaces[0] === 'assets') return <Navigate to="/assets" replace />;
+  }
+
   const person = access.platform.person;
   const first = person.fullName.split(' ')[0];
   const tasksOn = access.apps.includes('tasks');
   const level = person.role === 'owner' ? 'Super Admin' : person.role === 'admin' ? 'Admin' : 'Member';
-  const apps: AppKey[] = access.apps;
 
   return (
-    <div className="min-h-dvh bg-background pb-24 sm:pb-0">
+    <div className="min-h-dvh bg-background pb-24 sm:pb-8">
+      <a
+        href="#workspaces"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"
+      >
+        Skip to workspaces
+      </a>
       <PortalHeader access={access} level={level} />
-      <main className="mx-auto max-w-6xl space-y-7 px-4 py-6 sm:px-6 sm:py-8">
-        {/* Hero: the old dashboard's "Good morning, Demo" greeting on a card with a soft green glow. */}
-        <section className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-card sm:p-7">
-          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-2/3 bg-gradient-to-l from-primary/[0.07] to-transparent" />
-          <div aria-hidden className="pointer-events-none absolute -top-32 -right-24 size-80 rounded-full bg-brand-2/15 blur-3xl" />
-          <div aria-hidden className="pointer-events-none absolute -bottom-40 left-1/3 size-72 rounded-full bg-app-attendance/8 blur-3xl" />
-          <div className="relative">
-            <p className="inline-flex items-center gap-2 font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
-              <span className="size-1.5 rounded-full bg-brand-2 shadow-[0_0_0_3px_var(--accent)]" aria-hidden />
-              {access.platform.company.name} · Workspace portal
+      <main className="mx-auto max-w-6xl space-y-5 px-4 py-5 sm:px-6 sm:py-6">
+        {/* One line: who, when, and today's attendance at a glance. */}
+        <section aria-label="Today" className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-[28px]">
+              {greeting()}, {first}
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {today()}
+              {person.role !== 'member' && <> · {level}</>}
             </p>
-            <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
-                <h1 className="text-[28px] leading-tight font-extrabold tracking-tight sm:text-[34px]">
-                  {greeting()}, {first}
-                </h1>
-                <p className="mt-1.5 text-sm text-muted-foreground sm:text-[15px]">
-                  Choose where you want to work today.
-                  {person.role !== 'member' && <> You have {level.toLowerCase()} access to this company.</>}
-                </p>
-                <p className="mt-1 font-mono text-xs text-muted-foreground/80">{today()}</p>
-              </div>
-              {tasksOn && <ShiftBox />}
-            </div>
-            {tasksOn && <StatusStrip />}
           </div>
+          {tasksOn && <TodayStrip />}
         </section>
 
-        {apps.length === 0 && (
-          <p className="rounded-xl border border-warning/30 bg-warning/8 p-4 text-sm">
+        {access.apps.length === 0 && (
+          <p role="status" className="rounded-xl border border-warning/30 bg-warning/8 p-4 text-sm">
             You don’t have access to any app yet. {access.isAdmin ? 'Give yourself a role under People & access.' : 'Ask your company admin for access.'}
           </p>
         )}
 
-        {workspaces.some((w) => w !== 'admin') && (
+        {cards.length > 0 && (
           <section aria-labelledby="choose-title" id="workspaces" className="scroll-mt-20">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <h2 id="choose-title" className="text-lg font-bold tracking-tight">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 id="choose-title" className="text-base font-bold tracking-tight">
                 Choose your workspace
+                <span className="ml-2 hidden font-mono text-[11px] font-medium text-muted-foreground sm:inline">press 1 · 2 · 3</span>
               </h2>
-              {workspaces.filter((w) => w !== 'admin').length > 1 && (
-                <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-card transition hover:border-primary/40 hover:text-foreground">
+              {cards.length > 1 && (
+                <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] text-muted-foreground hover:text-foreground">
                   <Checkbox checked={keep} onCheckedChange={(v) => setKeep(v === true)} aria-label="Remember my choice on this device" />
                   Remember my choice on this device
                 </label>
               )}
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {tasksOn && <AttendanceCard onOpen={(to) => open('attendance', to)} />}
-              {tasksOn && <TasksCard onOpen={(to) => open('tasks', to)} />}
-              {apps.includes('assets') && <AssetsCard access={access} onOpen={(to) => open('assets', to)} />}
+              {cards.map((w, i) =>
+                w === 'attendance' ? (
+                  <AttendanceCard key={w} index={i + 1} onOpen={(to) => open('attendance', to)} />
+                ) : w === 'tasks' ? (
+                  <TasksCard key={w} index={i + 1} onOpen={(to) => open('tasks', to)} />
+                ) : (
+                  <AssetsCard key={w} index={i + 1} access={access} onOpen={(to) => open('assets', to)} />
+                ),
+              )}
             </div>
           </section>
         )}
@@ -208,23 +214,20 @@ function PortalHeader({ access, level }: { access: Access; level: string }) {
   const signOut = useSignOut();
   const name = access.platform?.person.fullName ?? '';
   return (
-    <header className="sticky top-0 z-20 border-b bg-card/85 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b bg-card/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-6">
         <Logo company={access.brand} subtitle={access.platform?.company.name !== access.brand?.shortName ? access.platform?.company.name : undefined} />
-        <span className="ml-1 hidden rounded-full border border-primary/20 bg-accent px-2.5 py-0.5 font-mono text-[10.5px] font-semibold tracking-wider text-primary uppercase sm:inline">
-          Workspace Portal
-        </span>
         <div className="flex-1" />
         <ThemeToggle />
         <NotificationsBell />
         <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
-        <span className="hidden text-right leading-tight sm:block">
+        <span className="hidden text-right leading-tight md:block">
           <span className="block text-sm font-semibold">{name}</span>
-          <span className="block font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">{level}</span>
+          <span className="block text-[11px] text-muted-foreground">{level}</span>
         </span>
-        <Avatar name={name} className="size-9 ring-2 ring-primary/20" />
+        <Avatar name={name} className="size-9" />
         <Button variant="ghost" size="sm" onClick={() => navigate('/account')} aria-label="Change password" title="Change password">
-          <KeyRound /> <span className="hidden md:inline">Change password</span>
+          <KeyRound /> <span className="hidden lg:inline">Change password</span>
         </Button>
         <Button variant="outline" size="sm" onClick={() => signOut.mutate(undefined, { onSuccess: () => navigate('/login') })}>
           <LogOut /> <span className="hidden sm:inline">Sign out</span>
@@ -235,113 +238,99 @@ function PortalHeader({ access, level }: { access: Access; level: string }) {
   );
 }
 
-/** Office hours and a live clock. */
-function ShiftBox() {
+/** Shift hours, the time now, and anything that will matter at the punch (outside the office, face not set up). */
+function TodayStrip() {
   const cfg = useHrConfig();
-  const now = useNow();
-  return (
-    <div className="flex items-center gap-3 self-start rounded-lg border bg-card/80 px-4 py-3 shadow-card lg:self-auto">
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-app-attendance/12 text-app-attendance" aria-hidden>
-        <Clock className="size-[18px]" />
-      </span>
-      <div className="leading-tight">
-        <p className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Shift window</p>
-        <p className="font-mono text-sm font-semibold whitespace-nowrap">
-          {cfg.data ? `${ampm(cfg.data.work_start)} – ${ampm(cfg.data.work_end)}` : '—'}
-        </p>
-      </div>
-      <span className="mx-1 hidden h-8 w-px bg-border sm:block" aria-hidden />
-      <p className="hidden font-mono text-lg font-bold whitespace-nowrap text-primary tabular-nums sm:block" aria-label="Current time">
-        {clock(now)}
-      </p>
-    </div>
-  );
-}
-
-/** Location, face check and punch-photo rules as they apply to me today. */
-function StatusStrip() {
   const p = usePunch();
   const offices = useOfficeLocations();
+  const now = useNow();
   const known = useKnownPosition(!!p.data?.geofence_enabled);
   const pos = p.position ?? known;
   const near = pos && offices.data ? nearestOffice(pos, offices.data) : null;
   const d = p.data;
-  if (!d) return <Skeleton className="mt-5 h-9" />;
-  const items: Array<{ icon: typeof MapPin; text: string; tone?: 'ok' | 'warn' }> = [];
-  if (d.geofence_enabled) {
-    items.push(
-      near
-        ? { icon: MapPin, text: `${near.office.name} · ${near.inside ? 'inside' : 'outside'} the area (${near.metres} m)`, tone: near.inside ? 'ok' : 'warn' }
-        : { icon: MapPin, text: 'Location is checked when you punch in' },
-    );
-  } else items.push({ icon: MapPin, text: 'No location check' });
-  if (d.face_enabled)
-    items.push(
-      d.face_enrolled
-        ? { icon: ScanFace, text: 'Face check ready', tone: 'ok' }
-        : d.face_self_enroll
-          ? { icon: ScanFace, text: 'Face saved on your first punch' }
-          : { icon: ScanFace, text: 'Face not enrolled — ask an admin', tone: 'warn' },
-    );
-  if (d.photo && d.photo !== 'off') items.push({ icon: Camera, text: d.photo === 'required' ? 'Selfie at every punch' : 'Selfie optional' });
+  const warnings: Array<{ icon: typeof MapPin; text: string }> = [];
+  if (d?.geofence_enabled && near && !near.inside) warnings.push({ icon: MapPin, text: `${near.metres} m from ${near.office.name}` });
+  if (d?.face_enabled && !d.face_enrolled && !d.face_self_enroll) warnings.push({ icon: ScanFace, text: 'Face not enrolled — ask an admin' });
   return (
-    <ul className="mt-5 flex flex-wrap gap-2 border-t pt-4 text-xs" aria-label="Attendance checks">
-      {items.map((i) => (
-        <li
-          key={i.text}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 font-mono font-medium text-muted-foreground shadow-card',
-            i.tone === 'ok' && 'border-success/30 bg-success/8 text-success',
-            i.tone === 'warn' && 'border-warning/40 bg-warning/8 text-warning',
-          )}
-        >
-          <i.icon className="size-3.5" aria-hidden /> {i.text}
-        </li>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <span className="text-muted-foreground">
+        Shift <span className="font-mono font-semibold text-foreground">{cfg.data ? `${ampm(cfg.data.work_start)} – ${ampm(cfg.data.work_end)}` : '—'}</span>
+      </span>
+      <span className="text-muted-foreground">
+        Now{' '}
+        <span className="font-mono font-semibold text-foreground tabular-nums" aria-label="Current time">
+          {clock(now)}
+        </span>
+      </span>
+      {d?.geofence_enabled && near?.inside && (
+        <span className="inline-flex items-center gap-1 text-success">
+          <MapPin className="size-3.5" aria-hidden /> At {near.office.name}
+        </span>
+      )}
+      {d?.photo === 'required' && (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <Camera className="size-3.5" aria-hidden /> Selfie at punch
+        </span>
+      )}
+      {warnings.map((w) => (
+        <span key={w.text} className="inline-flex items-center gap-1 font-medium text-warning">
+          <w.icon className="size-3.5" aria-hidden /> {w.text}
+        </span>
       ))}
-    </ul>
+    </div>
   );
 }
 
+/**
+ * A workspace card. The whole card opens the workspace (click, Enter or the number key); buttons inside it do their own
+ * thing. One region per card, named by its title (the tests find "Attendance & Shifts" this way).
+ */
 function WorkspaceCard({
   w,
-  blurb,
+  index,
   badge,
   children,
-  primary,
-  secondary,
+  action,
+  onOpen,
 }: {
-  w: Workspace;
-  blurb: string;
+  w: Exclude<Workspace, 'admin'>;
+  index: number;
   badge?: ReactNode;
   children: ReactNode;
-  primary: ReactNode;
-  secondary?: ReactNode;
+  action: ReactNode;
+  onOpen: () => void;
 }) {
   const look = WORKSPACE_LOOK[w];
+  const openIfCard = (e: React.MouseEvent) => {
+    // Clicks on buttons, links, inputs inside the card are theirs.
+    if ((e.target as HTMLElement).closest('button, a, input, label, [role=dialog]')) return;
+    onOpen();
+  };
   return (
     <section
       aria-labelledby={`card-${w}`}
-      className="relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-lg"
+      onClick={openIfCard}
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-shadow hover:shadow-card-lg focus-within:ring-2 focus-within:ring-ring/40"
     >
       <div aria-hidden className={cn('absolute inset-x-0 top-0 h-1', look.dot)} />
-      <div aria-hidden className={cn('pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b to-transparent', look.glow)} />
-      <div className="relative flex flex-1 flex-col gap-4 p-5">
-        <div className="flex items-start justify-between gap-2">
-          <span className={cn('grid size-11 place-items-center rounded-xl shadow-md shadow-black/15', look.solid)} aria-hidden>
+      <div className="flex flex-1 flex-col gap-4 p-5">
+        <div className="flex items-center gap-3">
+          <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', look.solid)} aria-hidden>
             <look.icon className="size-[22px]" />
           </span>
-          {badge}
-        </div>
-        <div>
-          <h3 id={`card-${w}`} className="text-[17px] font-bold tracking-tight">
-            {w === 'attendance' ? 'Attendance & Shifts' : w === 'tasks' ? 'Tasks & Automations' : 'Assets & Inventory'}
+          <h3 id={`card-${w}`} className="min-w-0 flex-1 text-[17px] leading-tight font-bold tracking-tight">
+            <button type="button" onClick={onOpen} className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:content-[''] hover:text-primary">
+              {TITLES[w]}
+            </button>
           </h3>
-          <p className="mt-0.5 text-[13.5px] text-muted-foreground">{blurb}</p>
+          <kbd className="hidden rounded-md border bg-muted px-1.5 font-mono text-[11px] text-muted-foreground sm:inline" aria-hidden>
+            {index}
+          </kbd>
         </div>
-        <div className="flex-1 space-y-3">{children}</div>
-        <div className="space-y-2">{primary}</div>
+        {badge}
+        <div className="relative z-10 flex-1 space-y-3">{children}</div>
+        <div className="relative z-10 space-y-2">{action}</div>
       </div>
-      {secondary && <div className="relative border-t bg-muted/30 px-5 py-2.5">{secondary}</div>}
     </section>
   );
 }
@@ -350,7 +339,7 @@ function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info'; childr
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold whitespace-nowrap',
+        'inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap',
         tone === 'ok' && 'border-success/30 bg-success/10 text-success',
         tone === 'warn' && 'border-warning/40 bg-warning/12 text-warning',
         tone === 'bad' && 'border-destructive/30 bg-destructive/10 text-destructive',
@@ -363,16 +352,23 @@ function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info'; childr
   );
 }
 
-function Count({ label, value, alert, to }: { label: string; value: number | string | undefined; alert?: boolean; to?: string }) {
+/** A number that opens its list. Big enough to tap; the label reads as one phrase ("24 overdue"). */
+function Count({ label, value, alert, to, small }: { label: string; value: number | string | undefined; alert?: boolean; to?: string; small?: boolean }) {
   const body = (
     <>
-      <span className={cn('block font-mono text-[22px] leading-tight font-bold tabular-nums', alert && 'text-destructive')}>{value ?? '—'}</span>
-      <span className="mt-0.5 block font-mono text-[10px] tracking-wider text-muted-foreground uppercase">{label}</span>
+      <span className={cn('block font-mono leading-tight font-bold whitespace-nowrap tabular-nums', small ? 'text-[17px]' : 'text-[22px]', alert && value ? 'text-destructive' : '')}>
+        {value ?? '—'}
+      </span>
+      <span className="mt-0.5 block text-[12px] text-muted-foreground">{label}</span>
     </>
   );
-  const cls = cn('block rounded-lg border bg-card px-2 py-2.5 text-center shadow-card', alert && 'border-destructive/30 bg-destructive/6');
+  const cls = cn('block rounded-lg border bg-background/60 px-2 py-2 text-center', alert && value ? 'border-destructive/30 bg-destructive/6' : '');
   return to ? (
-    <Link to={to} className={cn(cls, 'transition outline-none hover:border-primary/40 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40')}>
+    <Link
+      to={to}
+      aria-label={`${value ?? '—'} ${label}`}
+      className={cn(cls, 'transition outline-none hover:border-primary/50 hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/40')}
+    >
       {body}
     </Link>
   ) : (
@@ -380,28 +376,13 @@ function Count({ label, value, alert, to }: { label: string; value: number | str
   );
 }
 
-function FooterLink({ onClick, children, extra }: { onClick: () => void; children: ReactNode; extra?: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex w-full cursor-pointer items-center gap-2 rounded-md text-left text-sm font-semibold text-foreground/80 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/40"
-    >
-      <span className="flex-1">{children}</span>
-      {extra}
-      <ChevronRight className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
-    </button>
-  );
-}
-
-function AttendanceCard({ onOpen }: { onOpen: (to?: string) => void }) {
+function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string) => void }) {
   const p = usePunch();
   const cfg = useHrConfig();
   const balances = useLeaveBalances();
   const approves = !!cfg.data?.can_approve;
   const leaves = usePendingLeaves(approves);
   const corrections = usePendingCorrections(approves);
-  const now = useNow();
   const d = p.data;
   const a = d?.attendance;
   const pending = (leaves.data?.length ?? 0) + (corrections.data?.length ?? 0);
@@ -415,12 +396,14 @@ function AttendanceCard({ onOpen }: { onOpen: (to?: string) => void }) {
         : a?.check_in
           ? 'done'
           : 'none';
-  const badge = !d ? null : a?.check_in && !a.check_out ? (
+  const badge = !d ? (
+    <Skeleton className="h-6 w-32" />
+  ) : a?.check_in && !a.check_out ? (
     <Pill tone="ok">Checked in {timeOf(a.check_in)}</Pill>
   ) : a?.check_out ? (
     <Pill tone="info">Done · {hrs(a.working_minutes)}</Pill>
   ) : a && a.status !== 'not_checked_in' ? (
-    <AttendanceChip status={a.status} />
+    <Pill tone="info">{a.status_display}</Pill>
   ) : (
     <Pill tone="bad">Not checked in</Pill>
   );
@@ -428,23 +411,26 @@ function AttendanceCard({ onOpen }: { onOpen: (to?: string) => void }) {
   return (
     <WorkspaceCard
       w="attendance"
-      blurb="Punch in and out, see your attendance, and apply for leave."
+      index={index}
       badge={badge}
-      primary={
+      onOpen={() => onOpen()}
+      action={
         <>
-          {p.err && (
-            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
-              {p.err}{' '}
-              <button type="button" className="font-medium underline" onClick={() => onOpen('/attendance/history')}>
-                Request a correction
-              </button>
-            </p>
-          )}
-          {p.msg && (
-            <p role="status" className="rounded-lg border border-success/30 bg-success/8 px-3 py-2 text-sm text-success">
-              {p.msg}
-            </p>
-          )}
+          <div aria-live="polite">
+            {p.err && (
+              <p role="alert" className="mb-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+                {p.err}{' '}
+                <button type="button" className="font-medium underline" onClick={() => onOpen('/attendance/history')}>
+                  Request a correction
+                </button>
+              </p>
+            )}
+            {p.msg && (
+              <p role="status" className="mb-2 rounded-lg border border-success/30 bg-success/8 px-3 py-2 text-sm text-success">
+                {p.msg}
+              </p>
+            )}
+          </div>
           {state === 'in' || state === 'out' ? (
             <Button
               size="lg"
@@ -461,109 +447,91 @@ function AttendanceCard({ onOpen }: { onOpen: (to?: string) => void }) {
               {state === 'done' ? `Done for today · ${hrs(a?.working_minutes)}` : 'Open attendance'}
             </Button>
           )}
+          <Button variant="ghost" size="sm" className="w-full justify-between" onClick={() => onOpen()}>
+            Open Attendance &amp; Leave
+            {approves && pending > 0 ? <Pill tone="warn">{pending === 1 ? '1 approval' : `${pending} approvals`} pending</Pill> : <ArrowRight />}
+          </Button>
           {p.camera}
         </>
       }
-      secondary={
-        <FooterLink onClick={() => onOpen()} extra={approves && pending > 0 ? <Pill tone="warn">{pending} approvals pending</Pill> : undefined}>
-          Open Attendance &amp; Leave
-        </FooterLink>
-      }
     >
-      <dl className="divide-y rounded-lg border bg-card text-sm shadow-card">
-        <div className="flex items-center justify-between px-3 py-2">
-          <dt className="text-muted-foreground">Time now</dt>
-          <dd className="font-mono font-semibold tabular-nums">{clock(now)}</dd>
-        </div>
-        <div className="flex items-center justify-between px-3 py-2">
-          <dt className="text-muted-foreground">Checked in</dt>
-          <dd className={cn('font-mono font-semibold', a?.check_in && 'text-success')}>{timeOf(a?.check_in)}</dd>
-        </div>
-        <div className="flex items-center justify-between px-3 py-2">
-          <dt className="text-muted-foreground">Checked out</dt>
-          <dd className="font-mono font-semibold">{timeOf(a?.check_out)}</dd>
-        </div>
-      </dl>
+      <div className="grid grid-cols-3 gap-2">
+        <Count label="Checked in" value={timeOf(a?.check_in)} small />
+        <Count label="Checked out" value={timeOf(a?.check_out)} small />
+        <Count label="Worked" value={hrs(a?.working_minutes)} small />
+      </div>
       {(balances.data?.length ?? 0) > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          {balances.data!.slice(0, 2).map((b) => (
-            <div key={b.leave_type} className="rounded-lg border bg-card px-3 py-2 shadow-card">
-              <p className="truncate font-mono text-[10px] tracking-wider text-muted-foreground uppercase">{b.name}</p>
-              <p className="font-mono text-sm font-bold">
-                {b.balance} <span className="font-medium text-muted-foreground">left</span>
-              </p>
-            </div>
+        <p className="truncate text-[13px] text-muted-foreground">
+          Leave left:{' '}
+          {balances.data!.slice(0, 2).map((b, i) => (
+            <span key={b.leave_type}>
+              {i > 0 && ' · '}
+              <span className="font-mono font-semibold text-foreground">{b.balance}</span> {b.name}
+            </span>
           ))}
-        </div>
+        </p>
       )}
     </WorkspaceCard>
   );
 }
 
-function TasksCard({ onOpen }: { onOpen: (to?: string) => void }) {
+function TasksCard({ index, onOpen }: { index: number; onOpen: (to?: string) => void }) {
   const tiles = useMyTaskTiles();
   const waiting = useWaitingCounts();
   const t = tiles.data;
   return (
     <WorkspaceCard
       w="tasks"
-      blurb="Your tasks, checklists, reviews and the team’s work."
-      badge={t && t.overdue > 0 ? <Pill tone="bad">{t.overdue} overdue</Pill> : t ? <Pill tone="ok">On track</Pill> : null}
-      primary={
-        <Button size="lg" className="h-12 w-full text-base" onClick={() => onOpen()}>
-          Open Tasks <ArrowRight />
-        </Button>
+      index={index}
+      badge={!t ? <Skeleton className="h-6 w-24" /> : t.overdue > 0 ? <Pill tone="bad">{t.overdue} overdue</Pill> : <Pill tone="ok">On track</Pill>}
+      onOpen={() => onOpen()}
+      action={
+        <>
+          <Button size="lg" className="h-12 w-full text-base" onClick={() => onOpen()}>
+            Open Tasks <ArrowRight />
+          </Button>
+          <Button variant="ghost" size="sm" className="w-full justify-between" onClick={() => onOpen('/tasks/tasks')}>
+            My task list <ArrowRight />
+          </Button>
+        </>
       }
-      secondary={<FooterLink onClick={() => onOpen('/tasks/tasks')}>Open my task list</FooterLink>}
     >
       <div className="grid grid-cols-3 gap-2">
         <Count label="Active" value={t ? t.pending + t.in_progress : undefined} to="/tasks/tasks?tab=my" />
-        <Count label="Overdue" value={t?.overdue} alert={!!t?.overdue} to="/tasks/tasks?tab=my&overdue=1" />
+        <Count label="Overdue" value={t?.overdue} alert to="/tasks/tasks?tab=my&overdue=1" />
         <Count label="To accept" value={waiting.data?.accept} to="/tasks/tasks?tab=reviews" />
       </div>
-      <ul className="space-y-1.5 text-[13.5px] text-muted-foreground">
-        <li className="flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-app-tasks" aria-hidden />
-          <span>
-            <span className="font-mono font-semibold text-foreground">{waiting.data?.requests ?? 0}</span> change requests to decide
-          </span>
-        </li>
-        <li className="flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-app-tasks" aria-hidden />
-          <span>
-            <span className="font-mono font-semibold text-foreground">{t?.completed ?? 0}</span> completed · <span className="font-mono font-semibold text-foreground">{t?.in_time ?? 0}</span> on
-            time
-          </span>
-        </li>
-      </ul>
+      <p className="text-[13px] text-muted-foreground">
+        <span className="font-mono font-semibold text-foreground">{waiting.data?.requests ?? 0}</span> change requests to decide ·{' '}
+        <span className="font-mono font-semibold text-foreground">{t?.completed ?? 0}</span> completed
+      </p>
     </WorkspaceCard>
   );
 }
 
-function AssetsCard({ access, onOpen }: { access: Access; onOpen: (to?: string) => void }) {
+function AssetsCard({ index, access, onOpen }: { index: number; access: Access; onOpen: (to?: string) => void }) {
   const dash = useAssetsDashboard();
   const d = dash.data;
   const canScan = access.assets.can('asset:view', 'asset:assign');
   return (
     <WorkspaceCard
       w="assets"
-      blurb="Assets you hold, requests, tickets, joiners and exits."
-      badge={dash.error ? <Pill tone="warn">Unavailable</Pill> : d ? <Pill tone="ok">Up to date</Pill> : null}
-      primary={
-        <Button size="lg" className="h-12 w-full text-base" onClick={() => onOpen()}>
-          Open Assets <ArrowRight />
-        </Button>
-      }
-      secondary={
-        canScan ? (
-          <FooterLink onClick={() => onOpen('/assets/scan')}>
+      index={index}
+      badge={dash.error ? <Pill tone="warn">Unavailable right now</Pill> : !d ? <Skeleton className="h-6 w-24" /> : <Pill tone="ok">Up to date</Pill>}
+      onOpen={() => onOpen()}
+      action={
+        <>
+          <Button size="lg" className="h-12 w-full text-base" onClick={() => onOpen()}>
+            Open Assets <ArrowRight />
+          </Button>
+          <Button variant="ghost" size="sm" className="w-full justify-between" onClick={() => onOpen(canScan ? '/assets/scan' : '/assets/requests')}>
             <span className="inline-flex items-center gap-2">
-              <ScanLine className="size-4" aria-hidden /> Scan QR / barcode
+              {canScan && <ScanLine className="size-4" aria-hidden />}
+              {canScan ? 'Scan QR / barcode' : 'Request an item'}
             </span>
-          </FooterLink>
-        ) : (
-          <FooterLink onClick={() => onOpen('/assets/requests')}>Request an item</FooterLink>
-        )
+            <ArrowRight />
+          </Button>
+        </>
       }
     >
       {!d ? (
@@ -572,10 +540,10 @@ function AssetsCard({ access, onOpen }: { access: Access; onOpen: (to?: string) 
         <>
           <div className="grid grid-cols-3 gap-2">
             <Count label="Assigned" value={d.totals.assigned} />
-            <Count label="Exit items" value={d.totals.exitPendingItems} alert={d.totals.exitPendingItems > 0} />
+            <Count label="Exit items" value={d.totals.exitPendingItems} alert />
             <Count label="Open tickets" value={d.totals.openTickets} />
           </div>
-          <p className="text-[13.5px] text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             <span className="font-mono font-semibold text-foreground">{d.totals.available}</span> available ·{' '}
             <span className="font-mono font-semibold text-foreground">{d.totals.pendingRequests}</span> requests waiting
           </p>
@@ -584,12 +552,12 @@ function AssetsCard({ access, onOpen }: { access: Access; onOpen: (to?: string) 
         <>
           <div className="grid grid-cols-3 gap-2">
             <Count label="With me" value={d.myAssets.length} />
-            <Count label="Exit hold" value={d.openExit ? 1 : 0} alert={!!d.openExit} />
+            <Count label="Exit hold" value={d.openExit ? 1 : 0} alert />
             <Count label="Tickets" value={d.tickets.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length} />
           </div>
           {d.myAssets[0] && (
-            <p className="truncate rounded-lg border bg-card px-3 py-2 font-mono text-xs shadow-card">
-              {d.myAssets[0].name} · <span className="text-primary">{d.myAssets[0].assetTag}</span>
+            <p className="truncate text-[13px] text-muted-foreground">
+              {d.myAssets[0].name} · <span className="font-mono text-primary">{d.myAssets[0].assetTag}</span>
             </p>
           )}
         </>
@@ -598,46 +566,34 @@ function AssetsCard({ access, onOpen }: { access: Access; onOpen: (to?: string) 
   );
 }
 
+/** Admin: three plain buttons on one row (no extra requests on this page). */
 function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
-  const people = usePeople('');
-  const roles = useRoles();
-  const company = useCompanySettings();
-  const active = people.data?.filter((p) => p.status === 'active').length;
-  const modulesOn = company.data?.modules.reduce((n, a) => n + a.modules.filter((m) => m.on).length, 0);
   const items = [
-    { name: 'People & access', blurb: 'Add people, give them roles, reset passwords', to: '/people', icon: Users, count: active != null ? `${active} people` : '' },
-    { name: 'Roles', blurb: 'What each role can do, and its duties', to: '/roles', icon: ShieldCheck, count: roles.data ? `${roles.data.length} roles` : '' },
-    { name: 'Settings', blurb: 'Company, modules and departments', to: '/settings', icon: Settings2, count: modulesOn != null ? `${modulesOn} modules on` : '' },
+    { name: 'People & access', blurb: 'People, roles, passwords', to: '/people', icon: Users },
+    { name: 'Roles', blurb: 'Permissions and duties', to: '/roles', icon: ShieldCheck },
+    { name: 'Settings', blurb: 'Company, modules, departments', to: '/settings', icon: Settings2 },
   ];
   return (
     <section aria-labelledby="admin-title">
-      <h2 id="admin-title" className="mb-4 flex items-center gap-2 text-lg font-bold tracking-tight">
-        <span className="grid size-7 place-items-center rounded-lg bg-app-admin/12 text-app-admin" aria-hidden>
-          <ShieldCheck className="size-4" />
-        </span>
+      <h2 id="admin-title" className="mb-3 text-base font-bold tracking-tight">
         Admin
-        <span aria-hidden className="ml-2 h-px flex-1 bg-border" />
       </h2>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         {items.map((x) => (
           <button
             key={x.to}
             type="button"
             onClick={() => onOpen(x.to)}
-            className="group relative overflow-hidden rounded-xl border bg-card p-5 text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-app-admin/40 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
+            className="group flex cursor-pointer items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left shadow-card transition hover:border-primary/50 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
           >
-            <span aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-28 rounded-full bg-app-admin/8 blur-2xl" />
-            <span className="relative flex items-start justify-between gap-2">
-              <span className="grid size-10 place-items-center rounded-xl bg-app-admin/12 text-app-admin" aria-hidden>
-                <x.icon className="size-5" />
-              </span>
-              {x.count && <span className="rounded-full border bg-background px-2.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">{x.count}</span>}
+            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-app-admin/12 text-app-admin" aria-hidden>
+              <x.icon className="size-5" />
             </span>
-            <span className="relative mt-4 block text-[15px] font-bold tracking-tight">{x.name}</span>
-            <span className="relative block text-[13px] text-muted-foreground">{x.blurb}</span>
-            <span className="relative mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">
-              Open <ChevronRight className="size-3.5 transition group-hover:translate-x-0.5" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-bold tracking-tight group-hover:text-primary">{x.name}</span>
+              <span className="block truncate text-[12.5px] text-muted-foreground">{x.blurb}</span>
             </span>
+            <ArrowRight className="size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
           </button>
         ))}
       </div>

@@ -66,6 +66,7 @@ const djangoEnv = {
   ...shared,
   DATABASE_URL: pg.localUrl('ff_tasks'),
   DB_SSLMODE: 'disable',
+  DB_CONN_MAX_AGE: '0', // runserver leaks a persistent connection per request thread (see settings.py)
   DEBUG: 'true',
   ALLOWED_HOSTS: 'localhost,127.0.0.1',
   NOTIF_SCHEDULER: 'false',

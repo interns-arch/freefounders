@@ -111,7 +111,10 @@ def _database_from_env():
             "HOST": parsed.hostname,
             "PORT": parsed.port or 5432,
             "OPTIONS": {"sslmode": os.environ.get("DB_SSLMODE", "require")},
-            "CONN_MAX_AGE": 60,
+            # Persistent connections per worker (gunicorn). The dev server (runserver) uses a thread per request and
+            # never closes a thread's connection when the thread ends, so dev sets DB_CONN_MAX_AGE=0 (scripts/dev.mjs)
+            # or Postgres runs out of connections after a few hundred requests.
+            "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
         }
     return {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
 
