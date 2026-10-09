@@ -16,6 +16,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/inter": "^5.2.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@freefounders/core": "*",
     "@freefounders/theme": "*",
     "@hookform/resolvers": "^5.2.0",

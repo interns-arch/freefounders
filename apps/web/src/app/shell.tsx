@@ -26,12 +26,9 @@ const MENUS: Record<Workspace, NavItem[]> = {
 export function useBrandColour(colour: string | null | undefined) {
   useEffect(() => {
     const root = document.documentElement.style;
-    if (colour) {
-      root.setProperty('--primary', colour);
-      root.setProperty('--ring', colour);
-    } else {
-      root.removeProperty('--primary');
-      root.removeProperty('--ring');
+    for (const v of ['--primary', '--ring', '--brand-2']) {
+      if (colour) root.setProperty(v, colour);
+      else root.removeProperty(v);
     }
   }, [colour]);
 }
@@ -69,22 +66,22 @@ export function AppShell() {
   }, [access.ready, workspaces, here, navigate]);
 
   const items = MENUS[here].filter((i) => !i.show || i.show(access));
-  const itemClass = 'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground transition hover:bg-sidebar-accent/70';
+  const itemClass = 'relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/75 transition hover:bg-white/6 hover:text-white';
   const sidebar = (
     <div className="flex h-full flex-col gap-3 p-3">
       <Link to="/?choose" className="rounded-lg px-1 py-1.5" aria-label="Choose workspace">
-        <Logo company={access.brand} subtitle={WORKSPACE_NAMES[here]} />
+        <Logo company={access.brand} subtitle={WORKSPACE_NAMES[here]} onDark />
       </Link>
       {workspaces.length > 1 && (
-        <nav aria-label="Workspaces" className="grid grid-cols-2 gap-1 rounded-xl border bg-background p-1">
+        <nav aria-label="Workspaces" className="grid grid-cols-2 gap-1 rounded-xl border border-sidebar-border bg-white/5 p-1">
           {workspaces.map((w) => (
             <Link
               key={w}
               to={WORKSPACE_HOME[w]}
               aria-current={w === here ? 'page' : undefined}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground',
-                w === here && 'bg-card text-foreground shadow-xs ring-1 ring-border',
+                'flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-sidebar-foreground/70 transition hover:text-white',
+                w === here && 'bg-white/10 text-white shadow-xs',
               )}
             >
               <span className={cn('size-1.5 shrink-0 rounded-full', WORKSPACE_LOOK[w].dot)} aria-hidden />
@@ -104,11 +101,13 @@ export function AppShell() {
           );
           return (
             <div key={item.to}>
-              {heading && <p className="px-2.5 pt-4 pb-1 font-mono text-[10px] font-medium tracking-widest text-muted-foreground/80 uppercase">{item.group}</p>}
+              {heading && <p className="px-3 pt-4 pb-1 font-mono text-[10px] font-medium tracking-widest text-sidebar-foreground/45 uppercase">{item.group}</p>}
               <NavLink
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) => cn(itemClass, isActive && 'bg-sidebar-accent font-medium text-primary [&_svg]:text-primary')}
+                className={({ isActive }) =>
+                  cn(itemClass, isActive && 'bg-gradient-to-r from-brand-2/30 to-brand-2/5 text-white shadow-[inset_3px_0_0_var(--brand-2)] [&_svg]:text-brand-2')
+                }
               >
                 {inner}
               </NavLink>

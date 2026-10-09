@@ -9,7 +9,7 @@ import { Avatar } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
 /** FreeFounders mark, or the company's logo and short name (Settings Center). */
-export function Logo({ company, inverted = false, compact = false, subtitle }: { company?: Access['brand']; inverted?: boolean; compact?: boolean; subtitle?: string }) {
+export function Logo({ company, inverted = false, compact = false, subtitle, onDark = false }: { company?: Access['brand']; inverted?: boolean; compact?: boolean; subtitle?: string; onDark?: boolean }) {
   return (
     <span className="flex min-w-0 items-center gap-2.5">
       {company?.logoUrl ? (
@@ -19,7 +19,7 @@ export function Logo({ company, inverted = false, compact = false, subtitle }: {
           aria-hidden
           className={cn(
             'grid size-8 shrink-0 place-items-center rounded-lg text-[13px] font-extrabold',
-            inverted ? 'bg-primary-foreground text-primary' : 'bg-primary text-primary-foreground',
+            inverted ? 'bg-primary-foreground text-primary' : 'bg-gradient-to-br from-brand-2 to-primary text-white',
           )}
         >
           {company ? company.shortName.slice(0, 1).toUpperCase() : 'FF'}
@@ -27,8 +27,8 @@ export function Logo({ company, inverted = false, compact = false, subtitle }: {
       )}
       {!compact && (
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-[15px] font-semibold tracking-tight">{company?.shortName ?? 'FreeFounders'}</span>
-          {subtitle && <span className="block truncate font-mono text-[10px] tracking-wider text-muted-foreground uppercase">{subtitle}</span>}
+          <span className={cn('block truncate text-[15px] font-bold tracking-tight', onDark && 'text-white')}>{company?.shortName ?? 'FreeFounders'}</span>
+          {subtitle && <span className={cn('block truncate font-mono text-[10px] tracking-wider uppercase', onDark ? 'text-sidebar-foreground/60' : 'text-muted-foreground')}>{subtitle}</span>}
         </span>
       )}
     </span>
@@ -137,11 +137,11 @@ export function UserMenu({ access }: { access: Access }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left hover:bg-sidebar-accent" aria-label="Your account">
+        <button type="button" className="flex w-full items-center gap-2.5 rounded-lg border-t border-sidebar-border p-2 pt-3 text-left hover:bg-white/6" aria-label="Your account">
           <Avatar name={name} className="size-8" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">{name}</span>
-            <span className="block truncate text-xs text-muted-foreground">{role}</span>
+            <span className="block truncate text-sm font-semibold text-white">{name}</span>
+            <span className="block truncate text-xs text-sidebar-foreground/60">{role}</span>
           </span>
         </button>
       </DropdownMenuTrigger>
