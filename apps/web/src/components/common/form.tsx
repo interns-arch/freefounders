@@ -83,7 +83,7 @@ export function Field({
         </Label>
       )}
       {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {error ? <p className="text-xs font-medium text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -104,9 +104,12 @@ export function errorOf(form: UseFormReturn<any>, name: string): string | undefi
 export function FormSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
     <section className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      <div className="flex items-center gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold">{title}</h3>
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        </div>
+        <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
       {children}
     </section>

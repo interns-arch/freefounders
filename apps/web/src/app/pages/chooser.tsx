@@ -54,6 +54,7 @@ const greeting = () => {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 };
+const today = () => new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const clock = (d: Date) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 const timeOf = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
@@ -140,42 +141,48 @@ export function ChooserPage() {
   return (
     <div className="min-h-dvh bg-background pb-24 sm:pb-0">
       <PortalHeader access={access} level={level} />
-      <main className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-        <section className="relative overflow-hidden rounded-2xl border bg-card p-5 shadow-xs sm:p-6">
-          <div aria-hidden className="pointer-events-none absolute -top-24 -right-24 size-64 rounded-full bg-primary/6 blur-2xl" />
-          <p className="font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
-            <span className="mr-1.5 inline-block size-1.5 rounded-full bg-success align-middle" aria-hidden />
-            {access.platform.company.name} · Workspace portal
-          </p>
-          <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                {greeting()}, {first}
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-                Choose where you want to work today.
-                {person.role !== 'member' && <> You have {level.toLowerCase()} access to this company.</>}
-              </p>
+      <main className="mx-auto max-w-6xl space-y-7 px-4 py-6 sm:px-6 sm:py-8">
+        {/* Hero: the old dashboard's "Good morning, Demo" greeting on a card with a soft green glow. */}
+        <section className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-card sm:p-7">
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-2/3 bg-gradient-to-l from-primary/[0.07] to-transparent" />
+          <div aria-hidden className="pointer-events-none absolute -top-32 -right-24 size-80 rounded-full bg-brand-2/15 blur-3xl" />
+          <div aria-hidden className="pointer-events-none absolute -bottom-40 left-1/3 size-72 rounded-full bg-app-attendance/8 blur-3xl" />
+          <div className="relative">
+            <p className="inline-flex items-center gap-2 font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
+              <span className="size-1.5 rounded-full bg-brand-2 shadow-[0_0_0_3px_var(--accent)]" aria-hidden />
+              {access.platform.company.name} · Workspace portal
+            </p>
+            <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <h1 className="text-[28px] leading-tight font-extrabold tracking-tight sm:text-[34px]">
+                  {greeting()}, {first}
+                </h1>
+                <p className="mt-1.5 text-sm text-muted-foreground sm:text-[15px]">
+                  Choose where you want to work today.
+                  {person.role !== 'member' && <> You have {level.toLowerCase()} access to this company.</>}
+                </p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground/80">{today()}</p>
+              </div>
+              {tasksOn && <ShiftBox />}
             </div>
-            {tasksOn && <ShiftBox />}
+            {tasksOn && <StatusStrip />}
           </div>
-          {tasksOn && <StatusStrip />}
         </section>
 
         {apps.length === 0 && (
-          <p className="rounded-xl border bg-card p-4 text-sm">
+          <p className="rounded-xl border border-warning/30 bg-warning/8 p-4 text-sm">
             You don’t have access to any app yet. {access.isAdmin ? 'Give yourself a role under People & access.' : 'Ask your company admin for access.'}
           </p>
         )}
 
         {workspaces.some((w) => w !== 'admin') && (
           <section aria-labelledby="choose-title" id="workspaces" className="scroll-mt-20">
-            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-              <h2 id="choose-title" className="text-lg font-semibold tracking-tight">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h2 id="choose-title" className="text-lg font-bold tracking-tight">
                 Choose your workspace
               </h2>
               {workspaces.filter((w) => w !== 'admin').length > 1 && (
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-card transition hover:border-primary/40 hover:text-foreground">
                   <Checkbox checked={keep} onCheckedChange={(v) => setKeep(v === true)} aria-label="Remember my choice on this device" />
                   Remember my choice on this device
                 </label>
@@ -204,20 +211,22 @@ function PortalHeader({ access, level }: { access: Access; level: string }) {
     <header className="sticky top-0 z-20 border-b bg-card/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-6">
         <Logo company={access.brand} subtitle={access.platform?.company.name !== access.brand?.shortName ? access.platform?.company.name : undefined} />
-        <span className="ml-1 hidden rounded-full border bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground sm:inline">Workspace Portal</span>
+        <span className="ml-1 hidden rounded-full border border-primary/20 bg-accent px-2.5 py-0.5 font-mono text-[10.5px] font-semibold tracking-wider text-primary uppercase sm:inline">
+          Workspace Portal
+        </span>
         <div className="flex-1" />
         <ThemeToggle />
         <NotificationsBell />
         <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
         <span className="hidden text-right leading-tight sm:block">
-          <span className="block text-sm font-medium">{name}</span>
-          <span className="block text-[11px] text-muted-foreground">{level}</span>
+          <span className="block text-sm font-semibold">{name}</span>
+          <span className="block font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">{level}</span>
         </span>
-        <Avatar name={name} className="size-8" />
+        <Avatar name={name} className="size-9 ring-2 ring-primary/20" />
         <Button variant="ghost" size="sm" onClick={() => navigate('/account')} aria-label="Change password" title="Change password">
           <KeyRound /> <span className="hidden md:inline">Change password</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => signOut.mutate(undefined, { onSuccess: () => navigate('/login') })}>
+        <Button variant="outline" size="sm" onClick={() => signOut.mutate(undefined, { onSuccess: () => navigate('/login') })}>
           <LogOut /> <span className="hidden sm:inline">Sign out</span>
           <span className="sr-only sm:hidden">Sign out</span>
         </Button>
@@ -231,16 +240,18 @@ function ShiftBox() {
   const cfg = useHrConfig();
   const now = useNow();
   return (
-    <div className="flex items-center gap-3 self-start rounded-xl border bg-background/60 px-4 py-2.5 lg:self-auto">
-      <Clock className="size-5 text-app-attendance" aria-hidden />
+    <div className="flex items-center gap-3 self-start rounded-lg border bg-card/80 px-4 py-3 shadow-card lg:self-auto">
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-app-attendance/12 text-app-attendance" aria-hidden>
+        <Clock className="size-[18px]" />
+      </span>
       <div className="leading-tight">
         <p className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Shift window</p>
-        <p className="font-mono text-sm font-medium whitespace-nowrap">
+        <p className="font-mono text-sm font-semibold whitespace-nowrap">
           {cfg.data ? `${ampm(cfg.data.work_start)} – ${ampm(cfg.data.work_end)}` : '—'}
         </p>
       </div>
       <span className="mx-1 hidden h-8 w-px bg-border sm:block" aria-hidden />
-      <p className="hidden font-mono text-sm font-semibold whitespace-nowrap tabular-nums sm:block" aria-label="Current time">
+      <p className="hidden font-mono text-lg font-bold whitespace-nowrap text-primary tabular-nums sm:block" aria-label="Current time">
         {clock(now)}
       </p>
     </div>
@@ -255,7 +266,7 @@ function StatusStrip() {
   const pos = p.position ?? known;
   const near = pos && offices.data ? nearestOffice(pos, offices.data) : null;
   const d = p.data;
-  if (!d) return <Skeleton className="mt-4 h-9" />;
+  if (!d) return <Skeleton className="mt-5 h-9" />;
   const items: Array<{ icon: typeof MapPin; text: string; tone?: 'ok' | 'warn' }> = [];
   if (d.geofence_enabled) {
     items.push(
@@ -274,14 +285,14 @@ function StatusStrip() {
     );
   if (d.photo && d.photo !== 'off') items.push({ icon: Camera, text: d.photo === 'required' ? 'Selfie at every punch' : 'Selfie optional' });
   return (
-    <ul className="mt-4 flex flex-wrap gap-2 border-t pt-4 text-xs" aria-label="Attendance checks">
+    <ul className="mt-5 flex flex-wrap gap-2 border-t pt-4 text-xs" aria-label="Attendance checks">
       {items.map((i) => (
         <li
           key={i.text}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-full border bg-background/60 px-2.5 py-1 font-mono text-muted-foreground',
-            i.tone === 'ok' && 'border-success/30 text-success',
-            i.tone === 'warn' && 'border-warning/40 text-warning',
+            'inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 font-mono font-medium text-muted-foreground shadow-card',
+            i.tone === 'ok' && 'border-success/30 bg-success/8 text-success',
+            i.tone === 'warn' && 'border-warning/40 bg-warning/8 text-warning',
           )}
         >
           <i.icon className="size-3.5" aria-hidden /> {i.text}
@@ -308,25 +319,29 @@ function WorkspaceCard({
 }) {
   const look = WORKSPACE_LOOK[w];
   return (
-    <section aria-labelledby={`card-${w}`} className="relative flex flex-col overflow-hidden rounded-2xl border bg-card shadow-xs transition hover:shadow-md">
-      <div aria-hidden className={cn('pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b to-transparent', look.glow)} />
+    <section
+      aria-labelledby={`card-${w}`}
+      className="relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-lg"
+    >
+      <div aria-hidden className={cn('absolute inset-x-0 top-0 h-1', look.dot)} />
+      <div aria-hidden className={cn('pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b to-transparent', look.glow)} />
       <div className="relative flex flex-1 flex-col gap-4 p-5">
         <div className="flex items-start justify-between gap-2">
-          <span className={cn('grid size-10 place-items-center rounded-xl', look.soft)} aria-hidden>
-            <look.icon className="size-5" />
+          <span className={cn('grid size-11 place-items-center rounded-xl shadow-md shadow-black/15', look.solid)} aria-hidden>
+            <look.icon className="size-[22px]" />
           </span>
           {badge}
         </div>
         <div>
-          <h3 id={`card-${w}`} className="text-lg font-semibold tracking-tight">
+          <h3 id={`card-${w}`} className="text-[17px] font-bold tracking-tight">
             {w === 'attendance' ? 'Attendance & Shifts' : w === 'tasks' ? 'Tasks & Automations' : 'Assets & Inventory'}
           </h3>
-          <p className="text-sm text-muted-foreground">{blurb}</p>
+          <p className="mt-0.5 text-[13.5px] text-muted-foreground">{blurb}</p>
         </div>
         <div className="flex-1 space-y-3">{children}</div>
         <div className="space-y-2">{primary}</div>
       </div>
-      {secondary && <div className="relative border-t bg-background/50 px-5 py-2.5">{secondary}</div>}
+      {secondary && <div className="relative border-t bg-muted/30 px-5 py-2.5">{secondary}</div>}
     </section>
   );
 }
@@ -335,13 +350,14 @@ function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info'; childr
   return (
     <span
       className={cn(
-        'rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap',
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold whitespace-nowrap',
         tone === 'ok' && 'border-success/30 bg-success/10 text-success',
         tone === 'warn' && 'border-warning/40 bg-warning/12 text-warning',
         tone === 'bad' && 'border-destructive/30 bg-destructive/10 text-destructive',
-        tone === 'info' && 'border-primary/25 bg-primary/8 text-primary',
+        tone === 'info' && 'border-primary/25 bg-primary/10 text-primary',
       )}
     >
+      <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden />
       {children}
     </span>
   );
@@ -350,13 +366,13 @@ function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info'; childr
 function Count({ label, value, alert, to }: { label: string; value: number | string | undefined; alert?: boolean; to?: string }) {
   const body = (
     <>
-      <span className={cn('block font-mono text-xl font-semibold tabular-nums', alert && 'text-destructive')}>{value ?? '—'}</span>
-      <span className="block text-[11px] text-muted-foreground">{label}</span>
+      <span className={cn('block font-mono text-[22px] leading-tight font-bold tabular-nums', alert && 'text-destructive')}>{value ?? '—'}</span>
+      <span className="mt-0.5 block font-mono text-[10px] tracking-wider text-muted-foreground uppercase">{label}</span>
     </>
   );
-  const cls = cn('rounded-xl border bg-background/60 px-2 py-2.5 text-center', alert && 'border-destructive/30 bg-destructive/6');
+  const cls = cn('block rounded-lg border bg-card px-2 py-2.5 text-center shadow-card', alert && 'border-destructive/30 bg-destructive/6');
   return to ? (
-    <Link to={to} className={cn(cls, 'transition hover:border-primary/40')}>
+    <Link to={to} className={cn(cls, 'transition outline-none hover:border-primary/40 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40')}>
       {body}
     </Link>
   ) : (
@@ -366,10 +382,14 @@ function Count({ label, value, alert, to }: { label: string; value: number | str
 
 function FooterLink({ onClick, children, extra }: { onClick: () => void; children: ReactNode; extra?: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-2 text-left text-sm font-medium text-foreground/80 hover:text-foreground">
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full cursor-pointer items-center gap-2 rounded-md text-left text-sm font-semibold text-foreground/80 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/40"
+    >
       <span className="flex-1">{children}</span>
       {extra}
-      <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
+      <ChevronRight className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
     </button>
   );
 }
@@ -450,26 +470,28 @@ function AttendanceCard({ onOpen }: { onOpen: (to?: string) => void }) {
         </FooterLink>
       }
     >
-      <dl className="divide-y rounded-xl border bg-background/60 text-sm">
+      <dl className="divide-y rounded-lg border bg-card text-sm shadow-card">
         <div className="flex items-center justify-between px-3 py-2">
           <dt className="text-muted-foreground">Time now</dt>
-          <dd className="font-mono font-medium tabular-nums">{clock(now)}</dd>
+          <dd className="font-mono font-semibold tabular-nums">{clock(now)}</dd>
         </div>
         <div className="flex items-center justify-between px-3 py-2">
           <dt className="text-muted-foreground">Checked in</dt>
-          <dd className="font-mono font-medium">{timeOf(a?.check_in)}</dd>
+          <dd className={cn('font-mono font-semibold', a?.check_in && 'text-success')}>{timeOf(a?.check_in)}</dd>
         </div>
         <div className="flex items-center justify-between px-3 py-2">
           <dt className="text-muted-foreground">Checked out</dt>
-          <dd className="font-mono font-medium">{timeOf(a?.check_out)}</dd>
+          <dd className="font-mono font-semibold">{timeOf(a?.check_out)}</dd>
         </div>
       </dl>
       {(balances.data?.length ?? 0) > 0 && (
         <div className="grid grid-cols-2 gap-2">
           {balances.data!.slice(0, 2).map((b) => (
-            <div key={b.leave_type} className="rounded-xl border bg-background/60 px-3 py-2">
+            <div key={b.leave_type} className="rounded-lg border bg-card px-3 py-2 shadow-card">
               <p className="truncate font-mono text-[10px] tracking-wider text-muted-foreground uppercase">{b.name}</p>
-              <p className="font-mono text-sm font-semibold">{b.balance} left</p>
+              <p className="font-mono text-sm font-bold">
+                {b.balance} <span className="font-medium text-muted-foreground">left</span>
+              </p>
             </div>
           ))}
         </div>
@@ -499,12 +521,19 @@ function TasksCard({ onOpen }: { onOpen: (to?: string) => void }) {
         <Count label="Overdue" value={t?.overdue} alert={!!t?.overdue} to="/tasks/tasks?tab=my&overdue=1" />
         <Count label="To accept" value={waiting.data?.accept} to="/tasks/tasks?tab=reviews" />
       </div>
-      <ul className="space-y-1.5 text-sm text-muted-foreground">
+      <ul className="space-y-1.5 text-[13.5px] text-muted-foreground">
         <li className="flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-app-tasks" aria-hidden /> {waiting.data?.requests ?? 0} change requests to decide
+          <span className="size-1.5 rounded-full bg-app-tasks" aria-hidden />
+          <span>
+            <span className="font-mono font-semibold text-foreground">{waiting.data?.requests ?? 0}</span> change requests to decide
+          </span>
         </li>
         <li className="flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-app-tasks" aria-hidden /> {t?.completed ?? 0} completed · {t?.in_time ?? 0} on time
+          <span className="size-1.5 rounded-full bg-app-tasks" aria-hidden />
+          <span>
+            <span className="font-mono font-semibold text-foreground">{t?.completed ?? 0}</span> completed · <span className="font-mono font-semibold text-foreground">{t?.in_time ?? 0}</span> on
+            time
+          </span>
         </li>
       </ul>
     </WorkspaceCard>
@@ -546,8 +575,9 @@ function AssetsCard({ access, onOpen }: { access: Access; onOpen: (to?: string) 
             <Count label="Exit items" value={d.totals.exitPendingItems} alert={d.totals.exitPendingItems > 0} />
             <Count label="Open tickets" value={d.totals.openTickets} />
           </div>
-          <p className="text-sm text-muted-foreground">
-            {d.totals.available} available · {d.totals.pendingRequests} requests waiting
+          <p className="text-[13.5px] text-muted-foreground">
+            <span className="font-mono font-semibold text-foreground">{d.totals.available}</span> available ·{' '}
+            <span className="font-mono font-semibold text-foreground">{d.totals.pendingRequests}</span> requests waiting
           </p>
         </>
       ) : (
@@ -558,8 +588,8 @@ function AssetsCard({ access, onOpen }: { access: Access; onOpen: (to?: string) 
             <Count label="Tickets" value={d.tickets.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length} />
           </div>
           {d.myAssets[0] && (
-            <p className="truncate rounded-lg border bg-background/60 px-3 py-2 font-mono text-xs">
-              {d.myAssets[0].name} · {d.myAssets[0].assetTag}
+            <p className="truncate rounded-lg border bg-card px-3 py-2 font-mono text-xs shadow-card">
+              {d.myAssets[0].name} · <span className="text-primary">{d.myAssets[0].assetTag}</span>
             </p>
           )}
         </>
@@ -581,26 +611,31 @@ function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
   ];
   return (
     <section aria-labelledby="admin-title">
-      <h2 id="admin-title" className="mb-3 flex items-center gap-2 text-lg font-semibold tracking-tight">
-        <ShieldCheck className="size-5 text-app-admin" aria-hidden /> Admin
+      <h2 id="admin-title" className="mb-4 flex items-center gap-2 text-lg font-bold tracking-tight">
+        <span className="grid size-7 place-items-center rounded-lg bg-app-admin/12 text-app-admin" aria-hidden>
+          <ShieldCheck className="size-4" />
+        </span>
+        Admin
+        <span aria-hidden className="ml-2 h-px flex-1 bg-border" />
       </h2>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         {items.map((x) => (
           <button
             key={x.to}
             type="button"
             onClick={() => onOpen(x.to)}
-            className="group rounded-2xl border bg-card p-4 text-left shadow-xs transition hover:border-primary/40 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="group relative overflow-hidden rounded-xl border bg-card p-5 text-left shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-app-admin/40 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
           >
-            <span className="flex items-start justify-between gap-2">
-              <span className="grid size-9 place-items-center rounded-lg bg-app-admin/10 text-app-admin" aria-hidden>
-                <x.icon className="size-4.5" />
+            <span aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-28 rounded-full bg-app-admin/8 blur-2xl" />
+            <span className="relative flex items-start justify-between gap-2">
+              <span className="grid size-10 place-items-center rounded-xl bg-app-admin/12 text-app-admin" aria-hidden>
+                <x.icon className="size-5" />
               </span>
-              {x.count && <span className="rounded-full border bg-background px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{x.count}</span>}
+              {x.count && <span className="rounded-full border bg-background px-2.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">{x.count}</span>}
             </span>
-            <span className="mt-3 block font-semibold">{x.name}</span>
-            <span className="block text-xs text-muted-foreground">{x.blurb}</span>
-            <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
+            <span className="relative mt-4 block text-[15px] font-bold tracking-tight">{x.name}</span>
+            <span className="relative block text-[13px] text-muted-foreground">{x.blurb}</span>
+            <span className="relative mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">
               Open <ChevronRight className="size-3.5 transition group-hover:translate-x-0.5" aria-hidden />
             </span>
           </button>
@@ -614,10 +649,15 @@ function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
 function PortalBottomBar({ workspaces }: { workspaces: Workspace[] }) {
   const items = [{ to: '/?choose', label: 'Home', icon: Home }, ...workspaces.map((w) => ({ to: WORKSPACE_HOME[w], label: WORKSPACE_NAMES[w], icon: WORKSPACE_LOOK[w].icon }))];
   return (
-    <nav aria-label="Quick menu" className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
+    <nav
+      aria-label="Quick menu"
+      className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t bg-card/95 pb-[env(safe-area-inset-bottom)] shadow-card-lg backdrop-blur sm:hidden"
+    >
       {items.map((i, n) => (
-        <Link key={i.to} to={i.to} className={cn('flex flex-col items-center gap-0.5 px-1 py-2 text-[11px] text-muted-foreground', n === 0 && 'font-medium text-primary')}>
-          <i.icon className="size-5" aria-hidden />
+        <Link key={i.to} to={i.to} className={cn('flex flex-col items-center gap-0.5 px-1 pt-1.5 pb-2 text-[11px] text-muted-foreground', n === 0 && 'font-semibold text-primary')}>
+          <span className={cn('rounded-full px-3 py-0.5', n === 0 && 'bg-accent')}>
+            <i.icon className="size-5" aria-hidden />
+          </span>
           {i.label}
         </Link>
       ))}

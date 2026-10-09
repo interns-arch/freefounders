@@ -17,14 +17,36 @@ export const STATUS_TONE: Record<AttendanceStatus, Tone> = {
 
 /** Background for a calendar day (theme colours only). */
 export const STATUS_CELL: Record<string, string> = {
-  present: 'bg-success/15 border-success/30',
-  late: 'bg-warning/18 border-warning/40',
-  half_day: 'bg-warning/10 border-warning/30',
-  absent: 'bg-destructive/12 border-destructive/30',
+  present: 'bg-success/14 border-success/30',
+  late: 'bg-warning/16 border-warning/40',
+  half_day: 'bg-warning/8 border-warning/30',
+  absent: 'bg-destructive/10 border-destructive/30',
   leave: 'bg-info/12 border-info/30',
   holiday: 'bg-primary/10 border-primary/25',
-  week_off: 'bg-muted border-border',
+  week_off: 'bg-muted/70 border-border',
   future: 'bg-card border-border',
+};
+
+/** Text colour for a day's status tag. */
+export const STATUS_TEXT: Record<string, string> = {
+  present: 'text-success',
+  late: 'text-warning',
+  half_day: 'text-warning',
+  absent: 'text-destructive',
+  leave: 'text-info',
+  holiday: 'text-primary',
+  week_off: 'text-muted-foreground',
+};
+
+/** The small dot used in legends and calendar cells. */
+export const STATUS_DOT: Record<string, string> = {
+  present: 'bg-success',
+  late: 'bg-warning',
+  half_day: 'bg-warning/60',
+  absent: 'bg-destructive',
+  leave: 'bg-info',
+  holiday: 'bg-primary',
+  week_off: 'bg-muted-foreground/50',
 };
 
 export function AttendanceChip({ status, extra }: { status: AttendanceStatus; extra?: string }) {
@@ -53,7 +75,7 @@ export function PunchPhoto({ id, which, label }: { id: number | null | undefined
   if (!url) return null;
   return (
     <>
-      <button type="button" aria-label={label} onClick={() => setOpen(true)} className="ml-1.5 inline-block size-8 cursor-pointer overflow-hidden rounded-md border align-middle hover:ring-2 hover:ring-primary/40">
+      <button type="button" aria-label={label} onClick={() => setOpen(true)} className="ml-1.5 inline-block size-8 cursor-pointer overflow-hidden rounded-lg border shadow-xs align-middle transition hover:ring-2 hover:ring-primary/40">
         <img src={url} alt="" className="size-full object-cover" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>

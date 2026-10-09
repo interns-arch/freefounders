@@ -1,8 +1,9 @@
 import { ASSET_STATUS_LABELS, ASSET_STATUSES, HOLDER_TYPE_LABELS, type HolderType } from '@eam/shared';
-import { AlertTriangle, ArrowRight, Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, PackageCheck, Plus, ScanLine, ShieldAlert, UserPlus, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, PackageCheck, Plus, ScanLine, ShieldAlert, UserPlus, Wrench } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { EnumBadge, HOLDER_ICONS } from '@/components/common/badges';
-import { EmptyState, ErrorState, PageHeader, PageLoader, StatCard } from '@/components/common/page';
+import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { StatTile } from '@/features/assets/components/stat-tile';
 import { Timeline } from '@/features/assets/components/timeline';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Progress } from '@/components/ui/primitives';
@@ -65,10 +66,10 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
       <PageHeader title={`${greeting()}${name ? `, ${name}` : ''}`} description="Here’s what’s happening with your assets today." actions={<QuickActions />} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total assets" value={formatNumber(t.assets)} hint="In the register" icon={Boxes} tone="blue" to="/assets/assets" />
-        <StatCard label="Assigned" value={formatNumber(t.assigned)} hint={`${utilisation}% in use`} icon={PackageCheck} tone="violet" to="/assets/assets?status=ASSIGNED" />
-        <StatCard label="Available" value={formatNumber(t.available)} hint="Ready to assign" icon={CheckCircle2} tone="green" to="/assets/assets?status=AVAILABLE" />
-        <StatCard
+        <StatTile label="Total assets" value={formatNumber(t.assets)} hint="In the register" icon={Boxes} tone="indigo" to="/assets/assets" />
+        <StatTile label="Assigned" value={formatNumber(t.assigned)} hint={`${utilisation}% in use`} icon={PackageCheck} tone="violet" to="/assets/assets?status=ASSIGNED" />
+        <StatTile label="Available" value={formatNumber(t.available)} hint="Ready to assign" icon={CheckCircle2} tone="green" to="/assets/assets?status=AVAILABLE" />
+        <StatTile
           label="Pending exit recoveries"
           value={formatNumber(t.exitPendingItems)}
           hint={`${plural(t.onNotice, 'employee')} on notice`}
@@ -79,10 +80,10 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="In maintenance" value={t.inMaintenance} icon={Wrench} to="/assets/assets?status=IN_MAINTENANCE" />
-        <StatCard label="Open tickets" value={t.openTickets} icon={LifeBuoy} to="/assets/tickets" tone={t.openTickets ? 'red' : 'default'} />
-        <StatCard label="Requests to action" value={t.pendingRequests + t.approvedRequests} hint={`${t.pendingRequests} pending · ${t.approvedRequests} to fulfil`} icon={ClipboardList} to="/assets/requests" />
-        <StatCard label="Warranties expiring (30d)" value={t.warrantyExpiring} hint={t.lost ? `${t.lost} lost asset(s)` : undefined} icon={ShieldAlert} tone={t.warrantyExpiring ? 'amber' : 'default'} to="/assets/assets?warranty=expiring" />
+        <StatTile label="In maintenance" value={t.inMaintenance} hint="Being repaired or serviced" icon={Wrench} tone={t.inMaintenance ? 'amber' : 'default'} to="/assets/assets?status=IN_MAINTENANCE" />
+        <StatTile label="Open tickets" value={t.openTickets} hint="Issues raised against assets" icon={LifeBuoy} to="/assets/tickets" tone={t.openTickets ? 'red' : 'default'} />
+        <StatTile label="Requests to action" value={t.pendingRequests + t.approvedRequests} hint={`${t.pendingRequests} pending · ${t.approvedRequests} to fulfil`} icon={ClipboardList} tone={t.pendingRequests + t.approvedRequests ? 'blue' : 'default'} to="/assets/requests" />
+        <StatTile label="Warranties expiring (30d)" value={t.warrantyExpiring} hint={t.lost ? `${t.lost} lost asset(s)` : 'Next 30 days'} icon={ShieldAlert} tone={t.warrantyExpiring ? 'amber' : 'default'} to="/assets/assets?warranty=expiring" />
       </div>
 
       {can('ticket:manage', 'request:approve', 'request:fulfil') && <QueueCard />}
@@ -96,35 +97,38 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+            <div className="flex h-3.5 gap-px overflow-hidden rounded-full bg-muted">
               {ASSET_STATUSES.filter((s) => s !== 'DISPOSED' && data.byStatus[s]).map((s) => (
                 <div key={s} className={cn('h-full transition-all', ASSET_STATUS_BAR[s])} style={{ width: `${((data.byStatus[s] ?? 0) / statusTotal) * 100}%` }} title={`${ASSET_STATUS_LABELS[s]}: ${data.byStatus[s]}`} />
               ))}
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
               {ASSET_STATUSES.filter((s) => data.byStatus[s]).map((s) => (
-                <Link key={s} to={`/assets/assets?status=${s}`} className="flex items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-muted">
+                <Link key={s} to={`/assets/assets?status=${s}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm transition hover:bg-muted">
                   <span className={cn('size-2.5 rounded-sm', ASSET_STATUS_BAR[s])} />
                   <span className="flex-1 text-muted-foreground">{ASSET_STATUS_LABELS[s]}</span>
-                  <span className="font-medium tabular">{data.byStatus[s]}</span>
+                  <span className="font-mono text-[13px] font-semibold tabular">{data.byStatus[s]}</span>
                 </Link>
               ))}
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">By category</p>
+              <p className="mb-2 font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">By category</p>
+              {!data.byCategory.length && <p className="text-sm text-muted-foreground">No categories hold assets yet.</p>}
               <div className="grid gap-2 sm:grid-cols-2">
                 {data.byCategory.map((c) => {
                   const pct = c.count ? Math.round((c.assigned / c.count) * 100) : 0;
                   return (
-                    <Link key={c.id} to={`/assets/assets?categoryId=${c.id}`} className="flex items-center gap-3 rounded-lg border p-2.5 transition hover:border-primary/40">
-                      <AssetIcon icon={c.icon} color={c.color} size="sm" />
+                    <Link key={c.id} to={`/assets/assets?categoryId=${c.id}`} className="flex items-center gap-3 rounded-xl border bg-muted/20 p-2.5 transition hover:border-primary/40 hover:bg-card hover:shadow-xs">
+                      <AssetIcon icon={c.icon} color={c.color} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2 text-sm">
                           <span className="truncate font-medium">{c.name}</span>
-                          <span className="tabular text-muted-foreground">{c.count}</span>
+                          <span className="font-mono text-xs tabular text-muted-foreground">
+                            <span className="font-semibold text-foreground">{c.assigned}</span>/{c.count} in use
+                          </span>
                         </div>
-                        <Progress value={pct} className="mt-1.5 h-1" indicatorClassName={COLORS[c.color ?? '']?.bar} />
+                        <Progress value={pct} className="mt-1.5 h-1.5" indicatorClassName={COLORS[c.color ?? '']?.bar} />
                       </div>
                     </Link>
                   );
@@ -156,7 +160,7 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
                   const done = x.total - x.pending;
                   return (
                     <li key={x.id}>
-                      <Link to={`/assets/exits/${x.id}`} className="block rounded-lg border p-3 transition hover:border-primary/40">
+                      <Link to={`/assets/exits/${x.id}`} className="block rounded-xl border bg-muted/20 p-3 transition hover:border-primary/40 hover:bg-card hover:shadow-xs">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-sm font-medium">{x.employeeName}</span>
                           <span className={cn('text-xs font-medium', days < 0 ? 'text-destructive' : days <= 3 ? 'text-warning' : 'text-muted-foreground')}>
@@ -188,14 +192,15 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
             </div>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2.5">
+            {!data.byType.length && <EmptyState icon={Boxes} title="No asset types yet" className="py-8" />}
+            <ul className="space-y-1">
               {data.byType.map((ty) => (
                 <li key={ty.id}>
-                  <Link to={`/assets/assets?assetTypeId=${ty.id}&status=AVAILABLE`} className="flex items-center gap-3 text-sm hover:text-primary">
+                  <Link to={`/assets/assets?assetTypeId=${ty.id}&status=AVAILABLE`} className="-mx-1.5 flex items-center gap-3 rounded-md px-1.5 py-1 text-sm transition hover:bg-muted">
                     <AssetIcon icon={ty.icon} color="indigo" size="sm" />
                     <span className="min-w-0 flex-1 truncate">{ty.name}</span>
-                    <span className={cn('tabular font-medium', ty.available === 0 && 'text-destructive')}>{ty.available}</span>
-                    <span className="w-12 text-right tabular text-xs text-muted-foreground">of {ty.total}</span>
+                    <span className={cn('font-mono text-[13px] font-semibold tabular', ty.available === 0 ? 'text-destructive' : 'text-success')}>{ty.available}</span>
+                    <span className="w-12 text-right font-mono text-xs tabular text-muted-foreground">of {ty.total}</span>
                   </Link>
                 </li>
               ))}
@@ -215,8 +220,8 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
               {(Object.entries(data.byHolder) as [HolderType, number][]).map(([h, n]) => {
                 const I = HOLDER_ICONS[h];
                 return (
-                  <Link key={h} to={`/assets/assets?holderType=${h}`} className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:border-primary/40">
-                    <I className="size-3.5 text-muted-foreground" /> {h === 'INVENTORY' ? 'In store' : HOLDER_TYPE_LABELS[h]} <span className="font-semibold tabular">{n}</span>
+                  <Link key={h} to={`/assets/assets?holderType=${h}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/20 px-2.5 py-1.5 text-xs transition hover:border-primary/40 hover:bg-card">
+                    <I className="size-3.5 text-primary" /> {h === 'INVENTORY' ? 'In store' : HOLDER_TYPE_LABELS[h]} <span className="font-mono font-semibold tabular">{n}</span>
                   </Link>
                 );
               })}
@@ -260,7 +265,9 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
       <Card>
         <CardHeader>
           <div>
-            <CardTitle>Recent activity</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="size-4 text-primary" /> Recent activity
+            </CardTitle>
             <CardDescription>Every change is recorded permanently</CardDescription>
           </div>
           <Button variant="ghost" size="xs" asChild>
@@ -306,19 +313,19 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
   return (
     <div className="mx-auto max-w-3xl space-y-4 sm:space-y-5">
       {/* Welcome */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-app-attendance p-5 text-white shadow-lg shadow-primary/20 sm:p-6">
-        <div className="absolute -top-16 -right-10 size-48 rounded-full bg-white/10 blur-2xl" />
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-2 via-primary to-primary p-5 text-primary-foreground shadow-lg shadow-primary/20 sm:p-6">
+        <div className="absolute -top-16 -right-10 size-48 rounded-full bg-primary-foreground/10 blur-2xl" />
         <div className="relative flex items-start gap-4">
           <div className="min-w-0 flex-1">
-            {company.short && <p className="text-xs font-medium tracking-wide text-primary uppercase">{company.short}</p>}
+            {company.short && <p className="font-mono text-[11px] font-medium tracking-wider text-primary-foreground/75 uppercase">{company.short}</p>}
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">
               {greeting()}
               {name ? `, ${name}` : ''}
             </h1>
-            <p className="mt-1 text-sm text-primary">
+            <p className="mt-1 text-sm text-primary-foreground/80">
               {data.myAssets.length ? `You have ${plural(data.myAssets.length, 'item')} from the company.` : 'No company items are assigned to you.'}
             </p>
-            {me?.employee && <span className="mt-3 inline-block rounded-md bg-white/15 px-2 py-0.5 font-mono text-xs">{me.employee.employeeCode}</span>}
+            {me?.employee && <span className="mt-3 inline-block rounded-md bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs">{me.employee.employeeCode}</span>}
           </div>
           {me?.employee && links.ready && (
             <Link to={`/assets/employees/${me.employee.id}`} className="shrink-0 rounded-xl bg-white p-1.5 shadow-md transition active:scale-95" aria-label="Open my QR">

@@ -22,9 +22,9 @@ export function RouteError() {
   const message = isRouteErrorResponse(err) ? `${err.status} ${err.statusText}` : err instanceof Error ? err.message : 'Something went wrong';
   const stale = /dynamically imported module|Failed to fetch|Loading chunk/i.test(message);
   return (
-    <div className="flex min-h-dvh items-center justify-center p-6">
-      <div className="max-w-md space-y-3 text-center">
-        <h1 className="text-xl font-semibold">{stale ? 'A new version is available' : 'Something went wrong'}</h1>
+    <div className="flex min-h-dvh items-center justify-center bg-background p-6">
+      <div className="max-w-md space-y-3 rounded-xl border bg-card p-8 text-center shadow-card-lg">
+        <h1 className="text-xl font-bold tracking-tight">{stale ? 'A new version is available' : 'Something went wrong'}</h1>
         <p className="text-sm text-muted-foreground">{stale ? 'Reload to get the latest FreeFounders.' : message}</p>
         <Button onClick={() => window.location.reload()}>Reload</Button>
       </div>

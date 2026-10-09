@@ -212,7 +212,7 @@ function FieldList({ fields, owner }: { fields: FieldDefinition[]; owner: { cate
   return (
     <>
       {order.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center">
+        <div className="rounded-xl border border-dashed bg-muted/20 p-6 text-center">
           <p className="text-sm text-muted-foreground">No fields yet.</p>
           <Button size="sm" variant="outline" className="mt-3" onClick={() => setAdding(true)}>
             <Plus /> Add the first field
@@ -454,15 +454,15 @@ function CategoryPanel({ category, types, onOpenType, onDeleted }: { category: C
               <ul className="grid gap-2 sm:grid-cols-2">
                 {types.map((t) => (
                   <li key={t.id}>
-                    <button type="button" onClick={() => onOpenType(t.id)} className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-left transition hover:border-primary/40">
-                      <AssetIcon icon={t.icon ?? t.categoryIcon} color={t.categoryColor} size="sm" />
+                    <button type="button" onClick={() => onOpenType(t.id)} className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border bg-muted/20 p-3 text-left transition hover:-translate-y-px hover:border-primary/40 hover:bg-card hover:shadow-md hover:shadow-primary/5">
+                      <AssetIcon icon={t.icon ?? t.categoryIcon} color={t.categoryColor} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{t.name}</span>
-                        <span className="block text-xs text-muted-foreground">
+                        <span className="block truncate text-sm font-medium group-hover:text-primary">{t.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground tabular">
                           {t.fieldCount} fields · {t.assetCount} assets
                         </span>
                       </span>
-                      <ChevronRight className="size-4 text-muted-foreground" />
+                      <ChevronRight className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
                     </button>
                   </li>
                 ))}

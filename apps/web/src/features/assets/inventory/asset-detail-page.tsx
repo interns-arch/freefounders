@@ -86,12 +86,18 @@ export default function AssetDetailPage() {
         <Link to="/assets/assets" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-3.5" /> Assets
         </Link>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <Card className="relative overflow-hidden p-4 sm:p-5">
+          <span className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-3xl" aria-hidden />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
-            <AssetIcon icon={a.type.icon ?? a.category.icon} color={a.category.color} size="lg" />
+            <AssetIcon icon={a.type.icon ?? a.category.icon} color={a.category.color} size="xl" className="hidden sm:inline-flex" />
+            <AssetIcon icon={a.type.icon ?? a.category.icon} color={a.category.color} size="lg" className="sm:hidden" />
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">{a.name}</h1>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+                {a.category.name} · {a.type.name}
+              </p>
+              <h1 className="mt-0.5 truncate text-xl font-semibold tracking-tight sm:text-2xl">{a.name}</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <button
                   type="button"
                   className="inline-flex cursor-pointer items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground hover:bg-accent"
@@ -106,15 +112,19 @@ export default function AssetDetailPage() {
                 </button>
                 <AssetStatusBadge status={a.status} />
                 <ConditionBadge condition={a.condition} />
-                <span>
-                  {a.type.name} · {a.category.name}
-                </span>
+                {a.serialNumber && <span className="font-mono text-xs">SN {a.serialNumber}</span>}
                 {pooled && <Badge tone="cyan">Tracked by quantity</Badge>}
                 {consumable && <Badge tone="green">One-time — no return</Badge>}
               </div>
+              {(a.holderName || a.manufacturer || a.model) && (
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  {(a.manufacturer || a.model) && <span className="text-muted-foreground">{[a.manufacturer, a.model].filter(Boolean).join(' ')}</span>}
+                  {a.holderName && !pooled && <HolderLabel type={a.holderType} name={a.holderName} className="font-medium" />}
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {primary.map((x) => {
               const Icon = x === 'assign' ? UserPlus : x === 'transfer' ? ArrowRightLeft : Undo2;
               return (
@@ -155,7 +165,8 @@ export default function AssetDetailPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
+          </div>
+        </Card>
       </div>
 
       {/* Alerts */}
@@ -186,7 +197,8 @@ export default function AssetDetailPage() {
       )}
 
       {/* Lifecycle stepper */}
-      <Card className="no-scrollbar overflow-x-auto p-4">
+      <Card className="no-scrollbar overflow-x-auto px-4 pt-3 pb-4">
+        <p className="mb-3 font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Lifecycle</p>
         <ol className="flex min-w-[720px] items-center">
           {LIFECYCLE_STAGES.map((s, i) => {
             const done = stageIndex >= 0 && i < stageIndex;
@@ -197,7 +209,7 @@ export default function AssetDetailPage() {
                   <span
                     className={cn(
                       'flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-semibold',
-                      current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white' : 'border-primary bg-primary text-primary-foreground') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
+                      current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white ring-4 ring-destructive/15' : 'border-primary bg-gradient-to-b from-brand-2 to-primary text-primary-foreground ring-4 ring-primary/15') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
                     )}
                   >
                     {done ? <Check className="size-3" /> : i + 1}
@@ -334,8 +346,8 @@ export default function AssetDetailPage() {
                   const link = al.employeeId ? `/assets/employees/${al.employeeId}` : null;
                   return (
                     <div className="space-y-3">
-                      <div className="rounded-lg border bg-muted/30 p-3">
-                        <p className="text-xs text-muted-foreground">{al.holderType === 'INVENTORY' ? 'In store at' : `Assigned to (${humanize(al.holderType).toLowerCase()})`}</p>
+                      <div className="rounded-xl border border-info/25 bg-info/8 p-3">
+                        <p className="font-mono text-[11px] font-medium tracking-wider text-info uppercase">{al.holderType === 'INVENTORY' ? 'In store at' : `Assigned to (${humanize(al.holderType).toLowerCase()})`}</p>
                         {link ? (
                           <Link to={link} className="mt-1 block font-medium hover:text-primary hover:underline">
                             <HolderLabel type={al.holderType} name={al.holderName} />
@@ -387,7 +399,11 @@ export default function AssetDetailPage() {
               </Button>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-3">
-              {links.ready && <QRCode value={links.asset(a.qrCode)} size={148} className="border p-1.5" />}
+              {links.ready && (
+                <div className="rounded-2xl border bg-gradient-to-br from-primary/8 to-transparent p-3">
+                  <QRCode value={links.asset(a.qrCode)} size={148} className="rounded-lg border bg-white p-1.5" />
+                </div>
+              )}
               <Barcode value={a.assetTag} height={34} className="text-foreground dark:invert" />
               <p className="font-mono text-sm font-semibold">{a.assetTag}</p>
               <p className="text-center text-xs text-muted-foreground">Scan with a phone camera or a USB scanner to open this asset.</p>

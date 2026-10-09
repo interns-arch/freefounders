@@ -1,5 +1,5 @@
 import { type PersonOption, useTaskActivities, useTaskPeople } from '@freefounders/core/tasks';
-import { Search } from 'lucide-react';
+import { Activity, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { EmptyState, ErrorState } from '@/components/common/page';
@@ -9,7 +9,7 @@ import { Avatar, Card, Skeleton } from '@/components/ui/primitives';
 import { fmtDT } from '@/features/tasks/shared';
 import { useDebounced } from '@/lib/url-state';
 import { cn } from '@/lib/utils';
-import { Segmented, TaskCode } from './task-bits';
+import { CountPill, Segmented, TaskCode } from './task-bits';
 
 /** Everything done on the tasks I can see; click a row to open its task. The chips pick who did it. */
 export function ActivitiesTab({ href }: { href: (id: number) => string }) {
@@ -78,11 +78,11 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
                 aria-pressed={on}
                 title={on ? `Showing only ${c.name} — click to clear` : `Show only ${c.name}`}
                 onClick={() => setActor(on ? '' : String(c.user))}
-                className={cn('inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-card py-0.5 pr-2.5 pl-0.5 text-[13px] transition hover:border-primary/40', on && 'border-primary bg-primary/10 text-primary')}
+                className={cn('inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-card py-0.5 pr-2.5 pl-0.5 text-[13px] font-medium shadow-xs transition hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none', on && 'border-primary bg-primary/10 text-primary')}
               >
                 <Avatar name={c.name} className="size-6 text-[10px]" />
                 {c.name}
-                <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular">{c.count}</span>
+                <CountPill tone={on ? 'primary' : 'neutral'}>{c.count}</CountPill>
               </button>
             );
           })}
@@ -98,7 +98,7 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
         ) : list.error ? (
           <ErrorState error={list.error} onRetry={() => list.refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title="No task activity in this window." />
+          <EmptyState icon={Activity} title="No task activity in this window." description="Try a wider window or clear the people filters." />
         ) : (
           <ul className="divide-y" aria-label="Activity">
             {rows.map((a) => (
@@ -108,17 +108,17 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
                   disabled={!a.task}
                   title={a.task ? 'Open this task' : undefined}
                   onClick={() => a.task && navigate(href(a.task), { state: { fromList: true } })}
-                  className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left transition hover:bg-muted/40 disabled:cursor-default"
+                  className="flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none disabled:cursor-default"
                 >
-                  <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                  <Avatar name={a.actor?.name || 'System'} className="mt-0.5 size-7 text-[10px]" />
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="flex flex-wrap items-center gap-1.5">
                       {a.task_code && <TaskCode code={a.task_code} />}
-                      <strong>{a.task_title}</strong>
+                      <strong className="font-semibold">{a.task_title}</strong>
                       <span className="text-muted-foreground">{a.text}</span>
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {a.actor?.name || 'System'} · {fmtDT(a.created_at)}
+                      <span className="font-semibold text-foreground/80">{a.actor?.name || 'System'}</span> · {fmtDT(a.created_at)}
                       {a.task_assignee && <> · task of {a.task_assignee}</>}
                     </span>
                   </span>

@@ -21,6 +21,7 @@ import { Card, Skeleton } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
+import { ASSET_STATUS_BAR } from '@/lib/status';
 import { useAssetList, useAssetType, useAssetTypes, useCategories, usePrefetchAsset } from '@freefounders/core/assets';
 import type { AssetListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
@@ -86,7 +87,7 @@ export default function AssetsPage() {
         <div className="flex min-w-56 items-center gap-3">
           <AssetIcon icon={a.typeIcon ?? a.categoryIcon} color={a.categoryColor} />
           <div className="min-w-0">
-            <div className="truncate font-medium">{a.name}</div>
+            <div className="truncate font-medium transition group-hover:text-primary">{a.name}</div>
             <div className="truncate text-xs text-muted-foreground">
               <span className="font-mono">{a.assetTag}</span>
               {a.serialNumber && <> · {a.serialNumber}</>}
@@ -197,7 +198,7 @@ export default function AssetsPage() {
       />
 
       {/* Status tabs with live counts */}
-      <div className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-1 no-scrollbar">
+      <div className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-1 no-scrollbar" role="tablist" aria-label="Asset status">
         {STATUS_TABS.filter((s) => s === 'ALL' || (counts[s] ?? 0) > 0 || f.status === s).map((s) => {
           const active = (f.status ?? 'ALL') === s;
           const n = s === 'ALL' ? allCount : (counts[s] ?? 0);
@@ -206,13 +207,16 @@ export default function AssetsPage() {
               key={s}
               type="button"
               onClick={() => set({ status: s === 'ALL' ? null : s })}
+              role="tab"
+              aria-selected={active}
               className={cn(
                 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
-                active ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+                active ? 'border-primary/30 bg-primary/10 text-primary shadow-xs' : 'border-transparent text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-xs',
               )}
             >
+              {s !== 'ALL' && <span className={cn('size-1.5 rounded-full', ASSET_STATUS_BAR[s])} aria-hidden />}
               {s === 'ALL' ? 'All' : ASSET_STATUS_LABELS[s]}
-              <span className={cn('rounded px-1.5 text-[11px] tabular', active ? 'bg-primary/15' : 'bg-muted')}>{formatNumber(n)}</span>
+              <span className={cn('rounded-md px-1.5 font-mono text-[11px] tabular', active ? 'bg-primary/15' : 'bg-muted')}>{formatNumber(n)}</span>
             </button>
           );
         })}
@@ -220,8 +224,9 @@ export default function AssetsPage() {
 
       <Card className="overflow-hidden">
         {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-2 border-b p-3">
-          <div className="relative min-w-52 flex-1">
+        <div className="space-y-2 border-b bg-muted/20 p-3">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, tag, serial, holder, specs…" className="pl-8" aria-label="Search assets" />
             {search && (
@@ -229,7 +234,17 @@ export default function AssetsPage() {
                 <X className="size-3.5" />
               </button>
             )}
+            </div>
+            <div className="flex shrink-0 rounded-lg border bg-card p-0.5">
+              <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('table')} aria-label="Table view" aria-pressed={view === 'table'} className={cn(view === 'table' && 'bg-primary/10 text-primary hover:bg-primary/15')}>
+                <List />
+              </Button>
+              <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('cards')} aria-label="Card view" aria-pressed={view === 'cards'} className={cn(view === 'cards' && 'bg-primary/10 text-primary hover:bg-primary/15')}>
+                <LayoutGrid />
+              </Button>
+            </div>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
           <NativeSelect className="w-auto min-w-36" value={f.categoryId ?? ''} onChange={(e) => set({ categoryId: e.target.value, assetTypeId: null })} aria-label="Category">
             <option value="">All categories</option>
             {(categories.data ?? []).map((c) => (
@@ -238,9 +253,11 @@ export default function AssetsPage() {
               </option>
             ))}
           </NativeSelect>
-          <div className="w-44">
+          <div className="w-44 shrink-0">
             <Combobox value={f.assetTypeId ?? null} onChange={(v) => set({ assetTypeId: v })} options={typeOptions} placeholder="All types" searchPlaceholder="Search types…" />
           </div>
+          {seesAll && (
+          <>
           <NativeSelect className="hidden w-auto min-w-32 lg:block" value={f.holderType ?? ''} onChange={(e) => set({ holderType: e.target.value, holderId: null })} aria-label="Held by">
             <option value="">Any holder</option>
             {ASSIGNABLE_HOLDERS.map((h) => (
@@ -265,14 +282,9 @@ export default function AssetsPage() {
               </option>
             ))}
           </NativeSelect>
+          </>
+          )}
           <AttributeFilters categoryId={f.categoryId} assetTypeId={f.assetTypeId} values={f} onApply={(p) => set(p)} />
-          <div className="ml-auto flex rounded-lg border p-0.5">
-            <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('table')} aria-label="Table view">
-              <List />
-            </Button>
-            <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('cards')} aria-label="Card view">
-              <LayoutGrid />
-            </Button>
           </div>
         </div>
 
@@ -283,7 +295,7 @@ export default function AssetsPage() {
                 key={af.key}
                 type="button"
                 onClick={() => set({ [af.key]: null, ...(af.key === 'holderType' ? { holderId: null } : {}) })}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-card px-2 py-0.5 text-xs hover:border-destructive/40"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-primary/25 bg-primary/8 px-2 py-0.5 text-xs text-primary transition hover:border-destructive/40 hover:bg-destructive/8 hover:text-destructive"
               >
                 {af.label} <X className="size-3" />
               </button>
@@ -296,8 +308,10 @@ export default function AssetsPage() {
 
         {/* Bulk action bar */}
         {selected.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-b bg-primary/5 px-3 py-2 text-sm">
-            <span className="font-medium">{selected.size} selected</span>
+          <div className="flex flex-wrap items-center gap-2 border-b border-primary/20 bg-primary/8 px-3 py-2 text-sm">
+            <span className="inline-flex items-center gap-1.5 font-medium text-primary">
+              <span className="rounded-md bg-primary px-1.5 font-mono text-[11px] text-primary-foreground tabular">{selected.size}</span> selected
+            </span>
             <div className="mx-1 h-4 w-px bg-border" />
             {can('asset:assign') && (
               <Button size="xs" variant="outline" onClick={() => setBulk('assign')}>
@@ -329,7 +343,7 @@ export default function AssetsPage() {
             onRetry={() => query.refetch()}
             onRowClick={(a) => navigate(`/assets/assets/${a.id}`)}
             onRowHover={prefetch}
-            selectable
+            selectable={seesAll}
             selected={selected}
             onSelectedChange={setSelected}
             sort={{ key: f.sort, dir: f.dir as 'asc' | 'desc' }}
@@ -349,12 +363,12 @@ export default function AssetsPage() {
                     type="button"
                     onMouseEnter={() => prefetch(a)}
                     onClick={() => navigate(`/assets/assets/${a.id}`)}
-                    className={cn('flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-4 text-left transition hover:border-primary/40 hover:shadow-sm', selected.has(a.id) && 'border-primary ring-1 ring-primary/30')}
+                    className={cn('group flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-4 text-left transition hover:-translate-y-px hover:border-primary/40 hover:shadow-md hover:shadow-primary/5', selected.has(a.id) && 'border-primary ring-1 ring-primary/30')}
                   >
                     <div className="flex items-start gap-3">
                       <AssetIcon icon={a.typeIcon ?? a.categoryIcon} color={a.categoryColor} size="lg" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{a.name}</p>
+                        <p className="truncate font-medium group-hover:text-primary">{a.name}</p>
                         <p className="truncate font-mono text-xs text-muted-foreground">{a.assetTag}</p>
                         <p className="truncate text-xs text-muted-foreground">{a.typeName}</p>
                       </div>

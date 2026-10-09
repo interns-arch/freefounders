@@ -48,6 +48,21 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* Soft shadows (the old app's --shadow / --shadow-lg): shadow-card, shadow-card-lg, shadow-pop. */
+  --shadow-card: var(--sh-card);
+  --shadow-card-lg: var(--sh-card-lg);
+  --shadow-pop: var(--sh-pop);
+}
+
+:root {
+  --sh-card: 0 1px 2px rgb(16 32 26 / 0.05), 0 2px 8px rgb(16 32 26 / 0.04);
+  --sh-card-lg: 0 2px 4px rgb(16 32 26 / 0.05), 0 10px 28px rgb(16 32 26 / 0.08);
+  --sh-pop: 0 6px 24px rgb(16 32 26 / 0.14), 0 1px 3px rgb(16 32 26 / 0.06);
+}
+.dark {
+  --sh-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.25);
+  --sh-card-lg: 0 2px 4px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.45);
+  --sh-pop: 0 8px 28px rgb(0 0 0 / 0.55), 0 1px 3px rgb(0 0 0 / 0.4);
 }
 
 @layer base {
@@ -59,6 +74,10 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply tracking-tight;
+    text-wrap: balance;
   }
   ::selection {
     @apply bg-primary/20;

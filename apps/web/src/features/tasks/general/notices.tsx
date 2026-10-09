@@ -97,38 +97,43 @@ function NoticeFeed() {
       {!q.data && !q.error && <Skeleton className="h-40" />}
       {q.data?.length === 0 && (
         <Card>
-          <EmptyState icon={Megaphone} title="No notices here" />
+          <EmptyState icon={Megaphone} title="No notices here" description={search || filter ? 'Nothing matches this filter.' : 'Company announcements show up on this board.'} />
         </Card>
       )}
       <ul className="grid gap-2">
         {q.data?.map((n) => {
           const Icon = PRIORITY_ICON[n.priority] ?? Pin;
           const isOpen = openId === n.id;
+          const bubble = n.priority === 'urgent' ? 'bg-destructive/10 text-destructive' : n.priority === 'important' ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary';
           return (
             <li key={n.id}>
               <div
                 className={cn(
-                  'rounded-xl border bg-card transition',
-                  !n.read && 'border-primary/30 bg-primary/5',
+                  'rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] transition hover:border-primary/40 hover:shadow-sm',
+                  !n.read && 'border-primary/30 bg-gradient-to-r from-primary/8 to-card',
                   n.priority === 'urgent' && 'border-l-4 border-l-destructive',
                   n.priority === 'important' && 'border-l-4 border-l-warning',
+                  isOpen && 'border-primary/40',
                 )}
               >
-                <button type="button" aria-expanded={isOpen} onClick={() => open(n)} className="flex w-full cursor-pointer items-start gap-3 p-3 text-left">
-                  <Icon className={cn('mt-0.5 size-4 shrink-0', n.priority === 'urgent' ? 'text-destructive' : n.priority === 'important' ? 'text-warning' : 'text-muted-foreground')} />
+                <button type="button" aria-expanded={isOpen} onClick={() => open(n)} className="flex w-full cursor-pointer items-start gap-3 p-3 text-left sm:p-3.5">
+                  <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', bubble)}>
+                    <Icon className="size-4" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2">
-                      <strong className="text-sm">{n.title}</strong>
+                      <strong className={cn('text-sm', !n.read && 'font-bold')}>{n.title}</strong>
                       {n.category && <Chip tone="primary">{n.category}</Chip>}
-                      {!n.read && <span className="size-2 rounded-full bg-primary" aria-label="Unread" />}
+                      {n.priority !== 'normal' && <Chip tone={n.priority === 'urgent' ? 'danger' : 'warning'}>{n.priority_display}</Chip>}
+                      {!n.read && <span className="size-2 rounded-full bg-primary ring-4 ring-primary/15" aria-label="Unread" />}
                     </span>
-                    <span className="block text-xs text-muted-foreground">
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
                       {n.author_detail?.name || '—'} · {fmtWhen(n.publish_at || n.created_at)}
                     </span>
                   </span>
                 </button>
                 {isOpen && (
-                  <div className="space-y-2 px-3 pb-3 pl-10 text-sm whitespace-pre-line">
+                  <div className="mx-3 mb-3 space-y-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm whitespace-pre-line sm:ml-[3.75rem]">
                     {n.content ? <Linkify text={n.content} /> : '—'}
                     {n.attachment_url && (
                       <div>

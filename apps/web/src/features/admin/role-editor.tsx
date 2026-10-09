@@ -21,7 +21,7 @@ import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/overlays';
 import { Checkbox } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
-import { ErrorNote } from './parts';
+import { AppChip, ErrorNote } from './parts';
 
 const key = (g: Pick<Grant, 'app' | 'permission'>) => `${g.app}:${g.permission}`;
 
@@ -106,19 +106,25 @@ export function RoleEditor({ role, catalogue, onClose }: { role: Role | null; ca
 
             <div className="space-y-5">
               {groups.map((app) => (
-                <section key={app.app} aria-label={`${APP_NAMES[app.app]} permissions`} className="rounded-lg border">
-                  <h3 className={cn('border-b bg-muted/40 px-4 py-2 text-sm font-semibold', APP_HEADING[app.app])}>{APP_NAMES[app.app]}</h3>
+                <section key={app.app} aria-label={`${APP_NAMES[app.app]} permissions`} className="overflow-hidden rounded-lg border shadow-card">
+                  <h3 className={cn('flex items-center gap-2 border-b bg-muted/40 px-4 py-2.5 text-sm font-bold', APP_HEADING[app.app])}>
+                    <AppChip app={app.app} />
+                    <span className="sr-only">{APP_NAMES[app.app]}</span>
+                    <span className="ml-auto font-mono text-[11px] font-medium text-muted-foreground">
+                      {[...grants.values()].filter((g) => g.app === app.app).length} / {app.groups.reduce((n, g) => n + g.permissions.length, 0)} on
+                    </span>
+                  </h3>
                   <div className="divide-y">
                     {app.groups.map((g) => (
                       <div key={g.name} className="px-4 py-3">
-                        <h4 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{g.name}</h4>
-                        <ul className="space-y-1.5">
+                        <h4 className="mb-2 font-mono text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{g.name}</h4>
+                        <ul className="space-y-1">
                           {g.permissions.map((p) => {
                             const grant = grants.get(key({ app: app.app, permission: p.key }));
                             const id = `perm-${app.app}-${p.key}`;
                             return (
-                              <li key={p.key} className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="flex items-center gap-2">
+                              <li key={p.key} className={cn('-mx-2 flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 transition-colors', grant && 'bg-accent/40')}>
+                                <span className="flex items-center gap-2.5">
                                   <Checkbox
                                     id={id}
                                     checked={!!grant}
@@ -126,12 +132,12 @@ export function RoleEditor({ role, catalogue, onClose }: { role: Role | null; ca
                                     disabled={locked}
                                     aria-label={`${APP_NAMES[app.app]}: ${p.label}`}
                                   />
-                                  <label htmlFor={id} className="cursor-pointer text-sm">
+                                  <label htmlFor={id} className={cn('cursor-pointer text-sm', grant && 'font-medium')}>
                                     {p.label}
                                   </label>
                                 </span>
                                 {p.scopes && grant && (
-                                  <div role="radiogroup" aria-label={`Scope for ${p.label}`} className="inline-flex rounded-md border bg-muted/40 p-0.5">
+                                  <div role="radiogroup" aria-label={`Scope for ${p.label}`} className="inline-flex rounded-full border bg-card p-0.5 shadow-xs">
                                     {p.scopes.map((s) => (
                                       <button
                                         type="button"
@@ -141,8 +147,8 @@ export function RoleEditor({ role, catalogue, onClose }: { role: Role | null; ca
                                         disabled={locked}
                                         onClick={() => setScope(app.app, p.key, s)}
                                         className={cn(
-                                          'cursor-pointer rounded px-2 py-0.5 text-xs text-muted-foreground transition disabled:cursor-not-allowed',
-                                          grant.scope === s && 'bg-card font-medium text-foreground shadow-xs',
+                                          'cursor-pointer rounded-full px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed',
+                                          grant.scope === s && 'bg-gradient-to-b from-brand-2 to-primary font-semibold text-primary-foreground shadow-xs',
                                         )}
                                       >
                                         {SCOPE_LABELS[s]}
@@ -159,7 +165,10 @@ export function RoleEditor({ role, catalogue, onClose }: { role: Role | null; ca
                   </div>
                 </section>
               ))}
-              <p className="text-xs text-muted-foreground">Own = only my records · Team = mine and my direct reports · Department = everyone in my department · Company = everyone.</p>
+              <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">Own</span> = only my records · <span className="font-semibold text-foreground">Team</span> = mine and my direct reports ·{' '}
+                <span className="font-semibold text-foreground">Department</span> = everyone in my department · <span className="font-semibold text-foreground">Company</span> = everyone.
+              </p>
             </div>
 
             {!locked && <DutiesEditor duties={duties} onChange={setDuties} />}
@@ -186,15 +195,21 @@ function DutiesEditor({ duties, onChange }: { duties: Duty[]; onChange: (d: Duty
   const update = (i: number, patch: Partial<Duty>) => onChange(duties.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   return (
     <section aria-label="Duties" className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold">Duties</h3>
-        <p className="text-xs text-muted-foreground">Each duty becomes a task in Tasks for everyone with this role, at the time you choose. Steps become its checklist.</p>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold">Duties</h3>
+          <p className="text-xs text-muted-foreground">Each duty becomes a task in Tasks for everyone with this role, at the time you choose. Steps become its checklist.</p>
+        </div>
+        <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
       {duties.map((d, i) => {
         const n = i + 1;
         return (
-          <fieldset key={d.id ?? `new-${i}`} className="grid gap-3 rounded-lg border p-4">
+          <fieldset key={d.id ?? `new-${i}`} className="relative grid gap-3 rounded-lg border bg-muted/20 p-4 pt-5">
             <legend className="sr-only">Duty {n}</legend>
+            <span aria-hidden className="absolute -top-2.5 left-3 rounded-full border bg-card px-2 font-mono text-[10px] font-semibold tracking-wider text-primary uppercase">
+              Duty {n}
+            </span>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Duty" htmlFor={`duty-${i}-title`}>
                 <Input id={`duty-${i}-title`} value={d.title} onChange={(e) => update(i, { title: e.target.value })} maxLength={150} required aria-label={`Duty ${n} title`} />

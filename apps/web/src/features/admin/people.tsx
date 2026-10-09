@@ -16,7 +16,7 @@ import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/overlays';
-import { Card } from '@/components/ui/primitives';
+import { Avatar, Card } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill } from './parts';
 import { ExitDialog, PersonRolesDialog, PersonSheet } from './people-dialogs';
@@ -77,9 +77,20 @@ export function PeoplePage() {
       key: 'person',
       header: 'Person',
       cell: (p) => (
-        <div className={cn('min-w-40', p.status === 'inactive' && 'opacity-60')}>
-          <p className="font-medium">{p.fullName}</p>
-          <p className="text-xs text-muted-foreground">{[p.email, p.employeeCode].filter(Boolean).join(' · ') || '—'}</p>
+        <div className={cn('flex min-w-44 items-center gap-3', p.status === 'inactive' && 'opacity-60')}>
+          <Avatar name={p.fullName} className="size-9" />
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{p.fullName}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {p.email || <span>—</span>}
+              {p.employeeCode && (
+                <>
+                  {p.email && ' · '}
+                  <span className="font-mono">{p.employeeCode}</span>
+                </>
+              )}
+            </p>
+          </div>
         </div>
       ),
     },
@@ -88,7 +99,7 @@ export function PeoplePage() {
       header: 'Level',
       cell: (p) => (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span>{PLATFORM_ROLE_LABELS[p.platformRole]}</span>
+          <Pill tone={p.platformRole === 'owner' ? 'admin' : p.platformRole === 'admin' ? 'info' : 'neutral'}>{PLATFORM_ROLE_LABELS[p.platformRole]}</Pill>
           {p.status === 'inactive' && <Pill tone="warning">Inactive</Pill>}
           {p.status === 'active' && p.lastWorkingDate && <Pill tone="warning">Leaving {p.lastWorkingDate}</Pill>}
         </div>
@@ -101,7 +112,7 @@ export function PeoplePage() {
       cell: (p) =>
         p.login ? (
           <div className="flex flex-wrap items-center gap-1.5">
-            {p.login.username ?? <span className="text-muted-foreground">email / ID</span>}
+            {p.login.username ? <span className="font-mono text-[13px]">{p.login.username}</span> : <span className="text-muted-foreground">email / ID</span>}
             {p.login.locked && <Pill tone="warning">Locked</Pill>}
           </div>
         ) : (
@@ -196,9 +207,16 @@ export function PeoplePage() {
           </Button>
         }
       />
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input type="search" className="pl-9" placeholder="Search name, email, employee ID or username" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search people" />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-md">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input type="search" className="h-10 pl-9" placeholder="Search name, email, employee ID or username" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search people" />
+        </div>
+        {people.data && (
+          <span className="rounded-full border bg-card px-3 py-1 font-mono text-xs text-muted-foreground shadow-card" aria-live="polite">
+            <span className="font-semibold text-foreground">{people.data.filter((p) => p.status === 'active').length}</span> active · {people.data.length} total
+          </span>
+        )}
       </div>
       <ErrorNote>{error}</ErrorNote>
       <Card className="overflow-hidden">
@@ -238,12 +256,12 @@ export function PeoplePage() {
                   Give these to <strong className="text-foreground">{open.person.fullName}</strong>. They will choose their own password the first time they sign in.
                 </DialogDescription>
               </DialogHeader>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg border bg-muted/40 p-4 text-sm">
-                <dt className="text-muted-foreground">Sign in with</dt>
-                <dd className="font-medium break-all">{open.username ?? open.person.email ?? open.person.employeeCode}</dd>
-                <dt className="text-muted-foreground">Password</dt>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 rounded-lg border border-primary/20 bg-accent/40 p-4 text-sm">
+                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Sign in with</dt>
+                <dd className="font-mono font-semibold break-all">{open.username ?? open.person.email ?? open.person.employeeCode}</dd>
+                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Password</dt>
                 <dd>
-                  <code className="rounded bg-card px-1.5 py-0.5 font-mono break-all">{open.password || '(the one you entered)'}</code>
+                  <code className="rounded-md border bg-card px-2 py-1 font-mono text-[15px] font-semibold tracking-wide break-all">{open.password || '(the one you entered)'}</code>
                 </dd>
               </dl>
               <p className="text-xs text-muted-foreground">This password is shown only once and is never stored where anyone can read it.</p>

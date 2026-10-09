@@ -1,12 +1,13 @@
 import { errorMessage } from '@freefounders/core';
 import { LEVEL_LABELS, type Role, roleApps, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles } from '@freefounders/core/admin';
-import { Plus, ShieldCheck } from 'lucide-react';
+import { Lock, Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/primitives';
+import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill } from './parts';
 import { RoleEditor } from './role-editor';
 
@@ -26,16 +27,27 @@ export function RolesPage() {
       key: 'role',
       header: 'Role',
       cell: (r) => (
-        <div className="min-w-44">
-          <p className="flex flex-wrap items-center gap-1.5 font-medium">
-            {r.name}
-            {r.system && <Pill tone="admin">Locked</Pill>}
-          </p>
-          <p className="text-xs text-muted-foreground">{r.description || `${r.grants.length} permission${r.grants.length === 1 ? '' : 's'}`}</p>
+        <div className="flex min-w-48 items-start gap-3">
+          <span className={cn('mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg', r.system ? 'bg-app-admin/12 text-app-admin' : 'bg-accent text-primary')} aria-hidden>
+            {r.system ? <Lock className="size-4" /> : <ShieldCheck className="size-4" />}
+          </span>
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-1.5 font-semibold">
+              {r.name}
+              {r.system && <Pill tone="admin">Locked</Pill>}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {r.description || (
+                <>
+                  <span className="font-mono">{r.grants.length}</span> permission{r.grants.length === 1 ? '' : 's'}
+                </>
+              )}
+            </p>
+          </div>
         </div>
       ),
     },
-    { key: 'level', header: 'Level', cell: (r) => LEVEL_LABELS[r.level] ?? r.level },
+    { key: 'level', header: 'Level', cell: (r) => <Pill tone={r.level >= 3 ? 'admin' : r.level === 2 ? 'info' : 'neutral'}>{LEVEL_LABELS[r.level] ?? r.level}</Pill> },
     {
       key: 'apps',
       header: 'Apps',
@@ -49,12 +61,12 @@ export function RolesPage() {
         </div>
       ),
     },
-    { key: 'people', header: 'People', className: 'tabular', cell: (r) => r.people },
+    { key: 'people', header: 'People', className: 'font-mono tabular', cell: (r) => <span className={cn(r.people === 0 && 'text-muted-foreground')}>{r.people}</span> },
     {
       key: 'actions',
       header: <span className="sr-only">Actions</span>,
       cell: (r) => (
-        <div className="flex flex-wrap items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
           <Button variant="outline" size="xs" onClick={() => setEditing(r)} disabled={!catalogue.data} aria-label={`${r.system ? 'View' : 'Edit'} ${r.name}`}>
             {r.system ? 'View' : 'Edit'}
           </Button>

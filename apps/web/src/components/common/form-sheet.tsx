@@ -52,7 +52,7 @@ export function FormSheet({
           </SheetHeader>
           <SheetBody className="space-y-6">{children}</SheetBody>
           <SheetFooter>
-            <span className="mr-auto hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
+            <span className="mr-auto hidden items-center gap-1 text-xs text-muted-foreground sm:flex" aria-hidden>
               <Kbd>Ctrl</Kbd>
               <Kbd>Enter</Kbd> to save
             </span>

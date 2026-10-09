@@ -16,7 +16,7 @@ import { EntityPicker } from '@/features/assets/components/pickers';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
-import { Card } from '@/components/ui/primitives';
+import { Avatar, Card } from '@/components/ui/primitives';
 import { OnboardingTable } from '@/features/assets/onboarding/onboarding-page';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { errorMessage } from '@freefounders/core';
@@ -142,13 +142,18 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
       key: 'request',
       header: 'Request',
       cell: (r) => (
-        <div className="min-w-56">
-          <div className="font-medium">
-            {r.quantity > 1 ? `${r.quantity} × ` : ''}
-            {r.typeName}
-          </div>
-          <div className="line-clamp-1 text-xs text-muted-foreground">
-            <span className="font-mono">{r.number}</span> · {r.reason}
+        <div className="flex min-w-56 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info dark:bg-info/16">
+            <ClipboardList className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="truncate font-medium">
+              {r.quantity > 1 ? `${r.quantity} × ` : ''}
+              {r.typeName}
+            </div>
+            <div className="line-clamp-1 text-xs text-muted-foreground">
+              <span className="font-mono">{r.number}</span> · {r.reason}
+            </div>
           </div>
         </div>
       ),
@@ -157,9 +162,12 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
       key: 'employee',
       header: 'For',
       cell: (r) => (
-        <div>
-          <div className="whitespace-nowrap">{r.employeeName}</div>
-          <div className="text-xs text-muted-foreground">{r.departmentName ?? r.employeeCode}</div>
+        <div className="flex items-center gap-2.5">
+          <Avatar name={r.employeeName} className="size-7 text-[10px]" />
+          <div className="min-w-0">
+            <div className="whitespace-nowrap">{r.employeeName}</div>
+            <div className="text-xs text-muted-foreground">{r.departmentName ?? r.employeeCode}</div>
+          </div>
         </div>
       ),
     },
@@ -247,6 +255,7 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
             <EmptyState
               icon={ClipboardList}
               title="No requests"
+              description={f.status === 'PENDING,APPROVED' ? 'Nothing is waiting for approval or fulfilment.' : 'Nothing here for this filter.'}
               action={
                 can('request:create') ? (
                   <Button size="sm" onClick={() => quickAdd.open('request')}>

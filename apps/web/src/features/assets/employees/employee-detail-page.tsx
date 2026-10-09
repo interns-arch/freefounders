@@ -163,17 +163,34 @@ export default function EmployeeDetailPage() {
       )}
 
       {/* Who */}
-      <Card className="p-4 sm:p-5">
-        <div className="flex items-start gap-3 sm:gap-4">
-          <Avatar name={e.fullName} className="size-14 text-base sm:size-16 sm:text-lg" />
+      <Card className="relative overflow-hidden p-4 sm:p-5">
+        <span className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-3xl" aria-hidden />
+        <div className="relative flex items-start gap-3 sm:gap-4">
+          <Avatar name={e.fullName} className="size-14 text-base ring-4 ring-primary/10 sm:size-16 sm:text-lg" />
           <div className="min-w-0 flex-1">
+            {e.departmentName && <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{e.departmentName}</p>}
             <h1 className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">{e.fullName}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{e.employeeCode}</span>
               <EmployeeStatusBadge status={e.status} />
+              {e.designation && <span className="text-sm text-muted-foreground">{e.designation}</span>}
             </div>
-            <p className="mt-1.5 text-sm text-muted-foreground">{[e.designation, e.departmentName].filter(Boolean).join(' · ') || '—'}</p>
+            {(e.managerName || e.joinDate) && (
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                {[e.managerName ? `Reports to ${e.managerName}` : null, e.joinDate ? `Joined ${formatDate(e.joinDate)}` : null].filter(Boolean).join(' · ')}
+              </p>
+            )}
           </div>
+          {canAssign && !exited && (
+            <div className="hidden items-center gap-2 sm:flex">
+              <Button onClick={() => setPickAsset(true)}>
+                <UserPlus /> Assign asset
+              </Button>
+              <Button variant="outline" onClick={() => verify.mutate(e.id)} loading={verify.isPending}>
+                <ClipboardCheck /> Mark checked
+              </Button>
+            </div>
+          )}
           {(can('employee:status') || can('employee:manage')) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -197,11 +214,11 @@ export default function EmployeeDetailPage() {
           )}
         </div>
         {canAssign && !exited && (
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
-            <Button onClick={() => setPickAsset(true)} className="h-11 sm:h-9">
+          <div className="relative mt-4 grid grid-cols-2 gap-2 sm:hidden">
+            <Button onClick={() => setPickAsset(true)} className="h-11">
               <UserPlus /> Assign asset
             </Button>
-            <Button variant="outline" onClick={() => verify.mutate(e.id)} loading={verify.isPending} className="h-11 sm:h-9">
+            <Button variant="outline" onClick={() => verify.mutate(e.id)} loading={verify.isPending} className="h-11">
               <ClipboardCheck /> Mark checked
             </Button>
           </div>

@@ -12,17 +12,54 @@ export type Tone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'i
 
 const CHIP: Record<Tone, string> = {
   neutral: 'border-border bg-muted text-muted-foreground',
-  primary: 'border-primary/25 bg-primary/10 text-primary',
-  success: 'border-success/30 bg-success/10 text-success',
-  warning: 'border-warning/35 bg-warning/12 text-warning',
-  danger: 'border-destructive/30 bg-destructive/10 text-destructive',
-  info: 'border-info/30 bg-info/10 text-info',
+  primary: 'border-primary/20 bg-primary/10 text-primary',
+  success: 'border-success/25 bg-success/10 text-success',
+  warning: 'border-warning/30 bg-warning/12 text-warning',
+  danger: 'border-destructive/25 bg-destructive/10 text-destructive',
+  info: 'border-info/25 bg-info/10 text-info',
 };
+
+/** Solid tints for small count pills (the old app's badge). */
+const PILL: Record<Tone, string> = {
+  neutral: 'bg-muted text-muted-foreground',
+  primary: 'bg-primary/12 text-primary',
+  success: 'bg-success/14 text-success',
+  warning: 'bg-warning/16 text-warning',
+  danger: 'bg-destructive/12 text-destructive',
+  info: 'bg-info/14 text-info',
+};
+
+const ICON_TONE: Record<Tone, string> = {
+  neutral: 'bg-muted text-muted-foreground',
+  primary: 'bg-primary/12 text-primary',
+  success: 'bg-success/12 text-success',
+  warning: 'bg-warning/15 text-warning',
+  danger: 'bg-destructive/10 text-destructive',
+  info: 'bg-info/12 text-info',
+};
+
+/** A small round count (e.g. "3" next to a tab or a title). */
+export function CountPill({ tone = 'neutral', className, children, ...rest }: { tone?: Tone; className?: string; children: ReactNode } & React.ComponentProps<'span'>) {
+  return (
+    <span className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-semibold tabular-nums', PILL[tone], className)} {...rest}>
+      {children}
+    </span>
+  );
+}
+
+/** A tinted icon bubble (the old app's stat icon). */
+export function IconBubble({ icon: Icon, tone = 'primary', className }: { icon: ComponentType<{ className?: string }>; tone?: Tone; className?: string }) {
+  return (
+    <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', ICON_TONE[tone], className)}>
+      <Icon className="size-4.5" />
+    </span>
+  );
+}
 
 /** A small coloured label (status, priority, counts). */
 export function Chip({ tone = 'neutral', className, children, ...rest }: { tone?: Tone; className?: string; children: ReactNode } & React.ComponentProps<'span'>) {
   return (
-    <span className={cn('inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-xs font-medium', CHIP[tone], className)} {...rest}>
+    <span className={cn('inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.15rem]', CHIP[tone], className)} {...rest}>
       {children}
     </span>
   );
@@ -41,7 +78,7 @@ export function PriorityChip({ priority, label }: { priority: TaskPriority; labe
 export function ErrorNote({ children, className }: { children: ReactNode; className?: string }) {
   if (!children) return null;
   return (
-    <p role="alert" className={cn('rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive', className)}>
+    <p role="alert" className={cn('rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm font-medium text-destructive', className)}>
       {children}
     </p>
   );
@@ -50,17 +87,19 @@ export function ErrorNote({ children, className }: { children: ReactNode; classN
 export function OkNote({ children, className }: { children: ReactNode; className?: string }) {
   if (!children) return null;
   return (
-    <p role="status" className={cn('rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm font-medium text-success', className)}>
+    <p role="status" className={cn('rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm font-semibold text-success', className)}>
       {children}
     </p>
   );
 }
 
-/** A card with a heading row (title on the left, actions on the right). */
+/** A card with a heading row (title on the left, actions on the right); `icon` adds a tinted bubble before the title. */
 export function Panel({
   title,
   actions,
   description,
+  icon: Icon,
+  tone = 'primary',
   children,
   className,
   bodyClassName,
@@ -68,32 +107,63 @@ export function Panel({
   title?: ReactNode;
   actions?: ReactNode;
   description?: ReactNode;
+  icon?: ComponentType<{ className?: string }>;
+  tone?: Tone;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
 }) {
+  const hasHead = !!(title || actions);
   return (
     <Card className={cn('min-w-0', className)}>
-      {(title || actions) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-2 sm:px-5">
-          {title && <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">{title}</h2>}
+      {hasHead && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3.5 pb-2.5 sm:px-5">
+          {title && (
+            <h2 className="flex min-w-0 flex-wrap items-center gap-2 text-[15px] font-bold tracking-tight">
+              {Icon && (
+                <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-lg', ICON_TONE[tone])}>
+                  <Icon className="size-4" />
+                </span>
+              )}
+              {title}
+            </h2>
+          )}
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
-      {description && <p className="px-4 pb-2 text-[13px] text-muted-foreground sm:px-5">{description}</p>}
-      <div className={cn('px-4 pb-4 sm:px-5', !title && !actions && 'pt-4', bodyClassName)}>{children}</div>
+      {description && <p className={cn('px-4 pb-2.5 text-[13px] text-muted-foreground sm:px-5', !hasHead && 'pt-4')}>{description}</p>}
+      <div className={cn('px-4 pb-4 sm:px-5', !hasHead && !description && 'pt-4', bodyClassName)}>{children}</div>
     </Card>
   );
 }
 
-const ICON_TONE: Record<Tone, string> = {
-  neutral: 'bg-muted text-muted-foreground',
-  primary: 'bg-primary/10 text-primary',
-  success: 'bg-success/12 text-success',
-  warning: 'bg-warning/15 text-warning',
-  danger: 'bg-destructive/10 text-destructive',
-  info: 'bg-info/12 text-info',
-};
+/** A section heading between groups of cards ("MY WORK", "TEAM"). */
+export function SectionHead({ children, className, actions }: { children: ReactNode; className?: string; actions?: ReactNode }) {
+  return (
+    <div className={cn('flex items-center justify-between gap-2 pt-1', className)}>
+      <h2 className="flex items-center gap-2 text-[11px] font-bold tracking-[0.1em] text-muted-foreground uppercase">
+        <span aria-hidden className="h-3 w-1 rounded-full bg-gradient-to-b from-brand-2 to-primary" />
+        {children}
+      </h2>
+      {actions}
+    </div>
+  );
+}
+
+/** A quiet "nothing here" note inside a card (icon bubble + a line of text). */
+export function Empty({ icon: Icon, children, className, action }: { icon?: ComponentType<{ className?: string }>; children: ReactNode; className?: string; action?: ReactNode }) {
+  return (
+    <div className={cn('flex flex-col items-center justify-center gap-2 px-4 py-7 text-center text-sm text-muted-foreground', className)}>
+      {Icon && (
+        <span className="flex size-10 items-center justify-center rounded-xl border border-dashed bg-muted/40">
+          <Icon className="size-4.5" />
+        </span>
+      )}
+      <span>{children}</span>
+      {action && <div className="mt-1">{action}</div>}
+    </div>
+  );
+}
 
 /** A number tile; with `to` it opens that list. */
 export function Tile({
@@ -114,21 +184,27 @@ export function Tile({
   to?: string;
 }) {
   const body = (
-    <Card className={cn('flex h-full items-start justify-between gap-3 p-4', alert && 'border-destructive/40 bg-destructive/5', to && 'transition hover:border-primary/40 hover:shadow-sm')}>
-      <div className="min-w-0">
-        <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{label}</p>
-        <p className={cn('mt-1.5 font-mono text-2xl font-semibold tracking-tight tabular-nums', alert && 'text-destructive')}>{value}</p>
-        {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
-      </div>
+    <Card
+      className={cn(
+        'flex h-full items-center gap-3.5 p-4 transition-[box-shadow,border-color,transform] duration-150',
+        alert && 'border-destructive/35 bg-gradient-to-b from-card to-destructive/6',
+        to && 'hover:-translate-y-px hover:border-primary/40 hover:shadow-[0_6px_18px_-8px_rgb(0_0_0/0.18)]',
+      )}
+    >
       {Icon && (
-        <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', ICON_TONE[alert ? 'danger' : tone])}>
-          <Icon className="size-4.5" />
+        <span className={cn('hidden size-10 shrink-0 items-center justify-center rounded-xl min-[420px]:flex sm:size-11', ICON_TONE[alert ? 'danger' : tone])}>
+          <Icon className="size-5" />
         </span>
       )}
+      <div className="min-w-0 flex-1">
+        <p className="font-mono text-[10.5px] leading-[1.2] font-semibold tracking-[0.08em] text-muted-foreground uppercase">{label}</p>
+        <p className={cn('mt-0.5 font-mono text-[22px] leading-tight font-bold tracking-tight whitespace-nowrap tabular-nums sm:text-[25px]', alert && 'text-destructive')}>{value}</p>
+        {sub && <div className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</div>}
+      </div>
     </Card>
   );
   if (!to) return body;
-  const cls = 'block rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40';
+  const cls = 'block h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40';
   return (
     <Link to={to} className={cls}>
       {body}
@@ -167,7 +243,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className={cn('inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border bg-muted/50 p-0.5', className)}>
+    <div role="group" aria-label={label} className={cn('inline-flex max-w-full flex-wrap gap-0.5 rounded-full border bg-muted/60 p-0.5', className)}>
       {options.map(([v, l]) => (
         <button
           key={v}
@@ -175,8 +251,8 @@ export function Segmented<T extends string>({
           aria-pressed={value === v}
           onClick={() => onChange(v)}
           className={cn(
-            'inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground',
-            value === v && 'bg-card text-foreground shadow-xs',
+            'inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground',
+            value === v && 'bg-card font-semibold text-primary shadow-[0_1px_2px_rgb(0_0_0/0.08)] ring-1 ring-border',
           )}
         >
           {l}

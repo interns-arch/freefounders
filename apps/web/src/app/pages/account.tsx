@@ -41,11 +41,11 @@ export function AccountPage() {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background p-6">
       <Logo />
-      <form onSubmit={submit} className="w-full max-w-sm space-y-5 rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="pw-title">
+      <form onSubmit={submit} className="w-full max-w-[400px] space-y-5 rounded-xl border bg-card p-7 shadow-card-lg" aria-labelledby="pw-title">
         <div className="space-y-1">
-          <h1 id="pw-title" className="text-xl font-semibold">
+          <h1 id="pw-title" className="text-2xl font-bold tracking-tight">
             {first ? 'Choose a new password' : 'Change password'}
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -65,12 +65,12 @@ export function AccountPage() {
           <Input id="pw-again" type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
         </div>
         {problem && (
-          <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
             {problem}
           </p>
         )}
         {done && !first && (
-          <p role="status" className="rounded-md bg-success/10 px-3 py-2 text-sm text-success">
+          <p role="status" className="rounded-md border border-success/20 bg-success/8 px-3 py-2 text-sm font-medium text-success">
             Password changed.
           </p>
         )}

@@ -1,8 +1,8 @@
 import { useAccess } from '@freefounders/core';
 import { type DashboardCounts, type TaskDashboard, useTaskCategoryNames, useTaskDashboard } from '@freefounders/core/tasks';
 import { BarElement, CategoryScale, Chart as ChartJS, LinearScale, Tooltip } from 'chart.js';
-import { Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlarmClock, CheckCircle2, CircleDashed, Hourglass, Loader, Search, Timer } from 'lucide-react';
+import { type ComponentType, useEffect, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Input, NativeSelect } from '@/components/ui/input';
@@ -11,18 +11,18 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { RangePicker, rangeParams, rangeReady } from '@/features/tasks/shared';
 import { useDebounced } from '@/lib/url-state';
 import { cn } from '@/lib/utils';
-import { Segmented } from './task-bits';
+import { Segmented, StatTile } from './task-bits';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip);
 
-// [key, label, alert?, denominator]
-const TILES: Array<[keyof DashboardCounts, string, 'alert' | 'good' | '', keyof DashboardCounts]> = [
-  ['overdue', 'Overdue', 'alert', 'total'],
-  ['pending', 'Pending', '', 'total'],
-  ['in_progress', 'In Progress', '', 'total'],
-  ['completed', 'Completed', 'good', 'total'],
-  ['in_time', 'Finished on time', 'good', 'completed'],
-  ['delayed', 'Finished late', 'alert', 'completed'],
+// [key, label, alert?, denominator, icon]
+const TILES: Array<[keyof DashboardCounts, string, 'alert' | 'good' | '', keyof DashboardCounts, ComponentType<{ className?: string }>]> = [
+  ['overdue', 'Overdue', 'alert', 'total', AlarmClock],
+  ['pending', 'Pending', '', 'total', CircleDashed],
+  ['in_progress', 'In Progress', '', 'total', Loader],
+  ['completed', 'Completed', 'good', 'total', CheckCircle2],
+  ['in_time', 'Finished on time', 'good', 'completed', Timer],
+  ['delayed', 'Finished late', 'alert', 'completed', Hourglass],
 ];
 
 /** Which list filters a tile opens (?status=…&overdue=1&done=…). */
@@ -60,6 +60,16 @@ export function DashboardTab({ onTile }: { onTile: (tab: 'my' | 'delegated', fil
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <RangePicker range={range} setRange={setRange} custom={custom} setCustom={setCustom} applied={data ? { from: data.range_from, to: data.range_to } : null} />
+        <span className="hidden flex-1 sm:block" />
+        <Segmented
+          label="View"
+          value={view}
+          onChange={setView}
+          options={[
+            ['table', 'Table'],
+            ['bar', 'Bar chart'],
+          ]}
+        />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Segmented
@@ -80,16 +90,6 @@ export function DashboardTab({ onTile }: { onTile: (tab: 'my' | 'delegated', fil
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input type="search" aria-label="Search tasks" placeholder="Search tasks…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
         </div>
-        <span className="flex-1" />
-        <Segmented
-          label="View"
-          value={view}
-          onChange={setView}
-          options={[
-            ['table', 'Table'],
-            ['bar', 'Bar chart'],
-          ]}
-        />
       </div>
 
       {dash.error ? (
@@ -97,38 +97,34 @@ export function DashboardTab({ onTile }: { onTile: (tab: 'my' | 'delegated', fil
       ) : !data ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {TILES.map(([k]) => (
-            <Skeleton key={k} className="h-24" />
+            <Skeleton key={k} className="h-[92px] rounded-xl" />
           ))}
         </div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            {TILES.map(([k, label, tone, base]) => {
+            {TILES.map(([k, label, tone, base, Icon]) => {
               const of = data.tiles[base] || 0;
               const value = data.tiles[k] ?? 0;
               const clickable = scope !== 'group';
-              const body = (
-                <>
-                  <span className="text-xs font-medium text-muted-foreground">{label}</span>
-                  <span className={cn('text-2xl font-semibold tracking-tight tabular', tone === 'alert' && value > 0 && 'text-destructive', tone === 'good' && value > 0 && 'text-success')}>{value}</span>
-                  <span className="text-xs text-muted-foreground">{of ? `${value} of ${of} ${base === 'completed' ? 'completed' : 'tasks'}` : '—'}</span>
-                </>
-              );
-              const cls = cn('flex flex-col gap-0.5 rounded-xl border bg-card p-3 text-left', tone === 'alert' && value > 0 && 'border-destructive/30');
-              return clickable ? (
-                <button key={k} type="button" className={cn(cls, 'cursor-pointer transition hover:border-primary/40 hover:shadow-sm')} title="Open the matching task list" onClick={() => onTile(scope === 'delegated' ? 'delegated' : 'my', TILE_FILTERS[k])}>
-                  {body}
-                </button>
-              ) : (
-                <div key={k} className={cls}>
-                  {body}
-                </div>
+              const lit = value > 0 ? tone || undefined : undefined;
+              return (
+                <StatTile
+                  key={k}
+                  label={label}
+                  value={value}
+                  icon={Icon}
+                  tone={lit}
+                  hint={of ? `${value} of ${of} ${base === 'completed' ? 'completed' : 'tasks'}` : '—'}
+                  title={clickable ? 'Open the matching task list' : undefined}
+                  onClick={clickable ? () => onTile(scope === 'delegated' ? 'delegated' : 'my', TILE_FILTERS[k]) : undefined}
+                />
               );
             })}
           </div>
           {data.categories.length === 0 ? (
             <Card>
-              <EmptyState title="No tasks in this range." />
+              <EmptyState title="No tasks in this range." description="Try a wider date range or another category." />
             </Card>
           ) : view === 'table' ? (
             <Card className="overflow-x-auto">
@@ -148,14 +144,14 @@ export function DashboardTab({ onTile }: { onTile: (tab: 'my' | 'delegated', fil
                 <TBody>
                   {data.categories.map((c) => (
                     <TR key={c.category}>
-                      <TD className="font-medium">{c.category}</TD>
-                      <TD className="text-right tabular">{c.total}</TD>
-                      <TD className={cn('text-right tabular', c.overdue > 0 && 'text-destructive')}>{c.overdue}</TD>
-                      <TD className="text-right tabular">{c.pending}</TD>
-                      <TD className="text-right tabular">{c.in_progress}</TD>
-                      <TD className="text-right text-success tabular">{c.completed}</TD>
-                      <TD className="text-right tabular">{c.in_time}</TD>
-                      <TD className={cn('text-right tabular', c.delayed > 0 && 'text-destructive')}>{c.delayed}</TD>
+                      <TD className="font-semibold">{c.category}</TD>
+                      <TD className="text-right font-mono tabular">{c.total}</TD>
+                      <TD className={cn('text-right font-mono tabular', c.overdue > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground')}>{c.overdue}</TD>
+                      <TD className="text-right font-mono tabular">{c.pending}</TD>
+                      <TD className="text-right font-mono tabular">{c.in_progress}</TD>
+                      <TD className={cn('text-right font-mono tabular', c.completed > 0 ? 'font-semibold text-success' : 'text-muted-foreground')}>{c.completed}</TD>
+                      <TD className="text-right font-mono tabular">{c.in_time}</TD>
+                      <TD className={cn('text-right font-mono tabular', c.delayed > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground')}>{c.delayed}</TD>
                     </TR>
                   ))}
                 </TBody>

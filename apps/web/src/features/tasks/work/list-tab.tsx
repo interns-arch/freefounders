@@ -11,7 +11,7 @@ import {
   useToggleTaskFollow,
   useWorkTaskList,
 } from '@freefounders/core/tasks';
-import { AlarmClock, Plus, Repeat, Search, UserRound, X } from 'lucide-react';
+import { AlarmClock, ClipboardList, Plus, Repeat, Search, UserRound, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, ErrorState } from '@/components/common/page';
@@ -23,7 +23,7 @@ import { RangePicker } from '@/features/tasks/shared';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn } from '@/lib/utils';
 import { useTaskDialogs } from './dialogs';
-import { Segmented, ToggleChip } from './task-bits';
+import { CountPill, FactRow, Segmented, ToggleChip } from './task-bits';
 import { TaskRow } from './task-row';
 
 type ListScope = 'my' | 'all' | 'delegated' | 'subscribed';
@@ -156,7 +156,7 @@ export function TaskListTab({
             ['all', 'All'],
           ]}
         />
-        <ToggleChip on={overdue} onChange={(v) => set({ overdue: v ? '1' : null })}>
+        <ToggleChip on={overdue} tone="danger" onChange={(v) => set({ overdue: v ? '1' : null })}>
           <AlarmClock /> Overdue only
         </ToggleChip>
         <ToggleChip on={recurring} onChange={(v) => set({ recurring: v ? '1' : null })} title="Only the tasks that repeat — daily, weekly or monthly">
@@ -164,10 +164,10 @@ export function TaskListTab({
         </ToggleChip>
         {status === 'in_progress' && <span className="text-xs text-muted-foreground">Showing in progress only</span>}
         {fDone && (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <span className={cn('inline-flex h-9 items-center gap-1 rounded-full border px-3 text-[13px] font-semibold', fDone === 'on_time' ? 'border-success/40 bg-success/10 text-success' : 'border-destructive/40 bg-destructive/10 text-destructive')}>
             {fDone === 'on_time' ? 'Finished on time' : 'Finished late'}
-            <Button variant="ghost" size="icon-xs" aria-label="Clear finished filter" onClick={() => set({ done: null })}>
-              <X />
+            <Button variant="ghost" size="icon-xs" className="-mr-1.5 size-6 hover:bg-transparent hover:text-inherit" aria-label="Clear finished filter" onClick={() => set({ done: null })}>
+              <X className="size-3.5" />
             </Button>
           </span>
         )}
@@ -180,16 +180,16 @@ export function TaskListTab({
       </div>
 
       {scope === 'all' && (
-        <div className="space-y-3">
-          <RangePicker
-            range={range}
-            setRange={(v) => set({ range: v === 'all' ? null : v })}
-            custom={custom}
-            setCustom={(c) => set({ start: c.start, end: c.end })}
-            applied={list.data?.range_from ? { from: list.data.range_from, to: list.data.range_to } : null}
-            countedBy={status === 'done' ? 'completion date' : status === 'all' ? 'completion date (done) or due date (open)' : 'due date'}
-          />
+        <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
+            <RangePicker
+              range={range}
+              setRange={(v) => set({ range: v === 'all' ? null : v })}
+              custom={custom}
+              setCustom={(c) => set({ start: c.start, end: c.end })}
+              applied={list.data?.range_from ? { from: list.data.range_from, to: list.data.range_to } : null}
+              countedBy={status === 'done' ? 'completion date' : status === 'all' ? 'completion date (done) or due date (open)' : 'due date'}
+            />
             <NativeSelect aria-label="Department" className="w-auto min-w-40" value={dept} onChange={(e) => set({ dept: e.target.value, person: null })}>
               <option value="">All departments</option>
               {deptOptions.map(([v, l]) => (
@@ -228,27 +228,39 @@ export function TaskListTab({
       {scope === 'delegated' && summary.data && <DelegatedAgents data={summary.data} person={person} status={status} fDone={fDone} overdue={overdue} onPick={pickAgent} />}
 
       {scope === 'all' && rows.length > 0 && (
-        <p className="text-sm text-muted-foreground">
-          <strong className="text-foreground">{counts.total}</strong> tasks · {counts.pending} pending · {counts.in_progress} in progress · {counts.done} completed ·{' '}
-          <span className={cn(counts.overdue > 0 && 'font-medium text-destructive')}>{counts.overdue} overdue</span>
-        </p>
+        <FactRow
+          facts={[
+            { n: counts.total, label: counts.total === 1 ? 'task' : 'tasks', tone: 'strong' },
+            { n: counts.pending, label: 'pending' },
+            { n: counts.in_progress, label: 'in progress', tone: counts.in_progress > 0 ? 'warn' : undefined },
+            { n: counts.done, label: 'completed', tone: counts.done > 0 ? 'good' : undefined },
+            { n: counts.overdue, label: 'overdue', tone: counts.overdue > 0 ? 'danger' : undefined },
+          ]}
+        />
       )}
 
       <Card className="overflow-hidden">
         {list.isLoading || !customReady ? (
           customReady ? (
-            <div className="space-y-3 p-4">
+            <ul className="divide-y" aria-busy="true" aria-label="Loading tasks">
               {Array.from({ length: 4 }, (_, i) => (
-                <Skeleton key={i} className="h-14" />
+                <li key={i} className="flex gap-3 px-4 py-3.5">
+                  <Skeleton className="mt-0.5 size-[17px] rounded-[4px]" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/3 max-w-sm" />
+                    <Skeleton className="h-3 w-1/3 max-w-40" />
+                  </div>
+                  <Skeleton className="hidden h-7 w-40 sm:block" />
+                </li>
               ))}
-            </div>
+            </ul>
           ) : (
             <EmptyState title="Pick both dates" description="Choose a from and a to date for the custom range." />
           )
         ) : list.error ? (
           <ErrorState error={list.error} onRetry={() => list.refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title={EMPTY[scope]} />
+          <EmptyState icon={ClipboardList} title={EMPTY[scope]} description={overdue || recurring || status !== 'open' ? 'Try clearing a filter above.' : scope === 'my' ? 'New tasks assigned to you will show up here.' : undefined} />
         ) : (
           <ul className="divide-y" aria-label="Tasks">
             {rows.map((t) => (
@@ -309,7 +321,7 @@ function DelegatedAgents({
       aria-label={`${a.name}: ${v} ${KIND[k === 'on_time' ? 'on_time' : k] ?? k}`}
       onClick={() => onPick(a.id, k)}
       className={cn(
-        'min-w-8 cursor-pointer rounded-md px-2 py-0.5 font-medium tabular transition hover:bg-accent disabled:cursor-default disabled:text-muted-foreground/50 disabled:hover:bg-transparent',
+        'min-w-8 cursor-pointer rounded-md px-2 py-0.5 font-mono font-semibold tabular transition hover:bg-accent disabled:cursor-default disabled:text-muted-foreground/50 disabled:hover:bg-transparent',
         v > 0 && tone,
         String(a.id) === person && kind === k && 'bg-primary/10 ring-1 ring-primary/30',
       )}
@@ -321,8 +333,8 @@ function DelegatedAgents({
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">
-          Agents I&apos;ve delegated to <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{data.agents.length}</span>
+        <h3 className="flex items-center gap-2 text-sm font-bold tracking-tight">
+          Agents I&apos;ve delegated to <CountPill>{data.agents.length}</CountPill>
         </h3>
         <span className="flex-1" />
         <NativeSelect aria-label="Filter by agent" className="h-8 w-auto text-[13px]" value={person} onChange={(e) => onPick(e.target.value, 'all')}>
@@ -335,21 +347,16 @@ function DelegatedAgents({
         </NativeSelect>
         <Input type="search" aria-label="Search agent" placeholder="Search agent…" value={q} onChange={(e) => setQ(e.target.value)} className="h-8 w-40" />
       </div>
-      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <span>
-          <strong>{data.totals.open}</strong> open
-        </span>
-        <span className="text-destructive">
-          <strong>{data.totals.overdue}</strong> overdue
-        </span>
-        <span className="text-success">
-          <strong>{data.totals.done_on_time}</strong> done on time
-        </span>
-        <span className="text-warning">
-          <strong>{data.totals.done_late}</strong> done late
-        </span>
-        <span className="text-muted-foreground">{data.totals.total} given in all</span>
-      </p>
+      <FactRow
+        className="mt-2"
+        facts={[
+          { n: data.totals.open, label: 'open', tone: 'strong' },
+          { n: data.totals.overdue, label: 'overdue', tone: data.totals.overdue > 0 ? 'danger' : undefined },
+          { n: data.totals.done_on_time, label: 'done on time', tone: 'good' },
+          { n: data.totals.done_late, label: 'done late', tone: data.totals.done_late > 0 ? 'warn' : undefined },
+          { n: data.totals.total, label: 'given in all' },
+        ]}
+      />
       <div className="mt-3 overflow-x-auto">
         <Table>
           <THead>
@@ -366,7 +373,7 @@ function DelegatedAgents({
             {shown.map((a) => (
               <TR key={a.id} className={cn(String(a.id) === person && 'bg-primary/5')}>
                 <TD>
-                  <button type="button" className="cursor-pointer font-medium hover:text-primary hover:underline" onClick={() => onPick(a.id, 'all')}>
+                  <button type="button" className="cursor-pointer font-semibold hover:text-primary hover:underline" onClick={() => onPick(a.id, 'all')}>
                     {a.name}
                   </button>
                   {!a.active && <span className="text-xs text-muted-foreground"> (inactive)</span>}
@@ -398,7 +405,7 @@ function DelegatedAgents({
         </Button>
       )}
       {picked && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/8 px-3 py-2 text-sm">
           Showing <strong>{picked.name}</strong> — {KIND[kind]}
           <Button variant="outline" size="xs" onClick={() => onPick('', 'open')}>
             <X /> Clear

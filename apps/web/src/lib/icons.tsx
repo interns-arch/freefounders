@@ -127,20 +127,23 @@ export const ICONS: Record<string, LucideIcon> = {
 
 export const ICON_NAMES = Object.keys(ICONS);
 
-/** Tailwind classes per category colour. */
-export const COLORS: Record<string, { bg: string; text: string; bar: string }> = {
-  blue: { bg: 'bg-blue-100 dark:bg-blue-950/60', text: 'text-blue-700 dark:text-blue-300', bar: 'bg-blue-500' },
-  indigo: { bg: 'bg-indigo-100 dark:bg-indigo-950/60', text: 'text-indigo-700 dark:text-indigo-300', bar: 'bg-indigo-500' },
-  violet: { bg: 'bg-violet-100 dark:bg-violet-950/60', text: 'text-violet-700 dark:text-violet-300', bar: 'bg-violet-500' },
-  emerald: { bg: 'bg-emerald-100 dark:bg-emerald-950/60', text: 'text-emerald-700 dark:text-emerald-300', bar: 'bg-emerald-500' },
-  amber: { bg: 'bg-amber-100 dark:bg-amber-950/60', text: 'text-amber-700 dark:text-amber-300', bar: 'bg-amber-500' },
-  orange: { bg: 'bg-orange-100 dark:bg-orange-950/60', text: 'text-orange-700 dark:text-orange-300', bar: 'bg-orange-500' },
-  red: { bg: 'bg-red-100 dark:bg-red-950/60', text: 'text-red-700 dark:text-red-300', bar: 'bg-red-500' },
-  cyan: { bg: 'bg-cyan-100 dark:bg-cyan-950/60', text: 'text-cyan-700 dark:text-cyan-300', bar: 'bg-cyan-500' },
-  slate: { bg: 'bg-slate-200 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300', bar: 'bg-slate-500' },
-  stone: { bg: 'bg-stone-200 dark:bg-stone-800', text: 'text-stone-700 dark:text-stone-300', bar: 'bg-stone-500' },
-  rose: { bg: 'bg-rose-100 dark:bg-rose-950/60', text: 'text-rose-700 dark:text-rose-300', bar: 'bg-rose-500' },
-  teal: { bg: 'bg-teal-100 dark:bg-teal-950/60', text: 'text-teal-700 dark:text-teal-300', bar: 'bg-teal-500' },
+/**
+ * Classes per category colour. The NAMES are what admins pick and what is saved on categories, so they stay; the
+ * colours come from the theme tokens (PLAN.md §19.1), so the brand colour and dark mode reach every tile.
+ */
+export const COLORS: Record<string, { bg: string; text: string; bar: string; ring: string }> = {
+  blue: { bg: 'bg-info/12 dark:bg-info/18', text: 'text-info', bar: 'bg-info', ring: 'ring-info/30' },
+  indigo: { bg: 'bg-app-assets/12 dark:bg-app-assets/18', text: 'text-app-assets', bar: 'bg-app-assets', ring: 'ring-app-assets/30' },
+  violet: { bg: 'bg-app-attendance/12 dark:bg-app-attendance/18', text: 'text-app-attendance', bar: 'bg-app-attendance', ring: 'ring-app-attendance/30' },
+  emerald: { bg: 'bg-success/12 dark:bg-success/18', text: 'text-success', bar: 'bg-success', ring: 'ring-success/30' },
+  teal: { bg: 'bg-primary/12 dark:bg-primary/18', text: 'text-primary', bar: 'bg-primary', ring: 'ring-primary/30' },
+  cyan: { bg: 'bg-brand-2/15 dark:bg-brand-2/18', text: 'text-primary', bar: 'bg-brand-2', ring: 'ring-brand-2/30' },
+  amber: { bg: 'bg-warning/12 dark:bg-warning/18', text: 'text-warning', bar: 'bg-warning', ring: 'ring-warning/30' },
+  orange: { bg: 'bg-app-admin/12 dark:bg-app-admin/18', text: 'text-app-admin', bar: 'bg-app-admin', ring: 'ring-app-admin/30' },
+  red: { bg: 'bg-destructive/12 dark:bg-destructive/18', text: 'text-destructive', bar: 'bg-destructive', ring: 'ring-destructive/30' },
+  rose: { bg: 'bg-destructive/8 dark:bg-destructive/14', text: 'text-destructive', bar: 'bg-destructive/70', ring: 'ring-destructive/25' },
+  slate: { bg: 'bg-muted', text: 'text-muted-foreground', bar: 'bg-muted-foreground', ring: 'ring-border' },
+  stone: { bg: 'bg-secondary', text: 'text-secondary-foreground', bar: 'bg-secondary-foreground/60', ring: 'ring-border' },
 };
 export const COLOR_NAMES = Object.keys(COLORS);
 
@@ -150,11 +153,16 @@ export function DynamicIcon({ name, className }: { name: string | null | undefin
 }
 
 /** Rounded tile with the category colour and the type / category icon. */
-export function AssetIcon({ icon, color, className, size = 'md' }: { icon: string | null | undefined; color: string | null | undefined; className?: string; size?: 'sm' | 'md' | 'lg' }) {
+export function AssetIcon({ icon, color, className, size = 'md' }: { icon: string | null | undefined; color: string | null | undefined; className?: string; size?: 'sm' | 'md' | 'lg' | 'xl' }) {
   const c = COLORS[color ?? ''] ?? COLORS.slate;
-  const dims = { sm: 'size-7 rounded-md [&_svg]:size-3.5', md: 'size-9 rounded-lg [&_svg]:size-4.5', lg: 'size-12 rounded-xl [&_svg]:size-6' }[size];
+  const dims = {
+    sm: 'size-7 rounded-md [&_svg]:size-3.5',
+    md: 'size-9 rounded-lg [&_svg]:size-4.5',
+    lg: 'size-12 rounded-xl [&_svg]:size-6',
+    xl: 'size-16 rounded-2xl [&_svg]:size-8 ring-1 ring-inset',
+  }[size];
   return (
-    <span className={cn('inline-flex shrink-0 items-center justify-center', dims, c.bg, c.text, className)}>
+    <span className={cn('inline-flex shrink-0 items-center justify-center', dims, c.bg, c.text, size === 'xl' && c.ring, className)}>
       <DynamicIcon name={icon} />
     </span>
   );

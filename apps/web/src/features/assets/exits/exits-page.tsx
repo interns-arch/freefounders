@@ -1,8 +1,9 @@
-import { LogOut, Search } from 'lucide-react';
+import { CalendarClock, LogOut, PackageSearch, Search } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';
 import { type Column, DataTable, Pagination } from '@/components/common/data-table';
-import { EmptyState, PageHeader, StatCard } from '@/components/common/page';
+import { EmptyState, PageHeader } from '@/components/common/page';
+import { StatTile } from '@/features/assets/components/stat-tile';
 import { Input } from '@/components/ui/input';
 import { Avatar, Badge, Card, Progress } from '@/components/ui/primitives';
 import { useExitCases, useOpenExitCases } from '@freefounders/core/assets';
@@ -106,9 +107,9 @@ export default function ExitsPage() {
     <div>
       <PageHeader title="Employee exits" description="Asset recovery for people on notice. Exits can’t complete until every asset is cleared." />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Exits in progress" value={openItems.length} icon={LogOut} tone="amber" loading={open.isLoading} />
-        <StatCard label="Assets still to recover" value={pending} tone={pending ? 'red' : 'default'} loading={open.isLoading} hint="Pending + missing" />
-        <StatCard label="Leaving within 7 days" value={dueSoon} hint={overdue ? `${overdue} overdue with items outstanding` : 'None overdue'} loading={open.isLoading} />
+        <StatTile label="Exits in progress" value={openItems.length} icon={LogOut} tone="amber" loading={open.isLoading} hint="Checklists still open" />
+        <StatTile label="Assets still to recover" value={pending} icon={PackageSearch} tone={pending ? 'red' : 'green'} loading={open.isLoading} hint="Pending + missing" />
+        <StatTile label="Leaving within 7 days" value={dueSoon} icon={CalendarClock} tone={overdue ? 'red' : dueSoon ? 'amber' : 'default'} hint={overdue ? `${overdue} overdue with items outstanding` : 'None overdue'} loading={open.isLoading} />
       </div>
       <div className="mb-3 flex gap-1 overflow-x-auto pb-1 no-scrollbar">
         {TABS.map((t) => (

@@ -1,7 +1,7 @@
 /** HR → My attendance: the month as a calendar, a day's punches (with photos) and correction requests. */
 import { errorMessage } from '@freefounders/core';
 import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, useAttendanceMonth, useRequestCorrection } from '@freefounders/core/hr';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarCheck, CalendarX, Clock3, ChevronLeft, ChevronRight, Palmtree, Sun, Timer } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, OkNote, Panel, Tile, fmtDay, fmtTime } from '../tasks/general/parts';
-import { AttendanceChip, PunchPhoto, STATUS_CELL, hrs } from './parts';
+import { AttendanceChip, PunchPhoto, STATUS_CELL, STATUS_DOT, STATUS_TEXT, hrs } from './parts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -47,7 +47,7 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
 
   return (
     <div className="max-w-4xl space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-2.5 py-2">
         <Button size="icon-sm" variant="outline" onClick={() => shift(-1)} aria-label="Previous month">
           <ChevronLeft />
         </Button>
@@ -84,16 +84,20 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
         <Button size="icon-sm" variant="outline" onClick={() => shift(1)} aria-label="Next month">
           <ChevronRight />
         </Button>
-        {userName && <span className="text-sm text-muted-foreground">· {userName}</span>}
-        {data && <span className="ml-auto text-xs text-muted-foreground">Total {data.total_hours} h</span>}
+        {userName && <span className="text-sm font-medium text-muted-foreground">· {userName}</span>}
+        {data && (
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
+            <Timer className="size-3.5" /> Total {data.total_hours} h
+          </span>
+        )}
       </div>
-      <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
-        <Tile label="Present" value={t.present || 0} />
-        <Tile label="Late" value={t.late || 0} />
-        <Tile label="Half Day" value={t.half_day || 0} />
-        <Tile label="Leave" value={t.leave || 0} />
-        <Tile label="Absent" value={t.absent || 0} alert={(t.absent ?? 0) > 0} />
-        <Tile label="Week Off" value={t.week_off || 0} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
+        <Tile icon={CalendarCheck} tone="success" label="Present" value={t.present || 0} />
+        <Tile icon={Clock3} tone="warning" label="Late" value={t.late || 0} />
+        <Tile icon={Sun} tone="warning" label="Half Day" value={t.half_day || 0} />
+        <Tile icon={Palmtree} tone="info" label="Leave" value={t.leave || 0} />
+        <Tile icon={CalendarX} tone="danger" label="Absent" value={t.absent || 0} alert={(t.absent ?? 0) > 0} />
+        <Tile icon={Sun} tone="neutral" label="Week Off" value={t.week_off || 0} />
       </div>
       <OkNote>{sent}</OkNote>
       {!data ? (
@@ -103,6 +107,7 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
       )}
       {selected && selected.status && (
         <Panel
+          icon={CalendarCheck}
           title={
             <>
               {new Date(`${selected.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -110,27 +115,27 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
             </>
           }
         >
-          <dl className="grid gap-2 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Check in</dt>
-              <dd className="flex items-center font-medium">
+          <dl className="grid gap-2 text-sm sm:grid-cols-3">
+            <div className="rounded-xl border bg-muted/30 px-3 py-2">
+              <dt className="font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check in</dt>
+              <dd className="mt-0.5 flex items-center font-mono text-lg font-bold tabular-nums">
                 {fmtTime(selected.check_in)}
                 {selected.has_check_in_photo && <PunchPhoto key={`${selected.attendance_id}-in`} id={selected.attendance_id} which="in" label={`${userName ? `${userName} ` : ''}Check-in photo`} />}
               </dd>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Check out</dt>
-              <dd className="flex items-center font-medium">
+            <div className="rounded-xl border bg-muted/30 px-3 py-2">
+              <dt className="font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check out</dt>
+              <dd className="mt-0.5 flex items-center font-mono text-lg font-bold tabular-nums">
                 {fmtTime(selected.check_out)}
                 {selected.has_check_out_photo && <PunchPhoto key={`${selected.attendance_id}-out`} id={selected.attendance_id} which="out" label={`${userName ? `${userName} ` : ''}Check-out photo`} />}
               </dd>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Worked</dt>
-              <dd className="font-medium">{hrs(selected.working_minutes)}</dd>
+            <div className="rounded-xl border bg-muted/30 px-3 py-2">
+              <dt className="font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Worked</dt>
+              <dd className="mt-0.5 font-mono text-lg font-bold tabular-nums">{hrs(selected.working_minutes)}</dd>
             </div>
             {(selected.is_late || selected.is_early_checkout || selected.missing_checkout) && (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 sm:col-span-3">
                 <dt className="text-muted-foreground">Flags</dt>
                 <dd className="flex gap-1">
                   {selected.is_late && <Chip tone="warning">late</Chip>}
@@ -218,18 +223,22 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
   const pad = (x: number) => String(x).padStart(2, '0');
   const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   return (
-    <div className="rounded-xl border bg-card p-2 sm:p-3">
-      <div className="grid grid-cols-7 gap-1 pb-1 text-center text-[11px] font-medium text-muted-foreground">
-        {DOW.map((d) => (
-          <div key={d}>{d}</div>
+    <div className="rounded-2xl border bg-card p-2 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] sm:p-3">
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+        {DOW.map((d, i) => (
+          <div key={d} className={cn('py-1', i >= 5 && 'text-muted-foreground/70')}>
+            {d}
+          </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
         {Array.from({ length: lead }, (_, i) => (
           <div key={`x${i}`} />
         ))}
         {days.map((d) => {
           const num = Number(d.date.slice(-2));
+          const isToday = d.date === todayIso;
+          const isSel = selected?.date === d.date;
           return (
             <button
               key={d.date}
@@ -237,28 +246,39 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
               disabled={!d.status}
               onClick={() => onSelect(d)}
               aria-label={`${fmtDay(d.date)}${d.status ? `: ${ATTENDANCE_STATUS_LABELS[d.status]}` : ''}`}
-              aria-pressed={selected?.date === d.date}
+              aria-pressed={isSel}
               className={cn(
-                'relative flex aspect-square min-h-10 cursor-pointer flex-col items-center justify-center rounded-lg border text-sm transition disabled:cursor-default sm:aspect-auto sm:h-16',
+                'relative flex aspect-square min-h-10 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border text-sm transition-[box-shadow,transform,border-color] disabled:cursor-default sm:aspect-auto sm:h-[4.25rem] sm:rounded-xl',
                 STATUS_CELL[d.status ?? 'future'],
-                selected?.date === d.date && 'ring-2 ring-primary',
-                d.date === todayIso && 'font-bold',
+                d.status && 'hover:-translate-y-px hover:shadow-sm',
+                !d.status && 'text-muted-foreground/70',
+                isSel && 'ring-2 ring-primary ring-offset-1 ring-offset-card',
               )}
             >
-              <span className={cn(d.date === todayIso && 'rounded-full bg-primary px-1.5 text-primary-foreground')}>{num}</span>
-              {d.status && <span className="text-[10px] text-muted-foreground">{TAG[d.status]}</span>}
-              {(d.is_late || d.missing_checkout) && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive" />}
+              <span
+                className={cn(
+                  'flex size-6 items-center justify-center rounded-full font-mono text-[13px] font-semibold tabular-nums',
+                  isToday && 'bg-gradient-to-b from-brand-2 to-primary text-primary-foreground shadow-sm',
+                )}
+              >
+                {num}
+              </span>
+              {d.status && <span className={cn('text-[10px] leading-none font-bold', STATUS_TEXT[d.status])}>{TAG[d.status]}</span>}
+              {(d.is_late || d.missing_checkout) && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive ring-2 ring-card" aria-hidden />}
             </button>
           );
         })}
       </div>
-      <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+      <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3 text-xs text-muted-foreground">
         {(['present', 'late', 'half_day', 'absent', 'leave', 'week_off'] as const).map((s) => (
-          <span key={s} className="flex items-center gap-1">
-            <i className={cn('inline-block size-3 rounded border', STATUS_CELL[s])} />
+          <span key={s} className="inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-2 py-0.5">
+            <i className={cn('inline-block size-2 rounded-full', STATUS_DOT[s])} />
             {s === 'week_off' ? 'Off/Holiday' : ATTENDANCE_STATUS_LABELS[s]}
           </span>
         ))}
+        <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-2 py-0.5">
+          <i className="inline-block size-2 rounded-full bg-destructive" /> Late / no checkout
+        </span>
       </div>
     </div>
   );

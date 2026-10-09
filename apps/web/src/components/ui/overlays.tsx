@@ -17,17 +17,17 @@ export function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-xl border bg-popover p-5 shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97]',
+          'fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-xl border bg-popover p-6 shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97]',
           className,
         )}
         {...props}
       >
         {children}
         {!hideClose && (
-          <DialogPrimitive.Close className="absolute top-3.5 right-3.5 cursor-pointer rounded-md p-1 text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100">
+          <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-md p-1.5 text-muted-foreground opacity-70 transition hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none">
             <X className="size-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
@@ -43,7 +43,7 @@ export function DialogFooter({ className, ...props }: React.ComponentProps<'div'
   return <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />;
 }
 export function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
-  return <DialogPrimitive.Title className={cn('text-base font-semibold tracking-tight', className)} {...props} />;
+  return <DialogPrimitive.Title className={cn('text-lg font-bold tracking-tight', className)} {...props} />;
 }
 export function DialogDescription({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Description>) {
   return <DialogPrimitive.Description className={cn('text-sm text-muted-foreground', className)} {...props} />;
@@ -69,7 +69,7 @@ export function SheetContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed inset-y-0 z-50 flex h-full w-full flex-col bg-background shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:duration-200',
+          'fixed inset-y-0 z-50 flex h-full w-full flex-col bg-card shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:duration-200',
           sideClass,
           width,
           className,
@@ -77,7 +77,7 @@ export function SheetContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-md p-1 text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100">
+        <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-md p-1.5 text-muted-foreground opacity-70 transition hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none">
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
@@ -86,13 +86,13 @@ export function SheetContent({
   );
 }
 export function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col gap-1 border-b px-6 py-4 pr-12', className)} {...props} />;
+  return <div className={cn('flex flex-col gap-1 border-b bg-muted/30 px-6 py-5 pr-14', className)} {...props} />;
 }
 export function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
   return <div className={cn('flex-1 overflow-y-auto px-6 py-5 scrollbar-thin', className)} {...props} />;
 }
 export function SheetFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3', className)} {...props} />;
+  return <div className={cn('flex items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3.5', className)} {...props} />;
 }
 export const SheetTitle = DialogTitle;
 export const SheetDescription = DialogDescription;
@@ -104,7 +104,7 @@ export const DropdownMenuGroup = MenuPrimitive.Group;
 export const DropdownMenuSub = MenuPrimitive.Sub;
 
 const menuPanel =
-  'z-50 min-w-44 overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[side=bottom]:slide-in-from-top-1';
+  'z-50 min-w-44 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-pop data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[side=bottom]:slide-in-from-top-1';
 
 export function DropdownMenuContent({ className, sideOffset = 6, ...props }: React.ComponentProps<typeof MenuPrimitive.Content>) {
   return (
@@ -132,7 +132,7 @@ export function DropdownMenuCheckboxItem({ className, children, ...props }: Reac
   );
 }
 export function DropdownMenuLabel({ className, ...props }: React.ComponentProps<typeof MenuPrimitive.Label>) {
-  return <MenuPrimitive.Label className={cn('px-2 py-1.5 text-xs font-medium text-muted-foreground', className)} {...props} />;
+  return <MenuPrimitive.Label className={cn('px-2 py-1.5 font-mono text-[10.5px] font-medium tracking-wider text-muted-foreground uppercase', className)} {...props} />;
 }
 export function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof MenuPrimitive.Separator>) {
   return <MenuPrimitive.Separator className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />;
@@ -167,7 +167,7 @@ export function PopoverContent({ className, align = 'start', sideOffset = 6, ...
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          'z-50 w-72 rounded-lg border bg-popover p-3 text-popover-foreground shadow-lg outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
+          'z-50 w-72 rounded-lg border bg-popover p-3 text-popover-foreground shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
           className,
         )}
         {...props}

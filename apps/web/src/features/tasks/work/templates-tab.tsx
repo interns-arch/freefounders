@@ -17,7 +17,7 @@ import {
   useTaskTemplates,
   useTeamPeople,
 } from '@freefounders/core/tasks';
-import { ArrowLeft, Plus, Repeat, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, LayoutTemplate, ListChecks, Plus, Repeat, Search, Trash2 } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
@@ -28,7 +28,8 @@ import { Input, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Badge, Card, Skeleton } from '@/components/ui/primitives';
 import { ProofreadText } from '@/features/tasks/shared';
-import { Chip, PRIORITY_TONE } from './task-bits';
+import { cn } from '@/lib/utils';
+import { Chip, CountPill, PriorityPill, SectionHead } from './task-bits';
 
 const fail = (e: unknown) => toast.error(errorMessage(e));
 
@@ -60,27 +61,27 @@ export function TemplatesTab({ onUse }: { onUse: (t: TaskTemplate) => void }) {
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : grouped.length === 0 ? (
         <Card>
-          <EmptyState title="No templates yet" description={canManage ? 'Create reusable task blueprints for your team.' : undefined} />
+          <EmptyState icon={LayoutTemplate} title="No templates yet" description={canManage ? 'Create reusable task blueprints for your team, or pick some from the Template Directory.' : 'Your manager can add templates; the Template Directory has ready-made ones.'} />
         </Card>
       ) : (
         grouped.map(([cat, list]) => (
           <section key={cat} className="space-y-2" aria-label={cat}>
-            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{cat}</h3>
+            <SectionHead title={cat} count={list.length} />
             <Card className="overflow-hidden">
               <ul className="divide-y">
                 {list.map((t) => (
-                  <li key={t.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
+                  <li key={t.id} className="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center">
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5 font-medium">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[14.5px] font-semibold">
                         {t.name}
-                        {t.priority !== 'normal' && <Badge tone={PRIORITY_TONE[t.priority]}>{TASK_PRIORITY_LABELS[t.priority] ?? t.priority}</Badge>}
+                        {t.priority !== 'normal' && <PriorityPill priority={t.priority} label={TASK_PRIORITY_LABELS[t.priority] ?? t.priority} />}
                         {t.frequency !== 'one_time' && (
-                          <Chip>
+                          <Chip tone="indigo">
                             <Repeat /> {TASK_FREQUENCY_LABELS[t.frequency] ?? t.frequency}
                           </Chip>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="mt-0.5 text-[13px] text-muted-foreground">
                         {t.title}
                         {t.description ? ` — ${t.description}` : ''}
                       </p>
@@ -243,24 +244,28 @@ export function DirectoryTab() {
         </p>
       )}
 
-      {browsing ? (
+      {browsing && (industries.data ?? []).length === 0 ? (
+        <Card>
+          <EmptyState icon={LayoutTemplate} title="The template directory is empty." description="Industry templates appear here once they are loaded; search above or build your own under Templates." />
+        </Card>
+      ) : browsing ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {(industries.data ?? []).map((i) => (
             <button
               key={i.id}
               type="button"
               onClick={() => (setIndustry(i), setCategory(''))}
-              className="flex cursor-pointer flex-col gap-1 rounded-xl border bg-card p-4 text-left transition hover:border-primary/40 hover:shadow-sm"
+              className="flex cursor-pointer gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition hover:-translate-y-px hover:border-primary/40 hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
             >
-              <span className="flex items-center gap-2 font-medium">
-                <span className="text-xl" aria-hidden>
-                  {i.icon}
-                </span>
-                {i.name}
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xl" aria-hidden>
+                {i.icon}
               </span>
-              {i.description && <span className="text-sm text-muted-foreground">{i.description}</span>}
-              <span className="mt-1 text-xs text-muted-foreground">
-                {i.template_count} template{i.template_count === 1 ? '' : 's'} · {i.categories.length} categor{i.categories.length === 1 ? 'y' : 'ies'}
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="font-semibold">{i.name}</span>
+                {i.description && <span className="text-[13px] text-muted-foreground">{i.description}</span>}
+                <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <CountPill tone="neutral">{i.template_count}</CountPill> template{i.template_count === 1 ? '' : 's'} · <CountPill tone="neutral">{i.categories.length}</CountPill> categor{i.categories.length === 1 ? 'y' : 'ies'}
+                </span>
               </span>
             </button>
           ))}
@@ -268,22 +273,27 @@ export function DirectoryTab() {
       ) : (
         <div className="max-w-4xl space-y-2">
           {industry && (
-            <h3 className="text-sm font-semibold">
-              {industry.icon} {industry.name}
-            </h3>
+            <SectionHead
+              title={
+                <>
+                  <span aria-hidden>{industry.icon}</span> {industry.name}
+                </>
+              }
+              count={templates.data?.length}
+            />
           )}
           <Card className="overflow-hidden">
             {templates.isLoading ? (
               <Skeleton className="m-4 h-24" />
             ) : (templates.data ?? []).length === 0 ? (
-              <EmptyState title="No templates match." />
+              <EmptyState icon={Search} title="No templates match." description="Try another word, or clear the search to browse by industry." />
             ) : (
               <ul className="divide-y">
                 {(templates.data ?? []).map((t) => (
-                  <li key={t.id} className="px-4 py-3">
+                  <li key={t.id} className={cn('px-4 py-3 transition-colors', open === t.id ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5 font-medium">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[14.5px] font-semibold">
                           {t.name}
                           <Chip>{t.category}</Chip>
                           {!industry && (
@@ -296,11 +306,11 @@ export function DirectoryTab() {
                               <Repeat /> {TASK_FREQUENCY_LABELS[t.frequency] ?? t.frequency}
                             </Chip>
                           )}
-                          {t.priority !== 'normal' && <Badge tone={PRIORITY_TONE[t.priority]}>{TASK_PRIORITY_LABELS[t.priority] ?? t.priority}</Badge>}
+                          {t.priority !== 'normal' && <PriorityPill priority={t.priority} label={TASK_PRIORITY_LABELS[t.priority] ?? t.priority} />}
                         </div>
-                        {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
-                        <p className="text-xs text-muted-foreground">
-                          {t.step_count} step{t.step_count === 1 ? '' : 's'}
+                        {t.description && <p className="mt-0.5 text-[13px] text-muted-foreground">{t.description}</p>}
+                        <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                          <ListChecks className="size-3.5" aria-hidden /> {t.step_count} step{t.step_count === 1 ? '' : 's'}
                           {t.tags?.length > 0 && ` · ${t.tags.join(', ')}`}
                         </p>
                       </div>
@@ -338,16 +348,19 @@ function DirectoryTemplateDetail({ tpl, canManageTemplates, onDone }: { tpl: Dir
   const [group, setGroup] = useState('');
   return (
     <div className="mt-3 space-y-3 border-t pt-3">
-      <ol className="list-decimal space-y-1.5 pl-5 text-sm">
+      <ol className="space-y-1.5 text-sm">
         {tpl.steps.map((s, i) => (
-          <li key={i}>
-            <strong>{s.title}</strong>
+          <li key={i} className="flex gap-2.5 rounded-lg border bg-card px-3 py-2">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary tabular">{i + 1}</span>
+            <span className="min-w-0 flex-1">
+            <strong className="font-semibold">{s.title}</strong>
             {!!s.offset_days && s.offset_days > 0 && (
               <Badge tone="neutral" className="ml-1.5">
                 day +{s.offset_days}
               </Badge>
             )}
-            {s.description && <p className="text-muted-foreground">{s.description}</p>}
+            {s.description && <p className="text-[13px] text-muted-foreground">{s.description}</p>}
+            </span>
           </li>
         ))}
       </ol>

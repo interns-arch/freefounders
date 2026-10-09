@@ -19,6 +19,12 @@ import {
   X,
   BarChart3,
   Inbox,
+  CalendarDays,
+  Building2,
+  Users,
+  Megaphone,
+  ClipboardList,
+  Activity,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Bar } from 'react-chartjs-2';
@@ -32,17 +38,13 @@ import { relDue } from '../shared/format';
 import { axisOptions, themeColour } from './charts';
 import { DelegationCard, MyDelegationCard } from './delegation';
 import { Deadlines, HomeFilterBar, MistakesCard, NoticesCard, ScoreCard, TeamInsights, WaitingOnMe } from './home-insights';
-import { Chip, ErrorNote, Panel, PriorityChip, TaskStatusChip, Tile, fmtWhen } from './parts';
+import { Chip, Empty, ErrorNote, Panel, PriorityChip, SectionHead, TaskStatusChip, Tile, fmtWhen } from './parts';
 
 const LEADS = '/tasks/leads';
 
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-}
-
-function Band({ children }: { children: React.ReactNode }) {
-  return <h2 className="pt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{children}</h2>;
 }
 
 export function HomePage() {
@@ -61,16 +63,29 @@ export function HomePage() {
 
   const head = (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-            {greeting()}, {me.first_name || me.username}
-          </h1>
-          <p className="text-sm text-muted-foreground">{today}</p>
+      <section
+        aria-label="Welcome"
+        className="relative overflow-hidden rounded-2xl border bg-card px-4 py-4 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] sm:px-5 sm:py-5"
+      >
+        {/* A soft brand tint in the corner, like the workspace cards. */}
+        <div aria-hidden className="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-gradient-to-br from-brand-2/25 to-primary/5 blur-2xl" />
+        <div className="relative flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight sm:text-[26px]">
+              {greeting()}, <span className="bg-gradient-to-r from-primary to-brand-2 bg-clip-text text-transparent">{me.first_name || me.username}</span>
+            </h1>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <CalendarDays className="size-3.5" /> {today}
+            </p>
+          </div>
+          <Chip tone="primary" className="px-2.5 py-1">
+            <Building2 className="size-3.5" /> {isAdmin ? 'All departments' : `${me.department_display} department`}
+          </Chip>
         </div>
-        <Chip tone="primary">{isAdmin ? 'All departments' : `${me.department_display} department`}</Chip>
-      </div>
-      <HomeFilterBar filters={filters} setFilters={setFilters} home={home.data} />
+        <div className="relative mt-4 border-t pt-3">
+          <HomeFilterBar filters={filters} setFilters={setFilters} home={home.data} />
+        </div>
+      </section>
       {home.error && <ErrorNote>{errorMessage(home.error)}</ErrorNote>}
       <WaitingOnMe home={home.data} />
     </>
@@ -130,7 +145,7 @@ function MyTiles() {
   const v = (n: number | undefined) => (t ? n : '—');
   return (
     <>
-      <Band>My work</Band>
+      <SectionHead>My work</SectionHead>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Tile icon={ListTodo} label="My open tasks" to="/tasks/tasks?tab=my&status=open" value={t ? t.pending + t.in_progress : '—'} />
         <Tile icon={Flame} tone="danger" label="Overdue" to="/tasks/tasks?tab=my&status=open&overdue=1" value={v(t?.overdue)} alert={(t?.overdue ?? 0) > 0} />
@@ -151,6 +166,7 @@ function DelegatedCard() {
   const total = q.data?.total ?? 0;
   return (
     <Panel
+      icon={Send}
       title={
         <>
           Tasks I've delegated {rows && total > 0 && <Chip tone="primary">{total} open</Chip>}
@@ -163,17 +179,12 @@ function DelegatedCard() {
       }
     >
       {!rows && <Skeleton className="h-24" />}
-      {rows?.length === 0 && (
-        <div className="flex flex-col items-center gap-1 py-6 text-sm text-muted-foreground">
-          <Send className="size-5" />
-          You haven't handed out any open tasks.
-        </div>
-      )}
+      {rows?.length === 0 && <Empty icon={Send}>You haven't handed out any open tasks.</Empty>}
       {rows && rows.length > 0 && (
         <>
           <div className="grid gap-2 md:hidden">
             {rows.map((t) => (
-              <Link key={t.id} to={`/tasks/tasks/${t.id}`} className="block rounded-lg border p-3">
+              <Link key={t.id} to={`/tasks/tasks/${t.id}`} className="block rounded-xl border bg-card p-3 transition hover:border-primary/40 hover:shadow-sm">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="font-mono text-xs text-muted-foreground">{t.code}</span>
                   <TaskStatusChip status={t.status} label={t.status_display} />
@@ -288,7 +299,7 @@ function LeadsDashboard({
 
   return (
     <>
-      <Band>Tasks</Band>
+      <SectionHead>Tasks</SectionHead>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile icon={ListTodo} label="Open tasks" to={`${teamTasks}open`} value={tiles.open_tasks} sub="assigned and not done" />
         <Tile
@@ -307,7 +318,7 @@ function LeadsDashboard({
       {mine}
       {delegated}
 
-      <Band>Leads</Band>
+      <SectionHead>Leads</SectionHead>
       {hasLeads ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <Tile icon={Target} label="Total leads" to={LEADS} value={tiles.total} />
@@ -320,16 +331,13 @@ function LeadsDashboard({
         </div>
       ) : (
         <Panel>
-          <div className="flex flex-col items-center gap-1 py-4 text-sm text-muted-foreground">
-            <Target className="size-5" />
-            No leads yet. Pipeline, conversion and sources show up here once leads come in.
-          </div>
+          <Empty icon={Target} className="py-4">No leads yet. Pipeline, conversion and sources show up here once leads come in.</Empty>
         </Panel>
       )}
 
       <div className="grid gap-4 lg:grid-cols-12">
         {hasLeads && (
-          <Panel className="lg:col-span-8" title="Leads created — last 14 days">
+          <Panel className="lg:col-span-8" icon={BarChart3} title="Leads created — last 14 days">
             <div className="h-60">
               <Bar
                 data={{
@@ -342,13 +350,13 @@ function LeadsDashboard({
           </Panel>
         )}
         {hasLeads && (
-          <Panel className="lg:col-span-4" title="Pipeline by stage">
+          <Panel className="lg:col-span-4" icon={Target} tone="info" title="Pipeline by stage">
             <div className="grid gap-2">
               {status_dist.map((s) => (
                 <div key={s.status} className="flex items-center gap-2 text-sm" title={`${s.label}: ${s.count}`}>
                   <span className="w-28 truncate text-muted-foreground">{s.label}</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-primary" style={{ width: `${(s.count / maxStatus) * 100}%` }} />
+                    <div className="h-full rounded-full bg-gradient-to-r from-primary to-brand-2" style={{ width: `${(s.count / maxStatus) * 100}%` }} />
                   </div>
                   <span className="w-8 text-right tabular-nums">{s.count}</span>
                 </div>
@@ -357,7 +365,7 @@ function LeadsDashboard({
           </Panel>
         )}
         {hasLeads && employees.length > 0 && (
-          <Panel className="lg:col-span-12" title="Lead performance by employee">
+          <Panel className="lg:col-span-12" icon={Users} tone="success" title="Lead performance by employee">
             <Table>
               <THead>
                 <TR>
@@ -395,7 +403,7 @@ function LeadsDashboard({
           </Panel>
         )}
         {hasLeads && (
-          <Panel className="lg:col-span-4" title="Lead sources">
+          <Panel className="lg:col-span-4" icon={ClipboardList} tone="warning" title="Lead sources">
             <Table>
               <THead>
                 <TR>
@@ -418,12 +426,9 @@ function LeadsDashboard({
             </Table>
           </Panel>
         )}
-        <Panel className={hasLeads ? 'lg:col-span-4' : 'lg:col-span-6'} title="WhatsApp / Gmail activity">
+        <Panel className={hasLeads ? 'lg:col-span-4' : 'lg:col-span-6'} icon={Megaphone} tone="info" title="WhatsApp / Gmail activity">
           {recent_inbound.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 py-4 text-sm text-muted-foreground">
-              <Inbox className="size-5" />
-              No inbound messages yet.
-            </div>
+            <Empty icon={Inbox} className="py-4">No inbound messages yet.</Empty>
           ) : (
             <ul className="grid gap-3">
               {recent_inbound.map((m, i) => (
@@ -439,12 +444,9 @@ function LeadsDashboard({
             </ul>
           )}
         </Panel>
-        <Panel className={hasLeads ? 'lg:col-span-4' : 'lg:col-span-6'} title="Recent lead activity">
+        <Panel className={hasLeads ? 'lg:col-span-4' : 'lg:col-span-6'} icon={Activity} tone="success" title="Recent lead activity">
           {recent_events.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 py-4 text-sm text-muted-foreground">
-              <BarChart3 className="size-5" />
-              No lead activity yet.
-            </div>
+            <Empty icon={BarChart3} className="py-4">No lead activity yet.</Empty>
           ) : (
             <ul className="grid gap-3">
               {recent_events.map((e, i) => (

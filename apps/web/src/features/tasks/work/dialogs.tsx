@@ -62,12 +62,12 @@ function FormDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className={wide ? 'max-w-2xl' : 'max-w-lg'}>
         <form onSubmit={submit} className="grid gap-4" noValidate>
-          <DialogHeader>
+          <DialogHeader className="-mx-5 -mt-5 border-b bg-muted/40 px-5 pt-5 pb-4">
             <DialogTitle>{title}</DialogTitle>
             {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
           {children}
-          <DialogFooter>
+          <DialogFooter className="-mx-5 -mb-5 border-t bg-muted/30 px-5 py-3.5">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
@@ -119,17 +119,17 @@ export function CompleteDialog({ task, onClose }: { task: TaskLike; onClose: () 
       <ProofreadText label="What was done?" required value={remarks} onChange={setRemarks} rows={3} placeholder="e.g. Delivered the quotation and confirmed on call" />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Assigned task time">
-          <Input value={task.effort_minutes ? (fmtEffort(task.effort_minutes) ?? '') : 'not set'} disabled aria-label="Assigned task time" />
+          <Input value={task.effort_minutes ? (fmtEffort(task.effort_minutes) ?? '') : 'not set'} disabled aria-label="Assigned task time" className="font-mono" />
         </Field>
         <EffortInput label="Total effort you spent" required value={actual} onChange={setActual} unit={unit} onUnit={setUnit} placeholder={unit === 'hours' ? 'e.g. 1.5' : 'e.g. 60'} />
       </div>
-      <div className="grid gap-1.5">
-        <span className="text-[13px] font-medium">Proof files / photos {needFile ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(optional)</span>}</span>
-        <div>
+      <div className="grid gap-1.5 rounded-lg border border-dashed bg-muted/30 p-3">
+        <span className="text-[13px] font-semibold">Proof files / photos {needFile ? <span className="text-destructive">*</span> : <span className="font-normal text-muted-foreground">(optional)</span>}</span>
+        <div className="flex flex-wrap items-center gap-2">
           <FilePick onPick={(picked) => setFiles((p) => addFiles(p, picked))} />
+          <span className="text-xs text-muted-foreground">Up to 5 files, 10 MB each.</span>
         </div>
         <PickedFiles files={files} onRemove={(i) => setFiles((p) => p.filter((_, k) => k !== i))} />
-        <p className="text-xs text-muted-foreground">Up to 5 files, 10 MB each.</p>
       </div>
     </FormDialog>
   );

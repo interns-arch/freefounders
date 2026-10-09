@@ -15,10 +15,15 @@ const ORDER: Priority[] = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
 const LABEL: Record<Priority, string> = { URGENT: 'Urgent', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
 const BAR: Record<Priority, string> = { URGENT: 'bg-destructive', HIGH: 'bg-warning', MEDIUM: 'bg-info', LOW: 'bg-border' };
 const TILE: Record<Priority, string> = {
-  URGENT: 'border-destructive/25 bg-destructive/8 text-destructive',
-  HIGH: 'border-warning/25 bg-warning/8 text-warning',
-  MEDIUM: 'border-info/25 bg-info/8 text-info',
-  LOW: 'border-border bg-muted text-foreground',
+  URGENT: 'border-destructive/25 bg-destructive/8 text-destructive dark:bg-destructive/12',
+  HIGH: 'border-warning/25 bg-warning/8 text-warning dark:bg-warning/12',
+  MEDIUM: 'border-info/25 bg-info/8 text-info dark:bg-info/12',
+  LOW: 'border-border bg-card text-foreground',
+};
+const KIND_BUBBLE: Record<string, string> = {
+  TICKET: 'bg-destructive/10 text-destructive dark:bg-destructive/16',
+  REQUEST: 'bg-info/10 text-info dark:bg-info/16',
+  ONBOARDING: 'bg-app-attendance/10 text-app-attendance dark:bg-app-attendance/16',
 };
 const STATUS_TEXT: Record<string, string> = { OPEN: 'Open', IN_PROGRESS: 'In progress', PENDING: 'Needs approval', APPROVED: 'Ready to fulfil' };
 const JOINER_TEXT: Record<string, string> = { SUBMITTED: 'Approve items', APPROVED: 'Assign items' };
@@ -47,28 +52,30 @@ export default function QueuePage() {
               key={p}
               type="button"
               onClick={() => set({ priority: active ? '' : p })}
-              className={cn('cursor-pointer rounded-xl border p-3 text-left transition', TILE[p], active ? 'ring-2 ring-current/40' : 'hover:shadow-sm', f.priority && !active && 'opacity-60')}
+              className={cn('relative cursor-pointer overflow-hidden rounded-xl border p-3 pl-4 text-left transition', TILE[p], active ? 'ring-2 ring-current/40' : 'hover:-translate-y-px hover:shadow-sm', f.priority && !active && 'opacity-60')}
+              aria-pressed={active}
             >
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide">
+              <span className={cn('absolute inset-y-0 left-0 w-1', BAR[p])} aria-hidden />
+              <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold tracking-wider uppercase">
                 <span className={cn('size-2 rounded-full', BAR[p])} />
                 {LABEL[p]}
               </div>
-              <div className="mt-1 text-2xl font-semibold tabular">{counts ? counts[p] : '–'}</div>
+              <div className="mt-1 font-mono text-[26px] leading-none font-semibold tabular">{counts ? counts[p] : '–'}</div>
             </button>
           );
         })}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1">
+        <div className="flex gap-0.5 rounded-lg border bg-card p-0.5">
           {KINDS.map((k) => (
             <button
               key={k.label}
               type="button"
               onClick={() => set({ kind: k.value })}
               className={cn(
-                'cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
-                (f.kind ?? '') === k.value ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+                'cursor-pointer rounded-md px-3 py-1 text-[13px] font-medium transition',
+                (f.kind ?? '') === k.value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >
               {k.label}
@@ -111,9 +118,9 @@ function GroupedList({ items }: { items: QueueItem[] }) {
         if (!group.length) return null;
         return (
           <section key={p}>
-            <h2 className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-muted/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
+            <h2 className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-muted/60 px-4 py-1.5 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase backdrop-blur">
               <span className={cn('size-2 rounded-full', BAR[p])} />
-              {LABEL[p]} · {group.length}
+              {LABEL[p]} <span className="rounded bg-card px-1.5 py-px tabular">{group.length}</span>
             </h2>
             <ul className="divide-y">
               {group.map((i) => (
@@ -133,13 +140,13 @@ function QueueRow({ item, compact }: { item: QueueItem; compact?: boolean }) {
   const navigate = useNavigate();
   const Icon = item.kind === 'TICKET' ? LifeBuoy : item.kind === 'ONBOARDING' ? UserPlus : ClipboardList;
   return (
-    <button type="button" onClick={() => navigate(item.link)} className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition hover:bg-muted/50">
+    <button type="button" onClick={() => navigate(item.link)} className="group flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition hover:bg-muted/50">
       <span className={cn('w-1 self-stretch rounded-full', BAR[item.priority])} />
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+      <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg transition group-hover:scale-105', KIND_BUBBLE[item.kind] ?? 'bg-muted text-muted-foreground')}>
         <Icon className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{item.title}</div>
+        <div className="truncate font-medium group-hover:text-primary">{item.title}</div>
         <div className="truncate text-xs text-muted-foreground">
           <span className="font-mono">{item.number}</span> · {(item.kind === 'ONBOARDING' ? JOINER_TEXT : STATUS_TEXT)[item.status] ?? item.status}
           {item.detail ? ` · ${item.detail}` : ''}
@@ -166,7 +173,10 @@ export function QueueCard() {
       <CardHeader>
         <div>
           <CardTitle className="flex items-center gap-2">
-            <ListOrdered className="size-4 text-primary" /> Priority queue
+            <span className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <ListOrdered className="size-3.5" />
+            </span>
+            Priority queue
           </CardTitle>
           <CardDescription>
             {c ? `${c.URGENT} urgent · ${c.HIGH} high · ${q.data!.total} waiting in total` : 'Loading…'}
@@ -193,9 +203,12 @@ export function QueueCard() {
         </ul>
       ) : (
         <CardContent>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckCircle2 className="size-4 text-success" /> All clear — nothing waiting.
-          </p>
+          <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm">
+            <span className="flex size-8 items-center justify-center rounded-full bg-success/15 text-success">
+              <CheckCircle2 className="size-4" />
+            </span>
+            <span className="text-success">All clear — nothing waiting.</span>
+          </div>
         </CardContent>
       )}
     </Card>

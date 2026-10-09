@@ -6,13 +6,13 @@ import { cn, initials } from '@/lib/utils';
 
 // ─── Card ─────────────────────────────────────────────────────────────────
 export function Card({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div data-slot="card" className={cn('rounded-xl border bg-card text-card-foreground shadow-[0_1px_3px_0_rgb(0_0_0/0.04),0_1px_2px_-1px_rgb(0_0_0/0.03)]', className)} {...props} />;
+  return <div data-slot="card" className={cn('rounded-lg border bg-card text-card-foreground shadow-card', className)} {...props} />;
 }
 export function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex items-start justify-between gap-3 px-5 pt-4 pb-3', className)} {...props} />;
+  return <div className={cn('flex items-start justify-between gap-3 px-5 pt-5 pb-3', className)} {...props} />;
 }
 export function CardTitle({ className, ...props }: React.ComponentProps<'h3'>) {
-  return <h3 className={cn('text-sm font-semibold tracking-tight', className)} {...props} />;
+  return <h3 className={cn('text-[15px] font-bold tracking-tight', className)} {...props} />;
 }
 export function CardDescription({ className, ...props }: React.ComponentProps<'p'>) {
   return <p className={cn('text-[13px] text-muted-foreground', className)} {...props} />;
@@ -23,20 +23,20 @@ export function CardContent({ className, ...props }: React.ComponentProps<'div'>
 
 // ─── Badge ────────────────────────────────────────────────────────────────
 export const badgeVariants = cva(
-  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-xs font-medium [&>svg]:size-3',
+  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11.5px] font-semibold leading-[1.5] [&>svg]:size-3',
   {
     variants: {
       tone: {
         neutral: 'border-transparent bg-muted text-muted-foreground',
         gray: 'border-border bg-muted text-foreground',
-        blue: 'border-info/25 bg-info/8 text-info',
-        indigo: 'border-primary/25 bg-primary/8 text-primary',
-        violet: 'border-app-attendance/25 bg-app-attendance/8 text-app-attendance',
-        green: 'border-success/25 bg-success/8 text-success',
-        amber: 'border-warning/25 bg-warning/8 text-warning',
-        orange: 'border-warning/25 bg-warning/8 text-warning',
-        red: 'border-destructive/25 bg-destructive/8 text-destructive',
-        cyan: 'border-info/25 bg-info/8 text-info',
+        blue: 'border-info/20 bg-info/10 text-info',
+        indigo: 'border-primary/20 bg-primary/10 text-primary',
+        violet: 'border-app-attendance/20 bg-app-attendance/10 text-app-attendance',
+        green: 'border-success/20 bg-success/10 text-success',
+        amber: 'border-warning/20 bg-warning/10 text-warning',
+        orange: 'border-warning/20 bg-warning/10 text-warning',
+        red: 'border-destructive/20 bg-destructive/10 text-destructive',
+        cyan: 'border-info/20 bg-info/10 text-info',
         outline: 'border-border bg-transparent text-foreground',
       },
     },
@@ -56,7 +56,7 @@ export function Badge({ className, tone, dot, children, ...props }: React.Compon
 
 // ─── Skeleton / Separator / Progress ─────────────────────────────────────
 export function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('animate-pulse rounded-md bg-muted', className)} {...props} />;
+  return <div className={cn('animate-pulse rounded-md bg-muted/80', className)} {...props} />;
 }
 
 export function Separator({ className, orientation = 'horizontal', ...props }: React.ComponentProps<typeof SeparatorPrimitive.Root>) {
@@ -74,7 +74,7 @@ export function Progress({ value, className, indicatorClassName }: { value: numb
   return (
     <ProgressPrimitive.Root className={cn('relative h-1.5 w-full overflow-hidden rounded-full bg-muted', className)} value={value}>
       <ProgressPrimitive.Indicator
-        className={cn('h-full rounded-full bg-primary transition-all duration-500', indicatorClassName)}
+        className={cn('h-full rounded-full bg-gradient-to-r from-brand-2 to-primary transition-all duration-500', indicatorClassName)}
         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
       />
     </ProgressPrimitive.Root>
@@ -104,7 +104,7 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input',
+        'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input hover:data-[state=unchecked]:bg-input/80',
         className,
       )}
       {...props}
@@ -117,13 +117,13 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 export const Tabs = TabsPrimitive.Root;
 export function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
-  return <TabsPrimitive.List className={cn('no-scrollbar inline-flex h-9 w-full items-center gap-1 overflow-x-auto overflow-y-hidden border-b', className)} {...props} />;
+  return <TabsPrimitive.List className={cn('no-scrollbar inline-flex h-10 w-full items-center gap-1 overflow-x-auto overflow-y-hidden border-b', className)} {...props} />;
 }
 export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        '-mb-px inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground [&_svg]:size-4',
+        '-mb-px inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 text-sm font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary [&_svg]:size-4',
         className,
       )}
       {...props}
@@ -155,14 +155,15 @@ export function Tooltip({ content, children, side = 'top' }: { content: React.Re
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────
+// Theme colours only, so dark mode and the brand colour follow automatically.
 const AVATAR_COLORS = [
-  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-  'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-  'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
-  'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
-  'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
+  'bg-primary/15 text-primary',
+  'bg-app-assets/15 text-app-assets',
+  'bg-warning/15 text-warning',
+  'bg-app-attendance/15 text-app-attendance',
+  'bg-info/15 text-info',
+  'bg-success/15 text-success',
+  'bg-app-admin/15 text-app-admin',
 ];
 
 export function Avatar({ name, className }: { name: string | null | undefined; className?: string }) {
@@ -170,8 +171,8 @@ export function Avatar({ name, className }: { name: string | null | undefined; c
   let h = 0;
   for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
   return (
-    <AvatarPrimitive.Root className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full', className)}>
-      <AvatarPrimitive.Fallback className={cn('flex size-full items-center justify-center text-xs font-semibold', AVATAR_COLORS[h % AVATAR_COLORS.length])}>
+    <AvatarPrimitive.Root className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full ring-1 ring-current/10 ring-inset', className)}>
+      <AvatarPrimitive.Fallback data-slot="avatar-fallback" className={cn('flex size-full items-center justify-center text-xs font-bold', AVATAR_COLORS[h % AVATAR_COLORS.length])}>
         {initials(n)}
       </AvatarPrimitive.Fallback>
     </AvatarPrimitive.Root>

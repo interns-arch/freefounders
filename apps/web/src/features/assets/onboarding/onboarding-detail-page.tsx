@@ -130,9 +130,10 @@ export default function OnboardingDetailPage() {
         </Link>
       </Button>
 
-      <Card>
-        <CardContent className="flex flex-wrap items-start gap-4 pt-5">
-          <Avatar name={o.employee.fullName} className="size-14 text-base" />
+      <Card className="relative overflow-hidden">
+        <span className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-gradient-to-br from-app-attendance/12 to-transparent blur-3xl" aria-hidden />
+        <CardContent className="relative flex flex-wrap items-start gap-4 pt-5">
+          <Avatar name={o.employee.fullName} className="size-14 text-base ring-4 ring-app-attendance/15" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Link to={`/assets/employees/${o.employee.id}`} className="text-xl font-semibold hover:text-primary hover:underline">

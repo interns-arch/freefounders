@@ -28,6 +28,8 @@ const ITEM_BUTTON: Record<ExitItemStatus, string> = {
   MISSING: 'data-[on=true]:bg-destructive/12 data-[on=true]:text-destructive dark:data-[on=true]:bg-destructive/15 dark:data-[on=true]:text-destructive',
 };
 
+const EXIT_ITEM_BAR: Record<'RETURNED' | 'DAMAGED' | 'PENDING' | 'MISSING', string> = { RETURNED: 'bg-success', DAMAGED: 'bg-app-admin', PENDING: 'bg-warning', MISSING: 'bg-destructive' };
+
 export default function ExitDetailPage() {
   const { id } = useParams();
   const { can } = useAuth();
@@ -136,11 +138,13 @@ export default function ExitDetailPage() {
         <Link to="/assets/exits" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-3.5" /> Exits
         </Link>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <Card className="relative overflow-hidden p-4 sm:p-5">
+          <span className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-gradient-to-br from-warning/12 to-transparent blur-3xl" aria-hidden />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4">
-            <Avatar name={x.employee.fullName} className="size-14 text-base" />
+            <Avatar name={x.employee.fullName} className="size-14 text-base ring-4 ring-warning/15" />
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Exit clearance · {x.caseNumber}</p>
+              <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Exit clearance · {x.caseNumber}</p>
               <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
                 <Link to={`/assets/employees/${x.employee.id}`} className="hover:text-primary">
                   {x.employee.fullName}
@@ -156,14 +160,15 @@ export default function ExitDetailPage() {
               </div>
             </div>
           </div>
-          <Card className="flex items-center gap-4 px-4 py-3">
+          <div className="flex items-center gap-4 rounded-xl border bg-muted/30 px-4 py-3">
             <div>
-              <p className="text-xs text-muted-foreground">Last working day</p>
-              <p className="text-lg font-semibold">{formatDate(x.lastWorkingDate)}</p>
+              <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Last working day</p>
+              <p className="font-mono text-lg font-semibold">{formatDate(x.lastWorkingDate)}</p>
             </div>
             {open && <DaysLeft date={x.lastWorkingDate} className="text-sm" />}
-          </Card>
-        </div>
+          </div>
+          </div>
+        </Card>
       </div>
 
       {x.status === 'COMPLETED' && (
@@ -184,27 +189,33 @@ export default function ExitDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Card className="p-4 sm:col-span-2">
-          <div className="flex items-end justify-between">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <Card className="relative overflow-hidden p-4 sm:col-span-2">
+          <span className={cn('pointer-events-none absolute -top-10 -right-10 size-32 rounded-full bg-gradient-to-br to-transparent blur-2xl', blocking ? 'from-warning/16' : 'from-success/16')} aria-hidden />
+          <div className="relative flex items-end justify-between">
             <div>
-              <p className="text-[13px] font-medium text-muted-foreground">Recovery progress</p>
-              <p className="mt-1 text-2xl font-semibold tabular">
-                {x.counts.cleared} <span className="text-base font-normal text-muted-foreground">of {x.counts.total} cleared</span>
+              <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Recovery progress</p>
+              <p className="mt-1.5 font-mono text-[28px] leading-none font-semibold tabular">
+                {x.counts.cleared} <span className="font-sans text-base font-normal text-muted-foreground">of {x.counts.total} cleared</span>
               </p>
             </div>
-            <span className="text-2xl font-semibold tabular text-muted-foreground">{pct}%</span>
+            <span className={cn('font-mono text-2xl font-semibold tabular', blocking ? 'text-warning' : 'text-success')}>{pct}%</span>
           </div>
-          <Progress value={pct} className="mt-3 h-2" indicatorClassName={blocking ? 'bg-warning' : 'bg-success'} />
+          <Progress value={pct} className="relative mt-3 h-2" indicatorClassName={blocking ? 'bg-warning' : 'bg-success'} />
         </Card>
-        {(['RETURNED', 'DAMAGED', 'PENDING', 'MISSING'] as const).map((s) => (
-          <Card key={s} className={cn('p-4', s === 'RETURNED' && 'hidden lg:block')}>
-            <p className="text-[13px] font-medium text-muted-foreground">{humanize(s)}</p>
-            <p className={cn('mt-1 text-2xl font-semibold tabular', s === 'MISSING' && x.counts.missing && 'text-destructive', s === 'PENDING' && x.counts.pending && 'text-warning')}>
-              {x.counts[s.toLowerCase() as 'returned']}
-            </p>
-          </Card>
-        ))}
+        {(['RETURNED', 'DAMAGED', 'PENDING', 'MISSING'] as const).map((s) => {
+          const n = x.counts[s.toLowerCase() as 'returned'];
+          const tone = s === 'MISSING' && n ? 'text-destructive' : s === 'PENDING' && n ? 'text-warning' : s === 'DAMAGED' && n ? 'text-app-admin' : s === 'RETURNED' && n ? 'text-success' : '';
+          return (
+            <Card key={s} className="flex flex-col justify-between p-4">
+              <p className="flex items-center gap-1.5 font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+                <span className={cn('size-1.5 rounded-full', EXIT_ITEM_BAR[s])} aria-hidden />
+                {humanize(s)}
+              </p>
+              <p className={cn('mt-1.5 font-mono text-[28px] leading-none font-semibold tabular', tone)}>{n}</p>
+            </Card>
+          );
+        })}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">

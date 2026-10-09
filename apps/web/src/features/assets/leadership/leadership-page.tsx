@@ -1,5 +1,6 @@
 import { Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, UserPlus, Users } from 'lucide-react';
-import { EmptyState, ErrorState, PageHeader, PageLoader, StatCard } from '@/components/common/page';
+import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { StatTile } from '@/features/assets/components/stat-tile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { useLeadership } from '@freefounders/core/assets';
@@ -48,9 +49,9 @@ export default function LeadershipPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="People" value={formatNumber(h.headcount)} hint={`${h.joiners} joined · ${h.leavers} left · ${h.onNotice} on notice`} icon={Users} tone="blue" />
-        <StatCard label="Joining soon" value={h.upcomingJoiners} hint="Being onboarded" icon={UserPlus} tone="violet" />
-        <StatCard label="Assets in use" value={formatNumber(h.assetsInUse)} hint={`${formatNumber(h.assetsAvailable)} available`} icon={Boxes} tone="green" />
+        <StatTile label="People" value={formatNumber(h.headcount)} hint={`${h.joiners} joined · ${h.leavers} left · ${h.onNotice} on notice`} icon={Users} tone="blue" to="/assets/employees" />
+        <StatTile label="Joining soon" value={h.upcomingJoiners} hint="Being onboarded" icon={UserPlus} tone="violet" to="/assets/onboarding" />
+        <StatTile label="Assets in use" value={formatNumber(h.assetsInUse)} hint={`${formatNumber(h.assetsAvailable)} available`} icon={Boxes} tone="indigo" to="/assets/assets?status=ASSIGNED" />
       </div>
 
       <Card>
@@ -63,6 +64,7 @@ export default function LeadershipPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric
             icon={LifeBuoy}
+            tone="bg-destructive/10 text-destructive"
             title="Tickets"
             value={`${s.ticketsResolved} resolved`}
             lines={[`${s.ticketsOpened} raised · ${s.ticketsOpen} open now`, `Typical fix time: ${hours(s.avgResolutionHours)}`]}
@@ -70,13 +72,15 @@ export default function LeadershipPage() {
           />
           <Metric
             icon={ClipboardList}
+            tone="bg-info/10 text-info"
             title="Asset requests"
             value={`${s.requestsFulfilled} fulfilled`}
             lines={[`${s.requestsRaised} raised · ${s.requestsWaiting} waiting`, `Typical wait: ${s.avgFulfilDays === null ? '—' : `${s.avgFulfilDays} days`}`]}
           />
-          <Metric icon={CheckCircle2} title="Handovers" value={`${s.handovers} assets handed over`} lines={[`${s.onboardingsCompleted} joiners onboarded${onTime === null ? '' : ` · ${onTime}% ready on day 1`}`]} />
+          <Metric icon={CheckCircle2} tone="bg-success/10 text-success" title="Handovers" value={`${s.handovers} assets handed over`} lines={[`${s.onboardingsCompleted} joiners onboarded${onTime === null ? '' : ` · ${onTime}% ready on day 1`}`]} />
           <Metric
             icon={LogOut}
+            tone="bg-warning/10 text-warning"
             title="Exits"
             value={`${s.exitsCompleted} completed`}
             lines={[`${s.itemsRecovered} assets recovered`]}
@@ -169,13 +173,19 @@ export default function LeadershipPage() {
   );
 }
 
-function Metric({ icon: Icon, title, value, lines, warn }: { icon: typeof Users; title: string; value: string; lines: string[]; warn?: string }) {
+function Metric({ icon: Icon, tone, title, value, lines, warn }: { icon: typeof Users; tone: string; title: string; value: string; lines: string[]; warn?: string }) {
+  const [n, ...rest] = value.split(' ');
   return (
-    <div className="rounded-xl border p-4">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        <Icon className="size-4" /> {title}
+    <div className="rounded-xl border bg-muted/20 p-4 transition hover:bg-card hover:shadow-xs">
+      <div className="flex items-center gap-2 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+        <span className={cn('flex size-7 items-center justify-center rounded-lg', tone)}>
+          <Icon className="size-4" />
+        </span>
+        {title}
       </div>
-      <div className="mt-2 text-lg font-semibold">{value}</div>
+      <div className="mt-2.5 text-lg font-semibold">
+        <span className="font-mono text-2xl tabular">{n}</span> <span className="text-base">{rest.join(' ')}</span>
+      </div>
       {lines.map((l) => (
         <p key={l} className="text-xs text-muted-foreground">
           {l}

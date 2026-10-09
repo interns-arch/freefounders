@@ -1,7 +1,7 @@
 /** HR → My leave (balances, requests, apply / cancel) and Holidays. */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type LeaveRequest, type LeaveType, useAddHoliday, useApplyLeave, useCancelLeave, useDeleteHoliday, useHolidays, useLeaveBalances, useLeaveTypes, useMyLeaves } from '@freefounders/core/hr';
-import { CalendarDays, Plus } from 'lucide-react';
+import { CalendarDays, CalendarHeart, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,8 @@ import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { Chip, ErrorNote, Tile, type Tone, fmtDay } from '../tasks/general/parts';
+import { Chip, ErrorNote, SectionHead, type Tone, fmtDay } from '../tasks/general/parts';
+import { cn } from '@/lib/utils';
 
 const LEAVE_TONE: Record<LeaveRequest['status'], Tone> = { pending: 'warning', approved: 'success', rejected: 'danger', cancelled: 'neutral' };
 
@@ -30,32 +31,56 @@ export function MyLeaveTab() {
 
   return (
     <div className="max-w-4xl space-y-4">
-      <Button onClick={() => setApplying(true)} disabled={!types.data}>
-        <Plus /> Apply for leave
-      </Button>
+      <SectionHead
+        actions={
+          <Button onClick={() => setApplying(true)} disabled={!types.data}>
+            <Plus /> Apply for leave
+          </Button>
+        }
+      >
+        Balances
+      </SectionHead>
       {balances.data?.length === 0 && <p className="text-sm text-muted-foreground">No leave types configured yet — an admin can add them in HR Settings.</p>}
+      {!balances.data && balances.isPending && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {balances.data?.map((b) => (
-          <Tile
-            key={b.leave_type}
-            label={`${b.name}${b.paid ? '' : ' (unpaid)'}`}
-            value={
-              <>
+        {balances.data?.map((b) => {
+          const pct = b.quota > 0 ? Math.max(0, Math.min(100, (100 * b.balance) / b.quota)) : 0;
+          const low = b.quota > 0 && pct <= 25;
+          return (
+            <Card key={b.leave_type} className={cn('relative overflow-hidden p-4', low && 'border-warning/40')}>
+              <div aria-hidden className={cn('pointer-events-none absolute -top-10 -right-8 size-28 rounded-full blur-2xl', low ? 'bg-warning/20' : 'bg-brand-2/15')} />
+              <p className="relative flex items-center gap-1.5 truncate font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase" title={b.name}>
+                <CalendarHeart className={cn('size-3.5 shrink-0', low ? 'text-warning' : 'text-primary')} />
+                <span className="truncate">{b.name}</span>
+              </p>
+              <p className="relative mt-1.5 font-mono text-[25px] leading-tight font-bold tracking-tight tabular-nums">
                 {b.balance}
-                <span className="text-sm font-normal text-muted-foreground"> / {b.quota}</span>
-              </>
-            }
-            sub={b.pending > 0 ? `${b.pending} pending` : undefined}
-          />
-        ))}
+                <span className="text-sm font-medium text-muted-foreground"> / {b.quota}</span>
+              </p>
+              <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                <div className={cn('h-full rounded-full', low ? 'bg-warning' : 'bg-gradient-to-r from-primary to-brand-2')} style={{ width: `${pct}%` }} />
+              </div>
+              <div className="relative mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                <span>{b.paid ? 'paid' : 'unpaid'}</span>
+                {b.pending > 0 && <Chip tone="warning">{b.pending} pending</Chip>}
+              </div>
+            </Card>
+          );
+        })}
       </div>
+      <SectionHead>Requests</SectionHead>
       {cancel.error && <ErrorNote>{errorMessage(cancel.error)}</ErrorNote>}
       {rows.length === 0 ? (
         <Card>
-          <EmptyState icon={CalendarDays} title="No leave requests yet" />
+          <EmptyState icon={CalendarDays} title="No leave requests yet" description="Apply above; approved and pending requests show here." className="py-10" />
         </Card>
       ) : (
-        <Card>
+        <Card className="overflow-hidden">
           <Table>
             <THead>
               <TR>
@@ -175,7 +200,7 @@ export function HolidaysTab() {
     <div className="max-w-2xl space-y-4">
       {canManage && (
         <form
-          className="flex flex-wrap items-end gap-2"
+          className="flex flex-wrap items-end gap-2 rounded-xl border bg-card p-3 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)]"
           onSubmit={(e) => {
             e.preventDefault();
             add.mutate(f, { onSuccess: () => setF({ name: '', date: '' }) });
@@ -199,11 +224,11 @@ export function HolidaysTab() {
       {!q.data && !q.error && <Skeleton className="h-32" />}
       {q.data?.length === 0 && (
         <Card>
-          <EmptyState icon={CalendarDays} title="No holidays configured" />
+          <EmptyState icon={CalendarDays} title="No holidays configured" description={canManage ? 'Add the company holidays above; they count as paid days off.' : 'The company holidays appear here once added.'} />
         </Card>
       )}
       {q.data && q.data.length > 0 && (
-        <Card>
+        <Card className="overflow-hidden">
           <Table>
             <THead>
               <TR>
@@ -215,8 +240,15 @@ export function HolidaysTab() {
             <TBody>
               {q.data.map((h) => (
                 <TR key={h.id}>
-                  <TD className="font-medium">{h.name}</TD>
-                  <TD>{new Date(`${h.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</TD>
+                  <TD className="font-medium">
+                    <span className="flex items-center gap-2.5">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                        <CalendarHeart className="size-4" />
+                      </span>
+                      {h.name}
+                    </span>
+                  </TD>
+                  <TD className="font-mono text-[13px]">{new Date(`${h.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</TD>
                   {canManage && (
                     <TD className="text-right">
                       <Button size="xs" variant="outline" aria-label={`Delete ${h.name}`} onClick={() => del.mutate(h.id)}>

@@ -102,7 +102,7 @@ export function DataTable<T>({
 
   return (
     <div className={cn('relative', className)}>
-      {fetching && !loading && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-primary/60" />}
+      {fetching && !loading && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-gradient-to-r from-brand-2 to-primary" />}
       <Table>
         <THead>
           <TR className="hover:bg-transparent">
@@ -129,7 +129,7 @@ export function DataTable<T>({
                   {sortable ? (
                     <button
                       type="button"
-                      className="-ml-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 hover:bg-accent hover:text-foreground"
+                      className="-ml-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 uppercase transition hover:bg-accent hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
                       onClick={() => onSortChange!({ key: c.sortKey!, dir: isSorted && sort!.dir === 'asc' ? 'desc' : 'asc' })}
                     >
                       {c.header}
@@ -166,7 +166,7 @@ export function DataTable<T>({
                   <TR
                     key={id}
                     data-state={isSelected ? 'selected' : undefined}
-                    className={cn(onRowClick && 'cursor-pointer hover:bg-muted/50', i === active && 'bg-accent/70 hover:bg-accent/70')}
+                    className={cn(onRowClick && 'cursor-pointer', i === active && 'bg-accent/70 hover:bg-accent/70')}
                     onClick={() => onRowClick?.(row)}
                     onMouseEnter={() => onRowHover?.(row)}
                   >
@@ -214,8 +214,8 @@ export function Pagination({
     [page, pages],
   );
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-2.5 text-[13px] text-muted-foreground">
-      <span className="tabular">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/30 px-4 py-2.5 text-[13px] text-muted-foreground">
+      <span className="font-mono text-xs tabular">
         {formatNumber(from)}–{formatNumber(to)} of {formatNumber(total)}
       </span>
       <div className="flex items-center gap-2">
@@ -228,7 +228,7 @@ export function Pagination({
             ))}
           </NativeSelect>
         )}
-        <span className="tabular">
+        <span className="font-mono text-xs tabular">
           Page {page} of {pages}
         </span>
         <Button variant="outline" size="icon-sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} aria-label="Previous page">

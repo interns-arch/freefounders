@@ -10,7 +10,7 @@ import {
   useReviewCompletion,
   useWorkTaskList,
 } from '@freefounders/core/tasks';
-import { ArrowUp, Paperclip, RotateCcw } from 'lucide-react';
+import { ArrowUp, CheckCircle2, ClipboardCheck, Clock, Paperclip, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -22,18 +22,21 @@ import { Badge, Card, Checkbox, Skeleton } from '@/components/ui/primitives';
 import { ProofreadText, fmtDT, fmtEffort } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
 import { describeChanges } from './dialogs';
-import { Segmented, TaskCode } from './task-bits';
+import { CountPill, Segmented, TaskCode } from './task-bits';
 
 const fail = (e: unknown) => toast.error(errorMessage(e));
 const IMAGE = /\.(jpe?g|png|gif|webp|heic|bmp)$/i;
 
 function Loading() {
   return (
-    <div className="space-y-3 p-4">
+    <ul className="divide-y" aria-busy="true" aria-label="Loading">
       {Array.from({ length: 3 }, (_, i) => (
-        <Skeleton key={i} className="h-16" />
+        <li key={i} className="space-y-2 px-4 py-4">
+          <Skeleton className="h-4 w-2/3 max-w-sm" />
+          <Skeleton className="h-3 w-1/2 max-w-64" />
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -43,11 +46,13 @@ function ProofFiles({ files }: { files: TaskFile[] }) {
   const others = files.filter((f) => !IMAGE.test(f.filename) || !f.url);
   return (
     <div className="mt-2 space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground">Proof attached · {files.length}</p>
+      <p className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">
+        <Paperclip className="size-3" aria-hidden /> Proof attached <CountPill tone="neutral">{files.length}</CountPill>
+      </p>
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {images.map((f) => (
-            <a key={f.id} href={f.url!} target="_blank" rel="noreferrer" title={f.filename} className="block size-20 overflow-hidden rounded-md border">
+            <a key={f.id} href={f.url!} target="_blank" rel="noreferrer" title={f.filename} className="block size-20 overflow-hidden rounded-lg border shadow-xs transition hover:border-primary/50">
               <img src={f.url!} alt={f.filename} loading="lazy" className="size-full object-cover" />
             </a>
           ))}
@@ -56,7 +61,7 @@ function ProofFiles({ files }: { files: TaskFile[] }) {
       {others.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {others.map((f) => (
-            <a key={f.id} href={f.url ?? undefined} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent">
+            <a key={f.id} href={f.url ?? undefined} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-card px-2 py-1 text-xs font-medium hover:border-primary/50 hover:text-primary">
               <Paperclip className="size-3" aria-hidden /> {f.filename}
             </a>
           ))}
@@ -176,8 +181,8 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
         </div>
       )}
       {inbox && total > rows.length && (
-        <p className="text-sm text-muted-foreground">
-          Showing the latest {rows.length} of {total}. Accept these and the rest will load.
+        <p className="rounded-lg border border-info/30 bg-info/5 px-3 py-2 text-[13px] text-muted-foreground">
+          Showing the latest <strong className="font-mono text-foreground">{rows.length}</strong> of <strong className="font-mono text-foreground">{total}</strong>. Accept these and the rest will load.
         </p>
       )}
       <Card className="overflow-hidden">
@@ -186,14 +191,14 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
         ) : q.error ? (
           <ErrorState error={q.error} onRetry={() => q.refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title={inbox ? 'Nothing waiting for you to accept.' : 'Nothing here yet.'} />
+          <EmptyState icon={ClipboardCheck} title={inbox ? 'Nothing waiting for you to accept.' : 'Nothing here yet.'} description={inbox ? 'When someone marks a task you gave them as done, it lands here for you to accept or send back.' : undefined} />
         ) : (
           <ul className="divide-y" aria-label="Completions">
             {shown.map((r) => {
               const late = !!r.task_due_at && new Date(r.created_at) > new Date(r.task_due_at);
               const over = !!r.task_actual_minutes && !!r.task_effort_minutes && r.task_actual_minutes > r.task_effort_minutes;
               return (
-                <li key={r.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start">
+                <li key={r.id} className={cn('flex flex-col gap-3 border-l-[3px] py-3.5 pr-4 pl-3.5 transition-colors hover:bg-muted/40 sm:flex-row sm:items-start', r.status === 'pending' ? 'border-l-primary' : r.status === 'rejected' ? 'border-l-warning' : 'border-l-success')}>
                   <div className="flex min-w-0 flex-1 gap-3">
                     {inbox && r.status === 'pending' && (
                       <Checkbox
@@ -214,20 +219,31 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <TaskCode code={r.task_code} />
-                        <Link to={href(r.task)} state={{ fromList: true }} className="font-medium hover:text-primary hover:underline">
+                        <Link to={href(r.task)} state={{ fromList: true }} className="text-[14.5px] font-semibold hover:text-primary hover:underline">
                           {r.task_title}
                         </Link>
-                        {r.status !== 'pending' && <Badge tone={r.status === 'rejected' ? 'orange' : 'green'}>{r.status_display}</Badge>}
-                        {late && <Badge tone="orange">finished late</Badge>}
+                        {r.status !== 'pending' && (
+                          <Badge tone={r.status === 'rejected' ? 'orange' : 'green'} className="rounded-full" dot>
+                            {r.status_display}
+                          </Badge>
+                        )}
+                        {late && (
+                          <Badge tone="red" className="rounded-full">
+                            finished late
+                          </Badge>
+                        )}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {r.submitted_by?.name} · submitted {fmtDT(r.created_at)} · took <strong className="text-foreground">{fmtEffort(r.task_actual_minutes) ?? '—'}</strong> against {fmtEffort(r.task_effort_minutes) ?? '—'}
-                        {over && <span className="text-destructive"> · over estimate</span>}
+                      <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+                        <strong className="font-semibold text-foreground">{r.submitted_by?.name}</strong> · submitted {fmtDT(r.created_at)}
+                        <span className={cn('inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 font-mono font-semibold tabular', over ? 'border-destructive/40 text-destructive' : 'text-foreground')} title={over ? 'Took longer than the assigned effort' : 'Effort spent against the assigned effort'}>
+                          <Clock className="size-3" aria-hidden /> {fmtEffort(r.task_actual_minutes) ?? '—'} <span className="font-sans font-normal text-muted-foreground">of</span> {fmtEffort(r.task_effort_minutes) ?? '—'}
+                        </span>
+                        {over && <span className="font-semibold text-destructive">over estimate</span>}
                       </p>
-                      {r.note && <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">{r.note}</p>}
+                      {r.note && <p className="mt-1.5 border-l-2 border-border pl-3 text-sm whitespace-pre-wrap text-foreground/90">{r.note}</p>}
                       {r.files?.length > 0 && <ProofFiles files={r.files} />}
                       {r.remarks && (
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className={cn('mt-1.5 rounded-lg px-3 py-1.5 text-sm', r.status === 'rejected' ? 'bg-warning/10 text-warning' : 'bg-muted text-muted-foreground')}>
                           <strong>{r.status === 'rejected' ? 'Sent back' : 'Note'}:</strong> {r.remarks}
                         </p>
                       )}
@@ -265,9 +281,9 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
                     </div>
                   </div>
                   {r.status === 'pending' && rejecting !== r.id && (
-                    <div className="flex gap-2 pl-7 sm:pl-0">
+                    <div className="flex gap-2 pl-7 sm:pl-0 [&>button]:flex-1 sm:[&>button]:flex-none">
                       <Button size="sm" disabled={busy} aria-label={`Accept ${r.task_code}`} onClick={() => decide.mutate({ id: r.id, decision: 'approved' }, { onSuccess: () => toast.success(`${r.task_code} accepted`), onError: fail })}>
-                        Accept
+                        <CheckCircle2 /> Accept
                       </Button>
                       <Button size="sm" variant="outline" disabled={busy} aria-label={`Send back ${r.task_code}`} onClick={() => (setRejecting(r.id), setWhy(''))}>
                         Send back
@@ -310,34 +326,40 @@ export function RequestsTab({ href }: { href: (id: number) => string }) {
         ) : q.error ? (
           <ErrorState error={q.error} onRetry={() => q.refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title={scope === 'inbox' ? 'Nothing waiting for your approval.' : 'No requests here.'} />
+          <EmptyState icon={ClipboardCheck} title={scope === 'inbox' ? 'Nothing waiting for your approval.' : 'No requests here.'} description={scope === 'inbox' ? 'Change requests on tasks you gave (deadline, effort, priority…) land here.' : undefined} />
         ) : (
           <ul className="divide-y" aria-label="Change requests">
             {rows.map((r) => (
-              <li key={r.id} className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start">
+              <li key={r.id} className={cn('flex flex-col gap-3 border-l-[3px] py-3.5 pr-4 pl-3.5 transition-colors hover:bg-muted/40 lg:flex-row lg:items-start', r.status === 'pending' ? 'border-l-warning' : r.status === 'approved' ? 'border-l-success' : r.status === 'rejected' ? 'border-l-destructive' : 'border-l-border')}>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <TaskCode code={r.task_code} />
-                    <Link to={href(r.task)} state={{ fromList: true }} className="font-medium hover:text-primary hover:underline">
+                    <Link to={href(r.task)} state={{ fromList: true }} className="text-[14.5px] font-semibold hover:text-primary hover:underline">
                       {r.task_title}
                     </Link>
-                    <Badge tone={r.status === 'pending' ? 'amber' : r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'neutral'}>{r.status_display}</Badge>
+                    <Badge tone={r.status === 'pending' ? 'amber' : r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'neutral'} className="rounded-full" dot>
+                      {r.status_display}
+                    </Badge>
                     {r.escalated && (
-                      <Badge tone="violet">
+                      <Badge tone="violet" className="rounded-full">
                         <ArrowUp /> escalated to admin
                       </Badge>
                     )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Task of <strong className="text-foreground">{r.task_assignee_name || r.task_assignee || '—'}</strong>
+                    Task of <strong className="font-semibold text-foreground">{r.task_assignee_name || r.task_assignee || '—'}</strong>
                     {r.task_created_by_name && <> · created by {r.task_created_by_name}</>}
                   </p>
-                  <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-sm">
+                  <ul className="mt-2 flex flex-wrap gap-1.5 text-[13px]">
                     {describeChanges(r).map((line, i) => (
-                      <li key={i}>{line}</li>
+                      <li key={i} className="rounded-md border border-warning/30 bg-warning/8 px-2 py-1 font-medium">
+                        {line}
+                      </li>
                     ))}
                   </ul>
-                  <p className="mt-1 text-sm text-muted-foreground">Reason: {r.reason}</p>
+                  <p className="mt-2 border-l-2 border-border pl-3 text-sm text-foreground/90">
+                    <span className="text-muted-foreground">Reason:</span> {r.reason}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {r.requested_by?.name} · {fmtDT(r.created_at)}
                     {r.reviewed_by && (
@@ -382,22 +404,24 @@ export function DeletedTab() {
   const rows = q.data?.rows ?? [];
   return (
     <div className="max-w-3xl space-y-3">
-      <p className="text-sm text-muted-foreground">Deleted tasks are never destroyed — they rest here, restorable any time.</p>
+      <p className="flex items-start gap-2 text-sm text-muted-foreground">
+        <Trash2 className="mt-0.5 size-4 shrink-0" aria-hidden /> Deleted tasks are never destroyed — they rest here, restorable any time.
+      </p>
       <Card className="overflow-hidden">
         {q.isLoading ? (
           <Loading />
         ) : q.error ? (
           <ErrorState error={q.error} onRetry={() => q.refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title="The bin is empty." />
+          <EmptyState icon={Trash2} title="The bin is empty." description="Tasks that are deleted or cancelled show up here." />
         ) : (
           <ul className="divide-y" aria-label="Deleted tasks">
             {rows.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 px-4 py-3">
-                <div className={cn('min-w-0 flex-1')}>
+              <li key={t.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <TaskCode code={t.code} />
-                    <span className="font-medium text-muted-foreground">{t.title}</span>
+                    <span className="font-semibold text-muted-foreground line-through decoration-muted-foreground/40">{t.title}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {t.assigned_to_detail?.name} · deleted {fmtDT(t.deleted_at)}

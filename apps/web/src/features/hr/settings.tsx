@@ -13,7 +13,7 @@ import {
   useSaveHrSettings,
 } from '@freefounders/core/hr';
 import { useTeamDirectory } from '@freefounders/core/tasks';
-import { Camera, LocateFixed, X } from 'lucide-react';
+import { CalendarHeart, Camera, LocateFixed, MapPin, ScanFace, Settings2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -79,7 +79,7 @@ function AttendanceRules() {
 
   return (
     <form onSubmit={submit} aria-label="Attendance rules">
-      <Panel title="Attendance rules">
+      <Panel icon={Settings2} title="Attendance rules" description="Working hours, grace time and what a punch needs. Saved for this company.">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="hr-start">Work starts</Label>
@@ -120,7 +120,7 @@ function AttendanceRules() {
           <legend className="mb-1.5 text-[13px] font-medium">Weekly off</legend>
           <div role="group" aria-label="Weekly off days" className="flex flex-wrap gap-1.5">
             {WEEKDAYS.map((d, i) => (
-              <label key={d} className={cn('flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm', week.includes(i) && 'border-primary/40 bg-primary/10')}>
+              <label key={d} className={cn('flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors hover:bg-accent', week.includes(i) && 'border-primary/40 bg-primary/10 font-semibold text-primary')}>
                 <Checkbox checked={week.includes(i)} onCheckedChange={() => toggleDay(i)} aria-label={d} /> {d}
               </label>
             ))}
@@ -164,15 +164,20 @@ function Offices() {
     navigator.geolocation?.getCurrentPosition((p) => setO((x) => ({ ...x, latitude: p.coords.latitude.toFixed(6), longitude: p.coords.longitude.toFixed(6) })));
   const error = add.error ?? del.error;
   return (
-    <Panel title="Office locations (geo-fence)">
+    <Panel icon={MapPin} tone="info" title="Office locations (geo-fence)">
       {q.data?.length === 0 && <p className="text-sm text-muted-foreground">No office added. Geo-fencing cannot be enforced until one exists.</p>}
       <ul className="divide-y">
         {q.data?.map((x) => (
           <li key={x.id} className="flex items-center justify-between gap-2 py-2">
-            <div>
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-8 items-center justify-center rounded-lg bg-info/12 text-info">
+                <MapPin className="size-4" />
+              </span>
+              <div>
               <div className="text-sm font-medium">{x.name}</div>
               <div className="text-xs text-muted-foreground">
                 {x.latitude}, {x.longitude} · {x.radius_m} m
+              </div>
               </div>
             </div>
             <Button size="icon-xs" variant="ghost" aria-label={`Remove office ${x.name}`} onClick={() => del.mutate(x.id)}>
@@ -232,7 +237,7 @@ function FaceEnrolment() {
   const error = face.enrol.error ?? face.remove.error;
 
   return (
-    <Panel title="Face attendance">
+    <Panel icon={ScanFace} tone="warning" title="Face attendance">
       <p className="text-sm text-muted-foreground">
         {config?.face_enabled
           ? 'Face verification is ON — employees must pass a face check to mark attendance.'
@@ -301,18 +306,18 @@ function LeaveTypes() {
   const empty = { name: '', annual_quota: '12', paid: true, requires_document: false };
   const [t, setT] = useState(empty);
   return (
-    <Panel title="Leave types">
-      <ul className="divide-y">
+    <Panel icon={CalendarHeart} tone="success" title="Leave types">
+      <ul className="grid gap-2 sm:grid-cols-2">
         {q.data?.map((x) => (
-          <li key={x.id} className="flex items-center justify-between py-2">
-            <div>
-              <div className="text-sm font-medium">{x.name}</div>
+          <li key={x.id} className={cn('flex items-center justify-between gap-2 rounded-xl border bg-muted/30 px-3 py-2', !x.active && 'opacity-70')}>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{x.name}</div>
               <div className="text-xs text-muted-foreground">
                 {x.annual_quota}/yr · {x.paid ? 'paid' : 'unpaid'}
                 {x.requires_document ? ' · document required' : ''}
               </div>
             </div>
-            {!x.active && <Chip>Inactive</Chip>}
+            {!x.active ? <Chip>Inactive</Chip> : <span className="font-mono text-sm font-bold text-primary tabular-nums">{x.annual_quota}</span>}
           </li>
         ))}
       </ul>

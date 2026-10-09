@@ -1,4 +1,4 @@
-import { AlertTriangle, Inbox, RotateCcw } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Inbox, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Card, Skeleton } from '@/components/ui/primitives';
 import { errorMessage } from '@freefounders/core';
 import { cn } from '@/lib/utils';
 
+/** Page title block (the old app's "Good morning, Demo" header): big bold title, a quiet line under it, actions on the right. */
 export function PageHeader({
   title,
   description,
@@ -20,22 +21,22 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={cn('mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}>
+    <div className={cn('mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}>
       <div className="min-w-0">
         {breadcrumb && (
-          <nav className="mb-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+          <nav className="mb-2 flex items-center gap-1 font-mono text-[11px] tracking-wider text-muted-foreground uppercase" aria-label="Breadcrumb">
             {breadcrumb.map((b, i) => (
               <span key={b.to} className="flex items-center gap-1">
-                {i > 0 && <span className="opacity-50">/</span>}
-                <Link to={b.to} className="hover:text-foreground">
+                {i > 0 && <ChevronRight className="size-3 opacity-50" aria-hidden />}
+                <Link to={b.to} className="rounded px-0.5 transition hover:text-primary">
                   {b.label}
                 </Link>
               </span>
             ))}
           </nav>
         )}
-        <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        <h1 className="truncate text-[26px] leading-tight font-bold tracking-tight sm:text-[28px]">{title}</h1>
+        {description && <p className="mt-1 text-[13.5px] text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -57,12 +58,13 @@ export function EmptyState({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-14 text-center', className)}>
-      <div className="mb-3 flex size-11 items-center justify-center rounded-xl border bg-muted/50">
-        <Icon className="size-5 text-muted-foreground" />
+      <div className="relative mb-4 flex size-14 items-center justify-center rounded-2xl border border-primary/15 bg-gradient-to-br from-accent to-card shadow-card">
+        <Icon className="size-6 text-primary" />
+        <span aria-hidden className="absolute -right-1 -bottom-1 size-3 rounded-full border-2 border-card bg-brand-2" />
       </div>
-      <p className="text-sm font-medium">{title}</p>
-      {description && <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
+      <p className="text-[15px] font-semibold">{title}</p>
+      {description && <p className="mt-1 max-w-sm text-[13.5px] text-muted-foreground">{description}</p>}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }
@@ -70,13 +72,13 @@ export function EmptyState({
 export function ErrorState({ error, onRetry, className }: { error: unknown; onRetry?: () => void; className?: string }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-12 text-center', className)}>
-      <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-destructive/8">
-        <AlertTriangle className="size-5 text-destructive" />
+      <div className="mb-4 flex size-14 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/8">
+        <AlertTriangle className="size-6 text-destructive" />
       </div>
-      <p className="text-sm font-medium">Couldn’t load this</p>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{errorMessage(error)}</p>
+      <p className="text-[15px] font-semibold">Couldn’t load this</p>
+      <p className="mt-1 max-w-sm text-[13.5px] text-muted-foreground">{errorMessage(error)}</p>
       {onRetry && (
-        <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
+        <Button variant="outline" size="sm" className="mt-5" onClick={onRetry}>
           <RotateCcw /> Try again
         </Button>
       )}
@@ -86,18 +88,22 @@ export function ErrorState({ error, onRetry, className }: { error: unknown; onRe
 
 export function PageLoader() {
   return (
-    <div className="space-y-4">
-      <Skeleton className="h-8 w-56" />
+    <div className="space-y-5" aria-busy="true" aria-label="Loading">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-24" />
+          <Skeleton key={i} className="h-[88px] rounded-lg" />
         ))}
       </div>
-      <Skeleton className="h-72" />
+      <Skeleton className="h-72 rounded-lg" />
     </div>
   );
 }
 
+/** A number tile (the old app's `.stat`): icon on the left, mono label above a big value. */
 export function StatCard({
   label,
   value,
@@ -116,7 +122,7 @@ export function StatCard({
   loading?: boolean;
 }) {
   const toneClass = {
-    default: 'bg-muted text-muted-foreground',
+    default: 'bg-accent text-primary',
     blue: 'bg-info/12 text-info',
     green: 'bg-success/12 text-success',
     amber: 'bg-warning/12 text-warning',
@@ -124,21 +130,25 @@ export function StatCard({
     violet: 'bg-app-attendance/12 text-app-attendance',
   }[tone];
   const body = (
-    <Card className={cn('flex items-start justify-between gap-3 p-4', to && 'transition hover:border-primary/40 hover:shadow-sm')}>
-      <div className="min-w-0">
-        <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{label}</p>
-        {loading ? <Skeleton className="mt-2 h-7 w-16" /> : <p className="mt-1.5 font-mono text-2xl font-semibold tracking-tight tabular">{value}</p>}
-        {hint && <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>}
-      </div>
+    <Card className={cn('flex h-full items-center gap-3.5 px-4 py-3.5 transition-shadow', to && 'hover:border-primary/40 hover:shadow-card-lg')}>
       {Icon && (
-        <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', toneClass)}>
-          <Icon className="size-4.5" />
+        <span className={cn('flex size-[42px] shrink-0 items-center justify-center rounded-xl', toneClass)}>
+          <Icon className="size-5" />
         </span>
       )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{label}</p>
+        {loading ? (
+          <Skeleton className="mt-1.5 h-7 w-16" />
+        ) : (
+          <p className={cn('mt-0.5 font-mono text-[25px] leading-tight font-bold tracking-tight tabular', tone === 'red' && 'text-destructive')}>{value}</p>
+        )}
+        {hint && <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>}
+      </div>
     </Card>
   );
   return to ? (
-    <Link to={to} className="block rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
+    <Link to={to} className="block h-full rounded-lg outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
       {body}
     </Link>
   ) : (
@@ -150,11 +160,13 @@ export function StatCard({
 export function DetailList({ items, className, columns = 2 }: { items: { label: string; value: ReactNode; full?: boolean }[]; className?: string; columns?: 1 | 2 | 3 }) {
   const grid = { 1: 'sm:grid-cols-1', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3' }[columns];
   return (
-    <dl className={cn('grid grid-cols-1 gap-x-6 gap-y-3.5', grid, className)}>
+    <dl className={cn('grid grid-cols-1 gap-x-6 gap-y-4', grid, className)}>
       {items.map((it) => (
         <div key={it.label} className={cn('min-w-0', it.full && 'sm:col-span-full')}>
-          <dt className="text-xs text-muted-foreground">{it.label}</dt>
-          <dd className="mt-0.5 break-words text-sm">{it.value === null || it.value === undefined || it.value === '' ? <span className="text-muted-foreground">—</span> : it.value}</dd>
+          <dt className="font-mono text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{it.label}</dt>
+          <dd className="mt-0.5 break-words text-sm font-medium">
+            {it.value === null || it.value === undefined || it.value === '' ? <span className="font-normal text-muted-foreground">—</span> : it.value}
+          </dd>
         </div>
       ))}
     </dl>

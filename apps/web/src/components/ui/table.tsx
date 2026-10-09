@@ -15,16 +15,16 @@ export function TBody({ className, ...props }: React.ComponentProps<'tbody'>) {
   return <tbody className={cn('[&_tr:last-child]:border-0', className)} {...props} />;
 }
 export function TR({ className, ...props }: React.ComponentProps<'tr'>) {
-  return <tr className={cn('border-b transition-colors data-[state=selected]:bg-primary/5', className)} {...props} />;
+  return <tr className={cn('border-b transition-colors hover:bg-muted/40 data-[state=selected]:bg-primary/6', className)} {...props} />;
 }
 export function TH({ className, ...props }: React.ComponentProps<'th'>) {
   return (
     <th
-      className={cn('h-9 whitespace-nowrap bg-muted/40 px-3 text-left align-middle text-xs font-medium text-muted-foreground first:pl-4 last:pr-4', className)}
+      className={cn('h-10 whitespace-nowrap bg-muted/50 px-3 text-left align-middle text-[11px] font-bold tracking-[0.06em] text-muted-foreground uppercase first:pl-4 last:pr-4', className)}
       {...props}
     />
   );
 }
 export function TD({ className, ...props }: React.ComponentProps<'td'>) {
-  return <td className={cn('px-3 py-2.5 align-middle first:pl-4 last:pr-4', className)} {...props} />;
+  return <td className={cn('px-3 py-3 align-middle first:pl-4 last:pr-4', className)} {...props} />;
 }

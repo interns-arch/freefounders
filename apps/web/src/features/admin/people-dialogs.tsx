@@ -17,12 +17,13 @@ import {
   useUpdatePerson,
 } from '@freefounders/core/admin';
 import { type FormEvent, useState } from 'react';
-import { Field } from '@/components/common/form';
+import { Field, FormSection } from '@/components/common/form';
 import { FormSheet } from '@/components/common/form-sheet';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Checkbox } from '@/components/ui/primitives';
+import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill } from './parts';
 
 // ─── Add / edit a person ──────────────────────────────────────────────────
@@ -116,7 +117,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
       onSubmit={submit}
       submitting={create.isPending || update.isPending}
     >
-      <div className="grid gap-4">
+      <FormSection title="Who they are">
         <Field label="Full name" required htmlFor="pf-name" error={errors.fullName}>
           <Input id="pf-name" value={f.fullName} onChange={set('fullName')} required autoFocus />
         </Field>
@@ -130,7 +131,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
           <Field label="Mobile" htmlFor="pf-mobile" error={errors.mobile}>
             <Input id="pf-mobile" value={f.mobile} onChange={set('mobile')} inputMode="tel" />
           </Field>
-          <Field label="Access level" htmlFor="pf-level" error={errors.platformRole}>
+          <Field label="Access level" htmlFor="pf-level" error={errors.platformRole} hint={levelLocked ? undefined : 'Admins can manage people, roles and settings.'}>
             <NativeSelect id="pf-level" value={f.platformRole} onChange={set('platformRole')} disabled={levelLocked}>
               {levelOptions.map((l) => (
                 <option key={l} value={l}>
@@ -139,6 +140,10 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
               ))}
             </NativeSelect>
           </Field>
+        </div>
+      </FormSection>
+      <FormSection title="At work" description="Department, manager and joining date reach every app.">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Department" htmlFor="pf-dept" error={errors.departmentId}>
             <NativeSelect id="pf-dept" value={f.departmentId} onChange={set('departmentId')}>
               <option value="">—</option>
@@ -170,11 +175,15 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
             <Input id="pf-join" type="date" value={f.joinDate} onChange={set('joinDate')} />
           </Field>
         </div>
+      </FormSection>
+      <div className="grid gap-4">
         {!person && (
-          <fieldset className="grid gap-4 rounded-lg border p-4">
-            <div className="flex items-center gap-2">
+          <fieldset className="grid gap-4 rounded-lg border border-primary/20 bg-accent/30 p-4">
+            <div className="flex items-center gap-2.5">
               <Checkbox id="pf-with-login" checked={f.withLogin} onCheckedChange={(v) => setF((p) => ({ ...p, withLogin: v === true }))} />
-              <Label htmlFor="pf-with-login">Create a login now</Label>
+              <Label htmlFor="pf-with-login" className="text-sm font-bold">
+                Create a login now
+              </Label>
             </div>
             {f.withLogin && (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -232,15 +241,15 @@ export function PersonRolesDialog({
           <DialogTitle>Roles of {person.fullName}</DialogTitle>
           <DialogDescription>Pick one or more roles. Their permissions add up; the widest scope wins.</DialogDescription>
         </DialogHeader>
-        <ul className="max-h-[50vh] divide-y overflow-y-auto rounded-lg border">
+        <ul className="max-h-[50vh] divide-y overflow-y-auto rounded-lg border scrollbar-thin">
           {roles.map((r) => {
             // Only an owner gives or takes Super Admin.
             const lockedForMe = r.code === SUPER_ADMIN_ROLE && myRole !== 'owner';
             const id = `role-pick-${r.id}`;
             return (
-              <li key={r.id} className="flex items-center gap-3 px-3 py-2.5">
+              <li key={r.id} className={cn('flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40', chosen.has(r.id) && 'bg-accent/40')}>
                 <Checkbox id={id} checked={chosen.has(r.id)} disabled={lockedForMe} onCheckedChange={() => toggle(r.id)} />
-                <Label htmlFor={id} className="flex-1 cursor-pointer font-normal">
+                <Label htmlFor={id} className={cn('flex-1 cursor-pointer font-medium', chosen.has(r.id) && 'font-semibold')}>
                   {r.name}
                 </Label>
                 {r.system && <Pill tone="admin">Locked</Pill>}
@@ -253,7 +262,7 @@ export function PersonRolesDialog({
             );
           })}
         </ul>
-        <p className="text-xs text-muted-foreground">
+        <p className={cn('rounded-md border px-3 py-2 text-xs', reach.length ? 'border-success/25 bg-success/8 text-success' : 'border-warning/30 bg-warning/8 text-warning')}>
           {reach.length ? `${first} will be able to open: ${reach.map((a) => APP_NAMES[a]).join(', ')}.` : `${first} will not be able to open any app.`} Losing an app signs them
           out.
         </p>
@@ -302,8 +311,9 @@ export function ExitDialog({ person, onClose }: { person: Person; onClose: () =>
         </DialogHeader>
         {result ? (
           <>
-            <p className="text-sm">
-              <strong>Exit started.</strong> Last working day {result.lastWorkingDate}. They stay active until the exit is complete.
+            <p className="rounded-md border border-success/25 bg-success/8 px-3 py-2 text-sm">
+              <strong className="text-success">Exit started.</strong> Last working day <span className="font-mono font-semibold">{result.lastWorkingDate}</span>. They stay active until
+              the exit is complete.
             </p>
             <ul className="list-disc space-y-1.5 pl-5 text-sm">
               {result.assets && (

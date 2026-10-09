@@ -5,7 +5,7 @@
  */
 import { useAccess } from '@freefounders/core';
 import { HOME_RANGES, type HomeFilters, type HomeSummary, type Task, useNotices, useTaskDepartments, useTaskList, useWaitingCounts } from '@freefounders/core/tasks';
-import { AlertTriangle, Bell, CheckCheck, Inbox, Megaphone, PartyPopper, ThumbsUp, Coffee } from 'lucide-react';
+import { AlertTriangle, Bell, CalendarClock, CheckCheck, Coffee, Gauge, Hourglass, Inbox, Megaphone, PartyPopper, ThumbsUp, Trophy, UserRoundSearch, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import { Avatar, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { relDue } from '../shared/format';
 import { Linkify } from '../shared/linkify';
-import { Chip, Panel, PriorityChip, Segmented, SmartLink, fmtDay } from './parts';
+import { Chip, CountPill, Empty, Panel, PriorityChip, SectionHead, Segmented, SmartLink, fmtDay } from './parts';
 
 const MISTAKES = '/tasks/mistakes';
 
@@ -70,28 +70,42 @@ export function WaitingOnMe({ home }: { home?: HomeSummary }) {
   ];
   const loaded = items.every((i) => i.n !== null);
   const total = items.reduce((s, i) => s + (i.n || 0), 0);
+  const hot = total > 0;
   return (
-    <section aria-label="Waiting on you" className="rounded-xl border bg-card p-3 sm:p-4">
-      <div className="mb-2 flex items-center gap-2 text-sm">
-        <Bell className="size-4 text-primary" />
-        <strong>Waiting on you</strong>
-        {loaded && total === 0 && <span className="text-xs text-muted-foreground">Nothing — all clear ✓</span>}
+    <section
+      aria-label="Waiting on you"
+      className={cn(
+        'flex flex-col gap-3 rounded-2xl border px-3 py-3 sm:px-4 lg:flex-row lg:items-center',
+        hot ? 'border-warning/35 bg-gradient-to-r from-warning/12 via-card to-card' : 'border-primary/20 bg-gradient-to-r from-primary/10 via-card to-card',
+      )}
+    >
+      <div className="flex items-center gap-2.5 lg:min-w-56">
+        <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', hot ? 'bg-warning/18 text-warning' : 'bg-primary/12 text-primary')}>
+          <Bell className="size-4.5" />
+        </span>
+        <div className="min-w-0">
+          <strong className="block text-sm font-bold">Waiting on you</strong>
+          <span className="block text-xs text-muted-foreground">{!loaded ? 'Counting…' : total === 0 ? 'Nothing — all clear ✓' : `${total} item${total === 1 ? '' : 's'} need a decision`}</span>
+        </div>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {items.map((i) => (
-          <SmartLink
-            key={i.to}
-            to={i.to}
-            className={cn(
-              'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition hover:border-primary/40',
-              (i.n ?? 0) > 0 ? 'border-warning/40 bg-warning/8' : 'bg-muted/30',
-            )}
-          >
-            <i.icon className="size-4 text-muted-foreground" />
-            <span className="flex-1">{i.label}</span>
-            <strong className="tabular-nums">{i.n ?? '…'}</strong>
-          </SmartLink>
-        ))}
+      <div className="grid flex-1 gap-2 sm:grid-cols-3">
+        {items.map((i) => {
+          const n = i.n ?? 0;
+          return (
+            <SmartLink
+              key={i.to}
+              to={i.to}
+              className={cn(
+                'flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm font-medium transition hover:-translate-y-px hover:border-primary/40 hover:shadow-sm',
+                n > 0 ? 'border-warning/40' : 'border-border',
+              )}
+            >
+              <i.icon className={cn('size-4', n > 0 ? 'text-warning' : 'text-muted-foreground')} />
+              <span className="flex-1 truncate">{i.label}</span>
+              <CountPill tone={i.n === null ? 'neutral' : n > 0 ? 'warning' : 'success'}>{i.n ?? '…'}</CountPill>
+            </SmartLink>
+          );
+        })}
       </div>
     </section>
   );
@@ -135,6 +149,7 @@ export function Deadlines({ className }: { className?: string }) {
   return (
     <Panel
       className={className}
+      icon={CalendarClock}
       title="My deadlines"
       actions={
         <Button asChild size="sm" variant="outline">
@@ -151,22 +166,30 @@ export function Deadlines({ className }: { className?: string }) {
           k,
           <>
             {l}
-            <span className={cn('rounded-full bg-muted px-1.5 text-[11px] tabular-nums', k === 'overdue' && groups.overdue.length > 0 && 'bg-destructive/15 text-destructive')}>{groups[k].length}</span>
+            <CountPill tone={k === 'overdue' && groups.overdue.length > 0 ? 'danger' : groups[k].length > 0 ? 'primary' : 'neutral'}>{groups[k].length}</CountPill>
           </>,
         ])}
       />
-      {!rows && <Skeleton className="h-24" />}
-      {rows && list.length === 0 && (
-        <div className="flex flex-col items-center gap-1 py-6 text-sm text-muted-foreground">
-          {current === 'overdue' ? <PartyPopper className="size-5" /> : <Coffee className="size-5" />}
-          {current === 'overdue' ? 'Nothing overdue.' : current === 'today' ? 'Nothing due today.' : 'Nothing else due this week.'}
+      {!rows && (
+        <div className="grid gap-2">
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
         </div>
+      )}
+      {rows && list.length === 0 && (
+        <Empty icon={current === 'overdue' ? PartyPopper : Coffee}>{current === 'overdue' ? 'Nothing overdue.' : current === 'today' ? 'Nothing due today.' : 'Nothing else due this week.'}</Empty>
       )}
       <ul className="divide-y">
         {list.slice(0, 8).map((t) => (
           <li key={t.id}>
-            <Link to={`/tasks/tasks/${t.id}`} className="flex items-start gap-3 py-2 hover:bg-muted/30">
-              <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', t.is_overdue ? 'bg-destructive' : 'bg-primary')} />
+            <Link to={`/tasks/tasks/${t.id}`} className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent/60">
+              <span
+                className={cn(
+                  'mt-1.5 size-2.5 shrink-0 rounded-full ring-4',
+                  t.is_overdue ? 'bg-destructive ring-destructive/15' : t.status === 'in_progress' ? 'bg-warning ring-warning/15' : 'bg-info ring-info/15',
+                )}
+              />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">
                   <span className="mr-1 font-mono text-xs text-muted-foreground">{t.code}</span>
@@ -183,7 +206,13 @@ export function Deadlines({ className }: { className?: string }) {
           </li>
         ))}
       </ul>
-      {list.length > 8 && <p className="mt-2 text-xs text-muted-foreground">+{list.length - 8} more in Tasks</p>}
+      {list.length > 8 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          <Link to="/tasks/tasks" className="font-medium text-primary hover:underline">
+            +{list.length - 8} more in Tasks
+          </Link>
+        </p>
+      )}
     </Panel>
   );
 }
@@ -197,12 +226,14 @@ export function ScoreDial({ value, size = 112 }: { value: number | null | undefi
   const tone = !scored ? 'stroke-border text-muted-foreground' : pct >= 75 ? 'stroke-success text-success' : pct >= 45 ? 'stroke-warning text-warning' : 'stroke-destructive text-destructive';
   return (
     <svg width={size} height={size} viewBox="0 0 112 112" role="img" aria-label={scored ? `Score ${Math.round(pct)}` : 'No score yet'} className={tone}>
-      <circle cx="56" cy="56" r={r} fill="none" className="stroke-muted" strokeWidth="10" />
-      <circle cx="56" cy="56" r={r} fill="none" strokeWidth="10" strokeLinecap="round" strokeDasharray={`${(pct / 100) * c} ${c}`} transform="rotate(-90 56 56)" />
-      <text x="56" y="56" textAnchor="middle" className="fill-current text-[26px] font-bold">
+      <circle cx="56" cy="56" r={r} fill="none" className="stroke-muted" strokeWidth="9" />
+      {scored && pct > 0 && (
+        <circle cx="56" cy="56" r={r} fill="none" strokeWidth="9" strokeLinecap="round" strokeDasharray={`${(pct / 100) * c} ${c}`} transform="rotate(-90 56 56)" className="transition-[stroke-dasharray] duration-700" />
+      )}
+      <text x="56" y="58" textAnchor="middle" className="fill-current font-mono text-[28px] font-bold">
         {scored ? Math.round(pct) : '—'}
       </text>
-      <text x="56" y="74" textAnchor="middle" className="fill-muted-foreground text-[11px]">
+      <text x="56" y="76" textAnchor="middle" className="fill-muted-foreground font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
         score
       </text>
     </svg>
@@ -213,31 +244,42 @@ export function ScoreCard({ home, className }: { home?: HomeSummary; className?:
   const me = home?.me;
   const d = me?.score_delta;
   return (
-    <Panel title="My score" className={className}>
+    <Panel icon={Gauge} tone="success" title="My score" className={className}>
       {!me ? (
         <Skeleton className="h-28" />
       ) : (
         <div className="flex flex-wrap items-center gap-5">
-          <ScoreDial value={me.score} />
-          <div className="min-w-40 flex-1 space-y-1.5 text-sm">
+          <div className="relative mx-auto sm:mx-0">
+            <div aria-hidden className="absolute inset-2 rounded-full bg-gradient-to-br from-brand-2/15 to-transparent" />
+            <ScoreDial value={me.score} size={128} />
+          </div>
+          <div className="min-w-40 flex-1 text-sm">
             {d !== null && d !== undefined && (
-              <div className={cn('text-xs font-semibold', d > 0 ? 'text-success' : d < 0 ? 'text-destructive' : 'text-muted-foreground')}>
+              <Chip tone={d > 0 ? 'success' : d < 0 ? 'danger' : 'neutral'} className="mb-2">
                 {d > 0 ? '▲' : d < 0 ? '▼' : '•'} {Math.abs(d)} vs previous period
-              </div>
+              </Chip>
             )}
-            {me.score === null && <p className="text-xs text-muted-foreground">Nothing scored yet in this range — finish work others gave you to earn a score.</p>}
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">On time</span>
-              <strong>{me.on_time_rate === null ? '—' : `${Math.round(me.on_time_rate)}%`}</strong>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Completed</span>
-              <strong>{me.completed}</strong>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Finished late</span>
-              <strong className={cn(me.delayed > 0 && 'text-destructive')}>{me.delayed}</strong>
-            </div>
+            {me.score === null && <p className="mb-2 text-xs text-muted-foreground">Nothing scored yet in this range — finish work others gave you to earn a score.</p>}
+            <dl className="divide-y">
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <dt className="flex items-center gap-1.5 text-muted-foreground">
+                  <Trophy className="size-3.5 text-success" /> On time
+                </dt>
+                <dd className="font-mono font-semibold tabular-nums">{me.on_time_rate === null ? '—' : `${Math.round(me.on_time_rate)}%`}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <dt className="flex items-center gap-1.5 text-muted-foreground">
+                  <CheckCheck className="size-3.5 text-primary" /> Completed
+                </dt>
+                <dd className="font-mono font-semibold tabular-nums">{me.completed}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <dt className="flex items-center gap-1.5 text-muted-foreground">
+                  <Hourglass className="size-3.5 text-warning" /> Finished late
+                </dt>
+                <dd className={cn('font-mono font-semibold tabular-nums', me.delayed > 0 && 'text-destructive')}>{me.delayed}</dd>
+              </div>
+            </dl>
           </div>
         </div>
       )}
@@ -253,9 +295,11 @@ export function MistakesCard({ home, className }: { home?: HomeSummary; classNam
   return (
     <Panel
       className={className}
+      icon={AlertTriangle}
+      tone="danger"
       title={
         <>
-          My open mistakes <Chip tone="danger">{me.mistakes_open}</Chip>
+          My open mistakes <CountPill tone="danger">{me.mistakes_open}</CountPill>
         </>
       }
       actions={
@@ -267,8 +311,8 @@ export function MistakesCard({ home, className }: { home?: HomeSummary; classNam
       <ul className="divide-y">
         {me.mistakes.map((m) => (
           <li key={m.id}>
-            <Link to={`${MISTAKES}?open=${m.id}`} className="flex items-start gap-3 py-2 hover:bg-muted/30">
-              <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', m.is_overdue ? 'bg-destructive' : 'bg-warning')} />
+            <Link to={`${MISTAKES}?open=${m.id}`} className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent/60">
+              <span className={cn('mt-1.5 size-2.5 shrink-0 rounded-full ring-4', m.is_overdue ? 'bg-destructive ring-destructive/15' : 'bg-warning ring-warning/15')} />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">
                   <span className="mr-1 font-mono text-xs text-muted-foreground">{m.code}</span>
@@ -304,10 +348,12 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
 
   return (
     <section aria-label="Team" className="space-y-3">
-      <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Team</h2>
+      <SectionHead>Team</SectionHead>
       <div className="grid gap-4 lg:grid-cols-12">
         <Panel
           className="lg:col-span-7"
+          icon={Users}
+          tone="danger"
           title={
             <>
               Overdue by person <Chip tone="danger">{team.overdue} overdue</Chip>
@@ -320,10 +366,7 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
           }
         >
           {team.overdue_by_person.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 py-6 text-sm text-muted-foreground">
-              <PartyPopper className="size-5" />
-              Nobody has overdue work.
-            </div>
+            <Empty icon={PartyPopper}>Nobody has overdue work.</Empty>
           ) : (
             <div className="grid gap-2">
               {people.map((p) => (
@@ -332,8 +375,8 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
                     <Avatar name={p.name} className="size-6" />
                     <span className="truncate text-sm">{p.name}</span>
                   </span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-destructive" style={{ width: `${(p.overdue / maxP) * 100}%` }} />
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-gradient-to-r from-warning to-destructive" style={{ width: `${(p.overdue / maxP) * 100}%` }} />
                   </div>
                   <span className="w-14 text-right text-sm tabular-nums">
                     <strong>{p.overdue}</strong>
@@ -350,13 +393,13 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
           )}
         </Panel>
 
-        <Panel className="lg:col-span-5" title="How late is overdue work?">
+        <Panel className="lg:col-span-5" icon={Hourglass} tone="warning" title="How late is overdue work?">
           <div className="flex h-36 items-end gap-3">
             {team.ageing.map((a, i) => (
               <div key={a.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
                 <span className="text-sm font-semibold tabular-nums">{a.count}</span>
-                <div className="flex w-full flex-1 items-end rounded-md bg-muted/50">
-                  <div className={cn('w-full rounded-md', AGE_TONE[i] ?? 'bg-destructive')} style={{ height: `${Math.max(a.count ? 8 : 0, (a.count / maxA) * 100)}%` }} />
+                <div className="flex w-full flex-1 items-end rounded-lg bg-muted/50">
+                  <div className={cn('w-full rounded-lg transition-[height] duration-500', AGE_TONE[i] ?? 'bg-destructive')} style={{ height: `${Math.max(a.count ? 8 : 0, (a.count / maxA) * 100)}%` }} />
                 </div>
                 <span className="text-center text-[11px] text-muted-foreground">{a.label}</span>
               </div>
@@ -365,13 +408,13 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
           <p className="mt-3 text-xs text-muted-foreground">Days past the due date, for every open task that is overdue right now.</p>
         </Panel>
 
-        <Panel className="lg:col-span-5" title="Top performers">
+        <Panel className="lg:col-span-5" icon={Trophy} tone="success" title="Top performers">
           {team.top.length === 0 ? (
-            <p className="py-4 text-sm text-muted-foreground">No scored work in this range yet.</p>
+            <Empty icon={Trophy}>No scored work in this range yet.</Empty>
           ) : (
             <ul className="grid gap-2">
               {team.top.map((t, i) => (
-                <li key={t.id} className="flex items-center gap-3">
+                <li key={t.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', i === 0 ? 'border-success/30 bg-success/8' : 'border-border bg-muted/30')}>
                   <span aria-hidden className="w-5 text-lg">
                     {medals[i]}
                   </span>
@@ -384,7 +427,7 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
                     </div>
                   </div>
                   <div className="text-right">
-                    <strong className="tabular-nums">{t.score}</strong>
+                    <strong className="font-mono text-base tabular-nums">{t.score}</strong>
                     {t.score_delta !== null && (
                       <span className={cn('ml-1 text-xs', t.score_delta > 0 ? 'text-success' : t.score_delta < 0 ? 'text-destructive' : 'text-muted-foreground')}>
                         {t.score_delta > 0 ? '▲' : t.score_delta < 0 ? '▼' : ''}
@@ -400,9 +443,11 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
 
         <Panel
           className="lg:col-span-7"
+          icon={UserRoundSearch}
+          tone="warning"
           title={
             <>
-              Needs attention {team.attention.length > 0 && <Chip tone="warning">{team.attention.length}</Chip>}
+              Needs attention {team.attention.length > 0 && <CountPill tone="warning">{team.attention.length}</CountPill>}
             </>
           }
           actions={
@@ -412,10 +457,7 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
           }
         >
           {team.attention.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 py-6 text-sm text-muted-foreground">
-              <ThumbsUp className="size-5" />
-              Everyone is active and on track.
-            </div>
+            <Empty icon={ThumbsUp}>Everyone is active and on track.</Empty>
           ) : (
             <ul className="grid gap-3">
               {team.attention.slice(0, 8).map((a) => (
@@ -452,9 +494,10 @@ export function NoticesCard({ className }: { className?: string }) {
   return (
     <Panel
       className={className}
+      icon={Megaphone}
       title={
         <>
-          <Megaphone className="size-4 text-primary" /> Notices {unread > 0 && <Chip tone="warning">{unread} new</Chip>}
+          Notices {unread > 0 && <Chip tone="warning">{unread} new</Chip>}
         </>
       }
       actions={
@@ -463,14 +506,14 @@ export function NoticesCard({ className }: { className?: string }) {
         </Button>
       }
     >
-      <ul className="grid gap-2">
+      <ul className="grid gap-2 md:grid-cols-3">
         {rows.slice(0, 3).map((n) => (
           <li key={n.id}>
             <Link
               to="/tasks/notices"
               className={cn(
-                'block rounded-lg border px-3 py-2 transition hover:border-primary/40',
-                n.read === false && 'border-primary/30 bg-primary/5',
+                'block h-full rounded-xl border bg-muted/30 px-3 py-2.5 transition hover:border-primary/40 hover:bg-card hover:shadow-sm',
+                n.read === false && 'border-primary/30 bg-primary/6',
                 n.priority === 'urgent' && 'border-l-4 border-l-destructive',
                 n.priority === 'important' && 'border-l-4 border-l-warning',
               )}

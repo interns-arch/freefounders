@@ -3,7 +3,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const fieldBase =
-  'w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm shadow-xs transition-[color,box-shadow,border-color] outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
+  'w-full min-w-0 rounded-sm border border-input bg-card px-3 text-sm shadow-xs transition-[color,box-shadow,border-color] outline-none placeholder:text-muted-foreground/70 hover:border-ring/50 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:bg-muted/60 disabled:opacity-60 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
 
 export function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
   return <input type={type} data-slot="input" className={cn(fieldBase, 'h-9 py-1 file:border-0 file:bg-transparent file:text-sm', className)} {...props} />;
@@ -34,7 +34,7 @@ export function Label({ className, ...props }: React.ComponentProps<typeof Label
   return (
     <LabelPrimitive.Root
       data-slot="label"
-      className={cn('flex items-center gap-1.5 text-[13px] font-medium leading-none text-foreground/90 select-none peer-disabled:opacity-50', className)}
+      className={cn('flex items-center gap-1.5 text-[13px] font-semibold leading-none text-foreground/85 select-none peer-disabled:opacity-50', className)}
       {...props}
     />
   );
@@ -44,7 +44,7 @@ export function Kbd({ className, ...props }: React.ComponentProps<'kbd'>) {
   return (
     <kbd
       className={cn(
-        'pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-0.5 rounded border bg-muted px-1 font-sans text-[11px] font-medium text-muted-foreground',
+        'pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-0.5 rounded border bg-muted px-1 font-mono text-[11px] font-medium text-muted-foreground',
         className,
       )}
       {...props}

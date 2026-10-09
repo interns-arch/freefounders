@@ -1,6 +1,6 @@
 import { useAccess } from '@freefounders/core';
 import { type ReportRow, useEffortDisputes, useEmployeesReport, useTaskDashboard, useTimeReport } from '@freefounders/core/tasks';
-import { Download, Lightbulb } from 'lucide-react';
+import { BarChart3, Download, Lightbulb, Scale, Timer } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Badge, Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { RangePicker, ScoreRing, downloadCSV, fmtEffort, pct, rangeParams, rangeReady } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
-import { Segmented, TaskCode } from './task-bits';
+import { Segmented, StatusPill, TaskCode } from './task-bits';
 
 function Loading() {
   return <Skeleton className="h-48" />;
@@ -33,7 +33,7 @@ function ReportTable({
   if (!rows.length)
     return (
       <Card>
-        <EmptyState title={empty} />
+        <EmptyState icon={BarChart3} title={empty} description="Try a wider date range." />
       </Card>
     );
   const n = (v: number | undefined) => v ?? 0;
@@ -57,24 +57,24 @@ function ReportTable({
           {rows.map((r, i) => (
             <TR key={String(r.user ?? r.month ?? r.group ?? r.category ?? r.date ?? i)}>
               <TD className="min-w-40">{firstCell(r)}</TD>
-              <TD className="text-right tabular">{n(r.total)}</TD>
+              <TD className="text-right font-mono font-semibold tabular">{n(r.total)}</TD>
               <TD>
                 <ScoreRing value={r.score} />
               </TD>
-              <TD className={cn('text-right tabular', n(r.overdue) > 0 && 'text-destructive')}>
-                {n(r.overdue)} <span className="text-xs text-muted-foreground">({pct(n(r.overdue), r.total)})</span>
+              <TD className={cn('text-right font-mono tabular', n(r.overdue) > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
+                {n(r.overdue)} <span className="font-sans text-xs font-normal text-muted-foreground">({pct(n(r.overdue), r.total)})</span>
               </TD>
-              <TD className="text-right tabular">
-                {n(r.pending)} <span className="text-xs text-muted-foreground">({pct(n(r.pending), r.total)})</span>
+              <TD className="text-right font-mono tabular">
+                {n(r.pending)} <span className="font-sans text-xs text-muted-foreground">({pct(n(r.pending), r.total)})</span>
               </TD>
-              <TD className="text-right tabular">
-                {n(r.in_progress)} <span className="text-xs text-muted-foreground">({pct(n(r.in_progress), r.total)})</span>
+              <TD className="text-right font-mono tabular">
+                {n(r.in_progress)} <span className="font-sans text-xs text-muted-foreground">({pct(n(r.in_progress), r.total)})</span>
               </TD>
-              <TD className="text-right text-success tabular">
-                {n(r.in_time)} <span className="text-xs text-muted-foreground">({pct(n(r.in_time), r.completed)})</span>
+              <TD className={cn('text-right font-mono tabular', n(r.in_time) > 0 ? 'font-semibold text-success' : 'text-muted-foreground')}>
+                {n(r.in_time)} <span className="font-sans text-xs font-normal text-muted-foreground">({pct(n(r.in_time), r.completed)})</span>
               </TD>
-              <TD className={cn('text-right tabular', n(r.delayed) > 0 && 'text-destructive')}>
-                {n(r.delayed)} <span className="text-xs text-muted-foreground">({pct(n(r.delayed), r.completed)})</span>
+              <TD className={cn('text-right font-mono tabular', n(r.delayed) > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
+                {n(r.delayed)} <span className="font-sans text-xs font-normal text-muted-foreground">({pct(n(r.delayed), r.completed)})</span>
               </TD>
               {extraCell?.(r)}
             </TR>
@@ -128,7 +128,7 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
     return (
       <div className="space-y-0.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <button type="button" className="cursor-pointer font-medium hover:text-primary hover:underline" title="Open this person's full profile" onClick={() => r.user && onProfile(r.user, r.name ?? '')}>
+          <button type="button" className="cursor-pointer font-semibold hover:text-primary hover:underline" title="Open this person's full profile" onClick={() => r.user && onProfile(r.user, r.name ?? '')}>
             {r.name}
           </button>
           {!!r.self_assigned && r.self_assigned > 0 && (
@@ -155,7 +155,10 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
             type="button"
             aria-current={tab === v ? 'page' : undefined}
             onClick={() => setTab(v)}
-            className={cn('shrink-0 cursor-pointer rounded-full border px-3 py-1 text-[13px] font-medium text-muted-foreground transition hover:text-foreground', tab === v && 'border-primary bg-primary text-primary-foreground hover:text-primary-foreground')}
+            className={cn(
+              'h-8 shrink-0 cursor-pointer rounded-full border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
+              tab === v && 'border-transparent bg-gradient-to-b from-brand-2 to-primary text-primary-foreground shadow-primary/25 hover:text-primary-foreground',
+            )}
           >
             {l}
           </button>
@@ -207,8 +210,11 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
         />
       )}
       {report.data?.formula && ['person', 'mine'].includes(tab) && (
-        <p className="text-xs text-muted-foreground">
-          Formula (open, not a black box): <strong>{report.data.formula}</strong>.
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>
+            Formula (open, not a black box): <strong className="font-semibold text-foreground">{report.data.formula}</strong>.
+          </span>
         </p>
       )}
     </div>
@@ -229,10 +235,13 @@ export function TimeTab() {
   const q = useTimeReport(range);
   return (
     <div className="max-w-3xl space-y-4">
-      <Segmented label="Period" value={range} onChange={setRange} options={TIME_RANGES} />
-      <p className="text-sm text-muted-foreground">
-        <strong className="text-foreground">Time Earned</strong> = the assigner&rsquo;s task time, credited when the task completes. <strong className="text-foreground">Time Spent</strong> = the actual effort the
-        person reported. A big gap either way is a conversation, not a verdict.
+      <Segmented label="Period" value={range} onChange={setRange} options={TIME_RANGES} className="max-w-full overflow-x-auto" />
+      <p className="flex items-start gap-2 rounded-lg border bg-card px-3 py-2.5 text-[13px] text-muted-foreground">
+        <Timer className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+        <span>
+          <strong className="text-foreground">Time Earned</strong> = the assigner&rsquo;s task time, credited when the task completes. <strong className="text-foreground">Time Spent</strong> = the actual effort
+          the person reported. A big gap either way is a conversation, not a verdict.
+        </span>
       </p>
       {q.error ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
@@ -240,7 +249,7 @@ export function TimeTab() {
         <Loading />
       ) : q.data.rows.length === 0 ? (
         <Card>
-          <EmptyState title="No completed tasks in this period." />
+          <EmptyState icon={Timer} title="No completed tasks in this period." description="Time is earned when a task is completed." />
         </Card>
       ) : (
         <Card className="overflow-x-auto">
@@ -267,10 +276,10 @@ export function TimeTab() {
                         </p>
                       )}
                     </TD>
-                    <TD className="text-right tabular">{r.done}</TD>
-                    <TD className="text-right tabular">{fmtEffort(r.time_earned_minutes) || '0m'}</TD>
-                    <TD className="text-right tabular">{fmtEffort(r.time_spent_minutes) || '0m'}</TD>
-                    <TD className={cn('text-right tabular', diff > 0 && 'text-destructive')}>
+                    <TD className="text-right font-mono tabular">{r.done}</TD>
+                    <TD className="text-right font-mono font-semibold text-success tabular">{fmtEffort(r.time_earned_minutes) || '0m'}</TD>
+                    <TD className="text-right font-mono tabular">{fmtEffort(r.time_spent_minutes) || '0m'}</TD>
+                    <TD className={cn('text-right font-mono tabular', diff > 0 ? 'font-semibold text-destructive' : diff < 0 ? 'text-success' : 'text-muted-foreground')}>
                       {diff === 0 ? '—' : `${diff > 0 ? '+' : '−'}${fmtEffort(Math.abs(diff))} ${diff > 0 ? 'over' : 'under'}`}
                     </TD>
                   </TR>
@@ -293,8 +302,9 @@ export function DisputesTab() {
   return (
     <div className="max-w-4xl space-y-4">
       <RangePicker range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
-      <p className="text-sm text-muted-foreground">
-        Where the assigner and the assignee disagreed on how long a task takes — &ldquo;Amit said 1 hour, Bhavna said 4&rdquo;. Sorted by the size of the disagreement; the Actual column settles the argument.
+      <p className="flex items-start gap-2 rounded-lg border bg-card px-3 py-2.5 text-[13px] text-muted-foreground">
+        <Scale className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+        <span>Where the assigner and the assignee disagreed on how long a task takes — &ldquo;Amit said 1 hour, Bhavna said 4&rdquo;. Sorted by the size of the disagreement; the Actual column settles the argument.</span>
       </p>
       {q.error ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
@@ -302,7 +312,7 @@ export function DisputesTab() {
         <Loading />
       ) : q.data.rows.length === 0 ? (
         <Card>
-          <EmptyState title="No disputes in this range — everyone agrees." />
+          <EmptyState icon={Scale} title="No disputes in this range — everyone agrees." />
         </Card>
       ) : (
         <Card className="overflow-x-auto">
@@ -327,10 +337,12 @@ export function DisputesTab() {
                     <p className="text-xs text-muted-foreground">assigned by {r.assigner}</p>
                   </TD>
                   <TD>{r.assignee}</TD>
-                  <TD className="text-right tabular">{fmtEffort(r.effort_minutes)}</TD>
-                  <TD className={cn('text-right tabular', r.estimate_minutes > r.effort_minutes ? 'text-destructive' : 'text-success')}>{fmtEffort(r.estimate_minutes)}</TD>
-                  <TD className="text-right font-semibold tabular">{r.actual_minutes ? fmtEffort(r.actual_minutes) : '—'}</TD>
-                  <TD>{r.status.replace('_', ' ')}</TD>
+                  <TD className="text-right font-mono tabular">{fmtEffort(r.effort_minutes)}</TD>
+                  <TD className={cn('text-right font-mono font-semibold tabular', r.estimate_minutes > r.effort_minutes ? 'text-destructive' : 'text-success')}>{fmtEffort(r.estimate_minutes)}</TD>
+                  <TD className="text-right font-mono font-bold tabular">{r.actual_minutes ? fmtEffort(r.actual_minutes) : '—'}</TD>
+                  <TD>
+                    <StatusPill status={r.status as 'open' | 'in_progress' | 'done'} label={r.status.replace('_', ' ')} className="capitalize" />
+                  </TD>
                 </TR>
               ))}
             </TBody>

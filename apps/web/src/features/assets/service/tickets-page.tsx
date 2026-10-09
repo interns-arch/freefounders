@@ -1,5 +1,5 @@
 import { humanize, PRIORITIES, TICKET_STATUSES, type TicketStatus } from '@eam/shared';
-import { LifeBuoy, Plus, Search } from 'lucide-react';
+import { AlertTriangle, HelpCircle, LifeBuoy, Plus, Search, SearchX, Wrench } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -21,6 +21,15 @@ import type { Ticket } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDateTime, relativeTime } from '@/lib/utils';
 
+const TYPE_ICON: Record<string, { icon: typeof LifeBuoy; tone: string }> = {
+  ISSUE: { icon: LifeBuoy, tone: 'bg-info/10 text-info dark:bg-info/16' },
+  DAMAGE: { icon: AlertTriangle, tone: 'bg-app-admin/10 text-app-admin dark:bg-app-admin/16' },
+  LOSS: { icon: SearchX, tone: 'bg-destructive/10 text-destructive dark:bg-destructive/16' },
+  REPAIR: { icon: Wrench, tone: 'bg-warning/10 text-warning dark:bg-warning/16' },
+  OTHER: { icon: HelpCircle, tone: 'bg-muted text-muted-foreground' },
+};
+const PRIORITY_BAR: Record<string, string> = { URGENT: 'bg-destructive', HIGH: 'bg-warning', MEDIUM: 'bg-info', LOW: 'bg-border' };
+
 const TABS = [
   { value: 'OPEN,IN_PROGRESS', label: 'Open' },
   { value: 'RESOLVED,CLOSED', label: 'Resolved' },
@@ -38,15 +47,24 @@ export default function TicketsPage() {
     {
       key: 'title',
       header: 'Ticket',
-      cell: (t) => (
-        <div className="min-w-56">
-          <div className="font-medium">{t.title}</div>
-          <div className="text-xs text-muted-foreground">
-            <span className="font-mono">{t.number}</span> · {humanize(t.type)}
-            {t.assetTag ? ` · ${t.assetTag}` : ''}
+      cell: (t) => {
+        const k = TYPE_ICON[t.type] ?? TYPE_ICON.OTHER;
+        return (
+          <div className="flex min-w-56 items-center gap-3">
+            <span className={cn('w-1 self-stretch rounded-full', PRIORITY_BAR[t.priority] ?? 'bg-border')} aria-hidden />
+            <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', k.tone)}>
+              <k.icon className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="truncate font-medium">{t.title}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                <span className="font-mono">{t.number}</span> · {humanize(t.type)}
+                {t.assetTag ? ` · ${t.assetTag}` : ''}
+              </div>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     { key: 'priority', header: 'Priority', cell: (t) => <EnumBadge value={t.priority} tones={PRIORITY_TONE} dot={false} /> },
     { key: 'status', header: 'Status', cell: (t) => <EnumBadge value={t.status} tones={TICKET_TONE} /> },
@@ -108,7 +126,7 @@ export default function TicketsPage() {
           onRetry={() => q.refetch()}
           onRowClick={(t) => set({ open: t.id }, { keepPage: true })}
           keyboard
-          empty={<EmptyState icon={LifeBuoy} title="No tickets" description="All quiet." />}
+          empty={<EmptyState icon={LifeBuoy} title="No tickets" description={f.status === 'OPEN,IN_PROGRESS' ? 'All quiet — nothing is broken, lost or waiting for repair.' : 'Nothing here for this filter.'} />}
         />
         {q.data && q.data.total > 0 && <Pagination page={q.data.page} pageSize={q.data.pageSize} total={q.data.total} onPageChange={(p) => set({ page: p }, { keepPage: true })} />}
       </Card>
@@ -171,7 +189,8 @@ function TicketSheet({ id, onClose }: { id: string | null; onClose: () => void }
                 ]}
               />
               {manage && (
-                <div className="grid gap-4 rounded-lg border p-4">
+                <div className="grid gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                  <p className="font-mono text-[11px] font-medium tracking-wider text-primary uppercase">Update ticket</p>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Status" htmlFor="ticket-status">
                       <NativeSelect id="ticket-status" value={status} onChange={(e) => setStatus(e.target.value as TicketStatus)}>
@@ -199,7 +218,7 @@ function TicketSheet({ id, onClose }: { id: string | null; onClose: () => void }
                 </div>
               )}
               <div>
-                <p className="mb-3 text-sm font-semibold">History</p>
+                <p className="mb-3 font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">History</p>
                 <Timeline events={t.history} />
               </div>
             </>

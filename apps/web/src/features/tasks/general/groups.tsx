@@ -66,19 +66,30 @@ export function GroupsPage() {
               key={g.id}
               type="button"
               onClick={() => setParams({ group: String(g.id) })}
-              className={cn('cursor-pointer rounded-xl border bg-card p-4 text-left transition hover:border-primary/40 hover:shadow-sm', !g.active && 'opacity-60')}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">{g.name}</span>
-                {!g.active && <Chip>Archived</Chip>}
-              </div>
-              {g.category && (
-                <Chip tone="primary" className="mt-1">
-                  {g.category}
-                </Chip>
+              className={cn(
+                'group relative cursor-pointer overflow-hidden rounded-xl border bg-card p-4 text-left shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] transition hover:-translate-y-px hover:border-primary/40 hover:shadow-[0_6px_18px_-8px_rgb(0_0_0/0.18)]',
+                !g.active && 'opacity-60',
               )}
-              {g.description && <p className="mt-2 text-sm text-muted-foreground">{g.description}</p>}
-              <p className="mt-3 text-xs text-muted-foreground">
+            >
+              <div aria-hidden className="pointer-events-none absolute -top-10 -right-8 size-28 rounded-full bg-brand-2/12 blur-2xl transition group-hover:bg-brand-2/20" />
+              <div className="relative flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                  <Boxes className="size-4.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{g.name}</span>
+                    {!g.active && <Chip>Archived</Chip>}
+                  </div>
+                  {g.category && (
+                    <Chip tone="primary" className="mt-1">
+                      {g.category}
+                    </Chip>
+                  )}
+                </div>
+              </div>
+              {g.description && <p className="relative mt-2 text-sm text-muted-foreground">{g.description}</p>}
+              <p className="relative mt-3 text-xs text-muted-foreground">
                 {g.member_count} member{g.member_count === 1 ? '' : 's'} · owner {g.owner_detail?.name || '—'}
               </p>
             </button>

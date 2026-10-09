@@ -15,7 +15,7 @@ import {
   useUpdateDepartment,
   useUploadLogo,
 } from '@freefounders/core/admin';
-import { ChevronRight, ImageIcon } from 'lucide-react';
+import { ChevronRight, ImageIcon, Palette } from 'lucide-react';
 import { type ChangeEvent, type FormEvent, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Field } from '@/components/common/form';
@@ -23,6 +23,7 @@ import { ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Switch } from '@/components/ui/primitives';
+import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill, SyncNote } from './parts';
 
 /** Settings Center (PLAN.md §16): company name and look, module switches, departments, links to each app's own settings. */
@@ -53,13 +54,17 @@ export function SettingsPage() {
             <CardContent className="grid gap-3 sm:grid-cols-2">
               {company.data.apps.flatMap((app) =>
                 APP_SETTINGS_LINKS[app].map((s) => (
-                  <Link key={s.href} to={s.href} className="group flex items-start gap-3 rounded-lg border p-3 transition hover:border-primary/40 hover:bg-accent/40">
+                  <Link
+                    key={s.href}
+                    to={s.href}
+                    className="group flex items-start gap-3 rounded-lg border bg-card p-4 shadow-card transition outline-none hover:border-primary/40 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40"
+                  >
                     <div className="min-w-0 flex-1 space-y-1">
                       <AppChip app={app} />
-                      <p className="text-sm font-medium">{s.label}</p>
+                      <p className="text-sm font-semibold">{s.label}</p>
                       <p className="text-xs text-muted-foreground">{s.blurb}</p>
                     </div>
-                    <ChevronRight className="mt-1 size-4 text-muted-foreground transition group-hover:translate-x-0.5" aria-hidden />
+                    <ChevronRight className="mt-1 size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
                   </Link>
                 )),
               )}
@@ -145,20 +150,32 @@ function ProfileCard({ company }: { company: CompanySettings }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label id="brand-colour-label">Brand colour</Label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="color"
                   aria-labelledby="brand-colour-label"
-                  className="h-9 w-12 shrink-0 cursor-pointer rounded-md border bg-card p-1"
+                  className="h-9 w-12 shrink-0 cursor-pointer rounded-sm border border-input bg-card p-1"
                   value={colour || DEFAULT_BRAND_COLOUR}
                   onChange={(e) => setColour(e.target.value)}
                 />
-                <Input aria-label="Brand colour code" value={colour} onChange={(e) => setColour(e.target.value)} placeholder="Default" pattern="#[0-9a-fA-F]{6}" className="max-w-40" />
+                <Input aria-label="Brand colour code" value={colour} onChange={(e) => setColour(e.target.value)} placeholder="Default" pattern="#[0-9a-fA-F]{6}" className="max-w-40 font-mono" />
                 {colour && (
                   <Button type="button" variant="outline" size="sm" onClick={() => setColour('')}>
                     Default
                   </Button>
                 )}
+              </div>
+              {/* How the colour will look: buttons and highlights take it over (PLAN.md §16). */}
+              <div className="mt-1 flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2" aria-hidden style={colour ? ({ '--primary': colour, '--brand-2': colour, '--ring': colour } as React.CSSProperties) : undefined}>
+                <Palette className="size-4 shrink-0 text-muted-foreground" />
+                <span className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Preview</span>
+                <span className="ml-auto inline-flex items-center gap-2">
+                  <span className="grid size-7 place-items-center rounded-[8px] bg-gradient-to-br from-brand-2 to-primary text-[11px] font-extrabold text-white">
+                    {(shortName || name).slice(0, 1).toUpperCase() || 'A'}
+                  </span>
+                  <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Pill</span>
+                  <span className="rounded-sm bg-gradient-to-b from-brand-2 to-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-xs">Button</span>
+                </span>
               </div>
             </div>
             <div className="grid gap-1.5">
@@ -232,15 +249,23 @@ function ModulesCard({ company }: { company: CompanySettings }) {
         {company.modules.length === 0 && <p className="text-sm text-muted-foreground">No app is connected.</p>}
         {company.modules.map((a) => (
           <div key={a.app} className="space-y-2">
-            <AppChip app={a.app} />
-            <ul className="divide-y rounded-lg border">
+            <div className="flex items-center gap-2">
+              <AppChip app={a.app} />
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {a.modules.filter((m) => m.on).length} of {a.modules.length} on
+              </span>
+            </div>
+            <ul className="divide-y overflow-hidden rounded-lg border shadow-card">
               {a.modules.map((m) => {
                 const label = `${APP_NAMES[a.app]}: ${m.label}`;
                 return (
-                  <li key={m.key} className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{m.label}</p>
-                      <p className="text-xs text-muted-foreground">{m.description}</p>
+                  <li key={m.key} className={cn('flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-muted/30', !m.on && 'bg-muted/20')}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className={cn('size-2 shrink-0 rounded-full', m.on ? 'bg-success' : 'bg-border')} aria-hidden />
+                      <div className="min-w-0">
+                        <p className={cn('text-sm font-semibold', !m.on && 'text-muted-foreground')}>{m.label}</p>
+                        <p className="text-xs text-muted-foreground">{m.description}</p>
+                      </div>
                     </div>
                     <Switch
                       aria-label={label}
@@ -282,11 +307,11 @@ function DepartmentsCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <ErrorNote>{error || (list.error ? errorMessage(list.error) : '')}</ErrorNote>
-        <ul className="divide-y rounded-lg border">
-          {list.data?.length === 0 && <li className="px-4 py-3 text-sm text-muted-foreground">No departments yet.</li>}
+        <ul className="divide-y overflow-hidden rounded-lg border shadow-card">
+          {list.data?.length === 0 && <li className="px-6 py-6 text-center text-sm text-muted-foreground">No departments yet. Add the first one below.</li>}
           {list.isLoading && <li className="px-4 py-3 text-sm text-muted-foreground">Loading…</li>}
           {list.data?.map((d) => (
-            <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+            <li key={d.id} className={cn('flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 transition-colors hover:bg-muted/30', !d.active && 'bg-muted/20')}>
               {editing?.id === d.id ? (
                 <form
                   className="flex flex-1 flex-wrap items-center gap-2"
@@ -312,14 +337,19 @@ function DepartmentsCard() {
                 </form>
               ) : (
                 <>
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 text-sm font-medium">
-                      {d.name}
-                      {!d.active && <Pill>Inactive</Pill>}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {d.people} {d.people === 1 ? 'person' : 'people'}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent font-mono text-[11px] font-bold text-primary" aria-hidden>
+                      {d.name.slice(0, 2).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className={cn('flex items-center gap-2 text-sm font-semibold', !d.active && 'text-muted-foreground')}>
+                        {d.name}
+                        {!d.active && <Pill>Inactive</Pill>}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-mono">{d.people}</span> {d.people === 1 ? 'person' : 'people'}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     <Button variant="outline" size="xs" aria-label={`Rename ${d.name}`} onClick={() => setEditing({ id: d.id, name: d.name })}>

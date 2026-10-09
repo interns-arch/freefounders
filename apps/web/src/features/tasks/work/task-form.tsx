@@ -20,7 +20,7 @@ import {
 import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Pencil, Plus, Sparkles, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
-import { Field } from '@/components/common/form';
+import { Field, FormSection } from '@/components/common/form';
 import { Button } from '@/components/ui/button';
 import { Input, Kbd, NativeSelect } from '@/components/ui/input';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/overlays';
@@ -228,7 +228,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
           </SheetHeader>
           <SheetBody className="space-y-5">
             {voice && (
-              <div className="space-y-1 rounded-lg border border-info/30 bg-info/5 p-3 text-sm">
+              <div className="space-y-1 rounded-xl border border-info/30 border-l-4 border-l-info bg-info/5 p-3 text-sm">
                 <p>
                   <strong>Heard:</strong> “{voice.transcript}”
                 </p>
@@ -249,7 +249,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
               </div>
             )}
             {aiPrompt !== null && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 rounded-xl border border-primary/30 bg-primary/5 p-2">
                 <Input
                   id={ids.ai}
                   aria-label="Describe the task for the AI draft"
@@ -270,6 +270,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
               </div>
             )}
 
+            <FormSection title="What" description="Title, description and who it is for.">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Title" required htmlFor={ids.title} className="sm:col-span-2">
                 <Input id={ids.title} value={f.title} onChange={(e) => set('title', e.target.value)} autoFocus placeholder="e.g. Call Ravi with revised quote" />
@@ -361,6 +362,10 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
                   ))}
                 </div>
               )}
+            </div>
+            </FormSection>
+            <FormSection title="Details" description="Optional — department, repeat, priority, group and who follows along.">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Department" htmlFor={ids.dept}>
                 <NativeSelect id={ids.dept} value={f.department} onChange={(e) => set('department', e.target.value)}>
                   <option value="">General (no department)</option>
@@ -411,6 +416,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
                 <MultiSelect id={ids.loop} options={team.filter((a) => a.id !== me?.id)} selected={inLoop} onChange={setInLoop} placeholder="— optional —" />
               </Field>
             </div>
+            </FormSection>
 
             <Collapsible
               open={stepsOpen}
@@ -437,10 +443,10 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
                           return next;
                         });
                       }}
-                      className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-sm"
+                      className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-2 py-1.5 text-sm shadow-xs"
                     >
                       <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground" aria-hidden />
-                      <span className="w-5 shrink-0 text-xs text-muted-foreground tabular">{i + 1}.</span>
+                      <span className="w-5 shrink-0 font-mono text-xs font-semibold text-muted-foreground tabular">{i + 1}.</span>
                       {editIdx === i ? (
                         <>
                           <Input
@@ -542,7 +548,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
             </Collapsible>
 
             {err && (
-              <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <p role="alert" className="rounded-lg border border-destructive/30 border-l-4 border-l-destructive bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive">
                 {err}
               </p>
             )}
@@ -567,10 +573,10 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
 
 function Collapsible({ open, onToggle, title, summary, children }: { open: boolean; onToggle: () => void; title: string; summary: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border">
-      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left">
+    <section className={cn('rounded-xl border transition-colors', open ? 'bg-card' : 'bg-muted/30')}>
+      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none">
         <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition', !open && '-rotate-90')} aria-hidden />
-        <span className="text-sm font-medium">{title}</span>
+        <span className="text-sm font-bold">{title}</span>
         <span className="truncate text-xs text-muted-foreground">{summary}</span>
       </button>
       {open && <div className="border-t px-3 py-3">{children}</div>}

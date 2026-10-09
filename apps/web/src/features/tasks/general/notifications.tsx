@@ -92,13 +92,15 @@ export function NotificationsPage() {
         {rows.map((n) => {
           const body = (
             <>
-              <span className="block text-sm font-medium">{n.title}</span>
+              <span className={cn('block text-sm font-medium', !n.read_at && 'font-semibold')}>{n.title}</span>
               {n.body && <span className="mt-0.5 block text-sm whitespace-pre-line text-muted-foreground">{n.body}</span>}
             </>
           );
           return (
-            <li key={n.id} className={cn('flex items-start gap-3 rounded-xl border bg-card p-3', !n.read_at && 'border-primary/30 bg-primary/5')}>
-              <Bell className={cn('mt-0.5 size-4 shrink-0', n.read_at ? 'text-muted-foreground' : 'text-primary')} />
+            <li key={n.id} className={cn('flex items-start gap-3 rounded-xl border bg-card p-3 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] transition hover:border-primary/40', !n.read_at && 'border-primary/30 bg-gradient-to-r from-primary/8 to-card')}>
+              <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', n.read_at ? 'bg-muted text-muted-foreground' : 'bg-primary/12 text-primary')}>
+                <Bell className="size-4" />
+              </span>
               <div className="min-w-0 flex-1">
                 {n.href ? (
                   <SmartLink to={n.href} onClick={() => open(n)} className="block hover:underline">
@@ -118,7 +120,7 @@ export function NotificationsPage() {
                   ))}
                 </div>
               </div>
-              {!n.read_at && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />}
+              {!n.read_at && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary ring-4 ring-primary/15" aria-label="Unread" />}
               <Button size="icon-xs" variant="ghost" title="Delete this notification" aria-label={`Delete notification: ${n.title}`} onClick={() => del.mutate(n.id)}>
                 <X />
               </Button>

@@ -14,11 +14,13 @@ import { PersonProfileSheet } from './person-profile';
 import { DisputesTab, ReportsTab, TimeTab } from './reports-tab';
 import { TaskDetailSheet } from './task-detail';
 import { TaskFormSheet } from './task-form';
+import { CountPill } from './task-bits';
 import { DirectoryTab, TemplatesTab } from './templates-tab';
 
 const BASE = '/tasks/tasks';
 /** How many tabs stay in the bar on a phone; the rest go under "More". */
-const PHONE_TABS = 4;
+const PHONE_TABS = 3;
+type Tab = [value: string, label: string, count?: number];
 
 /**
  * The task workspace at /tasks/tasks (?tab=dashboard|my|all|delegated|subscribed|reviews|requests|templates|directory|
@@ -43,14 +45,15 @@ export function TaskWorkspacePage() {
   const hasTeam = isManager || people.length > 1;
   const [form, setForm] = useState<{ template: TaskTemplate | null } | null>(null);
 
-  const tabs: Array<[string, string]> = [
+  // [value, label, count shown as a pill after the label]
+  const tabs: Tab[] = [
     ['dashboard', 'Dashboard'],
     ['my', 'My Tasks'],
-    ...(hasTeam ? [['all', 'All Tasks'] as [string, string]] : []),
+    ...(hasTeam ? [['all', 'All Tasks'] as Tab] : []),
     ['delegated', 'Delegated'],
     ['subscribed', 'Subscribed'],
-    ['reviews', counts.reviews > 0 ? `To accept (${counts.reviews})` : 'To accept'],
-    ['requests', counts.requests > 0 ? `Requests (${counts.requests})` : 'Requests'],
+    ['reviews', 'To accept', counts.reviews],
+    ['requests', 'Requests', counts.requests],
     ['templates', 'Templates'],
     ['directory', 'Template Directory'],
     ['activities', 'Activities'],
@@ -59,9 +62,9 @@ export function TaskWorkspacePage() {
           ['employees', 'Reports'],
           ['time', 'Time Report'],
           ['disputes', 'Disputes'],
-        ] as Array<[string, string]>)
-      : ([['time', 'Time Report']] as Array<[string, string]>)),
-    ...(isAdmin ? [['deleted', 'Deleted'] as [string, string]] : []),
+        ] as Tab[])
+      : ([['time', 'Time Report']] as Tab[])),
+    ...(isAdmin ? [['deleted', 'Deleted'] as Tab] : []),
   ];
 
   // Detail links keep the list's filters, so closing the task lands back on the same view.
@@ -90,7 +93,7 @@ export function TaskWorkspacePage() {
 
   return (
     <div>
-      <PageHeader title="Tasks" />
+      <PageHeader title="Tasks" className="mb-3" />
       <TabBar tabs={tabs} area={area} href={tabHref} />
       <div className="mt-5">
         {area === 'dashboard' && <DashboardTab onTile={openList} />}
@@ -130,46 +133,50 @@ export function TaskWorkspacePage() {
 }
 
 /** Every view as a link (the address keeps the tab). On a phone the first few stay and the rest go under "More". */
-function TabBar({ tabs, area, href }: { tabs: Array<[string, string]>; area: string; href: (v: string) => string }) {
-  const link = (v: string, l: string, extra?: string) => (
+function TabBar({ tabs, area, href }: { tabs: Tab[]; area: string; href: (v: string) => string }) {
+  const link = (v: string, l: string, count?: number) => (
     <Link
       key={v}
       to={href(v)}
       aria-current={area === v ? 'page' : undefined}
       className={cn(
-        '-mb-px inline-flex h-10 shrink-0 items-center border-b-2 border-transparent px-2.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition hover:text-foreground',
-        area === v && 'border-primary text-foreground',
-        extra,
+        '-mb-px inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-2.5 text-[13.5px] font-semibold whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none sm:px-3',
+        area === v && 'border-primary text-primary hover:text-primary',
       )}
     >
       {l}
+      {!!count && count > 0 && <CountPill tone={v === 'reviews' ? 'danger' : 'primary'}>{count}</CountPill>}
     </Link>
   );
   const front = tabs.slice(0, PHONE_TABS);
   const rest = tabs.slice(PHONE_TABS);
   const restActive = rest.find(([v]) => v === area);
+  const restCount = rest.reduce((n, [, , c]) => n + (c ?? 0), 0);
   const navigate = useNavigate();
   return (
     <>
-      <nav aria-label="Task views" className="no-scrollbar hidden gap-1 overflow-x-auto border-b md:flex">
-        {tabs.map(([v, l]) => link(v, l))}
+      <nav aria-label="Task views" className="hidden flex-wrap gap-x-0.5 border-b md:flex">
+        {tabs.map(([v, l, c]) => link(v, l, c))}
       </nav>
-      <nav aria-label="Task views" className="flex gap-1 border-b md:hidden">
-        {front.map(([v, l]) => link(v, l))}
+      <nav aria-label="Task views" className="no-scrollbar flex gap-0.5 overflow-x-auto border-b md:hidden">
+        {front.map(([v, l, c]) => link(v, l, c))}
         {rest.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger
               className={cn(
-                '-mb-px inline-flex h-10 shrink-0 cursor-pointer items-center gap-1 border-b-2 border-transparent px-2.5 text-sm font-medium whitespace-nowrap text-muted-foreground outline-none',
-                restActive && 'border-primary text-foreground',
+                '-mb-px ml-auto inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 border-b-2 border-transparent px-2.5 text-[13.5px] font-semibold whitespace-nowrap text-muted-foreground outline-none',
+                restActive && 'border-primary text-primary',
               )}
             >
-              {restActive ? restActive[1] : 'More'} <ChevronDown className="size-3.5" aria-hidden />
+              {restActive ? restActive[1] : 'More'}
+              {!restActive && restCount > 0 && <CountPill tone="danger">{restCount}</CountPill>}
+              <ChevronDown className="size-3.5" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {rest.map(([v, l]) => (
-                <DropdownMenuItem key={v} onSelect={() => navigate(href(v))} className={cn(area === v && 'font-medium text-primary')}>
+              {rest.map(([v, l, c]) => (
+                <DropdownMenuItem key={v} onSelect={() => navigate(href(v))} className={cn('justify-between', area === v && 'font-semibold text-primary')}>
                   {l}
+                  {!!c && c > 0 && <CountPill tone={v === 'reviews' ? 'danger' : 'primary'}>{c}</CountPill>}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

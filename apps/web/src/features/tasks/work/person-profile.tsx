@@ -1,14 +1,14 @@
 import { useAccess } from '@freefounders/core';
 import { useEmployeesReport, useWorkTaskList } from '@freefounders/core/tasks';
-import { AlarmClock, Lightbulb, Repeat } from 'lucide-react';
+import { AlarmClock, ClipboardList, Lightbulb, Repeat } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/overlays';
-import { Avatar, Badge, Skeleton } from '@/components/ui/primitives';
+import { Avatar, Skeleton } from '@/components/ui/primitives';
 import { fmtDT, fmtEffort, relDue } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
-import { Chip, MiniStat, PRIORITY_TONE, Segmented, TaskCode, ToggleChip } from './task-bits';
+import { Chip, MiniStat, PriorityPill, SectionHead, Segmented, StatusPill, TaskCode, ToggleChip } from './task-bits';
 
 const RANGES: Array<[string, string]> = [
   ['this_month', 'This Month'],
@@ -40,9 +40,9 @@ export function PersonProfileSheet({ userId, href, onClose }: { userId: number; 
       <SheetContent size="xl">
         <SheetHeader>
           <div className="flex items-center gap-3">
-            <Avatar name={name} className="size-10" />
+            <Avatar name={name} className="size-12 text-sm" />
             <div className="min-w-0">
-              <SheetTitle>{name}</SheetTitle>
+              <SheetTitle className="text-lg">{name}</SheetTitle>
               <SheetDescription>Their tasks and how they are doing</SheetDescription>
             </div>
           </div>
@@ -76,15 +76,15 @@ export function PersonProfileSheet({ userId, href, onClose }: { userId: number; 
                 </p>
               )}
               {s.review && (
-                <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
-                  <Lightbulb className="mt-0.5 size-4 shrink-0" aria-hidden /> {s.review}
+                <p className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-sm">
+                  <Lightbulb className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden /> <span>{s.review}</span>
                 </p>
               )}
             </>
           )}
 
           <section className="space-y-3" aria-label="Their tasks">
-            <h3 className="text-sm font-semibold">Tasks</h3>
+            <SectionHead title="Tasks" count={rows.length} />
             <div className="flex flex-wrap items-center gap-2">
               <Segmented
                 label="Status"
@@ -96,42 +96,43 @@ export function PersonProfileSheet({ userId, href, onClose }: { userId: number; 
                   ['all', 'All'],
                 ]}
               />
-              <ToggleChip on={overdue} onChange={setOverdue}>
+              <ToggleChip on={overdue} tone="danger" onChange={setOverdue}>
                 <AlarmClock /> Overdue only
               </ToggleChip>
               <ToggleChip on={recurring} onChange={setRecurring} title="Only the tasks that repeat — daily, weekly or monthly">
                 <Repeat /> Recurring only
               </ToggleChip>
-              <span className="text-xs text-muted-foreground">{rows.length} shown</span>
             </div>
             {tasks.isLoading ? (
               <Skeleton className="h-32" />
             ) : tasks.error ? (
               <ErrorState error={tasks.error} onRetry={() => tasks.refetch()} />
             ) : rows.length === 0 ? (
-              <EmptyState title="No tasks match this filter." />
+              <EmptyState icon={ClipboardList} title="No tasks match this filter." description="Try another status or clear a filter." />
             ) : (
-              <ul className="divide-y rounded-xl border">
-                {rows.map((t) => (
-                  <li key={t.id} className="px-3 py-2.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <TaskCode code={t.code} />
-                      <Link to={href(t.id)} state={{ fromList: true }} className="font-medium hover:text-primary hover:underline">
-                        {t.title}
-                      </Link>
-                      {t.category && <Chip>{t.category}</Chip>}
-                      {t.priority !== 'normal' && <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority_display}</Badge>}
-                      {!!t.effort_minutes && <Chip>{fmtEffort(t.effort_minutes)}</Chip>}
-                      {t.status === 'in_progress' && t.progress_percent != null && <Chip>{t.progress_percent}%</Chip>}
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {t.status_display}
-                      {t.created_by_detail && <> · by {t.created_by_detail.name}</>}
-                      {t.due_at && t.status !== 'done' && <span className={cn(t.is_overdue && 'text-destructive')}> · {relDue(t.due_at)}</span>}
-                      {t.completed_at && <> · done {fmtDT(t.completed_at)}</>}
-                    </p>
-                  </li>
-                ))}
+              <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+                {rows.map((t) => {
+                  const late = t.status !== 'done' && !!t.is_overdue;
+                  return (
+                    <li key={t.id} className={cn('border-l-[3px] border-l-transparent py-2.5 pr-3 pl-2.5 transition-colors hover:bg-muted/40', late && 'border-l-destructive')}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <TaskCode code={t.code} />
+                        <Link to={href(t.id)} state={{ fromList: true }} className="font-semibold hover:text-primary hover:underline">
+                          {t.title}
+                        </Link>
+                        {t.priority !== 'normal' && <PriorityPill priority={t.priority} label={t.priority_display} />}
+                        <StatusPill status={t.status} label={t.status === 'in_progress' && t.progress_percent != null ? `${t.progress_percent}% · ${t.status_display}` : t.status_display} />
+                        {t.category && <Chip>{t.category}</Chip>}
+                        {!!t.effort_minutes && <Chip className="font-mono tabular">{fmtEffort(t.effort_minutes)}</Chip>}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {t.created_by_detail && <>by {t.created_by_detail.name}</>}
+                        {t.due_at && t.status !== 'done' && <span className={cn(late && 'font-bold text-destructive')}> · {relDue(t.due_at)}</span>}
+                        {t.completed_at && <span className="text-success"> · done {fmtDT(t.completed_at)}</span>}
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
