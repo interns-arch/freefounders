@@ -27,11 +27,14 @@ const CatalogPage = lazy(() => import('./catalog/catalog-page'));
 const OrgPage = lazy(() => import('./org/org-page'));
 const UsersPage = lazy(() => import('./admin/users-page'));
 const RolesPage = lazy(() => import('./admin/roles-page'));
+const SimsPage = lazy(() => import('./sims/sims-page'));
+const ReconciliationPage = lazy(() => import('./reconciliation/reconciliation-page'));
+const ReconRunPage = lazy(() => import('./reconciliation/run-page'));
 
 /** /assets: the dashboard, or the first menu item this person can open (like the old Assets HomeRoute). */
 function HomeRoute() {
   const access = useAccess();
-  const items = ASSETS_NAV.filter((n) => !n.classic && (!n.show || n.show(access)));
+  const items = ASSETS_NAV.filter((n) => !n.show || n.show(access));
   if (items[0]?.to === '/assets') return <DashboardPage />;
   return <Navigate to={items[0]?.to ?? '/assets/employees'} replace />;
 }
@@ -46,8 +49,7 @@ function MyProfileRoute() {
 
 /**
  * Children of /assets: the same sub-paths as the old Assets web app, so QR codes, ID cards and notification links
- * keep working (/assets/scan/:code, /assets/id/:code, /assets/requests?open=…). SIM cards and reconciliation are not
- * here: they open in the classic app (the area's "*" fallback).
+ * keep working (/assets/scan/:code, /assets/id/:code, /assets/requests?open=…, /assets/reconciliation/:id).
  */
 export const assetsRoutes: RouteObject[] = [
   {
@@ -81,6 +83,9 @@ export const assetsRoutes: RouteObject[] = [
       { path: 'onboarding/:id', element: <OnboardingDetailPage /> },
       { path: 'maintenance', element: <MaintenancePage /> },
       { path: 'activity', element: <ActivityPage /> },
+      { path: 'sims', element: <SimsPage /> },
+      { path: 'reconciliation', element: <ReconciliationPage /> },
+      { path: 'reconciliation/:id', element: <ReconRunPage /> },
       { path: 'settings/catalog', element: <CatalogPage /> },
       { path: 'settings/departments', element: <OrgPage kind="department" /> },
       { path: 'settings/vendors', element: <OrgPage kind="vendor" /> },

@@ -194,13 +194,19 @@ test('HR settings: attendance rules are saved', async ({ browser, request }) => 
   }
 });
 
-test('approvers see Approvals; payroll tabs open the classic screen', async ({ browser }) => {
+test('approvers see Approvals; payroll tabs are in-app Attendance sections', async ({ browser }) => {
   const { ctx, page } = await ownerPage(browser, '/tasks/hr?tab=approvals');
   await expect(page.getByRole('heading', { name: /^Leave requests \(/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^Attendance corrections \(/ })).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Attendance and leave sections' });
   await expect(nav.getByRole('button', { name: 'Approvals' })).toHaveAttribute('aria-current', 'page');
-  const payroll = nav.getByRole('link', { name: 'Payroll' });
-  if (await payroll.count()) await expect(payroll).toHaveAttribute('href', '/classic/tasks/hr?tab=payroll');
+  // Payroll (module `payroll`, hr.manage) is a real tab now: it opens /attendance/payroll, not the classic screen.
+  const payroll = nav.getByRole('button', { name: 'Payroll' });
+  if (await payroll.count()) {
+    await payroll.click();
+    await expect(page).toHaveURL(/\/attendance\/payroll$/);
+    await expect(page.getByRole('group', { name: 'Payroll sections' })).toBeVisible();
+  }
+  await expect(nav.getByRole('link')).toHaveCount(0);
   await ctx.close();
 });

@@ -41,8 +41,8 @@ test('every Assets screen opens under /assets with its menu', async ({ page }) =
   for (const name of ['Dashboard', 'Assets', 'Employees', 'Requests', 'Tickets', 'Asset catalogue', 'Departments']) {
     await expect(menu.getByRole('link', { name, exact: true })).toBeVisible();
   }
-  // SIM cards and reconciliation stay in the classic app.
-  await expect(menu.getByRole('link', { name: /SIM cards/ })).toHaveAttribute('href', '/classic/assets/sims');
+  // SIM cards and reconciliation are in-app too (web-assets-sims-reconciliation.spec.ts covers them).
+  await expect(menu.getByRole('link', { name: /SIM cards/ })).toHaveAttribute('href', '/assets/sims');
 
   const screens: Array<[string, string | RegExp]> = [
     ['/assets/assets', 'Assets'],

@@ -127,6 +127,27 @@ class MultiCompanyTests(SimpleTestCase):
         self.assertEqual(res.status_code, 401)
         self.assertEqual(self.api().get("/health").status_code, 200)
 
+    def test_share_link_names_its_company(self):
+        """A web form's public page has no token: the link carries the company id. Only /api/public/ takes it."""
+        from webforms.models import Form, FormStatus
+        with schemas.use(ACME):
+            form = Form.objects.create(name="Acme enquiry", status=FormStatus.PUBLISHED, created_by=self.acme_user)
+            token = form.public_token
+        try:
+            self.assertEqual(self.api().get(f"/api/public/forms/{token}/").status_code, 401)
+            res = self.api().get(f"/api/public/forms/{token}/?company={ACME_ID}")
+            self.assertEqual(res.status_code, 200, res.content)
+            self.assertEqual(res.data["name"], "Acme enquiry")
+            self.assertEqual(self.api().get(f"/api/public/forms/{token}/", HTTP_X_FF_COMPANY=ACME_ID).status_code, 200)
+            # Another company's id does not reach Acme's form; an unknown id is refused.
+            self.assertEqual(self.api().get(f"/api/public/forms/{token}/?company={BETA_ID}").status_code, 404)
+            self.assertEqual(self.api().get(f"/api/public/forms/{token}/?company={uuid.uuid4()}").status_code, 401)
+            # The hint means nothing anywhere else.
+            self.assertEqual(self.api().get(f"/api/tasks/?company={ACME_ID}").status_code, 401)
+        finally:
+            with schemas.use(ACME):
+                form.delete()
+
     def test_fails_closed_without_a_company(self):
         with schemas.use(schemas.NO_COMPANY):
             with self.assertRaises(ProgrammingError):

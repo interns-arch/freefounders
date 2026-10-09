@@ -95,7 +95,7 @@ const ICON_TONE: Record<Tone, string> = {
   info: 'bg-info/12 text-info',
 };
 
-/** A number tile; with `to` it opens that list (in-app link, or a full page load for /classic/…). */
+/** A number tile; with `to` it opens that list. */
 export function Tile({
   label,
   value,
@@ -129,20 +129,16 @@ export function Tile({
   );
   if (!to) return body;
   const cls = 'block rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40';
-  return to.startsWith('/classic/') ? (
-    <a href={to} className={cls}>
-      {body}
-    </a>
-  ) : (
+  return (
     <Link to={to} className={cls}>
       {body}
     </Link>
   );
 }
 
-/** A link that works for in-app paths and for classic screens (full page load). */
+/** A link that works for in-app paths and for outside URLs (new tab). */
 export function SmartLink({ to, className, children, ...rest }: { to: string; className?: string; children: ReactNode } & Omit<React.ComponentProps<'a'>, 'href'>) {
-  if (to.startsWith('/classic/') || /^https?:\/\//.test(to)) {
+  if (/^https?:\/\//.test(to)) {
     return (
       <a href={to} className={className} {...rest}>
         {children}

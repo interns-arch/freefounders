@@ -34,7 +34,7 @@ import { DelegationCard, MyDelegationCard } from './delegation';
 import { Deadlines, HomeFilterBar, MistakesCard, NoticesCard, ScoreCard, TeamInsights, WaitingOnMe } from './home-insights';
 import { Chip, ErrorNote, Panel, PriorityChip, TaskStatusChip, Tile, fmtWhen } from './parts';
 
-const LEADS = '/classic/tasks/leads';
+const LEADS = '/tasks/leads';
 
 function greeting() {
   const h = new Date().getHours();

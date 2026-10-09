@@ -1,8 +1,6 @@
 # DRAFT: verified when the staging environment exists (needs the AWS account). Dev uses dev-gateway.mjs.
 # Production gateway (Caddy): the same path routing as dev-gateway.mjs, with automatic HTTPS (PLAN.md §18.4).
 #   /                 the FreeFounders web app (static build of apps/web), incl. /tasks/… and /assets/… screens
-#   /classic/tasks/*  the old Tasks screens (built with VITE_PLATFORM_LOGIN=true VITE_BASE=/classic/tasks/)
-#   /classic/assets/* the old Assets screens (built with VITE_PLATFORM_LOGIN=true VITE_BASE=/classic/assets/)
 # Upstream host names are the docker-compose service names; adjust for your deployment.
 {$FF_DOMAIN:app.freefounders.local} {
 	encode gzip
@@ -17,10 +15,6 @@
 		rewrite * /api{uri}
 		reverse_proxy tasks:8000
 	}
-	handle_path /classic/tasks/api/* {
-		rewrite * /api{uri}
-		reverse_proxy tasks:8000
-	}
 	handle /media/* {
 		reverse_proxy tasks:8000
 	}
@@ -30,24 +24,6 @@
 		rewrite * /api{uri}
 		reverse_proxy assets:3000
 	}
-	handle_path /classic/assets/api/* {
-		rewrite * /api{uri}
-		reverse_proxy assets:3000
-	}
-
-	# The classic screens (modules not moved to the new web app yet).
-	handle /classic/tasks/* {
-		root * /srv
-		try_files {path} /classic/tasks/index.html
-		file_server
-	}
-	redir /classic/tasks /classic/tasks/
-	handle /classic/assets/* {
-		root * /srv
-		try_files {path} /classic/assets/index.html
-		file_server
-	}
-	redir /classic/assets /classic/assets/
 
 	# Everything else: the FreeFounders web app (apps/web/dist). index.html is never cached, so phones pick up a
 	# new deploy on their next load; the hashed assets are cached for a year.

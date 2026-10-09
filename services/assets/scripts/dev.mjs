@@ -32,7 +32,9 @@ const portBusy = (port) =>
     const srv = net.createServer().once('error', () => resolve(true)).once('listening', () => srv.close(() => resolve(false)));
     srv.listen(Number(port));
   });
-for (const port of [API_PORT, '5173']) {
+// EAM_API_ONLY=1: the FreeFounders web app (apps/web) serves the screens; start only the API.
+const API_ONLY = process.env.EAM_API_ONLY === '1';
+for (const port of API_ONLY ? [API_PORT] : [API_PORT, '5173']) {
   if (await portBusy(port)) {
     console.error(`\n  ✖ Port ${port} is already in use by another program (maybe an old copy of this app).`);
     console.error(`    Free it with:  npx kill-port ${port}   then run npm run dev again.\n`);
@@ -53,7 +55,7 @@ const children = [
   // Watch only the compiled API: plain --watch also restarts when node_modules files are first loaded.
   spawn(process.execPath, ['--watch-path', API_DIST, path.join(API_DIST, 'main.js')], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, ...env } }),
   // --host: reachable from phones on the same Wi-Fi (for QR codes).
-  spawn(process.execPath, [VITE, '--host'], { cwd: path.join(ROOT, 'apps', 'web'), stdio: 'inherit', env: { ...process.env, ...env } }),
+  ...(API_ONLY ? [] : [spawn(process.execPath, [VITE, '--host'], { cwd: path.join(ROOT, 'apps', 'web'), stdio: 'inherit', env: { ...process.env, ...env } })]),
 ];
 // Only surface compiler errors from the watcher.
 children[0].stdout.on('data', (buf) => {

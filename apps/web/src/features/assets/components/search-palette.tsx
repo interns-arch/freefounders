@@ -32,7 +32,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
   };
   const r = q.length >= 2 ? results.data : undefined;
   const access = useAccess();
-  const nav = ASSETS_NAV.filter((n) => !n.classic && (!n.show || n.show(access)));
+  const nav = ASSETS_NAV.filter((n) => !n.show || n.show(access));
   const adds = useQuickAddItems();
 
   return (

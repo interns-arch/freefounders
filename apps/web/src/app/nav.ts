@@ -10,8 +10,6 @@ export interface NavItem {
   show?: (access: Access) => boolean;
   /** Exact match for the active highlight (for index pages). */
   end?: boolean;
-  /** Screens not moved yet (PLAN.md §18.3): a full page load into the classic app, e.g. "/classic/tasks/leads". */
-  classic?: boolean;
   /** Section heading this item sits under in the sidebar (optional). */
   group?: string;
 }

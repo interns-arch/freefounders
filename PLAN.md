@@ -1085,3 +1085,30 @@ shown yet; "Remember my choice" keeps working as before (opens that workspace ne
 
 Checks: rules + typecheck + build pass; e2e **34 / 34** (new: punch in/out from the portal + old HR link redirect); smoke 10/10.
 Next: screen-by-screen polish against the old apps (Tasks workspace, HR tabs, Assets detail pages), founder review.
+
+### 19.10 One application: the classic screens are gone (2026-10-09)
+Founder: clicking Leads opened the old Tasks screens: "make it consistent, one single application". So the nine modules left on
+the old screens in §18.3 are now screens of the new app, in the new look, with every function of the old pages (plus small
+fixes, listed in each module's e2e spec header):
+
+| Module | New screens | Data layer |
+|---|---|---|
+| Leads & quotations | `/tasks/leads` (pipeline board, drawer with timeline/documents/quotations, `?lead=` deep link) | `core/tasks/extras-leads.ts` |
+| AI inbox | `/tasks/intake` | `core/tasks/extras-intake.ts` |
+| Mistake register & SOPs | `/tasks/mistakes` (`?tab=sops`, `?open=`) | `core/tasks/extras-mistakes.ts` |
+| Web forms | `/tasks/forms`, builder, submissions, fill; public `/f/:token?c=<company>` (no sign-in, no shell) | `core/tasks/extras-forms.ts` |
+| Links | `/tasks/links` | `core/tasks/extras-links.ts` |
+| Idea board | `/tasks/ideas` | `core/tasks/extras-ideas.ts` |
+| Payroll, My salary | `/attendance/payroll`, `/attendance/salary` (tabs of the Attendance workspace) | `core/hr/payroll.ts` |
+| SIM cards | `/assets/sims` (the register filtered to the SIM type) | existing asset hooks |
+| Reconciliation | `/assets/reconciliation`, `/assets/reconciliation/:id` | `core/assets/reconciliation.ts` |
+
+Removed: `ClassicRedirect`, the `classic` menu flag and markers, the `/classic/*` gateway routes (dev gateway and Caddyfile),
+and the two old Vite servers from `npm run dev` (`EAM_API_ONLY=1` makes the Assets dev script start its API only). An unknown
+`/tasks/…` or `/assets/…` path now shows "Page not found" inside the shell. The old web apps stay in the repo (standalone
+installs, CarTrends until it moves) and are not served by FreeFounders.
+Backend: in multi-company mode the public form page names its company (`/f/<token>?c=<id>`; `tenancy/middleware.py` accepts
+`?company=`/`X-FF-Company` for `/api/public/*` only).
+
+Checks: rules + typecheck + build; e2e **44 / 44** (10 new tests across 4 specs); smoke 10/10; Tasks backend 755 + tenancy
+27 (+1 new) pass. `apps/portal` and the old frontends are Phase 9 clean-up candidates.

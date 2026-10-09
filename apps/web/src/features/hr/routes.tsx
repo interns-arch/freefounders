@@ -20,7 +20,7 @@ function AttendanceHome() {
   return <HrPage />;
 }
 
-/** The Attendance workspace (PLAN.md §19.4): /attendance, /attendance/history|leave|holidays|team|approvals|settings. */
+/** The Attendance workspace (PLAN.md §19.4): /attendance, /attendance/history|leave|salary|holidays|team|approvals|payroll|settings. */
 export const attendanceRoutes: RouteObject[] = [
   { index: true, element: <AttendanceHome /> },
   { path: ':tab', element: <HrPage /> },

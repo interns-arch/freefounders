@@ -1,7 +1,7 @@
 /** /tasks/groups — team workspaces (old pages/Groups.jsx). ?group=<id> opens one group. */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type Group, useAddGroupMembers, useArchiveGroup, useGroupDashboard, useGroups, useRemoveGroupMember, useSaveGroup, useSetTaskStatus, useTaskList, useTaskRoleOptions, useTeamPeople } from '@freefounders/core/tasks';
-import { ArrowLeft, Boxes, ExternalLink, Lightbulb, Link2, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Boxes, Lightbulb, Link2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useConfirm } from '@/components/common/confirm';
@@ -213,9 +213,9 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
       {tab === 'dashboard' && <GroupDashboardView group={group} />}
       {tab === 'tasks' && <GroupTasks group={group} />}
       {tab === 'ideas' && (
-        <ClassicCard icon={Lightbulb} href="/classic/tasks/ideas" title="Ideas" text={`Ideas for "${group.name}" are on the Idea board (opens the classic screen).`} />
+        <ClassicCard icon={Lightbulb} href="/tasks/ideas?scope=group" title="Ideas" text={`Ideas for "${group.name}" are on the Idea board.`} />
       )}
-      {tab === 'links' && <ClassicCard icon={Link2} href="/classic/tasks/links" title="Links" text={`Links scoped to "${group.name}" are on the Links page (opens the classic screen).`} />}
+      {tab === 'links' && <ClassicCard icon={Link2} href="/tasks/links" title="Links" text={`Links scoped to "${group.name}" are on the Links page.`} />}
       {tab === 'members' && <GroupMembers group={group} />}
       <GroupDialog open={editing} initial={group} onClose={() => setEditing(false)} />
     </div>
@@ -231,9 +231,9 @@ function ClassicCard({ icon: Icon, href, title, text }: { icon: React.ComponentT
         description={text}
         action={
           <Button asChild variant="outline">
-            <a href={href}>
-              Open {title} <ExternalLink />
-            </a>
+            <Link to={href}>
+              Open {title} <ArrowRight />
+            </Link>
           </Button>
         }
       />

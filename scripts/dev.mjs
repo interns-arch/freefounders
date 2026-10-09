@@ -2,7 +2,7 @@
 // in multi-company mode (one schema per company in Tasks and Assets, PLAN.md §14).
 //
 // Starts: PostgreSQL (:5434, Platform + Tasks), Platform API (:4000), Tasks API (:8000) + worker, Assets API (:3000),
-// the FreeFounders web app (:5176), the classic Tasks/Assets screens (:5174, :5173; under /classic/) and the gateway
+// the FreeFounders web app (:5176) and the gateway
 // (:8080) that puts them on one address.
 // Once everything answers, every company is set up in its apps (`company sync`). Ctrl+C stops everything.
 // First time: `npm run setup` (installs every part's dependencies).
@@ -75,9 +75,8 @@ console.log('• Migrating Tasks (every company)…');
 execFileSync(TASKS_PY, ['manage.py', 'migrate_companies'], { cwd: at('services/tasks/backend'), env: { ...process.env, ...djangoEnv }, stdio: 'ignore' });
 start('tasks', TASKS_PY, ['manage.py', 'runserver', '127.0.0.1:8000'], { cwd: 'services/tasks/backend', env: djangoEnv });
 start('tasks-job', TASKS_PY, ['manage.py', 'run_worker'], { cwd: 'services/tasks/backend', env: djangoEnv });
-// The old screens run under /classic/ for the modules not moved to the new web app yet (PLAN.md §18.3).
-start('tasks-web', 'npx', ['vite', '--host', '127.0.0.1', '--port', '5174', '--strictPort'], { cwd: 'services/tasks/frontend', env: { ...shared, VITE_BASE: '/classic/tasks/' } });
-start('assets', 'npm', ['run', 'dev'], { cwd: 'services/assets', env: { ...shared, VITE_BASE: '/classic/assets/', PUBLIC_URL: process.env.PUBLIC_URL ?? 'http://localhost:8080' } });
+// Assets API only: every screen is in the FreeFounders web app now (PLAN.md §19.10).
+start('assets', 'npm', ['run', 'dev'], { cwd: 'services/assets', env: { ...shared, EAM_API_ONLY: '1', PUBLIC_URL: process.env.PUBLIC_URL ?? 'http://localhost:8080' } });
 // The FreeFounders web app (apps/web): everything else on :8080.
 start('web', 'npx', ['vite', '--host', '127.0.0.1', '--port', '5176', '--strictPort'], { cwd: 'apps/web' });
 

@@ -16,7 +16,7 @@ import { relDue } from '../shared/format';
 import { Linkify } from '../shared/linkify';
 import { Chip, Panel, PriorityChip, Segmented, SmartLink, fmtDay } from './parts';
 
-const MISTAKES = '/classic/tasks/mistakes';
+const MISTAKES = '/tasks/mistakes';
 
 // ─── 15: filters ─────────────────────────────────────────────────────────
 export function HomeFilterBar({ filters, setFilters, home }: { filters: HomeFilters; setFilters: (f: HomeFilters) => void; home?: HomeSummary }) {
@@ -260,14 +260,14 @@ export function MistakesCard({ home, className }: { home?: HomeSummary; classNam
       }
       actions={
         <Button asChild size="sm" variant="outline">
-          <a href={MISTAKES}>Open register →</a>
+          <Link to={MISTAKES}>Open register →</Link>
         </Button>
       }
     >
       <ul className="divide-y">
         {me.mistakes.map((m) => (
           <li key={m.id}>
-            <a href={MISTAKES} className="flex items-start gap-3 py-2 hover:bg-muted/30">
+            <Link to={`${MISTAKES}?open=${m.id}`} className="flex items-start gap-3 py-2 hover:bg-muted/30">
               <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', m.is_overdue ? 'bg-destructive' : 'bg-warning')} />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">
@@ -281,7 +281,7 @@ export function MistakesCard({ home, className }: { home?: HomeSummary; classNam
                 </div>
               </div>
               <Chip tone={m.severity === 'high' || m.severity === 'critical' ? 'danger' : 'warning'}>{m.severity_display}</Chip>
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

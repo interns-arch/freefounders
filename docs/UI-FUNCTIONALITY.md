@@ -17,6 +17,12 @@ Generated from the code on 2026-10-08. Source of truth if anything here disagree
 > team|approvals|settings`. Old `/tasks/hr?tab=x` links redirect there. Portal buttons: "Open Tasks", "Open Assets",
 > "Open Attendance & Leave". A Tasks-only person now lands on the portal instead of going straight into Tasks.
 
+> **Update 2026-10-09, later (PLAN.md §19.10): no more classic screens.** §0.6 is void: Leads (`/tasks/leads`, `?lead=`), AI inbox
+> (`/tasks/intake`), Mistakes & SOPs (`/tasks/mistakes`, `?tab=sops`, `?open=`), Forms (`/tasks/forms`, `/tasks/forms/:id`,
+> `…/submissions`, `…/fill`; public `/f/:token?c=<company>`), Links (`/tasks/links`), Idea board (`/tasks/ideas`), Payroll & My
+> salary (`/attendance/payroll`, `/attendance/salary`), SIM cards (`/assets/sims`) and Reconciliation (`/assets/reconciliation`,
+> `/assets/reconciliation/:id`) are all screens of the new app; an unknown `/tasks/…` or `/assets/…` path shows "Page not found".
+
 ## Contents
 0. Ground rules for the new design (what can change, what must stay, theme, permission model, journeys, classic screens, test names)
 1. App frame: sign in, workspace chooser, account, shell, notifications, errors

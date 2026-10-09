@@ -33,7 +33,8 @@ Phase 7 adds `apps/mobile`.
 **Web app rules** (checked before every typecheck/build by `scripts/check-web-rules.mjs`): screens under `apps/web/src/app` and
 `src/features` get data only from `@freefounders/core` hooks (no fetch, no HTTP client) and use theme colours only (no
 hex/rgb/oklch). Each area owns `src/features/<area>/` and `packages/core/src/<area>/`. Same URLs as the old apps
-(`/tasks/…`, `/assets/…`); any path not built in the new app opens the classic screen at `/classic/…`.
+(`/tasks/…`, `/assets/…`). **Every module is in the new app** (PLAN.md §19.10): the old web apps under `services/*/frontend`
+and `services/assets/apps/web` are no longer served or started (their APIs are); `/classic/…` is gone.
 Attendance is its own workspace at `/attendance/<tab>` (HR screens; `/tasks/hr?tab=` redirects), and `/` is the Workspace
 Portal with punch-in (PLAN.md §19). Theme colours only: fixed Tailwind palette classes (blue-700…) are refused too.
 
@@ -46,10 +47,9 @@ npm run e2e          # browser tests against the running suite (first time: npx 
 npm run rehearse-import   # CarTrends import rehearsal on demo data, against the running suite
 ```
 Routes on :8080: `/api/platform/*` Platform (:4000) · `/tasks/api/*` Django (:8000) · `/assets/api/*` NestJS (:3000) ·
-`/media/*` Django · `/classic/tasks/*` old Tasks web (:5174) · `/classic/assets/*` old Assets web (:5173) · everything
-else the new web app (:5176). Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
+`/media/*` Django · everything else the new web app (:5176). `/f/<token>?c=<company>` is the public web-form page. Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
 Single login is a build/env switch, off by default so each app still runs standalone:
-- old web apps: `VITE_PLATFORM_LOGIN=true` + `VITE_BASE=/classic/tasks/` or `/classic/assets/` (see `src/platform.js`, `src/lib/platform.ts`)
+- old web apps (standalone only now): `VITE_PLATFORM_LOGIN=true` (see `src/platform.js`, `src/lib/platform.ts`)
 - APIs: `PLATFORM_JWKS_URL` (Tasks, Assets); Platform: `TASKS_INTERNAL_URL`, `ASSETS_INTERNAL_URL`, `PLATFORM_SECRET`
 How it fits: PLAN.md §13. Tasks uses the Platform token directly (Bearer); Assets exchanges it for
 a 15-minute cookie session (`/api/auth/platform-session`) so photos/downloads keep working.

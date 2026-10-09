@@ -1,6 +1,6 @@
 import { useAccess } from '@freefounders/core';
 import { ensureAssetsCookie } from '@freefounders/core/assets';
-import { ArrowLeft, ExternalLink, LayoutGrid, Menu } from 'lucide-react';
+import { ArrowLeft, LayoutGrid, Menu } from 'lucide-react';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { PageLoader } from '@/components/common/page';
@@ -100,25 +100,18 @@ export function AppShell() {
             <>
               <item.icon className="size-4 shrink-0" aria-hidden />
               <span className="flex-1 truncate">{item.label}</span>
-              {item.classic && <ExternalLink className="size-3 opacity-50" aria-label="opens the classic screen" />}
             </>
           );
           return (
             <div key={item.to}>
               {heading && <p className="px-2.5 pt-4 pb-1 font-mono text-[10px] font-medium tracking-widest text-muted-foreground/80 uppercase">{item.group}</p>}
-              {item.classic ? (
-                <a href={item.to} className={itemClass}>
-                  {inner}
-                </a>
-              ) : (
-                <NavLink
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) => cn(itemClass, isActive && 'bg-sidebar-accent font-medium text-primary [&_svg]:text-primary')}
-                >
-                  {inner}
-                </NavLink>
-              )}
+              <NavLink
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => cn(itemClass, isActive && 'bg-sidebar-accent font-medium text-primary [&_svg]:text-primary')}
+              >
+                {inner}
+              </NavLink>
             </div>
           );
         })}
@@ -128,7 +121,7 @@ export function AppShell() {
   );
 
   // Phones: the first four menu entries stay one tap away; "More" opens the full menu.
-  const quick = items.filter((i) => !i.classic).slice(0, 4);
+  const quick = items.slice(0, 4);
 
   return (
     <div className="flex min-h-dvh">
