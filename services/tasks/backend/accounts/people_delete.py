@@ -6,8 +6,30 @@ token's company (the tenancy middleware picks the schema for every /api/internal
 months change. It cannot be undone. Everything happens in ONE transaction; files on disk that belonged to deleted
 rows are removed only after the transaction has committed.
 
-Responses: 200 {"deleted": true, "counts": {"app.Model": n, ...}} | 200 {"deleted": false} (no such person here;
-the Platform may retry) | 400 malformed id | 401 without the service token.
+Optional JSON body (the founder's choices; no body = delete everything, as described further down):
+  {"tasks":   {"mode": "delete"} | {"mode": "hand_over", "to": "<platform person id>"},
+   "leads":   {"mode": "delete"} | {"mode": "hand_over", "to": "<platform person id>"},
+   "history": {"mode": "delete"} | {"mode": "keep"}}        ("assets" belongs to the Assets app and is ignored here)
+  tasks hand_over: their OPEN tasks (not done) are assigned to `to` (activity "Handed over from <name> (deleted)");
+                   every task they created that stays (assigned to someone else, or handed over) gets `to` as creator.
+  tasks delete:    their open tasks (assigned to them or created by them) are deleted.
+  leads hand_over: leads assigned to / created by them get `to` as assignee / creator (a lead event records it), so
+                   the tasks linked to those leads are not deleted. leads delete: the leads go with their linked tasks.
+  history delete:  everything not handed over goes, exactly as described below.
+  history keep:    finished tasks, attendance, leave, payroll, comments, activity, notices, ideas, mistakes, form
+                   submissions etc. stay. The user row stays, anonymised and unusable: name "Deleted user", username
+                   deleted-<random>, email/WhatsApp blank, unusable password, inactive, platform_person_id NULL (that
+                   person id can never sign in or be matched again). Personal data still goes (PERSONAL below): face
+                   profile, punch photos and leave documents (files and fields), notifications, WhatsApp deliveries,
+                   login tokens, access roles, group memberships, task subscriptions, link favourites, notice reads;
+                   their reports' manager pointer and the auto-assignment lists are cleared.
+  `to` must be an active user here linked to that platform person, and not the person being deleted; otherwise 400
+  before anything changes.
+
+Responses: 200 {"deleted": true, "anonymised": bool, "counts": {"app.Model": n, ...},
+                "handed_over": {"tasks": n, "leads": n, "assets": 0}}
+         | 200 {"deleted": false} (no such person here; the Platform may retry)
+         | 400 {"detail": "..."} malformed id, body or hand-over target | 401 without the service token.
 
 How each relation to the user is handled (RELATIONS below; a test fails when a new relation is not listed):
 
@@ -162,69 +184,236 @@ def _files(model, rows):
     return names
 
 
-def delete_person(person_id: uuid.UUID) -> dict:
+class HandOverError(ValueError):
+    """The body cannot be applied (bad hand-over target); nothing has been changed."""
+
+
+TASK_DONE = "done"
+
+
+def parse_options(data) -> dict:
+    """The founder's choices from the request body; raises HandOverError for a malformed body."""
+    if data is None or data == "" or (hasattr(data, "keys") and not list(data.keys())):
+        data = {}
+    if not isinstance(data, dict):
+        raise HandOverError("The body must be a JSON object")
+    out = {}
+    for key, modes in (("tasks", ("delete", "hand_over")), ("leads", ("delete", "hand_over")), ("history", ("delete", "keep"))):
+        raw = data.get(key)
+        if raw is None:
+            out[key] = {"mode": "delete"}
+            continue
+        if not isinstance(raw, dict) or raw.get("mode") not in modes:
+            raise HandOverError(f"{key}.mode must be one of: {', '.join(modes)}")
+        choice = {"mode": raw["mode"]}
+        if raw["mode"] == "hand_over":
+            try:
+                choice["to"] = uuid.UUID(str(raw.get("to")))
+            except ValueError:
+                raise HandOverError(f"{key}.to must be a platform person id (UUID)") from None
+        out[key] = choice
+    return out
+
+
+def _receiver(User, user, person_id: uuid.UUID, what: str):
+    if person_id == user.platform_person_id:
+        raise HandOverError(f"{what} cannot be handed over to the person being deleted")
+    to = User.objects.filter(platform_person_id=person_id).first()
+    if to is None:
+        raise HandOverError(f"{what}: the person to hand over to has no Tasks access")
+    if not to.is_active:
+        raise HandOverError(f"{what}: the person to hand over to ({to.get_full_name() or to.username}) is not active")
+    return to
+
+
+def _name(user) -> str:
+    return (user.get_full_name() or user.username)[:120]
+
+
+def delete_person(person_id: uuid.UUID, options: dict | None = None) -> dict:
+    opts = options or parse_options({})
     User = get_user_model()
     using = router.db_for_write(User)
+    Task = apps.get_model("crm", "Task")
+    Lead = apps.get_model("crm", "Lead")
     with transaction.atomic(using=using):
         user = User.objects.select_for_update().filter(platform_person_id=person_id).first()
         if user is None:
             return {"deleted": False}
+        # Check every hand-over target before anything changes.
+        receivers = {k: _receiver(User, user, opts[k]["to"], k.capitalize())
+                     for k in ("tasks", "leads") if opts[k]["mode"] == "hand_over"}
+
+        handed = {"tasks": 0, "leads": 0, "assets": 0}
+        name = _name(user)
+        if "tasks" in receivers:
+            handed["tasks"] = _hand_over_tasks(Task, user, receivers["tasks"], name)
+        if "leads" in receivers:
+            handed["leads"] = _hand_over_leads(Lead, user, receivers["leads"], name)
 
         counts: dict[str, int] = {}
-        collector = Collector(using=using)
-        for label, model, field in user_relations():
-            if model is User and field.name == "reporting_manager":
-                User.objects.filter(reporting_manager=user).exclude(pk=user.pk).update(reporting_manager=None)
-                continue
-            rows = model._base_manager.using(using).filter(**{field.name: user})
-            if _decision(label, field) == DELETE:
-                collector.collect(rows)
-            elif label == "workspace.LinkCollection.created_by":
-                Link = apps.get_model("workspace", "Link")
-                shared = Link.objects.using(using).filter(collection__in=rows).exclude(added_by=user).values("collection_id")
-                own = list(rows.exclude(pk__in=shared))
-                if own:
-                    collector.collect(own)
-                rows.exclude(pk__in=[c.pk for c in own]).update(**{field.name: None})
-            else:
-                rows.update(**{field.name: None})
-        collector.collect([user])
-
-        # Ids taken out of the round-robin lists.
-        AssignmentRule = apps.get_model("crm", "AssignmentRule")
-        for rule in AssignmentRule.objects.using(using).select_for_update():
-            if user.pk in (rule.member_ids or []):
-                rule.member_ids = [i for i in rule.member_ids if i != user.pk]
-                rule.rr_index = 0
-                rule.save(update_fields=["member_ids", "rr_index", "updated_at"])
-
-        # Everything the collector will delete: remember files and deleted task ids first.
-        files, task_ids = [], set()
-        Task = apps.get_model("crm", "Task")
-        for model, instances in collector.data.items():
-            files += _files(model, instances)
-            if model is Task:
-                task_ids |= {t.pk for t in instances}
-        for qs in collector.fast_deletes:
-            files += _files(qs.model, qs)
-            if qs.model is Task:
-                task_ids |= set(qs.values_list("pk", flat=True))
-
-        _, deleted = collector.delete()
-        counts.update({k: v for k, v in deleted.items() if v})
-
-        if task_ids:
-            OutboxEvent = apps.get_model("tenancy", "OutboxEvent")
-            n, _ = OutboxEvent.objects.using(using).filter(payload__taskId__in=list(task_ids)).delete()
-            if n:
-                counts["tenancy.OutboxEvent"] = n
+        files: list = []
+        if opts["history"]["mode"] == "keep":
+            _anonymise(user, opts, using, counts, files)
+            anonymised = True
+        else:
+            _delete_everything(user, using, counts, files)
+            anonymised = False
 
         def remove_files():
-            for storage, name in files:
+            for storage, fname in files:
                 try:
-                    storage.delete(name)
+                    storage.delete(fname)
                 except Exception:  # noqa: BLE001 -- a missing file must not fail the request
                     pass
 
         transaction.on_commit(remove_files, using=using)
-    return {"deleted": True, "counts": counts}
+    return {"deleted": True, "anonymised": anonymised, "counts": counts, "handed_over": handed}
+
+
+def _hand_over_tasks(Task, user, to, name) -> int:
+    TaskActivity = apps.get_model("crm", "TaskActivity")
+    open_tasks = list(Task.objects.filter(assigned_to=user).exclude(status=TASK_DONE))
+    for task in open_tasks:
+        task.assigned_to = to
+        if task.created_by_id == user.pk:
+            task.created_by = to
+        task.save(update_fields=["assigned_to", "created_by"])
+    TaskActivity.objects.bulk_create([TaskActivity(task=t, actor=None, text=f"Handed over from {name} (deleted)"[:300])
+                                      for t in open_tasks])
+    # Tasks they created for other people stay, with the receiver as creator.
+    Task.objects.filter(created_by=user).exclude(assigned_to=user).update(created_by=to)
+    return len(open_tasks)
+
+
+def _hand_over_leads(Lead, user, to, name) -> int:
+    LeadEvent = apps.get_model("crm", "LeadEvent")
+    leads = list(Lead.objects.filter(models.Q(assigned_to=user) | models.Q(created_by=user)))
+    for lead in leads:
+        fields = []
+        if lead.assigned_to_id == user.pk:
+            lead.assigned_to = to
+            fields.append("assigned_to")
+        if lead.created_by_id == user.pk:
+            lead.created_by = to
+            fields.append("created_by")
+        lead.save(update_fields=fields)
+    LeadEvent.objects.bulk_create([LeadEvent(lead=lead, type="assignment", actor=None,
+                                             body=f"Handed over from {name} (deleted)")
+                                   for lead in leads])
+    return len(leads)
+
+
+def _finish(collector, using, counts, files):
+    """Deletes what the collector found; remembers its files and drops outbox events about deleted tasks."""
+    Task = apps.get_model("crm", "Task")
+    task_ids = set()
+    for model, instances in collector.data.items():
+        files += _files(model, instances)
+        if model is Task:
+            task_ids |= {t.pk for t in instances}
+    for qs in collector.fast_deletes:
+        files += _files(qs.model, qs)
+        if qs.model is Task:
+            task_ids |= set(qs.values_list("pk", flat=True))
+    _, deleted = collector.delete()
+    for k, v in deleted.items():
+        if v:
+            counts[k] = counts.get(k, 0) + v
+    if task_ids:
+        OutboxEvent = apps.get_model("tenancy", "OutboxEvent")
+        n, _ = OutboxEvent.objects.using(using).filter(payload__taskId__in=list(task_ids)).delete()
+        if n:
+            counts["tenancy.OutboxEvent"] = counts.get("tenancy.OutboxEvent", 0) + n
+
+
+def _drop_from_assignment_rules(user, using):
+    AssignmentRule = apps.get_model("crm", "AssignmentRule")
+    for rule in AssignmentRule.objects.using(using).select_for_update():
+        if user.pk in (rule.member_ids or []):
+            rule.member_ids = [i for i in rule.member_ids if i != user.pk]
+            rule.rr_index = 0
+            rule.save(update_fields=["member_ids", "rr_index", "updated_at"])
+
+
+def _delete_everything(user, using, counts, files):
+    """history "delete": the user and every row that belongs to them (RELATIONS)."""
+    User = type(user)
+    collector = Collector(using=using)
+    for label, model, field in user_relations():
+        if model is User and field.name == "reporting_manager":
+            User.objects.filter(reporting_manager=user).exclude(pk=user.pk).update(reporting_manager=None)
+            continue
+        rows = model._base_manager.using(using).filter(**{field.name: user})
+        if _decision(label, field) == DELETE:
+            collector.collect(rows)
+        elif label == "workspace.LinkCollection.created_by":
+            Link = apps.get_model("workspace", "Link")
+            shared = Link.objects.using(using).filter(collection__in=rows).exclude(added_by=user).values("collection_id")
+            own = list(rows.exclude(pk__in=shared))
+            if own:
+                collector.collect(own)
+            rows.exclude(pk__in=[c.pk for c in own]).update(**{field.name: None})
+        else:
+            rows.update(**{field.name: None})
+    collector.collect([user])
+    _drop_from_assignment_rules(user, using)
+    _finish(collector, using, counts, files)
+
+
+# Rows that are personal data or access, not history: removed even when history is kept.
+PERSONAL = (
+    "hr.FaceProfile.user", "notifications.Notification.user", "notifications.WhatsAppDelivery.user",
+    "token_blacklist.OutstandingToken.user", "accounts.UserAccessRole.user", "accounts.User_groups.user",
+    "accounts.User_user_permissions.user", "workspace.Group_members.user", "crm.Task_subscribers.user",
+    "workspace.Link_favorites.user", "workspace.NoticeRead.user",
+)
+
+
+def _anonymise(user, opts, using, counts, files):
+    """history "keep": the history stays, pointing at an anonymous, unusable user row."""
+    User = type(user)
+    Task = apps.get_model("crm", "Task")
+    Lead = apps.get_model("crm", "Lead")
+    collector = Collector(using=using)
+    relations = {label: (model, field) for label, model, field in user_relations()}
+    for label in PERSONAL:
+        if label in relations:
+            model, field = relations[label]
+            collector.collect(model._base_manager.using(using).filter(**{field.name: user}))
+    if opts["tasks"]["mode"] == "delete":
+        collector.collect(Task.objects.filter(models.Q(assigned_to=user) | models.Q(created_by=user)).exclude(status=TASK_DONE))
+    if opts["leads"]["mode"] == "delete":
+        collector.collect(Lead.objects.filter(models.Q(assigned_to=user) | models.Q(created_by=user)))
+
+    # Punch photos and leave documents: the files and fields go, the rows stay.
+    Attendance = apps.get_model("hr", "Attendance")
+    LeaveRequest = apps.get_model("hr", "LeaveRequest")
+    photos = Attendance.objects.filter(user=user).filter(~models.Q(check_in_photo="") | ~models.Q(check_out_photo=""))
+    files += _files(Attendance, photos)
+    n = photos.update(check_in_photo="", check_out_photo="")
+    if n:
+        counts["hr.Attendance photos"] = n
+    docs = LeaveRequest.objects.filter(user=user, document__isnull=False).exclude(document="")
+    files += _files(LeaveRequest, docs)
+    n = docs.update(document=None)
+    if n:
+        counts["hr.LeaveRequest documents"] = n
+
+    User.objects.filter(reporting_manager=user).exclude(pk=user.pk).update(reporting_manager=None)
+    _drop_from_assignment_rules(user, using)
+    _finish(collector, using, counts, files)
+
+    user.refresh_from_db()
+    user.first_name, user.last_name = "Deleted", "user"
+    user.username = f"deleted-{uuid.uuid4().hex[:10]}"
+    user.email = ""
+    user.whatsapp_phone = ""
+    user.set_unusable_password()
+    user.is_active = False
+    user.is_staff = False
+    user.is_superuser = False
+    user.reporting_manager = None
+    user.platform_person_id = None
+    user.save()
+    counts["accounts.User anonymised"] = 1

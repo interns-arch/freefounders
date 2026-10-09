@@ -405,9 +405,13 @@ def _import_access(data):
 @permission_classes([IsPlatformService])
 def delete_person(request, person_id):
     """The person and every record of theirs in this company. 200 {"deleted": false} when there is no such person."""
+    from .people_delete import HandOverError, parse_options
     from .people_delete import delete_person as run
     try:
         pid = uuid.UUID(str(person_id))
     except ValueError:
         return Response({"detail": "person id must be a UUID"}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(run(pid))
+    try:
+        return Response(run(pid, parse_options(request.data)))
+    except HandOverError as exc:  # raised before anything changed
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)

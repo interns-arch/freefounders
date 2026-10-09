@@ -1128,7 +1128,8 @@ everything about them ("delete everything").
   sign-in" (on by default). After saving, the password is shown once with Copy and "Share on WhatsApp" (`wa.me` link); it is
   never stored readable. "Login ready" after Add person is unchanged.
 
-**Delete permanently** — `DELETE /api/platform/people/:id`, body `{ confirm: "<full name>" }` (trimmed, case-insensitive).
+**Delete permanently** — `DELETE /api/platform/people/:id`, body `{ confirm: "<full name>", options? }` (name trimmed,
+case-insensitive; `options` below).
 
 | Caller \ target | member | admin | owner | themselves |
 |---|---|---|---|---|
@@ -1136,16 +1137,37 @@ everything about them ("delete everything").
 | admin | yes | no (403) | no (403) | no (400) |
 | member | no (403) | no (403) | no (403) | no |
 
+**Choices (founder's decision 2026-10-09: the default is "keep and hand over", not "erase everything").** `options`:
+
+| Key | Values | Goes to | Screen default |
+|---|---|---|---|
+| `tasks` (open tasks) | `{mode:"hand_over", to:<person id>}` / `{mode:"delete"}` | Tasks | hand over to their manager (reports-to) if active with Tasks, else the admin picks |
+| `leads` (assigned or created; only if the Leads module is on) | same; delete takes the leads' tasks too | Tasks | hand over to their manager |
+| `history` (finished tasks, attendance, leave, payslips, comments…) | `{mode:"keep"}` / `{mode:"delete"}` | Tasks + Assets | keep, shown as "Deleted user" (photos and login data are still erased) |
+| `assets` (held assets) | `{mode:"stock"}` / `{mode:"hand_over", to}` | Assets | return to stock |
+
+No `options` (the API without a body) = erase everything, as first built. Each app gets only its keys as the JSON body of its
+`DELETE …/people/<id>` (none = no body). The Platform checks first that every `to` is an **active** person of the same company,
+not the person, and has **Tasks** (tasks/leads) or **Assets** (assets): 400 otherwise, before anything changes. An app that
+refuses a choice answers 400 before changing anything: the Platform answers 400 "<App>: …" and switches the person back on;
+if an earlier app had already deleted, they stay switched off and the message says so. The answer adds the apps' results:
+`handedOver: { tasks: {tasks, leads, assets}, assets: {…} }`, `anonymised: { tasks: bool, assets: bool }`.
+
 Order: (a) the person is switched off and every session ended; (b) each app in the company's plan deletes its records
 (`DELETE {APP}_INTERNAL_URL/people/<personId>`, service token, company from `cid`; `{deleted:false}` = never had them); the
 first app that is unreachable or answers anything but 200 stops it with **502 "<App> could not delete their data: …"**:
 nothing is deleted in the Platform, the person stays switched off, the admin can try again (the apps' deletes are repeatable);
 (c) the Platform deletes their login, sessions, roles, app links and the person, and clears other people's "reports to" that
 pointed at them (exit/onboarding state lives on the person row and in the apps); (d) the People directory is pushed again.
-Answer: `{ deleted: true, apps: { tasks: counts, assets: counts }, sync }`.
-Screen: "⋯ → Delete permanently" (after a separator; hidden for yourself, the owner, and admins unless you are the owner) asks
-to type the full name, lists what goes (sign-in and roles; tasks, comments, attendance, leave, salary records, leads, mistakes,
-forms, ideas; requests, tickets, asset history; held assets go back to stock) and warns that reports for past months change.
+Answer: `{ deleted: true, apps: { tasks: counts, assets: counts }, handedOver, anonymised, sync }`.
+Screen: "⋯ → Delete permanently" (after a separator; hidden for yourself, the owner, and admins unless you are the owner):
+"Delete {name} permanently?" with numbered steps, each shown only when the company has that app (Leads: only with the Leads
+module on): **Their open tasks** (Hand over to + searchable person picker / Delete them), **Their leads** (same), **Their
+history** (Keep it, shown as 'Deleted user' / Delete it all), **Assets they hold** (Return to stock / Hand over to + picker).
+Pickers list active people of the company with that app, except the person. With the defaults the note reads "Their sign-in
+and personal details are erased; their work is kept or handed over."; with any "delete" choice it lists what goes and warns
+"This cannot be undone. Reports for past months will change." Then "Type their full name to confirm" and "Delete permanently"
+(enabled when the name matches and every hand-over has a person).
 
 **Not built: viewing saved passwords.** The founder also asked for admins to be able to see people's passwords. That needs a
 readable copy of every password, which the project's rule forbids ("Platform passwords are hashed only; never add a reversible
@@ -1156,3 +1178,7 @@ Checks: Platform 56 tests (5 new: chosen password + 6-character minimum + mustCh
 confirm, fake apps called then rows removed, 502 leaves the person switched off, apps outside the plan not called); web
 rules + typecheck; e2e `web-admin` + `single-login` 11 / 11 (2 new: reset with a typed password → they sign in in a fresh
 browser → delete permanently → row gone, sign-in refused; owner/self cannot be deleted), against the real Tasks and Assets.
+Choices added the same day: Platform **59** tests (+3: each app gets only its choices and the answer carries handedOver /
+anonymised; wrong hand-over people refused before any app is called and the person stays active; an app's 400 passed on, the
+person switched back on, or kept off when an earlier app already deleted); e2e 12 / 12 (+1: a person with a manager and an
+open task, deleted with the defaults → the task now belongs to the manager, row gone, sign-in refused).

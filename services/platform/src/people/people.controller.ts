@@ -23,11 +23,11 @@ export class PeopleController {
     return this.people.update(caller, uuidParam(id), body);
   }
 
-  /** Deletes the person and their records in every app (PLAN.md §19.12). Body: { confirm: "<their full name>" }. */
+  /** Deletes the person and their records in every app (PLAN.md §19.12). Body: { confirm: "<their full name>", options? } (PLAN.md §19.12). */
   @Delete(':id')
   @HttpCode(200)
   remove(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(deletePersonSchema)) body: z.infer<typeof deletePersonSchema>) {
-    return this.people.deletePerson(caller, uuidParam(id), body.confirm);
+    return this.people.deletePerson(caller, uuidParam(id), body.confirm, body.options);
   }
 
   @Put(':id/login')

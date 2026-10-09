@@ -1,7 +1,8 @@
-import { ApiError, errorMessage } from '@freefounders/core';
+import { ApiError, type AppKey, errorMessage } from '@freefounders/core';
 import {
   APP_NAMES,
   type AppInfo,
+  type DeleteOptions,
   type ExitResult,
   type Person,
   type PlatformRole,
@@ -10,6 +11,7 @@ import {
   roleApps,
   SUPER_ADMIN_ROLE,
   PLATFORM_PASSWORD_MIN,
+  useCompanySettings,
   useCreatePerson,
   useDeletePerson,
   useDepartments,
@@ -20,9 +22,10 @@ import {
   useUpdatePerson,
 } from '@freefounders/core/admin';
 import { Check, Copy, Eye, EyeOff, Share2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { Field, FormSection } from '@/components/common/form';
+import { Combobox, type Option } from '@/features/assets/components/pickers';
 import { FormSheet } from '@/components/common/form-sheet';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
@@ -558,19 +561,101 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
 
 // ─── Delete permanently ───────────────────────────────────────────────────
 
-/** "⋯ → Delete permanently": the person and every record about them in every app (PLAN.md §19.12). */
+type HandOverMode = 'hand_over' | 'delete';
+
+/** One step of the delete form: a group of radios (and a person picker for "Hand over to"). */
+function DeleteStep({ n, title, hint, children }: { n: number; title: string; hint?: string; children: ReactNode }) {
+  return (
+    <fieldset className="grid gap-2 rounded-lg border bg-card p-3">
+      <legend className="sr-only">{title}</legend>
+      <div className="flex items-baseline gap-2" aria-hidden>
+        <span className="font-mono text-[11px] font-semibold text-muted-foreground">{n}</span>
+        <span className="text-sm font-bold">{title}</span>
+      </div>
+      {hint && <p className="-mt-1 text-xs text-muted-foreground">{hint}</p>}
+      {children}
+    </fieldset>
+  );
+}
+
+function Choice({ name, checked, onChange, children }: { name: string; checked: boolean; onChange: () => void; children: ReactNode }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2.5 text-sm">
+      <input type="radio" name={name} className="size-4 shrink-0 accent-primary" checked={checked} onChange={onChange} />
+      {children}
+    </label>
+  );
+}
+
+function HandOverPicker({ id, value, onChange, options, emptyText }: { id: string; value: string | null; onChange: (v: string | null) => void; options: Option[]; emptyText: string }) {
+  return (
+    <div className="grid gap-1 pl-6.5">
+      <Label htmlFor={id} className="sr-only">
+        Hand over to
+      </Label>
+      <Combobox id={id} value={value} onChange={onChange} options={options} placeholder="Choose a person…" searchPlaceholder="Search people…" emptyText={emptyText} invalid={!value} />
+      {!value && <p className="text-xs text-muted-foreground">{options.length ? 'Choose who takes them over.' : emptyText}</p>}
+    </div>
+  );
+}
+
+/**
+ * "⋯ → Delete permanently" (PLAN.md §19.12): short steps for what happens to their work (founder's default: keep and
+ * hand over), then their full name to confirm. Steps appear only for the apps (and the Leads module) the company has.
+ */
 export function DeletePersonDialog({ person, onClose }: { person: Person; onClose: () => void }) {
+  const company = useCompanySettings();
+  const everyone = usePeople('');
+  const remove = useDeletePerson();
+  const apps = company.data?.apps ?? [];
+  const hasTasks = apps.includes('tasks');
+  const hasAssets = apps.includes('assets');
+  const leadsOn = hasTasks && (company.data?.modules.find((m) => m.app === 'tasks')?.modules.find((m) => m.key === 'leads')?.on ?? true);
+
+  const candidates = (app: AppKey): Option[] =>
+    (everyone.data ?? [])
+      .filter((p) => p.id !== person.id && p.status === 'active' && p.apps.includes(app))
+      .map((p) => ({ value: p.id, label: p.fullName, description: p.designation ?? p.email ?? undefined }));
+  const tasksPeople = candidates('tasks');
+  const assetsPeople = candidates('assets');
+  // Their manager takes over by default, when they can (active, with Tasks).
+  const manager = person.reportsTo && tasksPeople.some((o) => o.value === person.reportsTo) ? person.reportsTo : null;
+
+  const [tasks, setTasks] = useState<{ mode: HandOverMode; to: string | null }>({ mode: 'hand_over', to: null });
+  const [leads, setLeads] = useState<{ mode: HandOverMode; to: string | null }>({ mode: 'hand_over', to: null });
+  const [history, setHistory] = useState<'keep' | 'delete'>('keep');
+  const [assets, setAssets] = useState<{ mode: 'stock' | 'hand_over'; to: string | null }>({ mode: 'stock', to: null });
+  const [defaulted, setDefaulted] = useState(false);
+  if (!defaulted && everyone.data) {
+    // Once the people list is here: preselect the manager (render-time state update, no extra effect).
+    setDefaulted(true);
+    if (manager) {
+      setTasks((t) => (t.to ? t : { ...t, to: manager }));
+      setLeads((l) => (l.to ? l : { ...l, to: manager }));
+    }
+  }
   const [typed, setTyped] = useState('');
   const [error, setError] = useState<{ message: string; retry: boolean } | null>(null);
-  const remove = useDeletePerson();
+
+  const anyDelete = (hasTasks && tasks.mode === 'delete') || (leadsOn && leads.mode === 'delete') || history === 'delete';
+  const missing =
+    (hasTasks && tasks.mode === 'hand_over' && !tasks.to) || (leadsOn && leads.mode === 'hand_over' && !leads.to) || (hasAssets && assets.mode === 'hand_over' && !assets.to);
   const matches = sameName(typed, person.fullName);
+  const ready = !company.isLoading && !everyone.isLoading;
+
+  const options = (): DeleteOptions => ({
+    ...(hasTasks ? { tasks: tasks.mode === 'hand_over' ? { mode: 'hand_over', to: tasks.to! } : { mode: 'delete' } } : {}),
+    ...(leadsOn ? { leads: leads.mode === 'hand_over' ? { mode: 'hand_over', to: leads.to! } : { mode: 'delete' } } : {}),
+    history: { mode: history },
+    ...(hasAssets ? { assets: assets.mode === 'hand_over' ? { mode: 'hand_over', to: assets.to! } : { mode: 'stock' } } : {}),
+  });
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!matches) return;
+    if (!matches || missing || !ready) return;
     setError(null);
     remove.mutate(
-      { id: person.id, confirm: typed },
+      { id: person.id, confirm: typed, options: options() },
       {
         onSuccess: () => {
           toast.success(`${person.fullName} deleted`);
@@ -581,23 +666,86 @@ export function DeletePersonDialog({ person, onClose }: { person: Person; onClos
     );
   };
 
+  let step = 0;
   return (
     <Dialog open onOpenChange={(o) => !o && !remove.isPending && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[92dvh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Delete {person.fullName} permanently?</DialogTitle>
-          <DialogDescription>Everything about them is removed from every app:</DialogDescription>
+          <DialogDescription>Choose what happens to their work, then confirm with their name.</DialogDescription>
         </DialogHeader>
-        <form className="grid gap-4" onSubmit={submit}>
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            <li>their sign-in and roles</li>
-            <li>their tasks, comments, attendance, leave, salary records, leads, mistakes, forms and ideas</li>
-            <li>their requests, tickets and asset history</li>
-            <li>assets they hold go back to stock</li>
-          </ul>
-          <p role="note" className="rounded-md border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm font-medium text-destructive">
-            This cannot be undone. Reports for past months will change.
-          </p>
+        <form className="grid gap-3" onSubmit={submit}>
+          {!ready && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {ready && hasTasks && (
+            <DeleteStep n={++step} title="Their open tasks">
+              <Choice name="del-tasks" checked={tasks.mode === 'hand_over'} onChange={() => setTasks((t) => ({ ...t, mode: 'hand_over' }))}>
+                Hand over to
+              </Choice>
+              {tasks.mode === 'hand_over' && (
+                <HandOverPicker id="del-tasks-to" value={tasks.to} onChange={(to) => setTasks({ mode: 'hand_over', to })} options={tasksPeople} emptyText="No one else has Tasks: delete them instead." />
+              )}
+              <Choice name="del-tasks" checked={tasks.mode === 'delete'} onChange={() => setTasks((t) => ({ ...t, mode: 'delete' }))}>
+                Delete them
+              </Choice>
+            </DeleteStep>
+          )}
+          {ready && leadsOn && (
+            <DeleteStep n={++step} title="Their leads" hint="Leads assigned to them or created by them.">
+              <Choice name="del-leads" checked={leads.mode === 'hand_over'} onChange={() => setLeads((l) => ({ ...l, mode: 'hand_over' }))}>
+                Hand over to
+              </Choice>
+              {leads.mode === 'hand_over' && (
+                <HandOverPicker id="del-leads-to" value={leads.to} onChange={(to) => setLeads({ mode: 'hand_over', to })} options={tasksPeople} emptyText="No one else has Tasks: delete them instead." />
+              )}
+              <Choice name="del-leads" checked={leads.mode === 'delete'} onChange={() => setLeads((l) => ({ ...l, mode: 'delete' }))}>
+                Delete them (with their tasks)
+              </Choice>
+            </DeleteStep>
+          )}
+          {ready && (
+            <DeleteStep n={++step} title="Their history" hint="Finished tasks, attendance, leave, salary records, comments.">
+              <Choice name="del-history" checked={history === 'keep'} onChange={() => setHistory('keep')}>
+                Keep it, shown as &lsquo;Deleted user&rsquo;
+              </Choice>
+              <Choice name="del-history" checked={history === 'delete'} onChange={() => setHistory('delete')}>
+                Delete it all
+              </Choice>
+            </DeleteStep>
+          )}
+          {ready && hasAssets && (
+            <DeleteStep n={++step} title="Assets they hold">
+              <Choice name="del-assets" checked={assets.mode === 'stock'} onChange={() => setAssets((a) => ({ ...a, mode: 'stock' }))}>
+                Return to stock
+              </Choice>
+              <Choice name="del-assets" checked={assets.mode === 'hand_over'} onChange={() => setAssets((a) => ({ ...a, mode: 'hand_over' }))}>
+                Hand over to
+              </Choice>
+              {assets.mode === 'hand_over' && (
+                <HandOverPicker id="del-assets-to" value={assets.to} onChange={(to) => setAssets({ mode: 'hand_over', to })} options={assetsPeople} emptyText="No one else has Assets: return them to stock." />
+              )}
+            </DeleteStep>
+          )}
+
+          {anyDelete ? (
+            <div className="grid gap-2">
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                <li>their sign-in, roles and personal details</li>
+                {hasTasks && tasks.mode === 'delete' && <li>their open tasks</li>}
+                {leadsOn && leads.mode === 'delete' && <li>their leads and the leads&rsquo; tasks</li>}
+                {history === 'delete' && (
+                  <li>their finished tasks, comments, attendance, leave, salary records, mistakes, forms and ideas{hasAssets && '; their requests, tickets and asset history'}</li>
+                )}
+              </ul>
+              <p role="note" className="rounded-md border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm font-medium text-destructive">
+                This cannot be undone. Reports for past months will change.
+              </p>
+            </div>
+          ) : (
+            <p role="note" className="rounded-md border border-primary/20 bg-accent/40 px-3 py-2 text-sm">
+              Their sign-in and personal details are erased; their work is kept or handed over.
+            </p>
+          )}
+
           <Field label="Type their full name to confirm" htmlFor="del-confirm" hint={person.fullName}>
             <Input id="del-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} maxLength={200} />
           </Field>
@@ -611,7 +759,7 @@ export function DeletePersonDialog({ person, onClose }: { person: Person; onClos
             <Button type="button" variant="outline" onClick={onClose} disabled={remove.isPending}>
               Cancel
             </Button>
-            <Button type="submit" variant="destructive" loading={remove.isPending} disabled={!matches}>
+            <Button type="submit" variant="destructive" loading={remove.isPending} disabled={!matches || missing || !ready}>
               Delete permanently
             </Button>
           </DialogFooter>

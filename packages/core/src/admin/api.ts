@@ -10,6 +10,7 @@ import type {
   CompanySettings,
   CreatedPerson,
   DeletedPerson,
+  DeleteOptions,
   Department,
   ExitResult,
   LoginReset,
@@ -39,7 +40,7 @@ export const adminApi = {
   createPerson: (body: NewPerson) => platformApi.post<CreatedPerson>('/people', body),
   updatePerson: (id: string, body: Partial<PersonFields> & { status?: Person['status'] }) => platformApi.patch<Person>(`/people/${id}`, body),
   resetLogin: (id: string, body: ResetLoginInput = {}) => platformApi.put<LoginReset>(`/people/${id}/login`, body),
-  deletePerson: (id: string, confirm: string) => platformApi.del<DeletedPerson>(`/people/${id}`, { confirm }),
+  deletePerson: (id: string, confirm: string, options?: DeleteOptions) => platformApi.del<DeletedPerson>(`/people/${id}`, options ? { confirm, options } : { confirm }),
   setPersonRoles: (id: string, roleIds: string[]) => platformApi.put<unknown>(`/people/${id}/roles`, { roleIds }),
   startExit: (id: string, body: { lastWorkingDate: string; reason: string | null }) => platformApi.post<ExitResult>(`/people/${id}/exit`, body),
   apps: () => platformApi.get<AppInfo[]>('/apps'),
@@ -111,12 +112,13 @@ export function useResetLogin() {
   return useMutation({ mutationFn: ({ id, ...body }: ResetLoginInput & { id: string }) => adminApi.resetLogin(id, body), onSuccess: invalidate });
 }
 /**
- * Deletes a person and every record about them in all apps (PLAN.md §19.12). `confirm` is their full name.
+ * Deletes a person (PLAN.md §19.12). `confirm` is their full name; `options` hand over or keep their work (none = erase everything).
+ * A 400 means a choice was refused (nothing changed).
  * A 502 means an app could not delete: they stay switched off and it can be tried again.
  */
 export function useDeletePerson() {
   const invalidate = useInvalidateAdmin();
-  return useMutation({ mutationFn: ({ id, confirm }: { id: string; confirm: string }) => adminApi.deletePerson(id, confirm), onSuccess: invalidate });
+  return useMutation({ mutationFn: ({ id, confirm, options }: { id: string; confirm: string; options?: DeleteOptions }) => adminApi.deletePerson(id, confirm, options), onSuccess: invalidate });
 }
 export function useSetPersonRoles() {
   const invalidate = useInvalidateAdmin();

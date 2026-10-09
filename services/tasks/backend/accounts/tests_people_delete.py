@@ -13,7 +13,7 @@ from accounts.models import Role, User
 from accounts.people_delete import RELATIONS, user_relations
 from accounts.tests_platform import JWKS, token
 from crm.models import AssignmentRule, Lead, LeadEvent, Task, TaskActivity, TaskCompletion
-from hr.models import Attendance, LeaveRequest, LeaveType
+from hr.models import Attendance, FaceProfile, LeaveRequest, LeaveType
 from notifications.models import Notification
 from tenancy.models import OutboxEvent
 from workspace.models import Group
@@ -121,3 +121,134 @@ class DeletePersonTests(TestCase):
         self.assertEqual(user_token.delete(self.url()).status_code, 401)
         self.assertEqual(self.api.delete(self.url("not-a-uuid")).status_code, 400)
         self.assertTrue(User.objects.filter(platform_person_id=self.pid).exists())
+
+
+@override_settings(PLATFORM_JWKS=JWKS, MEDIA_ROOT=MEDIA)
+class DeletePersonChoicesTests(TestCase):
+    """The founder's choices in the DELETE body: hand over open work, keep history under an anonymised user."""
+
+    def setUp(self):
+        self.api = APIClient()
+        self.api.credentials(HTTP_AUTHORIZATION=f"Bearer {token('platform', {}, aud='tasks-internal')}")
+        self.pid = uuid.uuid4()
+        self.boss_pid = uuid.uuid4()
+        self.boss = User.objects.create_user("boss", "b@x.com", "pass@12345", role=Role.SALES_MANAGER,
+                                             platform_person_id=self.boss_pid)
+        self.mia = User.objects.create_user("mia", "m@x.com", "pass@12345", role=Role.SALES_EXECUTIVE,
+                                            platform_person_id=self.pid, first_name="Mia", last_name="Rao")
+        self.ravi = User.objects.create_user("ravi", "r@x.com", "pass@12345", role=Role.SALES_EXECUTIVE,
+                                             platform_person_id=uuid.uuid4())
+
+    def delete(self, body=None):
+        return self.api.delete(f"/api/internal/people/{self.pid}", body, format="json")
+
+    def test_hand_over_open_tasks_and_leads(self):
+        open_task = Task.objects.create(title="Open", assigned_to=self.mia, created_by=self.boss)
+        own_open = Task.objects.create(title="Own open", assigned_to=self.mia, created_by=self.mia)
+        Task.objects.create(title="Finished", assigned_to=self.mia, created_by=self.boss, status="done")
+        for_ravi = Task.objects.create(title="Mia gave Ravi", assigned_to=self.ravi, created_by=self.mia)
+        lead = Lead.objects.create(customer_name="Acme", assigned_to=self.mia, created_by=self.mia)
+        lead_task = Task.objects.create(title="Call Acme", assigned_to=self.ravi, created_by=self.boss, lead=lead)
+
+        to = {"mode": "hand_over", "to": str(self.boss_pid)}
+        res = self.delete({"tasks": to, "leads": to})
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertEqual(body["handed_over"], {"tasks": 2, "leads": 1, "assets": 0})
+        self.assertTrue(body["deleted"])
+        self.assertFalse(body["anonymised"])
+        self.assertFalse(User.objects.filter(pk=self.mia.pk).exists())
+
+        open_task.refresh_from_db()
+        self.assertEqual(open_task.assigned_to, self.boss)
+        self.assertTrue(open_task.activities.filter(text="Handed over from Mia Rao (deleted)").exists())
+        own_open.refresh_from_db()
+        self.assertEqual((own_open.assigned_to, own_open.created_by), (self.boss, self.boss))
+        self.assertFalse(Task.objects.filter(title="Finished").exists())  # history: delete
+        for_ravi.refresh_from_db()
+        self.assertEqual((for_ravi.assigned_to, for_ravi.created_by), (self.ravi, self.boss))
+        lead.refresh_from_db()
+        self.assertEqual((lead.assigned_to, lead.created_by), (self.boss, self.boss))
+        self.assertTrue(Task.objects.filter(pk=lead_task.pk).exists(), "tasks linked to the lead survive")
+        self.assertTrue(LeadEvent.objects.filter(lead=lead, body="Handed over from Mia Rao (deleted)").exists())
+
+    def test_keep_history_anonymises(self):
+        done = Task.objects.create(title="Finished", assigned_to=self.mia, created_by=self.boss, status="done")
+        TaskActivity.objects.create(task=done, actor=self.mia, text="All done", kind="comment")
+        Task.objects.create(title="Still open", assigned_to=self.mia, created_by=self.boss)
+        attendance = Attendance.objects.create(user=self.mia, date=date(2026, 9, 1))
+        attendance.check_in_photo.save("in.jpg", ContentFile(b"jpg"), save=True)
+        photo = attendance.check_in_photo.path
+        FaceProfile.objects.create(user=self.mia, descriptor=[0.1, 0.2])
+        Notification.objects.create(user=self.mia, type="x", title="hello")
+        leave_type = LeaveType.objects.create(name="Sick")
+        leave = LeaveRequest.objects.create(user=self.mia, leave_type=leave_type, start_date=date(2026, 9, 2),
+                                            end_date=date(2026, 9, 2), reason="flu")
+        leave.document.save("note.pdf", ContentFile(b"pdf"), save=True)
+        self.ravi.reporting_manager = self.mia
+        self.ravi.save()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.delete({"history": {"mode": "keep"}})
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertTrue(body["deleted"])
+        self.assertTrue(body["anonymised"])
+        self.assertEqual(body["handed_over"], {"tasks": 0, "leads": 0, "assets": 0})
+
+        mia = User.objects.get(pk=self.mia.pk)
+        self.assertEqual((mia.first_name, mia.last_name, mia.email, mia.whatsapp_phone), ("Deleted", "user", "", ""))
+        self.assertTrue(mia.username.startswith("deleted-"))
+        self.assertIsNone(mia.platform_person_id)
+        self.assertFalse(mia.is_active)
+        self.assertFalse(mia.has_usable_password())
+        # History stays.
+        self.assertTrue(Task.objects.filter(pk=done.pk, assigned_to=mia).exists())
+        self.assertTrue(TaskActivity.objects.filter(task=done, actor=mia).exists())
+        self.assertTrue(Attendance.objects.filter(pk=attendance.pk).exists())
+        self.assertTrue(LeaveRequest.objects.filter(pk=leave.pk).exists())
+        # Open work (tasks: delete by default) and personal data go.
+        self.assertFalse(Task.objects.filter(title="Still open").exists())
+        attendance.refresh_from_db()
+        self.assertFalse(attendance.check_in_photo)
+        self.assertFalse(os.path.exists(photo))
+        leave.refresh_from_db()
+        self.assertFalse(leave.document)
+        self.assertFalse(FaceProfile.objects.filter(user=mia).exists())
+        self.assertFalse(Notification.objects.filter(user=mia).exists())
+        self.ravi.refresh_from_db()
+        self.assertIsNone(self.ravi.reporting_manager)
+
+        # Nobody can sign in as them or match them again.
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {token(str(self.pid), {'tasks': str(mia.pk)})}")
+        self.assertEqual(client.get("/api/auth/me").status_code, 401)
+        login = APIClient().post("/api/auth/login", {"username": mia.username, "password": "pass@12345"}, format="json")
+        self.assertEqual(login.status_code, 401)
+        self.assertEqual(self.delete({"history": {"mode": "keep"}}).json(), {"deleted": False})
+
+    def test_bad_receiver_changes_nothing(self):
+        task = Task.objects.create(title="Open", assigned_to=self.mia, created_by=self.mia)
+        self.boss.is_active = False
+        self.boss.save()
+        cases = {
+            "unknown person": {"tasks": {"mode": "hand_over", "to": str(uuid.uuid4())}},
+            "themselves": {"leads": {"mode": "hand_over", "to": str(self.pid)}},
+            "inactive": {"tasks": {"mode": "hand_over", "to": str(self.boss_pid)}},
+            "not a uuid": {"tasks": {"mode": "hand_over", "to": "bob"}},
+            "bad mode": {"history": {"mode": "shred"}},
+        }
+        for name, body in cases.items():
+            res = self.delete(body)
+            self.assertEqual(res.status_code, 400, name)
+            self.assertIn("detail", res.json(), name)
+        self.assertTrue(User.objects.filter(platform_person_id=self.pid, is_active=True).exists())
+        task.refresh_from_db()
+        self.assertEqual(task.assigned_to, self.mia)
+
+    def test_empty_body_deletes_everything(self):
+        Task.objects.create(title="Finished", assigned_to=self.mia, created_by=self.mia, status="done")
+        body = self.delete({}).json()
+        self.assertEqual((body["deleted"], body["anonymised"]), (True, False))
+        self.assertFalse(Task.objects.exists())
+        self.assertFalse(User.objects.filter(pk=self.mia.pk).exists())

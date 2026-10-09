@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
@@ -61,7 +61,30 @@ export const setLoginSchema = z.object({
   /** Default true: they pick their own password at their next sign-in. */
   mustChangePassword: z.boolean().optional(),
 });
-export const deletePersonSchema = z.object({ confirm: z.string().max(200, 'Too long') });
+/** Delete choices (PLAN.md §19.12): `to` is a Platform person id; the apps find that person's user themselves. */
+const handOverOr = <M extends string>(other: M) =>
+  z.discriminatedUnion('mode', [
+    z.object({ mode: z.literal(other) }).strict(),
+    z.object({ mode: z.literal('hand_over'), to: z.string().uuid('Choose who takes them over') }).strict(),
+  ]);
+export const deleteOptionsSchema = z
+  .object({
+    /** Their open tasks (Tasks). */
+    tasks: handOverOr('delete').optional(),
+    /** Leads assigned to or created by them (Tasks), with their tasks when deleted. */
+    leads: handOverOr('delete').optional(),
+    /** Finished tasks, attendance, leave, payslips, comments…: kept under "Deleted user", or erased (both apps). */
+    history: z.object({ mode: z.enum(['delete', 'keep']) }).strict().optional(),
+    /** Assets they hold (Assets): back to stock or to someone. */
+    assets: handOverOr('stock').optional(),
+  })
+  .strict();
+export type DeleteOptions = z.infer<typeof deleteOptionsSchema>;
+export const deletePersonSchema = z.object({ confirm: z.string().max(200, 'Too long'), options: deleteOptionsSchema.optional() });
+
+/** Which app gets which delete choice. */
+const DELETE_KEYS: Record<AppKey, Array<keyof DeleteOptions>> = { tasks: ['tasks', 'leads', 'history'], assets: ['history', 'assets'] };
+const APP_LABEL: Record<AppKey, string> = { tasks: 'Tasks', assets: 'Assets' };
 export const grantSchema = z.object({ appRole: z.string().trim().max(60).optional() });
 
 export type PersonCreate = z.infer<typeof personCreateSchema>;
@@ -306,12 +329,15 @@ export class PeopleService {
   }
 
   /**
-   * Deletes a person and every record about them in every app (PLAN.md §19.12). The owner cannot be deleted, nobody
-   * deletes themselves, and only the owner deletes an admin. The caller types the person's full name to confirm.
-   * Order: switch them off and end their sessions; each app the company has deletes its records (any failure stops
-   * here with a 502: they stay switched off and the admin can retry); then the Platform rows; then the directory push.
+   * Deletes a person (PLAN.md §19.12). The owner cannot be deleted, nobody deletes themselves, and only the owner deletes
+   * an admin. The caller types the person's full name to confirm. Without `options` every record about them goes; with
+   * them, open tasks / leads / held assets can be handed over and their history kept under "Deleted user".
+   * Order: check everything (incl. the hand-over people); switch them off and end their sessions; each app the company
+   * has deletes / hands over (a 400 = the app refused the choices before changing anything: 400, and they are switched
+   * back on if no app had done anything yet; any other failure: 502, they stay switched off and the admin can retry);
+   * then the Platform rows; then the directory push.
    */
-  async deletePerson(caller: Caller, id: string, confirm: string) {
+  async deletePerson(caller: Caller, id: string, confirm: string, options?: DeleteOptions) {
     if (caller.role !== 'owner' && caller.role !== 'admin') throw new ForbiddenException('Only admins can delete people');
     const p = await this.get(caller, id);
     if (id === caller.personId) throw badRequest('You cannot delete yourself');
@@ -321,20 +347,38 @@ export class PeopleService {
     if (!confirm || norm(confirm) !== norm(p.fullName)) {
       throw badRequest('Type their full name exactly to confirm', { confirm: 'Does not match their name' });
     }
+    const [company] = await this.dbs.db.select({ apps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
+    const apps = (company?.apps ?? []).filter((a): a is AppKey => (APPS as readonly string[]).includes(a));
+    if (options) await this.assertDeleteOptions(caller.companyId, id, apps, options);
 
     // (a) Off everywhere first, so nothing new is written about them while the apps delete.
     if (p.status !== 'inactive') await this.dbs.db.update(people).set({ status: 'inactive', updatedAt: new Date() }).where(eq(people.id, id));
     await this.auth.revokeAll(id);
 
-    // (b) Every app the company has; the first one that cannot delete stops everything (throws 502).
-    const [company] = await this.dbs.db.select({ apps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
-    const appResults: Partial<Record<AppKey, Record<string, number>>> = {};
-    for (const app of (company?.apps ?? []).filter((a): a is AppKey => (APPS as readonly string[]).includes(a))) {
+    // (b) Every app the company has; the first one that cannot delete stops everything.
+    const counts: Partial<Record<AppKey, Record<string, number>>> = {};
+    const handedOver: Partial<Record<AppKey, Record<string, number>>> = {};
+    const anonymised: Partial<Record<AppKey, boolean>> = {};
+    const done: AppKey[] = [];
+    for (const app of apps) {
+      const mine = options ? Object.fromEntries(DELETE_KEYS[app].filter((k) => options[k]).map((k) => [k, options[k]])) : {};
       try {
-        const res = await this.provisioner.deletePerson(app, caller.companyId, id);
-        appResults[app] = res.deleted ? (res.counts ?? {}) : {};
+        const res = await this.provisioner.deletePerson(app, caller.companyId, id, Object.keys(mine).length ? mine : undefined);
+        counts[app] = res.deleted ? (res.counts ?? {}) : {};
+        if (res.handedOver) handedOver[app] = res.handedOver;
+        if (res.anonymised !== undefined) anonymised[app] = res.anonymised;
+        done.push(app);
       } catch (err) {
         this.log.warn(`Delete person ${id} stopped at ${app}: ${(err as Error).message}`);
+        if (err instanceof BadRequestException) {
+          if (!done.length) {
+            // Nothing was changed anywhere: they are back as they were (their sessions stay ended).
+            if (p.status !== 'inactive') await this.dbs.db.update(people).set({ status: p.status, updatedAt: new Date() }).where(eq(people.id, id));
+            throw err;
+          }
+          const already = done.map((a) => APP_LABEL[a]).join(' and ');
+          throw badRequest(`${err.message} (${already} already removed their data, so they stay switched off: change the choice and try again.)`);
+        }
         throw err;
       }
     }
@@ -351,7 +395,32 @@ export class PeopleService {
 
     // (d) The apps get the directory without them (and with nobody reporting to them).
     const sync = await this.directory.push(caller.companyId);
-    return { deleted: true, apps: appResults, sync };
+    return { deleted: true, apps: counts, handedOver, anonymised, sync };
+  }
+
+  /** A hand-over person must be someone else, active, in this company, and have the app that takes the work over. */
+  private async assertDeleteOptions(companyId: string, id: string, apps: AppKey[], options: DeleteOptions) {
+    const needs: Array<[keyof DeleteOptions, AppKey]> = [
+      ['tasks', 'tasks'],
+      ['leads', 'tasks'],
+      ['assets', 'assets'],
+    ];
+    for (const [key, app] of needs) {
+      const choice = options[key] as { mode: string; to?: string } | undefined;
+      if (!choice || choice.mode !== 'hand_over' || !choice.to) continue;
+      const field = { [`options.${key}.to`]: 'Choose someone else' };
+      if (!apps.includes(app)) throw badRequest(`Your plan does not include ${APP_LABEL[app]}`, field);
+      if (choice.to === id) throw badRequest('Hand over to someone other than the person being deleted', field);
+      const [to] = await this.dbs.db
+        .select({ fullName: people.fullName, status: people.status, hasApp: sql<boolean>`${personApps.personId} is not null` })
+        .from(people)
+        .leftJoin(personApps, and(eq(personApps.personId, people.id), eq(personApps.app, app)))
+        .where(and(eq(people.id, choice.to), eq(people.companyId, companyId)))
+        .limit(1);
+      if (!to) throw badRequest('The person to hand over to was not found', field);
+      if (to.status !== 'active') throw badRequest(`${to.fullName} is not active`, field);
+      if (!to.hasApp) throw badRequest(`${to.fullName} does not have ${APP_LABEL[app]}`, field);
+    }
   }
 
   /** Gives a person an app: the app finds or creates their user there, and we remember that user's id. */

@@ -46,7 +46,7 @@ const fakeTaskEvents: Array<{ id: number; type: string; payload: unknown }> = []
 const flowCalls: Array<{ app: string; method: string; url: string; body: any }> = [];
 let fakeProfileVersion = 0;
 /** Permanent delete (§19.12): what the fake apps answer to DELETE /internal/people/<id>, and the calls they got. */
-const deleteCalls: Array<{ app: string; cid: unknown; url: string }> = [];
+const deleteCalls: Array<{ app: string; cid: unknown; url: string; body: any }> = [];
 let fakeTasksDelete: { status: number; body: unknown } = { status: 200, body: { deleted: true, counts: { tasks: 3, comments: 1 } } };
 const FAKE_MODULES = {
   app: 'tasks',
@@ -120,7 +120,7 @@ before(async () => {
         return;
       }
       if (req.method === 'DELETE' && /\/people\/[0-9a-f-]{36}$/.test(req.url ?? '')) {
-        deleteCalls.push({ app: 'tasks', cid: payload.cid, url: req.url! });
+        deleteCalls.push({ app: 'tasks', cid: payload.cid, url: req.url!, body: raw ? JSON.parse(raw) : null });
         res.writeHead(fakeTasksDelete.status, { 'content-type': 'application/json' }).end(JSON.stringify(fakeTasksDelete.body));
         return;
       }
@@ -937,10 +937,11 @@ describe('delete a person permanently (§19.12)', () => {
 
   before(async () => {
     fakeAssets = createServer(async (req, res) => {
-      for await (const chunk of req) void chunk;
+      let raw = '';
+      for await (const chunk of req) raw += chunk;
       const url = req.url ?? '';
       if (req.method === 'DELETE') {
-        deleteCalls.push({ app: 'assets', cid: decodeJwt(String(req.headers.authorization).slice(7)).cid, url });
+        deleteCalls.push({ app: 'assets', cid: decodeJwt(String(req.headers.authorization).slice(7)).cid, url, body: raw ? JSON.parse(raw) : null });
         res.writeHead(assetsDelete.status, { 'content-type': 'application/json' }).end(JSON.stringify(assetsDelete.body));
         return;
       }
@@ -1031,6 +1032,7 @@ describe('delete a person permanently (§19.12)', () => {
         ['assets', ids.acme, `/api/internal/people/${dora}`],
       ],
     );
+    assert.deepEqual(deleteCalls.slice(before).map((c) => c.body), [null, null], 'no choices: no body (delete everything)');
     assert.equal((await dbs.db.select().from(people).where(eq(people.id, dora))).length, 0);
     assert.equal((await dbs.db.select().from(logins).where(eq(logins.personId, dora))).length, 0);
     assert.equal((await dbs.db.select().from(personApps).where(eq(personApps.personId, dora))).length, 0);
@@ -1040,6 +1042,90 @@ describe('delete a person permanently (§19.12)', () => {
     const push = peoplePushes.slice(pushesBefore).at(-1);
     assert.ok(push && !push.body.people.some((x: { personId: string }) => x.personId === dora), 'the directory is pushed without them');
     assert.equal((await call('POST', '/auth/login', { body: { login: 'dora', password: 'dora12' } })).status, 401);
+  });
+
+  test('choices: hand over and keep history; each app gets only its own choices', async () => {
+    const admin = await login('admin@acme.test');
+    const manager = await add('Max Manager');
+    await dbs.db.insert(personApps).values([
+      { personId: manager, app: 'tasks', localUserId: '92' },
+      { personId: manager, app: 'assets', localUserId: 'a-92' },
+    ]);
+    const leaver = await add('Lea Leaver', { reportsTo: manager });
+    await dbs.db.insert(personApps).values([
+      { personId: leaver, app: 'tasks', localUserId: '93' },
+      { personId: leaver, app: 'assets', localUserId: 'a-93' },
+    ]);
+    fakeTasksDelete = { status: 200, body: { deleted: true, counts: { 'accounts.User': 1 }, handed_over: { tasks: 4, leads: 0, assets: 0 }, anonymised: true } };
+    assetsDelete = { status: 200, body: { deleted: true, counts: { users: 1 }, handed_over: { tasks: 0, leads: 0, assets: 2 }, anonymised: true } };
+    const options = {
+      tasks: { mode: 'hand_over', to: manager },
+      leads: { mode: 'delete' },
+      history: { mode: 'keep' },
+      assets: { mode: 'hand_over', to: manager },
+    };
+    const before = deleteCalls.length;
+    const res = await call('DELETE', `/people/${leaver}`, { token: admin.token, body: { confirm: 'Lea Leaver', options } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual(
+      deleteCalls.slice(before).map((c) => [c.app, c.body]),
+      [
+        ['tasks', { tasks: options.tasks, leads: options.leads, history: options.history }],
+        ['assets', { history: options.history, assets: options.assets }],
+      ],
+    );
+    assert.deepEqual(res.body.handedOver, { tasks: { tasks: 4, leads: 0, assets: 0 }, assets: { tasks: 0, leads: 0, assets: 2 } });
+    assert.deepEqual(res.body.anonymised, { tasks: true, assets: true });
+    assert.equal((await dbs.db.select().from(people).where(eq(people.id, leaver))).length, 0);
+    fakeTasksDelete = { status: 200, body: { deleted: true, counts: { tasks: 3, comments: 1 } } };
+    assetsDelete = { status: 200, body: { deleted: true, counts: { requests: 2 } } };
+  });
+
+  test('hand-over people are checked first: nothing happens and they stay active when the choice is wrong', async () => {
+    const admin = await login('admin@acme.test');
+    const leaver = await add('Ben Bad Choice');
+    const asleep = await add('Ivy Inactive', { status: 'inactive' });
+    await dbs.db.insert(personApps).values({ personId: asleep, app: 'tasks', localUserId: '94' });
+    const noTasks = await add('Nat No Tasks');
+    const del = (options: unknown) => call('DELETE', `/people/${leaver}`, { token: admin.token, body: { confirm: 'Ben Bad Choice', options } });
+    const before = deleteCalls.length;
+    for (const [options, why] of [
+      [{ tasks: { mode: 'hand_over', to: leaver } }, 'not the person'],
+      [{ tasks: { mode: 'hand_over', to: asleep } }, 'not an inactive person'],
+      [{ leads: { mode: 'hand_over', to: noTasks } }, 'leads need someone with Tasks'],
+      [{ assets: { mode: 'hand_over', to: ids.admin } }, 'assets need someone with Assets'],
+      [{ tasks: { mode: 'hand_over', to: ids.otherShared } }, 'not someone from another company'],
+      [{ tasks: { mode: 'hand_over' } }, 'a hand-over needs a person'],
+      [{ history: { mode: 'shred' } }, 'only keep or delete'],
+      [{ tasks: { mode: 'delete' }, extra: true }, 'unknown choices are refused'],
+    ] as const) {
+      const res = await del(options);
+      assert.equal(res.status, 400, `${why}: ${JSON.stringify(res.body)}`);
+    }
+    assert.equal(deleteCalls.length, before, 'no app was called');
+    const [p] = await dbs.db.select().from(people).where(eq(people.id, leaver));
+    assert.equal(p.status, 'active');
+  });
+
+  test('an app that refuses the choices: 400 with its message; switched back on unless an app already deleted', async () => {
+    const admin = await login('admin@acme.test');
+    const leaver = await add('Cid Choice');
+    fakeTasksDelete = { status: 400, body: { detail: 'That person cannot take over leads' } };
+    const refused = await call('DELETE', `/people/${leaver}`, { token: admin.token, body: { confirm: 'Cid Choice', options: { leads: { mode: 'delete' } } } });
+    assert.equal(refused.status, 400);
+    assert.equal(refused.body.message, 'Tasks: That person cannot take over leads');
+    const [p] = await dbs.db.select().from(people).where(eq(people.id, leaver));
+    assert.equal(p.status, 'active', 'nothing was done, so they are switched back on');
+
+    fakeTasksDelete = { status: 200, body: { deleted: true, counts: { tasks: 3, comments: 1 } } };
+    assetsDelete = { status: 400, body: { statusCode: 400, message: ['to must be an active user'], error: 'Bad Request' } };
+    const late = await call('DELETE', `/people/${leaver}`, { token: admin.token, body: { confirm: 'Cid Choice', options: { assets: { mode: 'stock' } } } });
+    assert.equal(late.status, 400);
+    assert.match(late.body.message, /^Assets: to must be an active user \(Tasks already removed their data/);
+    const [q] = await dbs.db.select().from(people).where(eq(people.id, leaver));
+    assert.equal(q.status, 'inactive', 'Tasks already deleted: they stay switched off');
+    assetsDelete = { status: 200, body: { deleted: true, counts: { requests: 2 } } };
+    assert.equal((await call('DELETE', `/people/${leaver}`, { token: admin.token, body: { confirm: 'Cid Choice', options: { assets: { mode: 'stock' } } } })).status, 200);
   });
 
   test('an app that never had them is fine; apps outside the plan are not called', async () => {

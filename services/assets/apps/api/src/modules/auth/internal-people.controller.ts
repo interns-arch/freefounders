@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { type AuthedRequest, Public, ZodPipe } from '../../common/http';
 import { DbService } from '../../db/db.service';
 import { departments, employees, sessions, syncState, users } from '../../db/schema';
-import { deletePerson, removeFiles } from './person-delete';
+import { DeleteOptionsError, deletePerson, parseDeleteOptions, removeFiles } from './person-delete';
 import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-token';
 
 const PEOPLE_VERSION_KEY = 'ff_people_version';
@@ -141,15 +141,23 @@ export class InternalPeopleController {
 
   /**
    * Delete this person completely (Admin -> People & access): the login, the employee record and everything about
-   * them; assets they hold go back to stock. 200 {deleted:false} when there is no such person here. See person-delete.ts.
+   * them; assets they hold go back to stock or to a receiver; optional body chooses (see person-delete.ts).
+   * 200 {deleted:false} when there is no such person here.
    */
   @Public()
   @Delete(':personId')
-  async remove(@Req() req: AuthedRequest, @Param('personId') personId: string) {
+  async remove(@Req() req: AuthedRequest, @Param('personId') personId: string, @Body() raw: unknown) {
     await this.requireService(req);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(personId)) throw new BadRequestException('personId must be a UUID');
-    const { result, files } = await this.dbs.tx((db) => deletePerson(db, personId.toLowerCase()));
-    await removeFiles(files);
-    return result;
+    try {
+      const opts = parseDeleteOptions(raw);
+      const { result, files } = await this.dbs.tx((db) => deletePerson(db, personId.toLowerCase(), opts));
+      await removeFiles(files);
+      return result;
+    } catch (err) {
+      // Raised before anything changed (and the transaction is rolled back anyway).
+      if (err instanceof DeleteOptionsError) throw new BadRequestException(err.message);
+      throw err;
+    }
   }
 }

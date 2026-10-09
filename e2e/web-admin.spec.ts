@@ -345,8 +345,20 @@ test('People: reset with a typed password (shown once), they sign in with it, th
     await row.getByRole('button', { name: `More actions for ${name}` }).click();
     await page.getByRole('menuitem', { name: 'Delete permanently' }).click();
     const del = page.getByRole('dialog', { name: `Delete ${name} permanently?` });
-    await expect(del.getByText('This cannot be undone. Reports for past months will change.')).toBeVisible();
+    // Defaults: keep and hand over. They have no manager, so nobody is picked for their tasks yet.
+    await expect(del.getByText('Their sign-in and personal details are erased; their work is kept or handed over.')).toBeVisible();
+    await expect(del.getByRole('group', { name: 'Their history' }).getByRole('radio', { name: "Keep it, shown as ‘Deleted user’" })).toBeChecked();
+    await expect(del.getByRole('group', { name: 'Assets they hold' }).getByRole('radio', { name: 'Return to stock' })).toBeChecked();
+    await del.getByLabel('Type their full name to confirm').fill(name);
     const go = del.getByRole('button', { name: 'Delete permanently' });
+    await expect(go).toBeDisabled(); // their open tasks need someone (or "Delete them")
+    await del.getByLabel('Type their full name to confirm').fill('');
+    // Erase everything instead.
+    await del.getByRole('group', { name: 'Their open tasks' }).getByRole('radio', { name: 'Delete them' }).check();
+    const leads = del.getByRole('group', { name: 'Their leads' });
+    if (await leads.count()) await leads.getByRole('radio', { name: /^Delete them/ }).check();
+    await del.getByRole('group', { name: 'Their history' }).getByRole('radio', { name: 'Delete it all' }).check();
+    await expect(del.getByText('This cannot be undone. Reports for past months will change.')).toBeVisible();
     await expect(go).toBeDisabled();
     await del.getByLabel('Type their full name to confirm').fill(name.slice(0, -1));
     await expect(go).toBeDisabled();
@@ -364,6 +376,60 @@ test('People: reset with a typed password (shown once), they sign in with it, th
     const signIn = await request.post('/api/platform/auth/login', { data: { login, password: chosen, client: 'mobile' }, headers: XRW });
     expect(signIn.status()).toBe(401);
   } finally {
+    if (!deleted) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
+  }
+});
+
+test('People: delete with the defaults hands their open task to their manager', async ({ page, request }) => {
+  const owner = await token(request);
+  const me = await (await request.get('/api/platform/auth/me', { headers: auth(owner) })).json();
+  const ownerTasks = await (await request.get('/tasks/api/auth/me', { headers: auth(owner) })).json();
+  const s = stamp();
+  const name = `E2E Web Handover ${s}`;
+  const login = `e2e-web-ho-${s}`;
+  const created = await request.post('/api/platform/people', {
+    headers: auth(owner),
+    data: { fullName: name, email: `${login}@freefounders.test`, reportsTo: me.person.id, login: { username: login, password: 'Hand@123' } },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  const personId = (await created.json()).person.id as string;
+  let taskId: number | undefined;
+  let deleted = false;
+  try {
+    const granted = await request.put(`/api/platform/people/${personId}/apps/tasks`, { headers: auth(owner), data: {} });
+    expect(granted.ok(), await granted.text()).toBeTruthy();
+    const theirTasksId = Number((await granted.json()).localUserId);
+    const task = await request.post('/tasks/api/tasks/', {
+      headers: auth(owner),
+      data: { title: `E2E handover ${s}`, assigned_to: theirTasksId, priority: 'low', effort_minutes: 15, due_at: new Date(Date.now() + 86_400_000).toISOString() },
+    });
+    expect(task.status(), await task.text()).toBe(201);
+    taskId = (await task.json()).id;
+
+    await openSignedIn(page, '/people');
+    await page.getByLabel('Search people').fill(s);
+    const row = page.getByRole('row', { name: new RegExp(name) });
+    await row.getByRole('button', { name: `More actions for ${name}` }).click();
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click();
+    const del = page.getByRole('dialog', { name: `Delete ${name} permanently?` });
+    const tasks = del.getByRole('group', { name: 'Their open tasks' });
+    await expect(tasks.getByRole('radio', { name: 'Hand over to' })).toBeChecked();
+    await expect(tasks.getByRole('button', { name: 'Hand over to' })).toContainText(me.person.fullName); // their manager
+    await expect(del.getByText('Their sign-in and personal details are erased; their work is kept or handed over.')).toBeVisible();
+    await del.getByLabel('Type their full name to confirm').fill(name);
+    await del.getByRole('button', { name: 'Delete permanently' }).click();
+    await expect(page.getByText(`${name} deleted`)).toBeVisible({ timeout: 30_000 });
+    deleted = true;
+    await expect(row).toHaveCount(0);
+
+    // The open task now belongs to the manager.
+    const after = await (await request.get(`/tasks/api/tasks/${taskId}/`, { headers: auth(owner) })).json();
+    const assignee = typeof after.assigned_to === 'object' && after.assigned_to ? after.assigned_to.id : after.assigned_to;
+    expect(assignee).toBe(ownerTasks.id);
+    const signIn = await request.post('/api/platform/auth/login', { data: { login, password: 'Hand@123', client: 'mobile' }, headers: XRW });
+    expect(signIn.status()).toBe(401);
+  } finally {
+    if (taskId) await request.delete(`/tasks/api/tasks/${taskId}/`, { headers: auth(owner) });
     if (!deleted) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
   }
 });

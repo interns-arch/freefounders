@@ -71,10 +71,30 @@ export interface ResetLoginInput {
 /** The shortest password the Platform accepts (founder's choice, PLAN.md §19.12). */
 export const PLATFORM_PASSWORD_MIN = 6;
 
-/** DELETE /people/:id: how many records each app removed. */
+/** A choice for work someone leaves behind: hand it to another person (a Platform person id), or `other`. */
+export type HandOver<Other extends string> = { mode: Other } | { mode: 'hand_over'; to: string };
+
+/**
+ * Delete choices (PLAN.md §19.12). Leave out a key (or all of them) to delete that part entirely.
+ * Founder's default (2026-10-09): keep and hand over.
+ */
+export interface DeleteOptions {
+  /** Their open tasks (Tasks). */
+  tasks?: HandOver<'delete'>;
+  /** Leads assigned to or created by them (Tasks; with their tasks when deleted). */
+  leads?: HandOver<'delete'>;
+  /** Finished tasks, attendance, leave, salary records, comments: kept under "Deleted user", or erased. */
+  history?: { mode: 'keep' | 'delete' };
+  /** Assets they hold (Assets): back to stock, or to someone. */
+  assets?: HandOver<'stock'>;
+}
+
+/** DELETE /people/:id: per app, how many records went, how many were handed over, and whether history was kept anonymised. */
 export interface DeletedPerson {
   deleted: true;
   apps: Partial<Record<AppKey, Record<string, number>>>;
+  handedOver: Partial<Record<AppKey, Record<string, number>>>;
+  anonymised: Partial<Record<AppKey, boolean>>;
 }
 
 export interface ExitResult {

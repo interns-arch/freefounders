@@ -595,3 +595,113 @@ describe('delete a person completely', () => {
     assert.deepEqual(again.body, { deleted: false });
   });
 });
+
+describe('delete a person: the founder chooses', () => {
+  const mk = async (email: string, fullName: string) => {
+    const res = await provision({ email, fullName, appRole: 'Employee' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const [u] = await dbs.root.select().from(users).where(eq(users.id, res.body.userId));
+    return { user: u, token: await access(u.platformPersonId!, u.id) };
+  };
+  const laptopFor = async (employeeId: string, holderName: string) => {
+    const suffix = randomUUID().slice(0, 8);
+    const [cat] = await dbs.root.insert(assetCategories).values({ name: `Ch cat ${suffix}`, code: `CC${suffix}` }).returning();
+    const [type] = await dbs.root.insert(assetTypes).values({ categoryId: cat.id, name: 'Laptop', code: `CT${suffix}` }).returning();
+    const [laptop] = await dbs.root
+      .insert(assets)
+      .values({ assetTag: `CH-${suffix}`, qrCode: `cq-${suffix}`, name: 'Choice laptop', categoryId: cat.id, assetTypeId: type.id, status: 'ASSIGNED', holderType: 'EMPLOYEE', holderId: employeeId, holderName, assignedAt: new Date() })
+      .returning();
+    await dbs.root.insert(allocations).values({ assetId: laptop.id, holderType: 'EMPLOYEE', employeeId, holderName });
+    return laptop;
+  };
+
+  test('assets handed over: the receiver holds them, with an allocation and a history event', async () => {
+    const leaver = await mk('ch-leaver@t.test', 'Ch Leaver');
+    const receiver = await mk('ch-receiver@t.test', 'Ch Receiver');
+    const laptop = await laptopFor(leaver.user.employeeId!, 'Ch Leaver');
+    const res = await call('DELETE', `/internal/people/${leaver.user.platformPersonId}`, await service(), {
+      assets: { mode: 'hand_over', to: receiver.user.platformPersonId },
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.deleted, true);
+    assert.equal(res.body.anonymised, false);
+    assert.deepEqual(res.body.handed_over, { tasks: 0, leads: 0, assets: 1 });
+    const [now] = await dbs.root.select().from(assets).where(eq(assets.id, laptop.id));
+    assert.equal(now.status, 'ASSIGNED');
+    assert.equal(now.holderId, receiver.user.employeeId);
+    assert.equal(now.holderName, 'Ch Receiver');
+    const allocs = await dbs.root.select().from(allocations).where(eq(allocations.assetId, laptop.id));
+    assert.deepEqual(allocs.map((a) => [a.employeeId, a.status]), [[receiver.user.employeeId, 'ACTIVE']], 'the leaver’s custody history is deleted');
+    const history = await dbs.root.select().from(historyEvents).where(eq(historyEvents.assetId, laptop.id));
+    assert.equal(history.length, 1);
+    assert.equal(history[0].employeeId, receiver.user.employeeId);
+    assert.match(history[0].summary, /Handed over from Ch Leaver \(deleted\)/);
+    assert.equal((await dbs.root.select().from(users).where(eq(users.id, leaver.user.id))).length, 0);
+    assert.equal((await dbs.root.select().from(employees).where(eq(employees.id, leaver.user.employeeId!))).length, 0);
+  });
+
+  test('history kept: the employee record stays anonymised, the login goes', async () => {
+    const leaver = await mk('ch-keep@t.test', 'Ch Keeper');
+    const E = leaver.user.employeeId!;
+    const laptop = await laptopFor(E, 'Ch Keeper');
+    const request = await call('POST', '/requests', leaver.token, { itemName: 'Mouse', quantity: 1, reason: 'Broken' });
+    const ticket = await call('POST', '/tickets', leaver.token, { title: 'Fan noise', type: 'ISSUE', priority: 'LOW' });
+    assert.equal(ticket.status, 201, JSON.stringify(ticket.body));
+
+    const res = await call('DELETE', `/internal/people/${leaver.user.platformPersonId}`, await service(), { history: { mode: 'keep' } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.deleted, true);
+    assert.equal(res.body.anonymised, true);
+    assert.deepEqual(res.body.handed_over, { tasks: 0, leads: 0, assets: 0 });
+
+    assert.equal((await dbs.root.select().from(users).where(eq(users.id, leaver.user.id))).length, 0, 'the login is gone');
+    const [emp] = await dbs.root.select().from(employees).where(eq(employees.id, E));
+    assert.equal(emp.fullName, 'Deleted user');
+    assert.equal(emp.email, null);
+    assert.equal(emp.status, 'EXITED');
+    assert.match(emp.employeeCode, /^DELETED-/);
+    const [back] = await dbs.root.select().from(assets).where(eq(assets.id, laptop.id));
+    assert.equal(back.status, 'AVAILABLE');
+    assert.equal(back.holderId, null);
+    const [alloc] = await dbs.root.select().from(allocations).where(eq(allocations.assetId, laptop.id));
+    assert.equal(alloc.status, 'RETURNED');
+    assert.equal(alloc.holderName, 'Deleted user');
+    const [req] = await dbs.root.select().from(assetRequests).where(eq(assetRequests.id, request.body.id));
+    assert.equal(req.status, 'CANCELLED');
+    const [t] = await dbs.root.select().from(tickets).where(eq(tickets.id, ticket.body.id));
+    assert.equal(t.reportedBy, null);
+    assert.equal(t.reportedByName, 'Deleted user');
+    assert.equal(t.reporterEmployeeId, E);
+
+    assert.equal((await call('GET', '/auth/me', leaver.token)).status, 401);
+    assert.deepEqual((await call('DELETE', `/internal/people/${leaver.user.platformPersonId}`, await service(), { history: { mode: 'keep' } })).body, { deleted: false });
+  });
+
+  test('a bad hand-over target is refused before anything changes', async () => {
+    const leaver = await mk('ch-bad@t.test', 'Ch Bad');
+    const inactive = await mk('ch-inactive@t.test', 'Ch Inactive');
+    await dbs.root.update(users).set({ isActive: false }).where(eq(users.id, inactive.user.id));
+    const laptop = await laptopFor(leaver.user.employeeId!, 'Ch Bad');
+    const url = `/internal/people/${leaver.user.platformPersonId}`;
+    const cases: Record<string, unknown> = {
+      'unknown person': { assets: { mode: 'hand_over', to: randomUUID() } },
+      themselves: { assets: { mode: 'hand_over', to: leaver.user.platformPersonId } },
+      inactive: { assets: { mode: 'hand_over', to: inactive.user.platformPersonId } },
+      'not a uuid': { assets: { mode: 'hand_over', to: 'bob' } },
+      'bad mode': { history: { mode: 'shred' } },
+    };
+    for (const [name, body] of Object.entries(cases)) {
+      const res = await call('DELETE', url, await service(), body);
+      assert.equal(res.status, 400, name);
+      assert.equal(typeof res.body.message, 'string', name);
+    }
+    assert.equal((await dbs.root.select().from(users).where(eq(users.id, leaver.user.id))).length, 1);
+    const [still] = await dbs.root.select().from(assets).where(eq(assets.id, laptop.id));
+    assert.equal(still.holderId, leaver.user.employeeId);
+    // Tasks-only keys are ignored; an empty body deletes everything as before.
+    const res = await call('DELETE', url, await service(), { tasks: { mode: 'hand_over', to: randomUUID() } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.anonymised, false);
+    assert.equal((await dbs.root.select().from(employees).where(eq(employees.id, leaver.user.employeeId!))).length, 0);
+  });
+});
