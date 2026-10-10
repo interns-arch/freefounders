@@ -218,7 +218,7 @@ export function Deadlines({ className }: { className?: string }) {
 }
 
 // ─── 3: my score ─────────────────────────────────────────────────────────
-export function ScoreDial({ value, size = 112 }: { value: number | null | undefined; size?: number }) {
+function ScoreDial({ value, size = 112 }: { value: number | null | undefined; size?: number }) {
   const r = 46;
   const c = 2 * Math.PI * r;
   const scored = value !== null && value !== undefined;

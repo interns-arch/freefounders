@@ -8,7 +8,7 @@ import { fmtDT, fmtEffort, relDue } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
 import { Chip, PriorityPill, StatusPill, TaskCode } from './task-bits';
 
-export interface TaskRowActions {
+interface TaskRowActions {
   /** Open the detail of this task (a link, so it can open in a new tab). */
   href: (id: number) => string;
   setStatus?: (t: WorkTask, status: 'open' | 'in_progress' | 'done') => void;

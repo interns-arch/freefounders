@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 const LEAVE_TONE: Record<LeaveRequest['status'], Tone> = { pending: 'warning', approved: 'success', rejected: 'danger', cancelled: 'neutral' };
 
-export function LeaveStatusChip({ l }: { l: LeaveRequest }) {
+function LeaveStatusChip({ l }: { l: LeaveRequest }) {
   return <Chip tone={LEAVE_TONE[l.status] ?? 'neutral'}>{l.status_display}</Chip>;
 }
 

@@ -9,7 +9,7 @@
 import http from 'node:http';
 import net from 'node:net';
 
-export const ROUTES = [
+const ROUTES = [
   { prefix: '/api/platform/', port: 4000 },
   { prefix: '/tasks/api/', port: 8000, strip: '/tasks' },
   { prefix: '/media/', port: 8000 },
@@ -17,7 +17,7 @@ export const ROUTES = [
   { prefix: '/', port: 5176 },
 ];
 
-export function route(url) {
+function route(url) {
   // A prefix matches whole path segments only: "/tasks" and "/tasks/x", never "/tasksx".
   const pathname = url.split('?')[0];
   const r = ROUTES.find((x) => pathname === x.prefix.replace(/\/$/, '') || pathname.startsWith(x.prefix));

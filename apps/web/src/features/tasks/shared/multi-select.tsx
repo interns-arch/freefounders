@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlay
 import { Checkbox } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
-export interface MultiSelectOption {
+interface MultiSelectOption {
   id: number;
   name: string;
   department_name?: string;

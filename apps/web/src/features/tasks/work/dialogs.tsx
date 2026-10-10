@@ -85,7 +85,7 @@ const fail = (err: unknown) => toast.error(errorMessage(err));
 
 // ─── Complete with evidence ───────────────────────────────────────────────
 
-export function CompleteDialog({ task, onClose }: { task: TaskLike; onClose: () => void }) {
+function CompleteDialog({ task, onClose }: { task: TaskLike; onClose: () => void }) {
   const settings = useTaskWorkSettings().data;
   const complete = useCompleteTask();
   const [remarks, setRemarks] = useState('');
@@ -137,7 +137,7 @@ export function CompleteDialog({ task, onClose }: { task: TaskLike; onClose: () 
 
 // ─── In progress: status update ───────────────────────────────────────────
 
-export function ProgressDialog({ task, onClose }: { task: TaskLike; onClose: () => void }) {
+function ProgressDialog({ task, onClose }: { task: TaskLike; onClose: () => void }) {
   const progress = useTaskProgress();
   const pid = useId();
   const [percent, setPercent] = useState(task.progress_percent ? String(task.progress_percent) : '');
@@ -185,7 +185,7 @@ export function ProgressDialog({ task, onClose }: { task: TaskLike; onClose: () 
 
 // ─── Daily log ────────────────────────────────────────────────────────────
 
-export function DayLogDialog({ task, day, onClose }: { task: TaskLike; day: DayLogDay; onClose: () => void }) {
+function DayLogDialog({ task, day, onClose }: { task: TaskLike; day: DayLogDay; onClose: () => void }) {
   const save = useSaveDayLog();
   const entry = day.entry;
   const pid = useId();
@@ -237,7 +237,7 @@ export function DayLogDialog({ task, day, onClose }: { task: TaskLike; day: DayL
 
 // ─── Request a change (or an admin edit) ──────────────────────────────────
 
-export function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onClose: () => void; onDeleted?: () => void }) {
+function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onClose: () => void; onDeleted?: () => void }) {
   const access = useAccess();
   const isAdmin = access.tasks.can('tasks.view_all');
   const me = access.tasks.me;
@@ -350,7 +350,7 @@ export function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLi
 
 // ─── Small ones ────────────────────────────────────────────────────────────
 
-export function StepDoneDialog({ taskId, step, onClose }: { taskId: number; step: { id: number; text: string }; onClose: () => void }) {
+function StepDoneDialog({ taskId, step, onClose }: { taskId: number; step: { id: number; text: string }; onClose: () => void }) {
   const tick = useTaskStep();
   const [note, setNote] = useState('');
   return (
@@ -369,7 +369,7 @@ export function StepDoneDialog({ taskId, step, onClose }: { taskId: number; step
   );
 }
 
-export function EstimateDialog({ task, onClose }: { task: TaskLike; onClose: () => void }) {
+function EstimateDialog({ task, onClose }: { task: TaskLike; onClose: () => void }) {
   const estimate = useTaskEstimate();
   const id = useId();
   const [minutes, setMinutes] = useState('');
@@ -422,7 +422,7 @@ export function describeChanges(r: Pick<TaskChangeRequest, 'changes' | 'changes_
 
 // ─── one place that opens them ────────────────────────────────────────────
 
-export type TaskDialog =
+type TaskDialog =
   | { kind: 'complete' | 'progress' | 'request' | 'estimate'; task: TaskLike }
   | { kind: 'daylog'; task: TaskLike; day: DayLogDay }
   | { kind: 'step'; taskId: number; step: { id: number; text: string } };

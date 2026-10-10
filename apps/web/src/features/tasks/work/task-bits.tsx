@@ -3,9 +3,6 @@ import type { ReactNode } from 'react';
 import { Badge, type BadgeTone } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
-export const PRIORITY_TONE: Record<TaskPriority, BadgeTone> = { low: 'gray', normal: 'neutral', high: 'orange', urgent: 'red' };
-export const STATUS_TONE: Record<TaskStatus, BadgeTone> = { open: 'blue', in_progress: 'amber', done: 'green' };
-
 /* Soft-tinted pills, the way the old Tasks app drew status and priority (rounded, bold, tinted background, no border). */
 const PILL = 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold tracking-[0.01em] [&>svg]:size-3';
 const STATUS_PILL: Record<TaskStatus, string> = {

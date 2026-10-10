@@ -1,7 +1,6 @@
 import type { Permission } from '@eam/shared';
 import { useAccess } from '@freefounders/core';
 import type { Me } from '@freefounders/core/assets';
-import type { ReactNode } from 'react';
 
 /**
  * The Assets screens' view of who is signed in (was lib/auth.tsx in the Assets app): the Assets /me and its
@@ -12,19 +11,13 @@ export function useAuth(): { me: Me | null; can: (...permissions: Permission[]) 
   return { me: (access.assets.me as Me | undefined) ?? null, can: access.assets.can };
 }
 
-/** Renders children only when the user has one of the permissions. */
-export function Can({ perm, children, fallback = null }: { perm: Permission | Permission[]; children: ReactNode; fallback?: ReactNode }) {
-  const { can } = useAuth();
-  return <>{can(...(Array.isArray(perm) ? perm : [perm])) ? children : fallback}</>;
-}
-
 /** On unless the company switched it off (PLAN.md §16.2). */
 export function useModules() {
   return useAccess().assets.module;
 }
 
 /** Tidy display name: "CARTREND AUTOPARTS PVT LTD" → "Cartrend Autoparts". */
-export function shortCompanyName(name: string | null | undefined): string | null {
+function shortCompanyName(name: string | null | undefined): string | null {
   if (!name) return null;
   const trimmed = name.replace(/\b(pvt\.?|private|ltd\.?|limited|llp|inc\.?)\b/gi, '').replace(/\s+/g, ' ').trim();
   return trimmed.replace(/\w\S*/g, (w) => (w.length > 3 && w === w.toUpperCase() ? w[0] + w.slice(1).toLowerCase() : w));

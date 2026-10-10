@@ -16,7 +16,7 @@ import type { AccessInput, Credentials } from '@freefounders/core/assets';
 export type { AccessInput, Credentials };
 
 
-export const generatePassword = () => {
+const generatePassword = () => {
   const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = crypto.getRandomValues(new Uint8Array(10));
   const raw = Array.from(bytes, (b) => chars[b % chars.length]).join('');

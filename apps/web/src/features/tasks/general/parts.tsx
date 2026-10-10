@@ -47,15 +47,6 @@ export function CountPill({ tone = 'neutral', className, children, ...rest }: { 
   );
 }
 
-/** A tinted icon bubble (the old app's stat icon). */
-export function IconBubble({ icon: Icon, tone = 'primary', className }: { icon: ComponentType<{ className?: string }>; tone?: Tone; className?: string }) {
-  return (
-    <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', ICON_TONE[tone], className)}>
-      <Icon className="size-4.5" />
-    </span>
-  );
-}
-
 /** A small coloured label (status, priority, counts). */
 export function Chip({ tone = 'neutral', className, children, ...rest }: { tone?: Tone; className?: string; children: ReactNode } & React.ComponentProps<'span'>) {
   return (
@@ -276,7 +267,7 @@ export function Delta({ value, suffix = '' }: { value: number | null | undefined
 }
 
 /** Shown in place of a screen the person may not open. */
-export function NotAllowed({ what = 'this page' }: { what?: string }) {
+function NotAllowed({ what = 'this page' }: { what?: string }) {
   return <EmptyState icon={ShieldAlert} title={`You cannot open ${what}`} description="Ask an admin if you need access." />;
 }
 

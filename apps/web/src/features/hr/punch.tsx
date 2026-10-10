@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { currentPosition } from './face';
 import { FaceCapture } from './face-capture';
 
-export type Which = 'check_in' | 'check_out';
+type Which = 'check_in' | 'check_out';
 
 export function usePunch(onDone?: (which: Which) => void) {
   const q = useAttendanceToday();

@@ -34,7 +34,6 @@ export async function uploadPhotos(assetId: string, allocationId: string | null,
   return uploadAssetPhotos(assetId, form);
 }
 
-export { photoUrl };
 
 const KIND_LABEL: Record<AllocationPhoto['kind'], string> = { ASSET: 'Asset', HANDOVER: 'Handover', RETURN: 'Return' };
 

@@ -2,7 +2,7 @@ import { Input, NativeSelect } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 /** Date ranges the Tasks API understands (?range=). "custom" adds ?start=&end= (YYYY-MM-DD). */
-export const RANGES: Array<[string, string]> = [
+const RANGES: Array<[string, string]> = [
   ['today', 'Today'],
   ['yesterday', 'Yesterday'],
   ['this_week', 'This Week'],
@@ -29,7 +29,7 @@ export function rangeReady(range: string, custom: CustomRange): boolean {
 }
 
 /** "01 – 30 Sep 2026", dropping the year and month when they repeat. */
-export function fmtRange(from: string, to: string): string {
+function fmtRange(from: string, to: string): string {
   const a = new Date(`${from}T00:00:00`);
   const b = new Date(`${to}T00:00:00`);
   const d = (x: Date, opts: Intl.DateTimeFormatOptions) => x.toLocaleDateString('en-IN', opts);

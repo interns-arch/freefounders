@@ -3,8 +3,8 @@ import { Activity, Boxes, Briefcase, CardSim, ClipboardList, GitCompareArrows, L
 import type { NavItem } from '@/app/nav';
 
 // Same rules as the Assets app: IT hands out assets; staff (HR, managers, CEO) see people; plain employees see their own.
-export const isIT = (a: Access) => a.assets.can('asset:assign');
-export const isEmployeeOnly = (a: Access) => !a.assets.can('employee:view');
+const isIT = (a: Access) => a.assets.can('asset:assign');
+const isEmployeeOnly = (a: Access) => !a.assets.can('employee:view');
 const staff = (a: Access) => !isEmployeeOnly(a);
 
 // Plain employees see the same screens under "my" names (Home, My assets, My requests, My tickets, My QR & profile).

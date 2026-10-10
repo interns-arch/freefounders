@@ -2,7 +2,7 @@ import type { Permission } from '@eam/shared';
 import { useAuth } from '@/features/assets/lib/auth';
 import { createContext, lazy, type ReactNode, Suspense, useCallback, useContext, useMemo, useState } from 'react';
 
-export type QuickAddKind =
+type QuickAddKind =
   | 'asset'
   | 'employee'
   | 'assetType'
@@ -97,7 +97,7 @@ type Can = (...permissions: Permission[]) => boolean;
 const isIT = (can: Can) => can('asset:assign');
 const isEmployeeOnly = (can: Can) => !can('employee:view');
 
-export interface QuickAddItem {
+interface QuickAddItem {
   kind: QuickAddKind;
   label: string;
   perms: Permission[];
@@ -105,7 +105,7 @@ export interface QuickAddItem {
 }
 
 /** The universal "+ Add" menu, in the order from the brief. */
-export const QUICK_ADD: QuickAddItem[] = [
+const QUICK_ADD: QuickAddItem[] = [
   { kind: 'employee', label: 'Employee', perms: ['employee:manage'] },
   { kind: 'onboarding', label: 'New joiner', perms: ['onboarding:manage'] },
   { kind: 'asset', label: 'Asset', perms: ['asset:create'] },

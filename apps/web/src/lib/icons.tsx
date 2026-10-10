@@ -63,7 +63,7 @@ import {
 import { cn } from './utils';
 
 /** Icons an admin can pick for categories and asset types. */
-export const ICONS: Record<string, LucideIcon> = {
+const ICONS: Record<string, LucideIcon> = {
   box: Box,
   package: Package,
   laptop: Laptop,

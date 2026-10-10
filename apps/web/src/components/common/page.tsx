@@ -2,7 +2,7 @@ import { AlertTriangle, ChevronRight, Inbox, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
-import { Card, Skeleton } from '@/components/ui/primitives';
+import { Skeleton } from '@/components/ui/primitives';
 import { errorMessage } from '@freefounders/core';
 import { cn } from '@/lib/utils';
 
@@ -100,59 +100,6 @@ export function PageLoader() {
       </div>
       <Skeleton className="h-72 rounded-lg" />
     </div>
-  );
-}
-
-/** A number tile (the old app's `.stat`): icon on the left, mono label above a big value. */
-export function StatCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-  tone = 'default',
-  to,
-  loading,
-}: {
-  label: string;
-  value: ReactNode;
-  hint?: ReactNode;
-  icon?: React.ComponentType<{ className?: string }>;
-  tone?: 'default' | 'blue' | 'green' | 'amber' | 'red' | 'violet';
-  to?: string;
-  loading?: boolean;
-}) {
-  const toneClass = {
-    default: 'bg-accent text-primary',
-    blue: 'bg-info/12 text-info',
-    green: 'bg-success/12 text-success',
-    amber: 'bg-warning/12 text-warning',
-    red: 'bg-destructive/12 text-destructive',
-    violet: 'bg-app-attendance/12 text-app-attendance',
-  }[tone];
-  const body = (
-    <Card className={cn('flex h-full items-center gap-3.5 px-4 py-3.5 transition-shadow', to && 'hover:border-primary/40 hover:shadow-card-lg')}>
-      {Icon && (
-        <span className={cn('flex size-[42px] shrink-0 items-center justify-center rounded-xl', toneClass)}>
-          <Icon className="size-5" />
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{label}</p>
-        {loading ? (
-          <Skeleton className="mt-1.5 h-7 w-16" />
-        ) : (
-          <p className={cn('mt-0.5 font-mono text-[25px] leading-tight font-bold tracking-tight tabular', tone === 'red' && 'text-destructive')}>{value}</p>
-        )}
-        {hint && <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>}
-      </div>
-    </Card>
-  );
-  return to ? (
-    <Link to={to} className="block h-full rounded-lg outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
-      {body}
-    </Link>
-  ) : (
-    body
   );
 }
 

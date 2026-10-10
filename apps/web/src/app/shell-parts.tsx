@@ -35,7 +35,7 @@ export function Logo({ company, inverted = false, compact = false, subtitle, onD
   );
 }
 
-export function useTheme() {
+function useTheme() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
   const toggle = () => {
     const next = !dark;

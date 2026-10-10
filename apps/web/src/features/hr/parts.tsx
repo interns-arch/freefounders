@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Chip, type Tone } from '../tasks/general/parts';
 
-export const STATUS_TONE: Record<AttendanceStatus, Tone> = {
+const STATUS_TONE: Record<AttendanceStatus, Tone> = {
   present: 'success',
   late: 'warning',
   half_day: 'warning',

@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
-export type StatTone = 'default' | 'primary' | 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'indigo';
+type StatTone = 'default' | 'primary' | 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'indigo';
 
 const TONES: Record<StatTone, { bubble: string; glow: string; value: string }> = {
   default: { bubble: 'bg-muted text-muted-foreground', glow: 'from-muted-foreground/10', value: '' },

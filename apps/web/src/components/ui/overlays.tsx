@@ -1,13 +1,11 @@
 import { Command as CommandPrimitive } from 'cmdk';
-import { Check, ChevronRight, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Dialog as DialogPrimitive, DropdownMenu as MenuPrimitive, Popover as PopoverPrimitive } from 'radix-ui';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 // ─── Dialog ───────────────────────────────────────────────────────────────
 export const Dialog = DialogPrimitive.Root;
-export const DialogTrigger = DialogPrimitive.Trigger;
-export const DialogClose = DialogPrimitive.Close;
 
 export function DialogContent({
   className,
@@ -100,8 +98,6 @@ export const SheetDescription = DialogDescription;
 // ─── Dropdown menu ────────────────────────────────────────────────────────
 export const DropdownMenu = MenuPrimitive.Root;
 export const DropdownMenuTrigger = MenuPrimitive.Trigger;
-export const DropdownMenuGroup = MenuPrimitive.Group;
-export const DropdownMenuSub = MenuPrimitive.Sub;
 
 const menuPanel =
   'z-50 min-w-44 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-pop data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[side=bottom]:slide-in-from-top-1';
@@ -119,18 +115,6 @@ const menuItem =
 export function DropdownMenuItem({ className, destructive, ...props }: React.ComponentProps<typeof MenuPrimitive.Item> & { destructive?: boolean }) {
   return <MenuPrimitive.Item className={cn(menuItem, destructive && 'text-destructive data-[highlighted]:text-destructive [&_svg]:!text-destructive', className)} {...props} />;
 }
-export function DropdownMenuCheckboxItem({ className, children, ...props }: React.ComponentProps<typeof MenuPrimitive.CheckboxItem>) {
-  return (
-    <MenuPrimitive.CheckboxItem className={cn(menuItem, 'pl-8', className)} {...props}>
-      <span className="absolute left-2 flex size-4 items-center justify-center">
-        <MenuPrimitive.ItemIndicator>
-          <Check className="size-4" />
-        </MenuPrimitive.ItemIndicator>
-      </span>
-      {children}
-    </MenuPrimitive.CheckboxItem>
-  );
-}
 export function DropdownMenuLabel({ className, ...props }: React.ComponentProps<typeof MenuPrimitive.Label>) {
   return <MenuPrimitive.Label className={cn('px-2 py-1.5 font-mono text-[10.5px] font-medium tracking-wider text-muted-foreground uppercase', className)} {...props} />;
 }
@@ -140,26 +124,10 @@ export function DropdownMenuSeparator({ className, ...props }: React.ComponentPr
 export function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'span'>) {
   return <span className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)} {...props} />;
 }
-export function DropdownMenuSubTrigger({ className, children, ...props }: React.ComponentProps<typeof MenuPrimitive.SubTrigger>) {
-  return (
-    <MenuPrimitive.SubTrigger className={cn(menuItem, 'data-[state=open]:bg-accent', className)} {...props}>
-      {children}
-      <ChevronRight className="ml-auto size-4" />
-    </MenuPrimitive.SubTrigger>
-  );
-}
-export function DropdownMenuSubContent({ className, ...props }: React.ComponentProps<typeof MenuPrimitive.SubContent>) {
-  return (
-    <MenuPrimitive.Portal>
-      <MenuPrimitive.SubContent className={cn(menuPanel, className)} {...props} />
-    </MenuPrimitive.Portal>
-  );
-}
 
 // ─── Popover ──────────────────────────────────────────────────────────────
 export const Popover = PopoverPrimitive.Root;
 export const PopoverTrigger = PopoverPrimitive.Trigger;
-export const PopoverAnchor = PopoverPrimitive.Anchor;
 export function PopoverContent({ className, align = 'start', sideOffset = 6, ...props }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
     <PopoverPrimitive.Portal>
@@ -215,7 +183,4 @@ export function CommandItem({ className, ...props }: React.ComponentProps<typeof
       {...props}
     />
   );
-}
-export function CommandSeparator({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Separator>) {
-  return <CommandPrimitive.Separator className={cn('-mx-1 h-px bg-border', className)} {...props} />;
 }
