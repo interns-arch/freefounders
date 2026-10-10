@@ -19,11 +19,14 @@ const ConfirmContext = createContext<((opts: ConfirmOptions) => Promise<{ confir
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [opts, setOpts] = useState<ConfirmOptions | null>(null);
   const [note, setNote] = useState('');
+  const [noteError, setNoteError] = useState<string | null>(null);
   const resolver = useRef<Resolver | null>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const confirm = useCallback((o: ConfirmOptions) => {
     setOpts(o);
     setNote('');
+    setNoteError(null);
     return new Promise<{ confirmed: boolean; note: string }>((resolve) => {
       resolver.current = resolve;
     });
@@ -35,7 +38,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     setOpts(null);
   };
 
-  const noteInvalid = !!opts?.note?.required && note.trim().length < (opts.note.minLength ?? 1);
+  // The confirm button is never disabled: pressing it with a missing note says what is missing, next to the field.
+  const minLength = opts?.note?.minLength ?? 1;
+  const noteInvalid = !!opts?.note?.required && note.trim().length < minLength;
+  const tryConfirm = () => {
+    if (noteInvalid) {
+      setNoteError(note.trim().length === 0 ? `${opts?.note?.label ?? 'A note'} is required.` : `Please write at least ${minLength} characters.`);
+      noteRef.current?.focus();
+      return;
+    }
+    close(true);
+  };
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -48,19 +61,42 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           </DialogHeader>
           {opts?.note && (
             <div className="grid gap-1.5">
-              <label className="text-[13px] font-medium" htmlFor="confirm-note">
+              <label className="text-sm font-semibold" htmlFor="confirm-note">
                 {opts.note.label}
                 {opts.note.required && <span className="text-destructive"> *</span>}
               </label>
-              <Textarea id="confirm-note" autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder={opts.note.placeholder} rows={3} />
-              {opts.note.minLength && <p className="text-xs text-muted-foreground">At least {opts.note.minLength} characters</p>}
+              <Textarea
+                id="confirm-note"
+                ref={noteRef}
+                autoFocus
+                value={note}
+                onChange={(e) => {
+                  setNote(e.target.value);
+                  if (noteError) setNoteError(null);
+                }}
+                placeholder={opts.note.placeholder}
+                rows={3}
+                required={opts.note.required}
+                aria-required={opts.note.required || undefined}
+                aria-invalid={noteError ? true : undefined}
+                aria-describedby={noteError ? 'confirm-note-error' : opts.note.minLength ? 'confirm-note-hint' : undefined}
+              />
+              {noteError ? (
+                <p id="confirm-note-error" role="alert" className="text-sm font-medium text-destructive">
+                  {noteError}
+                </p>
+              ) : opts.note.minLength ? (
+                <p id="confirm-note-hint" className="text-xs text-muted-foreground">
+                  At least {opts.note.minLength} characters
+                </p>
+              ) : null}
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => close(false)}>
               Cancel
             </Button>
-            <Button variant={opts?.destructive ? 'destructive' : 'default'} disabled={noteInvalid} onClick={() => close(true)} autoFocus={!opts?.note}>
+            <Button variant={opts?.destructive ? 'destructive' : 'default'} onClick={tryConfirm} autoFocus={!opts?.note}>
               {opts?.confirmText ?? 'Confirm'}
             </Button>
           </DialogFooter>

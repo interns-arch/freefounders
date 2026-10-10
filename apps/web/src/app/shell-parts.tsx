@@ -1,5 +1,5 @@
 import { type Access, useMarkNotificationsRead, useNotifications, useSignOut } from '@freefounders/core';
-import { Bell, CheckCheck, ChevronsUpDown, KeyRound, LogOut, Moon, Sun } from 'lucide-react';
+import { Bell, CheckCheck, ChevronDown, Keyboard, KeyRound, LogOut, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -57,7 +57,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="rounded-full text-muted-foreground hover:text-primary"
+      className="rounded-full text-muted-foreground hover:text-primary max-lg:size-11"
       onClick={theme.toggle}
       aria-label={theme.dark ? 'Light mode' : 'Dark mode'}
       title={theme.dark ? 'Light mode' : 'Dark mode'}
@@ -89,7 +89,7 @@ export function NotificationsBell() {
           variant="ghost"
           size="icon"
           aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
-          className="relative rounded-full text-muted-foreground hover:text-primary"
+          className="relative rounded-full text-muted-foreground hover:text-primary max-lg:size-11"
         >
           <Bell className="size-5" />
           {unread > 0 && (
@@ -143,7 +143,8 @@ export function NotificationsBell() {
   );
 }
 
-export function UserMenu({ access }: { access: Access }) {
+/** The account menu in the header (one place on every screen): light/dark, shortcuts, change password, sign out. */
+export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?: () => void }) {
   const navigate = useNavigate();
   const signOut = useSignOut();
   const theme = useTheme();
@@ -154,23 +155,34 @@ export function UserMenu({ access }: { access: Access }) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center gap-2.5 rounded-xl border border-sidebar-border/70 bg-white/[0.04] p-2 text-left transition outline-none hover:bg-white/8 focus-visible:ring-2 focus-visible:ring-brand-2/60 data-[state=open]:bg-white/8"
+          className="flex min-h-11 max-w-[220px] cursor-pointer items-center gap-2 rounded-full border border-transparent py-1 pr-1 pl-1 text-left transition outline-none hover:border-border hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40 data-[state=open]:border-border data-[state=open]:bg-accent lg:pr-2"
           aria-label="Your account"
         >
-          <Avatar name={name} className="size-9 bg-gradient-to-br from-brand-2 to-primary text-white ring-2 ring-brand-2/30 [&_[data-slot=avatar-fallback]]:bg-transparent" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold text-white">{name}</span>
-            <span className="block truncate text-xs text-sidebar-foreground/60">{role}</span>
+          <Avatar name={name} className="size-8 bg-gradient-to-br from-brand-2 to-primary text-white [&_[data-slot=avatar-fallback]]:bg-transparent" />
+          <span className="hidden min-w-0 leading-tight lg:block">
+            <span className="block max-w-[150px] truncate text-[13px] font-semibold">{name}</span>
+            <span className="block max-w-[150px] truncate text-[11px] text-muted-foreground">{role}</span>
           </span>
-          <ChevronsUpDown className="size-4 shrink-0 text-sidebar-foreground/50" aria-hidden />
+          <ChevronDown className="hidden size-4 shrink-0 text-muted-foreground lg:block" aria-hidden />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="w-56">
-        <DropdownMenuLabel className="truncate">{access.platform?.company.name}</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuLabel className="leading-tight">
+          <span className="block truncate font-semibold">{name}</span>
+          <span className="block truncate text-xs font-normal text-muted-foreground">
+            {role}
+            {access.platform?.company.name ? ` · ${access.platform.company.name}` : ''}
+          </span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => theme.toggle()}>
           {theme.dark ? <Sun className="size-4" /> : <Moon className="size-4" />} {theme.dark ? 'Light mode' : 'Dark mode'}
         </DropdownMenuItem>
+        {onShortcuts && (
+          <DropdownMenuItem onSelect={onShortcuts}>
+            <Keyboard className="size-4" /> Keyboard shortcuts
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => navigate('/account')}>
           <KeyRound className="size-4" /> Change password
         </DropdownMenuItem>

@@ -14,14 +14,18 @@ export interface NavItem {
   group?: string;
 }
 
+/** The four groups of the one menu (PLAN.md §19.14). Home (`/`) belongs to none of them. */
 export type Workspace = 'attendance' | 'tasks' | 'assets' | 'admin';
 
-/** Which workspace a path belongs to. */
+export const WORKSPACES: Workspace[] = ['attendance', 'tasks', 'assets', 'admin'];
+export const isWorkspace = (v: unknown): v is Workspace => typeof v === 'string' && (WORKSPACES as string[]).includes(v);
+
+/** Which group a path belongs to (null = Home). */
 export function workspaceOf(pathname: string): Workspace | null {
   if (pathname === '/attendance' || pathname.startsWith('/attendance/')) return 'attendance';
   if (pathname === '/tasks' || pathname.startsWith('/tasks/')) return 'tasks';
   if (pathname === '/assets' || pathname.startsWith('/assets/')) return 'assets';
-  if (['/people', '/roles', '/settings', '/account'].some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'admin';
+  if (['/people', '/roles', '/settings'].some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'admin';
   return null;
 }
 

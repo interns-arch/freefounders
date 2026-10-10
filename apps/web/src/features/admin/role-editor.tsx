@@ -117,7 +117,7 @@ export function RoleEditor({ role, catalogue, onClose }: { role: Role | null; ca
                   <div className="divide-y">
                     {app.groups.map((g) => (
                       <div key={g.name} className="px-4 py-3">
-                        <h4 className="mb-2 font-mono text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{g.name}</h4>
+                        <h4 className="mb-2 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{g.name}</h4>
                         <ul className="space-y-1">
                           {g.permissions.map((p) => {
                             const grant = grants.get(key({ app: app.app, permission: p.key }));
@@ -207,7 +207,7 @@ function DutiesEditor({ duties, onChange }: { duties: Duty[]; onChange: (d: Duty
         return (
           <fieldset key={d.id ?? `new-${i}`} className="relative grid gap-3 rounded-lg border bg-muted/20 p-4 pt-5">
             <legend className="sr-only">Duty {n}</legend>
-            <span aria-hidden className="absolute -top-2.5 left-3 rounded-full border bg-card px-2 font-mono text-[10px] font-semibold tracking-wider text-primary uppercase">
+            <span aria-hidden className="absolute -top-2.5 left-3 rounded-full border bg-card px-2 font-mono text-[11px] font-semibold tracking-wider text-primary uppercase">
               Duty {n}
             </span>
             <div className="grid gap-3 sm:grid-cols-2">

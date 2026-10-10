@@ -40,7 +40,7 @@ export default function RequestForm({ open, onOpenChange, defaults }: FormProps)
   });
 
   return (
-    <FormSheet open={open} onOpenChange={onOpenChange} size="sm" title="Request an asset" description="Ask for anything you need for work — IT will be notified." onSubmit={submit} submitting={save.isPending} submitLabel="Submit request">
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={onOpenChange} size="sm" title="Request an asset" description="Ask for anything you need for work — IT will be notified." onSubmit={submit} submitting={save.isPending} submitLabel="Submit request">
       <div className="grid gap-4">
         {forOthers && (
           <Field label="For employee" required error={e('employeeId')}>

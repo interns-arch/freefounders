@@ -62,7 +62,7 @@ export function PhotoPicker({ files, onChange, hint }: { files: File[]; onChange
         {files.length < MAX_PHOTOS && (
           <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary">
             {files.length ? <ImagePlus className="size-5" /> : <Camera className="size-5" />}
-            <span className="text-[11px] font-medium">{files.length ? 'Add' : 'Photo'}</span>
+            <span className="text-xs font-medium">{files.length ? 'Add' : 'Photo'}</span>
             <input
               type="file"
               accept="image/*"

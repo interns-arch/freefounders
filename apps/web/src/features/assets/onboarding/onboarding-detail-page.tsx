@@ -371,9 +371,9 @@ function ItemRow({
             {item.itemName}
           </span>
           <EnumBadge value={item.status} tones={ONBOARDING_ITEM_TONE} labels={ITEM_LABEL} dot={false} />
-          {!item.assetTypeId && <span className="text-[11px] text-muted-foreground">not in catalog</span>}
+          {!item.assetTypeId && <span className="text-xs text-muted-foreground">not in catalog</span>}
           {item.consumable && (
-            <Badge tone="green" className="text-[10px]">
+            <Badge tone="green" className="text-xs">
               no return
             </Badge>
           )}

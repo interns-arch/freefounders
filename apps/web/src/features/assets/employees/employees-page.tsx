@@ -1,12 +1,13 @@
 import { EMPLOYEE_STATUS_LABELS, type EmployeeStatus } from '@eam/shared';
-import { Plus, Printer, Search, Users } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { Plus, Printer, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { EmployeeStatusBadge } from '@/components/common/badges';
 import { type Column, DataTable, Pagination } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/input';
 import { Avatar, Card } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { useEmployees } from '@freefounders/core/assets';
@@ -103,7 +104,7 @@ export default function EmployeesPage() {
           <div className="flex flex-col gap-0.5">
             <EmployeeStatusBadge status={e.status} />
             {e.status === 'NOTICE_PERIOD' && e.lastWorkingDate && (
-              <span className={cn('text-[11px]', d !== null && d <= 3 ? 'font-medium text-warning' : 'text-muted-foreground')}>LWD {formatDate(e.lastWorkingDate)}</span>
+              <span className={cn('text-xs', d !== null && d <= 3 ? 'font-medium text-warning' : 'text-muted-foreground')}>LWD {formatDate(e.lastWorkingDate)}</span>
             )}
           </div>
         );
@@ -180,10 +181,7 @@ export default function EmployeesPage() {
       </div>
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b p-3">
-          <div className="relative min-w-52 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, employee ID, phone, email…" className="pl-8" />
-          </div>
+          <SearchField className="relative min-w-52 flex-1" label="Search name" placeholder="Search name, employee ID, phone, email…" value={search} onChange={setSearch} />
           <NativeSelect className="w-auto min-w-40" value={f.departmentId ?? ''} onChange={(e) => set({ departmentId: e.target.value })}>
             <option value="">All departments</option>
             {(departments.data ?? []).map((d) => (

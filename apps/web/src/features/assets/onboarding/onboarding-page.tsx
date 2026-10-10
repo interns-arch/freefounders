@@ -1,12 +1,12 @@
 import { ONBOARDING_STATUS_LABELS } from '@eam/shared';
-import { Plus, Search, UserPlus } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { Plus, UserPlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';
 import { type Column, DataTable, Pagination } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Avatar, Card, Progress } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { useOnboardingList } from '@freefounders/core/assets';
@@ -103,10 +103,7 @@ export function OnboardingTable({ tabs, defaultStatus, empty }: { tabs: { value:
       </div>
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, employee ID, case…" className="pl-8" />
-          </div>
+          <SearchField className="relative max-w-md" label="Search name" placeholder="Search name, employee ID, case…" value={search} onChange={setSearch} />
         </div>
         <DataTable
           columns={columns}

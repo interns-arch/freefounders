@@ -61,7 +61,7 @@ export default function RolesPage() {
               </p>
               <div className="mt-2 flex flex-wrap gap-1">
                 {r.permissions.slice(0, 8).map((p) => (
-                  <Badge key={p} tone="outline" className="font-mono text-[10px]">
+                  <Badge key={p} tone="outline" className="font-mono text-[11px]">
                     {p}
                   </Badge>
                 ))}

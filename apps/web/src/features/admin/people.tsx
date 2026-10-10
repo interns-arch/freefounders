@@ -1,4 +1,5 @@
 import { errorMessage, usePlatformMe } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import {
   PLATFORM_ROLE_LABELS,
   type Person,
@@ -7,13 +8,12 @@ import {
   useRoles,
   useUpdatePerson,
 } from '@freefounders/core/admin';
-import { MoreHorizontal, Plus, Search, Users } from 'lucide-react';
+import { MoreHorizontal, Plus, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/overlays';
 import { Avatar, Card } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
@@ -206,10 +206,7 @@ export function PeoplePage() {
         }
       />
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full max-w-md">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input type="search" className="h-10 pl-9" placeholder="Search name, email, employee ID or username" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search people" />
-        </div>
+        <SearchField className="relative w-full max-w-md" label="Search people" placeholder="Search name, email, employee ID or username" value={search} onChange={setSearch} inputClassName="h-10" />
         {people.data && (
           <span className="rounded-full border bg-card px-3 py-1 font-mono text-xs text-muted-foreground shadow-card" aria-live="polite">
             <span className="font-semibold text-foreground">{people.data.filter((p) => p.status === 'active').length}</span> active · {people.data.length} total
@@ -257,9 +254,9 @@ export function PeoplePage() {
                 </DialogDescription>
               </DialogHeader>
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 rounded-lg border border-primary/20 bg-accent/40 p-4 text-sm">
-                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Sign in with</dt>
+                <dt className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Sign in with</dt>
                 <dd className="font-mono font-semibold break-all">{open.username ?? open.person.email ?? open.person.employeeCode}</dd>
-                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Password</dt>
+                <dt className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Password</dt>
                 <dd>
                   <code className="rounded-md border bg-card px-2 py-1 font-mono text-[15px] font-semibold tracking-wide break-all">{open.password || '(the one you entered)'}</code>
                 </dd>

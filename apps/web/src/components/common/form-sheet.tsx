@@ -2,8 +2,13 @@ import type { FormEvent, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/input';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/overlays';
+import { type ErrorMap, FormErrorSummary } from './form';
 
-/** Slide-over form shell: header, scrollable body, sticky footer. Ctrl/⌘+Enter submits. */
+/**
+ * Slide-over form shell: header, scrollable body, footer that stays put (so Save is always in reach on a phone).
+ * Ctrl/⌘+Enter submits. Pass `errors` (react-hook-form's formState.errors) to show the "please fix these" summary
+ * with a link to each field at the top of the body.
+ */
 export function FormSheet({
   open,
   onOpenChange,
@@ -14,6 +19,8 @@ export function FormSheet({
   submitLabel = 'Save',
   secondaryAction,
   size = 'md',
+  errors,
+  errorLabels,
   children,
 }: {
   open: boolean;
@@ -25,16 +32,24 @@ export function FormSheet({
   submitLabel?: string;
   secondaryAction?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** react-hook-form `formState.errors` (or a plain field → message record): shown as a summary with links to the fields. */
+  errors?: ErrorMap;
+  /** Field path → label, for the summary ("Name: Required"). */
+  errorLabels?: Record<string, string>;
   children: ReactNode;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent size={size} onOpenAutoFocus={(e) => {
-        // Focus the first field instead of the close button.
-        e.preventDefault();
-        const el = (e.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('input:not([type=hidden]):not([disabled]), select, textarea, button[role=combobox]');
-        el?.focus();
-      }}>
+      <SheetContent
+        size={size}
+        {...(description ? {} : { 'aria-describedby': undefined })}
+        onOpenAutoFocus={(e) => {
+          // Focus the first field instead of the close button.
+          e.preventDefault();
+          const el = (e.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('input:not([type=hidden]):not([disabled]), select, textarea, button[role=combobox]');
+          el?.focus();
+        }}
+      >
         <form
           className="flex h-full min-h-0 flex-col"
           onSubmit={onSubmit}
@@ -50,7 +65,10 @@ export function FormSheet({
             <SheetTitle>{title}</SheetTitle>
             {description && <SheetDescription>{description}</SheetDescription>}
           </SheetHeader>
-          <SheetBody className="space-y-6">{children}</SheetBody>
+          <SheetBody className="space-y-6">
+            {errors && <FormErrorSummary errors={errors} labels={errorLabels} />}
+            {children}
+          </SheetBody>
           <SheetFooter>
             <span className="mr-auto hidden items-center gap-1 text-xs text-muted-foreground sm:flex" aria-hidden>
               <Kbd>Ctrl</Kbd>

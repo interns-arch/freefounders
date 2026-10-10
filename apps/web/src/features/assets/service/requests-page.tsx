@@ -1,6 +1,7 @@
 import { humanize, PRIORITIES } from '@eam/shared';
+import { SearchField } from '@/components/common/search-field';
 import { useMutation } from '@tanstack/react-query';
-import { Check, ClipboardList, PackageCheck, Plus, Search, UserPlus, X } from 'lucide-react';
+import { Check, ClipboardList, PackageCheck, Plus, UserPlus, X } from 'lucide-react';
 import { DetailList } from '@/components/common/page';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/overlays';
 import { Link, useSearchParams } from 'react-router';
@@ -14,7 +15,7 @@ import { PhotoPicker, uploadPhotos } from '@/features/assets/components/photos';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { EntityPicker } from '@/features/assets/components/pickers';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Avatar, Card } from '@/components/ui/primitives';
 import { OnboardingTable } from '@/features/assets/onboarding/onboarding-page';
@@ -53,7 +54,7 @@ export default function RequestsPage() {
           className={cn('flex-1 rounded-md px-3 py-1.5 text-center text-[13px] font-medium transition sm:flex-none', v.active ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
         >
           {v.label}
-          {v.count > 0 && <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold text-primary-foreground">{v.count}</span>}
+          {v.count > 0 && <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">{v.count}</span>}
         </Link>
       ))}
     </div>
@@ -163,7 +164,7 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
       header: 'For',
       cell: (r) => (
         <div className="flex items-center gap-2.5">
-          <Avatar name={r.employeeName} className="size-7 text-[10px]" />
+          <Avatar name={r.employeeName} className="size-7 text-xs" />
           <div className="min-w-0">
             <div className="whitespace-nowrap">{r.employeeName}</div>
             <div className="text-xs text-muted-foreground">{r.departmentName ?? r.employeeCode}</div>
@@ -181,7 +182,7 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
           <EnumBadge value={r.status} tones={REQUEST_TONE} />
           {r.status === 'FULFILLED' && r.fulfilledAssetTag && <span className="font-mono text-[11px] text-muted-foreground">{r.fulfilledAssetTag}</span>}
           {(r.status === 'PENDING' || r.status === 'APPROVED') && (
-            <span className={cn('text-[11px]', r.custom ? 'text-muted-foreground' : r.availableCount ? 'text-success' : 'text-destructive')}>{r.custom ? 'Not in catalog' : `${r.availableCount} in stock`}</span>
+            <span className={cn('text-xs', r.custom ? 'text-muted-foreground' : r.availableCount ? 'text-success' : 'text-destructive')}>{r.custom ? 'Not in catalog' : `${r.availableCount} in stock`}</span>
           )}
         </div>
       ),
@@ -237,10 +238,7 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
       </div>
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search requests…" className="pl-8" />
-          </div>
+          <SearchField className="relative max-w-md" label="Search requests" placeholder="Search requests…" value={search} onChange={setSearch} />
         </div>
         <DataTable
           columns={columns}

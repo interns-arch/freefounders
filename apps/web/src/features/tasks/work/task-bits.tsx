@@ -4,7 +4,7 @@ import { Badge, type BadgeTone } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
 /* Soft-tinted pills, the way the old Tasks app drew status and priority (rounded, bold, tinted background, no border). */
-const PILL = 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold tracking-[0.01em] [&>svg]:size-3';
+const PILL = 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold tracking-[0.01em] [&>svg]:size-3';
 const STATUS_PILL: Record<TaskStatus, string> = {
   open: 'bg-info/10 text-info',
   in_progress: 'bg-warning/12 text-warning',
@@ -132,7 +132,7 @@ export function StatTile({
   const body = (
     <>
       <div className="min-w-0 flex-1">
-        <p className="font-mono text-[10.5px] leading-tight font-semibold tracking-[0.08em] text-muted-foreground uppercase">{label}</p>
+        <p className="font-mono text-[11px] leading-tight font-semibold tracking-[0.08em] text-muted-foreground uppercase">{label}</p>
         <p className={cn('mt-1 font-mono text-[26px] leading-none font-bold tracking-tight tabular', tone === 'alert' && 'text-destructive', tone === 'good' && 'text-success')}>{value}</p>
         {hint && <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>}
       </div>

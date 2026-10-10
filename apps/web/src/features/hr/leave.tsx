@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Chip, ErrorNote, SectionHead, type Tone, fmtDay } from '../tasks/general/parts';
@@ -54,7 +54,7 @@ export function MyLeaveTab() {
           return (
             <Card key={b.leave_type} className={cn('relative overflow-hidden p-4', low && 'border-warning/40')}>
               <div aria-hidden className={cn('pointer-events-none absolute -top-10 -right-8 size-28 rounded-full blur-2xl', low ? 'bg-warning/20' : 'bg-brand-2/15')} />
-              <p className="relative flex items-center gap-1.5 truncate font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase" title={b.name}>
+              <p className="relative flex items-center gap-1.5 truncate font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase" title={b.name}>
                 <CalendarHeart className={cn('size-3.5 shrink-0', low ? 'text-warning' : 'text-primary')} />
                 <span className="truncate">{b.name}</span>
               </p>
@@ -143,6 +143,7 @@ function ApplyForm({ types, onClose }: { types: LeaveType[]; onClose: () => void
     <form onSubmit={submit} className="grid gap-4">
       <DialogHeader>
         <DialogTitle>Apply for leave</DialogTitle>
+        <DialogDescription>Pick the type and dates; your approver is notified at once.</DialogDescription>
       </DialogHeader>
       <div className="grid gap-1.5">
         <Label htmlFor="lv-type">Leave type *</Label>

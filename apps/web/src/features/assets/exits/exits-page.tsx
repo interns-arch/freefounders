@@ -1,10 +1,10 @@
-import { CalendarClock, LogOut, PackageSearch, Search } from 'lucide-react';
+import { CalendarClock, LogOut, PackageSearch } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
 import { useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';
 import { type Column, DataTable, Pagination } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { StatTile } from '@/features/assets/components/stat-tile';
-import { Input } from '@/components/ui/input';
 import { Avatar, Badge, Card, Progress } from '@/components/ui/primitives';
 import { useExitCases, useOpenExitCases } from '@freefounders/core/assets';
 import { EXIT_CASE_TONE } from '@/lib/status';
@@ -97,7 +97,7 @@ export default function ExitsPage() {
       cell: (x) => (
         <div className="flex flex-col gap-0.5">
           <EnumBadge value={x.status} tones={EXIT_CASE_TONE} />
-          {x.overridden && <span className="text-[11px] text-destructive">Overridden</span>}
+          {x.overridden && <span className="text-xs text-destructive">Overridden</span>}
         </div>
       ),
     },
@@ -128,10 +128,7 @@ export default function ExitsPage() {
       </div>
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employee or case number…" className="pl-8" />
-          </div>
+          <SearchField className="relative max-w-md" label="Search employee or case number" placeholder="Search employee or case number…" value={search} onChange={setSearch} />
         </div>
         <DataTable
           columns={columns}

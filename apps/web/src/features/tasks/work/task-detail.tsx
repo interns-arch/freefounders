@@ -84,7 +84,7 @@ function Section({ title, count, extra, children, className }: { title: string; 
 function Fact({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
     <div className={cn('min-w-0', className)}>
-      <dt className="font-mono text-[10.5px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">{label}</dt>
+      <dt className="font-mono text-[11px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">{label}</dt>
       <dd className="mt-0.5 text-[13.5px] font-medium break-words">{children}</dd>
     </div>
   );
@@ -170,7 +170,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
           <StatusPill status={t.status} label={t.status_display} />
           {t.priority !== 'normal' && <PriorityPill priority={t.priority} label={t.priority_display} />}
           {late && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-bold text-destructive">
+            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-bold text-destructive">
               <AlarmClock className="size-3" aria-hidden /> Overdue
             </span>
           )}
@@ -553,7 +553,7 @@ function DayRow({ d, canWrite, onWrite }: { d: DayLogDay; canWrite: boolean; onW
     >
       <div className="w-24 shrink-0">
         <strong className="font-mono text-[12.5px] font-semibold">{d.label}</strong>
-        {d.is_today && <span className="block text-[11px] text-muted-foreground">today</span>}
+        {d.is_today && <span className="block text-xs text-muted-foreground">today</span>}
       </div>
       <div className="min-w-0 flex-1">
         {d.entry ? (

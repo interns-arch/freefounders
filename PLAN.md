@@ -1203,3 +1203,44 @@ side-effect free, so its zod schemas only load with the Assets screens that use 
 Kept on purpose (founder's choice): the old worktree `.claude/worktrees/prod-readiness-plan` and the test data in the demo
 database. Disk: about 210 MB of installed packages and builds went with the deleted folders; local test screenshots
 (34 MB) were cleared. CarTrends' live server is not affected: it runs from the original folders, which were not touched.
+
+### 19.14 One frame, no workspace page: Home first, attendance first (2026-10-10)
+Founder: "I don't like the first login page then second workspace page; reduce the efforts; make it easily accessible; more
+user friendly and accessible; keep in mind we are going to make it a mobile application." Later the same day: "anyone can
+see the attendance page first; marking attendance is the priority on mobile; it should be the FIRST page" and "make
+attendance the default page on mobile."
+
+**What changed**
+- **No separate workspace page.** Sign-in goes straight to **Home** at `/` (or `?next=`), a page inside the normal app
+  frame: "Good morning, {first}", then the **mark-attendance card** (live clock, state pill, one big Punch in / Punch out /
+  "Done for today" button, the checks that matter at the punch, today's in/out/worked, leave balances, "Open Attendance &
+  Leave" with the "{n} approvals pending" pill), then the Tasks and Assets cards with their live counts, then the admin
+  shortcuts. Same `usePunch` flow as Today (camera/location when the company turned them on). A person without an HR
+  record sees a quiet note instead of the card; a person with only Assets sees the Assets card first. `/?choose` is a
+  plain alias of `/`. "Remember my choice on this device" is gone (nothing to choose); the `ff-workspace` key is unused.
+- **Phones (under 640 px): Attendance is the first page.** Opening `/` lands on `/attendance` (the full Today page);
+  `/?home=1` opens Home (the bottom bar's Home tab uses it). Desktop lands on Home.
+- **One menu for the whole product** instead of "workspace switcher + per-workspace menu". Desktop sidebar: Home, then a
+  collapsible group per area (Attendance, Tasks, Assets, Admin; only the ones the person has) with that area's menu
+  (`features/*/nav.ts`; the Tasks menu's "Attendance & leave" entry is gone, Attendance is its own group). The group of the
+  current page is open and the others show just their header (a link to the area + a chevron to peek inside); on Home the
+  groups remembered on this device are open, Attendance on the first visit (`ff-nav-open`). Phone bottom bar:
+  Attendance · Home · Tasks · Assets · More (More = the full menu in a drawer; Admin lives there; tabs the person lacks
+  are hidden). The header keeps the menu button (phones), the area pill, light/dark, the bell, and now the **account menu**
+  (one place on every screen: light/dark, Keyboard shortcuts, Change password, Sign out). The brand/logo opens Home; the
+  "← Workspace portal" link is gone.
+- **Sign-in**: fewer words, the login field focused, a Show / Hide button on the password, the same labels and button; the
+  marketing panel only on desktop; fits a 360 px phone without scrolling. The locked-account message comes from the API as-is.
+- **Accessibility in the frame**: "Skip to content" first in the DOM, `<main id="content">`, header/nav/main landmarks,
+  `aria-current="page"` on the current entry, focus moves to the page's `h1` after each route change (screen readers
+  announce the page), visible focus rings, tap targets of at least 44 px on phones, `prefers-reduced-motion` respected
+  (no transitions or hover lifts), base font 15 px from 1024 px up. **Keyboard**: Alt+1..4 jump to Home / Attendance /
+  Tasks / Assets; `?` opens "Keyboard shortcuts" (Assets keeps its own `?` list with its G-then-letter jumps).
+- `/account` (change / first password) stays as it was.
+
+**Tests**: e2e names updated (Home h1 `/^Good (morning|afternoon|evening), /`, "Main menu" with the group headers,
+"Attendance & Shifts" region kept, "Open Tasks" / "Open Assets" / "People & access" buttons kept); new test: a 390 px
+context lands on `/attendance` and its bottom bar's Home tab opens `/?home=1`, a desktop lands on `/`.
+Not in this change (owned by the HR screens): on phones the Today page shows its four tiles before the mark-attendance
+card; moving the card first would put the punch buttons higher.
+

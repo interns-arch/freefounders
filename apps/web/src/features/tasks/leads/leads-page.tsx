@@ -1,5 +1,6 @@
 /** /tasks/leads — the pipeline board with filters, tiles, add-lead and the lead drawer (old pages/Leads.jsx). */
 import { errorMessage, useAccess } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import {
   LEAD_OPEN_STAGES,
   LEAD_PRIORITIES,
@@ -15,12 +16,12 @@ import {
   useTeamPeople,
   useUpdateLead,
 } from '@freefounders/core/tasks';
-import { AlarmClock, Clock, IndianRupee, Plus, RefreshCw, Search, Target, Trophy } from 'lucide-react';
+import { AlarmClock, Clock, IndianRupee, Plus, RefreshCw, Target, Trophy } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input, Label, NativeSelect } from '@/components/ui/input';
+import { Label, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent } from '@/components/ui/overlays';
 import { Avatar, Card, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
@@ -97,10 +98,7 @@ export function LeadsPage() {
 
       <Card className="p-3">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input type="search" aria-label="Search leads" placeholder="Search name, company, phone…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+          <SearchField className="relative" label="Search leads" placeholder="Search name, company, phone…" value={search} onChange={setSearch} />
           <div className="grid gap-0.5">
             <Label htmlFor="lf-stage" className="sr-only">
               Stage
@@ -239,7 +237,7 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
         </div>
         {lead.requirement && <p className="mt-1 line-clamp-2 text-xs text-foreground/80">{lead.requirement}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <Avatar name={lead.assigned_to_detail?.name} className="size-6 text-[10px]" />
+          <Avatar name={lead.assigned_to_detail?.name} className="size-6 text-xs" />
           <span className="sr-only">{lead.assigned_to_detail?.name || 'Unassigned'}</span>
           {lead.priority !== 'normal' && <Chip tone={LEAD_PRIORITY_TONE[lead.priority]}>{lead.priority_display}</Chip>}
           {value && <Chip tone="primary">{value}</Chip>}

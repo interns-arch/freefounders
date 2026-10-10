@@ -97,8 +97,8 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     const page = await context.newPage();
     await page.goto('/');
     await signIn(page, login, password);
-    // Tasks only: sign-in opens the Workspace Portal (punch in from the first page, PLAN.md §19.3).
-    await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
+    // Tasks only: sign-in opens Home with the attendance card first (PLAN.md §19.14).
+    await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     await page.goto('/tasks/hr');
     await page.getByRole('button', { name: /Check in/ }).click();
     const camera = page.getByRole('dialog', { name: 'Check in' });
@@ -114,7 +114,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     const hrPage = await hr.newPage();
     await hrPage.goto('/');
     await signIn(hrPage);
-    await expect(hrPage.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
+    await expect(hrPage.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     await hrPage.goto('/tasks/hr');
     await hrPage.getByRole('button', { name: 'Team' }).click();
     const thumb = hrPage.getByRole('button', { name: `E2E Photo ${stamp} check-in photo` });

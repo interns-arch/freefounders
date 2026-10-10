@@ -155,6 +155,7 @@ export default function AssetForm({ open, onOpenChange, record, defaults }: Form
       open={open}
       onOpenChange={onOpenChange}
       size="lg"
+      errors={form.formState.errors}
       title={editing ? `Edit ${asset.assetTag}` : 'Add asset'}
       description={editing ? asset.name : defaults?.holderLabel ? `It will be assigned to ${defaults.holderLabel}.` : 'Anything the company owns, leases, stores or uses.'}
       onSubmit={submit(false)}

@@ -233,7 +233,7 @@ function ScoreDial({ value, size = 112 }: { value: number | null | undefined; si
       <text x="56" y="58" textAnchor="middle" className="fill-current font-mono text-[28px] font-bold">
         {scored ? Math.round(pct) : '—'}
       </text>
-      <text x="56" y="76" textAnchor="middle" className="fill-muted-foreground font-mono text-[10px] font-semibold tracking-[0.12em] uppercase">
+      <text x="56" y="76" textAnchor="middle" className="fill-muted-foreground font-mono text-[11px] font-semibold tracking-[0.12em] uppercase">
         score
       </text>
     </svg>
@@ -401,7 +401,7 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
                 <div className="flex w-full flex-1 items-end rounded-lg bg-muted/50">
                   <div className={cn('w-full rounded-lg transition-[height] duration-500', AGE_TONE[i] ?? 'bg-destructive')} style={{ height: `${Math.max(a.count ? 8 : 0, (a.count / maxA) * 100)}%` }} />
                 </div>
-                <span className="text-center text-[11px] text-muted-foreground">{a.label}</span>
+                <span className="text-center text-xs text-muted-foreground">{a.label}</span>
               </div>
             ))}
           </div>

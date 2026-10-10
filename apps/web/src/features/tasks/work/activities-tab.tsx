@@ -1,10 +1,11 @@
 import { type PersonOption, useTaskActivities, useTaskPeople } from '@freefounders/core/tasks';
-import { Activity, Search } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { Activity } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/input';
 import { Avatar, Card, Skeleton } from '@/components/ui/primitives';
 import { fmtDT } from '@/features/tasks/shared';
 import { useDebounced } from '@/lib/url-state';
@@ -57,10 +58,7 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
             </NativeSelect>
           </>
         )}
-        <div className="relative min-w-48 flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input type="search" aria-label="Search activity" placeholder="Search activity or task…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <SearchField className="relative min-w-48 flex-1 sm:max-w-xs" label="Search activity" placeholder="Search activity or task…" value={search} onChange={setSearch} />
         {(who || actor || search) && (
           <Button variant="ghost" size="sm" onClick={() => (setWho(''), setActor(''), setSearch(''))}>
             Clear
@@ -80,7 +78,7 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
                 onClick={() => setActor(on ? '' : String(c.user))}
                 className={cn('inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-card py-0.5 pr-2.5 pl-0.5 text-[13px] font-medium shadow-xs transition hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none', on && 'border-primary bg-primary/10 text-primary')}
               >
-                <Avatar name={c.name} className="size-6 text-[10px]" />
+                <Avatar name={c.name} className="size-6 text-xs" />
                 {c.name}
                 <CountPill tone={on ? 'primary' : 'neutral'}>{c.count}</CountPill>
               </button>
@@ -110,7 +108,7 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
                   onClick={() => a.task && navigate(href(a.task), { state: { fromList: true } })}
                   className="flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none disabled:cursor-default"
                 >
-                  <Avatar name={a.actor?.name || 'System'} className="mt-0.5 size-7 text-[10px]" />
+                  <Avatar name={a.actor?.name || 'System'} className="mt-0.5 size-7 text-xs" />
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="flex flex-wrap items-center gap-1.5">
                       {a.task_code && <TaskCode code={a.task_code} />}

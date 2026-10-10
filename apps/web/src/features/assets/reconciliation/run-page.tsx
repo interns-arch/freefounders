@@ -1,12 +1,12 @@
 import { RECON_SOURCE_LABELS, type ReconStatus } from '@eam/shared';
-import { AlertTriangle, ArrowLeft, CardSim, CheckCircle2, Plus, Search } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { AlertTriangle, ArrowLeft, CardSim, CheckCircle2, Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge, Card } from '@/components/ui/primitives';
 import { useAuth } from '@/features/assets/lib/auth';
 import { errorMessage } from '@freefounders/core';
@@ -125,10 +125,7 @@ export default function ReconRunPage() {
 
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={run.source === 'AIRTEL' ? 'Search number, plan, person…' : 'Search name, employee ID, asset…'} className="pl-8" aria-label="Search rows" />
-          </div>
+          <SearchField className="relative max-w-md" label="Search rows" placeholder={run.source === 'AIRTEL' ? 'Search number, plan, person…' : 'Search name, employee ID, asset…'} value={search} onChange={setSearch} />
         </div>
         {!items.length ? (
           <EmptyState icon={CheckCircle2} title={tab.value === '' ? 'Everything matches' : 'Nothing here'} description={tab.value === '' ? 'The file and the system agree.' : undefined} />

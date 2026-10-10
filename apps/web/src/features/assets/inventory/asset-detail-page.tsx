@@ -208,13 +208,13 @@ export default function AssetDetailPage() {
                 <div className="flex flex-col items-center gap-1.5">
                   <span
                     className={cn(
-                      'flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-semibold',
+                      'flex size-6 items-center justify-center rounded-full border-2 text-xs font-semibold',
                       current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white ring-4 ring-destructive/15' : 'border-primary bg-gradient-to-b from-brand-2 to-primary text-primary-foreground ring-4 ring-primary/15') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
                     )}
                   >
                     {done ? <Check className="size-3" /> : i + 1}
                   </span>
-                  <span className={cn('whitespace-nowrap text-[11px]', current ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{current && a.status === 'LOST' ? 'Lost' : s.label}</span>
+                  <span className={cn('whitespace-nowrap text-xs', current ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{current && a.status === 'LOST' ? 'Lost' : s.label}</span>
                 </div>
                 {i < LIFECYCLE_STAGES.length - 1 && <span className={cn('mx-1 mb-5 h-0.5 flex-1 rounded', done ? 'bg-primary/50' : 'bg-border')} />}
               </li>

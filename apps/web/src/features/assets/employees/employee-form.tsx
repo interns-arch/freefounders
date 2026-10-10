@@ -82,7 +82,7 @@ export default function EmployeeForm({ open, onOpenChange, record, defaults }: F
   });
 
   return (
-    <FormSheet open={open} onOpenChange={onOpenChange} title={editing ? `Edit ${emp.fullName}` : 'Add employee'} onSubmit={submit} submitting={save.isPending} submitLabel={editing ? 'Save changes' : 'Add employee'}>
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={onOpenChange} title={editing ? `Edit ${emp.fullName}` : 'Add employee'} onSubmit={submit} submitting={save.isPending} submitLabel={editing ? 'Save changes' : 'Add employee'}>
       <FormSection title="Person">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="First name" required error={e('firstName')}>

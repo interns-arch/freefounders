@@ -52,7 +52,7 @@ export default function IdCardsPage() {
             <QRCode value={links.person(p.employeeCode)} size={112} className="my-2" />
             <p className="w-full truncate text-sm leading-tight font-bold">{p.fullName}</p>
             <p className="font-mono text-xs font-semibold">{p.employeeCode}</p>
-            <p className="mt-0.5 w-full truncate text-[11px] text-muted-foreground">{[p.designation, p.departmentName].filter(Boolean).join(' · ')}</p>
+            <p className="mt-0.5 w-full truncate text-xs text-muted-foreground">{[p.designation, p.departmentName].filter(Boolean).join(' · ')}</p>
           </div>
         ))}
       </div>

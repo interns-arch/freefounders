@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
 import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, OkNote, Panel, Tile, fmtDay, fmtTime } from '../tasks/general/parts';
@@ -117,21 +117,21 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
         >
           <dl className="grid gap-2 text-sm sm:grid-cols-3">
             <div className="rounded-xl border bg-muted/30 px-3 py-2">
-              <dt className="font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check in</dt>
+              <dt className="font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check in</dt>
               <dd className="mt-0.5 flex items-center font-mono text-lg font-bold tabular-nums">
                 {fmtTime(selected.check_in)}
                 {selected.has_check_in_photo && <PunchPhoto key={`${selected.attendance_id}-in`} id={selected.attendance_id} which="in" label={`${userName ? `${userName} ` : ''}Check-in photo`} />}
               </dd>
             </div>
             <div className="rounded-xl border bg-muted/30 px-3 py-2">
-              <dt className="font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check out</dt>
+              <dt className="font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check out</dt>
               <dd className="mt-0.5 flex items-center font-mono text-lg font-bold tabular-nums">
                 {fmtTime(selected.check_out)}
                 {selected.has_check_out_photo && <PunchPhoto key={`${selected.attendance_id}-out`} id={selected.attendance_id} which="out" label={`${userName ? `${userName} ` : ''}Check-out photo`} />}
               </dd>
             </div>
             <div className="rounded-xl border bg-muted/30 px-3 py-2">
-              <dt className="font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Worked</dt>
+              <dt className="font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Worked</dt>
               <dd className="mt-0.5 font-mono text-lg font-bold tabular-nums">{hrs(selected.working_minutes)}</dd>
             </div>
             {(selected.is_late || selected.is_early_checkout || selected.missing_checkout) && (
@@ -189,6 +189,7 @@ function CorrectionForm({ day, onClose, onSaved }: { day: AttendanceDay; onClose
     <form onSubmit={submit} className="grid gap-4">
       <DialogHeader>
         <DialogTitle>Correction request — {fmtDay(day.date)}</DialogTitle>
+        <DialogDescription>Enter the times that were actually worked and why; your approver decides.</DialogDescription>
       </DialogHeader>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
@@ -224,7 +225,7 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
   const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   return (
     <div className="rounded-2xl border bg-card p-2 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] sm:p-3">
-      <div className="mb-1 grid grid-cols-7 gap-1 text-center font-mono text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
         {DOW.map((d, i) => (
           <div key={d} className={cn('py-1', i >= 5 && 'text-muted-foreground/70')}>
             {d}
@@ -263,7 +264,7 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
               >
                 {num}
               </span>
-              {d.status && <span className={cn('text-[10px] leading-none font-bold', STATUS_TEXT[d.status])}>{TAG[d.status]}</span>}
+              {d.status && <span className={cn('text-xs leading-none font-bold', STATUS_TEXT[d.status])}>{TAG[d.status]}</span>}
               {(d.is_late || d.missing_checkout) && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive ring-2 ring-card" aria-hidden />}
             </button>
           );

@@ -51,7 +51,7 @@ export default function LabelsPage() {
             <div className="min-w-0 flex-1">
               <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Company property · {a.typeName}</p>
               <p className="truncate font-mono text-sm font-bold">{a.assetTag}</p>
-              <p className="truncate text-[11px] text-foreground">{a.name}</p>
+              <p className="truncate text-xs text-foreground">{a.name}</p>
               <Barcode value={a.assetTag} height={size === 'md' ? 22 : 16} className="mt-1" />
             </div>
           </div>

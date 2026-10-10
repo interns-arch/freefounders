@@ -72,6 +72,12 @@
   html {
     -webkit-tap-highlight-color: transparent;
   }
+  /* Desktop reads comfortably at 15 px; phones keep the browser's 16 px (PLAN.md §19.14). */
+  @media (min-width: 1024px) {
+    html {
+      font-size: 15px;
+    }
+  }
   body {
     @apply bg-background text-foreground antialiased;
   }
@@ -115,6 +121,24 @@
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* People who asked their device for less motion: no transitions, no hover lifts (PLAN.md §19.14). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  [class*='hover:translate']:hover,
+  [class*='hover:-translate']:hover,
+  .group:hover [class*='group-hover:translate'],
+  .group:hover [class*='group-hover:-translate'] {
+    translate: none !important;
   }
 }
 

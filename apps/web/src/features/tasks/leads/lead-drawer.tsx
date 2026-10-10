@@ -184,7 +184,7 @@ function LeadDrawerBody({ lead, onClose }: { lead: Lead; onClose: () => void }) 
               </NativeSelect>
             ) : (
               <div id="ld-assignee" className="flex items-center gap-2">
-                <Avatar name={lead.assigned_to_detail?.name} className="size-6 text-[10px]" />
+                <Avatar name={lead.assigned_to_detail?.name} className="size-6 text-xs" />
                 {lead.assigned_to_detail?.name || 'Unassigned'}
               </div>
             )}

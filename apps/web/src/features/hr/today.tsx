@@ -27,13 +27,13 @@ export function TodayTab() {
   if (!data) {
     return (
       <div className="max-w-2xl space-y-4">
+        <Skeleton className="h-64" />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
         </div>
-        <Skeleton className="h-64" />
       </div>
     );
   }
@@ -46,15 +46,7 @@ export function TodayTab() {
   const time = (iso: string | null | undefined) => <span className="text-xl sm:text-[22px]">{fmtTime(iso)}</span>;
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Tile icon={LogIn} tone="success" label="Check in" value={time(a?.check_in)} />
-        <Tile icon={LogOut} tone="info" label="Check out" value={time(a?.check_out)} />
-        <Tile icon={Timer} tone="warning" label="Worked" value={hrs(a?.working_minutes)} />
-        <Tile icon={Activity} tone="neutral" label="Status" value={a ? <AttendanceChip status={a.status} /> : '—'} alert={!!a?.is_late} />
-      </div>
-      <ErrorNote>{p.err}</ErrorNote>
-      <OkNote className="text-base">{p.msg}</OkNote>
-
+      {/* Marking attendance is the first thing on a phone: the card comes first, the day's tiles after it. */}
       <section aria-label="Mark attendance" className="relative max-w-2xl overflow-hidden rounded-2xl border bg-card shadow-[0_1px_3px_0_rgb(0_0_0/0.04)]">
         {/* Header band: the clock and today's state. */}
         <div className="relative overflow-hidden border-b bg-gradient-to-br from-primary/12 via-card to-brand-2/10 px-4 py-4 sm:px-5">
@@ -125,6 +117,14 @@ export function TodayTab() {
           </div>
         </div>
       </section>
+      <ErrorNote>{p.err}</ErrorNote>
+      <OkNote className="text-base">{p.msg}</OkNote>
+      <div className="grid max-w-2xl grid-cols-2 gap-3 md:grid-cols-4">
+        <Tile icon={LogIn} tone="success" label="Check in" value={time(a?.check_in)} />
+        <Tile icon={LogOut} tone="info" label="Check out" value={time(a?.check_out)} />
+        <Tile icon={Timer} tone="warning" label="Worked" value={hrs(a?.working_minutes)} />
+        <Tile icon={Activity} tone="neutral" label="Status" value={a ? <AttendanceChip status={a.status} /> : '—'} alert={!!a?.is_late} />
+      </div>
       {p.camera}
     </div>
   );

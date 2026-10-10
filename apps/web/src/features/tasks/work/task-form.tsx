@@ -20,7 +20,7 @@ import {
 import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Pencil, Plus, Sparkles, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
-import { Field, FormSection } from '@/components/common/form';
+import { Field, FormErrorSummary, FormSection } from '@/components/common/form';
 import { Button } from '@/components/ui/button';
 import { Input, Kbd, NativeSelect } from '@/components/ui/input';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/overlays';
@@ -227,6 +227,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
             </div>
           </SheetHeader>
           <SheetBody className="space-y-5">
+            {err && <FormErrorSummary errors={{ _: err }} />}
             {voice && (
               <div className="space-y-1 rounded-xl border border-info/30 border-l-4 border-l-info bg-info/5 p-3 text-sm">
                 <p>
@@ -547,11 +548,6 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
               <p className="mt-2 text-xs text-muted-foreground">Up to 5 files, 10 MB each. Everyone on the task can open them.</p>
             </Collapsible>
 
-            {err && (
-              <p role="alert" className="rounded-lg border border-destructive/30 border-l-4 border-l-destructive bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive">
-                {err}
-              </p>
-            )}
           </SheetBody>
           <SheetFooter>
             <span className="mr-auto hidden items-center gap-1 text-xs text-muted-foreground sm:flex">

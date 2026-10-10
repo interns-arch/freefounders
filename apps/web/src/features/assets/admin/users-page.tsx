@@ -1,5 +1,6 @@
 import { userCreateSchema, userUpdateSchema } from '@eam/shared';
-import { Plus, Search, UsersRound } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { Plus, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { Controller } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -57,10 +58,7 @@ export default function UsersPage() {
       />
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users…" className="pl-8" />
-          </div>
+          <SearchField className="relative max-w-md" label="Search users" placeholder="Search users…" value={search} onChange={setSearch} />
         </div>
         <DataTable columns={columns} rows={q.data?.items} rowKey={(u) => u.id} loading={q.isLoading} error={q.error} onRetry={() => q.refetch()} onRowClick={(u) => setEditing(u)} keyboard empty={<EmptyState icon={UsersRound} title="No users" />} />
         {q.data && q.data.total > 0 && <Pagination page={q.data.page} pageSize={q.data.pageSize} total={q.data.total} onPageChange={(p) => set({ page: p }, { keepPage: true })} />}
@@ -110,7 +108,7 @@ function UserSheet({ user, onClose }: { user: UserRow | null; onClose: () => voi
   });
 
   return (
-    <FormSheet open={open} onOpenChange={close} size="sm" title={editing ? `Edit ${user!.name}` : 'Add user'} onSubmit={submit} submitting={save.isPending}>
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={close} size="sm" title={editing ? `Edit ${user!.name}` : 'Add user'} onSubmit={submit} submitting={save.isPending}>
       <div className="grid gap-4">
         <Field label="Name" required error={e('name')}>
           <Input {...form.register('name')} />

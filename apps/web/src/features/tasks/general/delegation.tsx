@@ -7,7 +7,7 @@ import { errorMessage } from '@freefounders/core';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
 import { Avatar, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
@@ -257,6 +257,7 @@ function PersonBreakdown({ userId, date, startWin, onClose }: { userId: number |
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{data ? `${data.person.name}: tasks given & received` : 'Tasks given & received'}</DialogTitle>
+          <DialogDescription>Who they delegate to and who delegates to them.</DialogDescription>
         </DialogHeader>
         {q.error && <ErrorNote>{errorMessage(q.error)}</ErrorNote>}
         {!data && !q.error && <Skeleton className="h-40" />}

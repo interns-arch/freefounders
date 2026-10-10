@@ -33,7 +33,7 @@ export default function TicketForm({ open, onOpenChange, defaults }: FormProps) 
   });
 
   return (
-    <FormSheet open={open} onOpenChange={onOpenChange} size="sm" title="Raise a ticket" description="Report a problem, damage or loss." onSubmit={submit} submitting={save.isPending} submitLabel="Raise ticket">
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={onOpenChange} size="sm" title="Raise a ticket" description="Report a problem, damage or loss." onSubmit={submit} submitting={save.isPending} submitLabel="Raise ticket">
       <div className="grid gap-4">
         <Field label="Title" required error={e('title')}>
           <Input placeholder="Laptop won’t charge" {...form.register('title')} />

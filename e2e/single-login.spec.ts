@@ -19,27 +19,31 @@ test('one sign-in opens Tasks and Assets, switch between them, sign out', async 
   await shot(page, '1-sign-in');
 
   await signIn(page);
-  await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
+  // Home (PLAN.md §19.14): no workspace chooser; the greeting, the attendance card, then Tasks / Assets / admin shortcuts.
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Attendance & Shifts' })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Open Tasks/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Open Assets/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /People & access/ })).toBeVisible();
-  await shot(page, '2-choose-workspace');
+  await shot(page, '2-home');
 
-  // One web app (Phase 6): the workspace switcher in the sidebar moves between Tasks and Assets, no second sign-in.
+  // One web app (Phase 6): one menu for the whole product; its group headers move between Tasks and Assets, no second sign-in.
   await page.getByRole('button', { name: /^Open Tasks/ }).click();
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByRole('navigation', { name: 'Tasks menu' }).getByRole('link', { name: 'Home' })).toBeVisible({ timeout: 20_000 });
-  const switcher = page.getByRole('navigation', { name: 'Workspaces' });
-  await expect(switcher.getByRole('link', { name: 'Assets' })).toBeVisible();
+  const menu = page.getByRole('navigation', { name: 'Main menu' });
+  await expect(menu.getByRole('link', { name: 'Assets', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Assets menu' })).toHaveCount(0); // collapsed until opened
   await shot(page, '3-tasks');
 
-  await switcher.getByRole('link', { name: 'Assets' }).click();
+  await menu.getByRole('link', { name: 'Assets', exact: true }).click();
   await expect(page).toHaveURL(/\/assets$/);
   await expect(page.getByRole('navigation', { name: 'Assets menu' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
   await shot(page, '4-assets');
 
-  await switcher.getByRole('link', { name: 'Tasks' }).click();
+  await menu.getByRole('link', { name: 'Tasks', exact: true }).first().click();
   await expect(page.getByRole('navigation', { name: 'Tasks menu' })).toBeVisible({ timeout: 20_000 });
 
   await page.getByRole('button', { name: 'Your account' }).click();
@@ -54,7 +58,27 @@ test('opening an app while signed out goes to sign-in, then back to that app', a
   expect(new URL(page.url()).searchParams.get('next')).toBe('/assets/employees');
   await signIn(page);
   await expect(page).toHaveURL(/\/assets\/employees$/);
-  await expect(page.getByRole('navigation', { name: 'Workspaces' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('navigation', { name: 'Main menu' })).toBeVisible({ timeout: 20_000 });
+});
+
+// PLAN.md §19.14: on a phone a person with Attendance lands on the Today page (marking attendance first); desktop lands on Home.
+test('a phone lands on Attendance after sign-in, a desktop on Home; /?home=1 opens Home on a phone', async ({ browser, page }) => {
+  await page.goto('/');
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await phone.newPage();
+  await p.goto('/');
+  await signIn(p);
+  await expect(p).toHaveURL(/\/attendance$/);
+  await expect(p.getByRole('navigation', { name: 'Quick menu' }).getByRole('link', { name: 'Attendance' })).toHaveAttribute('aria-current', 'page');
+  await p.getByRole('navigation', { name: 'Quick menu' }).getByRole('link', { name: 'Home' }).click();
+  await expect(p).toHaveURL(/\/\?home=1$/);
+  await expect(p.getByRole('region', { name: 'Attendance & Shifts' })).toBeVisible();
+  await p.screenshot({ path: 'screenshots/2-phone-home.png', fullPage: true });
+  await phone.close();
 });
 
 test('admins manage people', async ({ page }) => {

@@ -46,7 +46,7 @@ function ProofFiles({ files }: { files: TaskFile[] }) {
   const others = files.filter((f) => !IMAGE.test(f.filename) || !f.url);
   return (
     <div className="mt-2 space-y-1.5">
-      <p className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">
+      <p className="flex items-center gap-1.5 font-mono text-[11px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">
         <Paperclip className="size-3" aria-hidden /> Proof attached <CountPill tone="neutral">{files.length}</CountPill>
       </p>
       {images.length > 0 && (

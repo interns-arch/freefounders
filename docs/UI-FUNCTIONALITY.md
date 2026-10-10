@@ -17,6 +17,17 @@ Generated from the code on 2026-10-08. Source of truth if anything here disagree
 > team|approvals|settings`. Old `/tasks/hr?tab=x` links redirect there. Portal buttons: "Open Tasks", "Open Assets",
 > "Open Attendance & Leave". A Tasks-only person now lands on the portal instead of going straight into Tasks.
 
+> **Update 2026-10-10 (PLAN.md §19.14): no workspace page.** Sign-in opens **Home** at `/` inside the app frame: h1 "Good
+> morning, {first}", the "Attendance & Shifts" card first (clock, "Punch in" / "Punch out" / "Done for today · …", checks,
+> today's times, "Open Attendance & Leave" + "{n} approvals pending"), then "Tasks & Automations" ("Open Tasks", "My task
+> list", counts) and "Assets & Inventory" ("Open Assets", "Scan QR / barcode" or "Request an item"), then Admin ("People &
+> access", "Roles", "Settings"). Keys 1 / 2 / 3 open the cards. "Remember my choice on this device" is gone; `/?choose` = `/`.
+> On phones (< 640 px) `/` lands on `/attendance`; `/?home=1` opens Home. One menu: sidebar "Main menu" = Home + groups
+> Attendance / Tasks / Assets / Admin (each a `<nav>` "… menu"); phone bottom bar "Quick menu" = Attendance · Home · Tasks ·
+> Assets · More. Header: area pill, light/dark, bell, "Your account" (light/dark, Keyboard shortcuts, Change password, Sign
+> out). Sign-in: "Show" / "Hide" on the password. Keyboard: Alt+1..4 = Home / Attendance / Tasks / Assets, `?` = shortcuts.
+> The "Workspace chooser" section below describes the old page.
+
 > **Update 2026-10-09, later (PLAN.md §19.10): no more classic screens.** §0.6 is void: Leads (`/tasks/leads`, `?lead=`), AI inbox
 > (`/tasks/intake`), Mistakes & SOPs (`/tasks/mistakes`, `?tab=sops`, `?open=`), Forms (`/tasks/forms`, `/tasks/forms/:id`,
 > `…/submissions`, `…/fill`; public `/f/:token?c=<company>`), Links (`/tasks/links`), Idea board (`/tasks/ideas`), Payroll & My

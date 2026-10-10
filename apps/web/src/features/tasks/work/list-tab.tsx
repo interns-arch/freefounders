@@ -1,4 +1,5 @@
 import { errorMessage, useAccess } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import {
   type DelegatedSummary,
   type PersonOption,
@@ -11,7 +12,7 @@ import {
   useToggleTaskFollow,
   useWorkTaskList,
 } from '@freefounders/core/tasks';
-import { AlarmClock, ClipboardList, Plus, Repeat, Search, UserRound, X } from 'lucide-react';
+import { AlarmClock, ClipboardList, Plus, Repeat, UserRound, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, ErrorState } from '@/components/common/page';
@@ -207,10 +208,7 @@ export function TaskListTab({
                 </option>
               ))}
             </NativeSelect>
-            <div className="relative min-w-52 flex-1 sm:max-w-xs">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-              <Input type="search" aria-label="Search tasks" placeholder="Search task, code or person…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
-            </div>
+            <SearchField className="relative min-w-52 flex-1 sm:max-w-xs" label="Search tasks" placeholder="Search task, code or person…" value={search} onChange={setSearch} />
             {(person || dept || values.q) && (
               <Button variant="ghost" size="sm" onClick={() => (setSearch(''), set({ person: null, dept: null, q: null }))}>
                 Clear

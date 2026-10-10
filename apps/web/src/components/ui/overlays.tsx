@@ -15,17 +15,17 @@ export function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-xl border bg-popover p-6 shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97]',
+          'fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-xl border bg-popover p-6 shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] motion-reduce:animate-none',
           className,
         )}
         {...props}
       >
         {children}
         {!hideClose && (
-          <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-md p-1.5 text-muted-foreground opacity-70 transition hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none">
+          <DialogPrimitive.Close className="absolute top-3 right-3 flex size-9 cursor-pointer items-center justify-center rounded-md text-foreground/70 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-11">
             <X className="size-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
@@ -64,10 +64,10 @@ export function SheetContent({
       : 'left-0 border-r data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left';
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed inset-y-0 z-50 flex h-full w-full flex-col bg-card shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:duration-200',
+          'fixed inset-y-0 z-50 flex h-full w-full flex-col bg-card shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:duration-200 motion-reduce:animate-none',
           sideClass,
           width,
           className,
@@ -75,7 +75,7 @@ export function SheetContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-md p-1.5 text-muted-foreground opacity-70 transition hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none">
+        <DialogPrimitive.Close className="absolute top-3 right-3 flex size-9 cursor-pointer items-center justify-center rounded-md text-foreground/70 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-11">
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
@@ -84,13 +84,13 @@ export function SheetContent({
   );
 }
 export function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col gap-1 border-b bg-muted/30 px-6 py-5 pr-14', className)} {...props} />;
+  return <div className={cn('flex flex-col gap-1 border-b bg-muted/30 px-6 py-5 pr-14 max-sm:px-4 max-sm:py-4', className)} {...props} />;
 }
 export function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex-1 overflow-y-auto px-6 py-5 scrollbar-thin', className)} {...props} />;
+  return <div className={cn('flex-1 overflow-y-auto px-6 py-5 scrollbar-thin max-sm:px-4', className)} {...props} />;
 }
 export function SheetFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3.5', className)} {...props} />;
+  return <div className={cn('flex flex-wrap items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3.5 max-sm:px-4 max-sm:pb-[max(0.875rem,env(safe-area-inset-bottom))]', className)} {...props} />;
 }
 export const SheetTitle = DialogTitle;
 export const SheetDescription = DialogDescription;
@@ -110,19 +110,19 @@ export function DropdownMenuContent({ className, sideOffset = 6, ...props }: Rea
   );
 }
 const menuItem =
-  "relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground";
+  "relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none max-sm:min-h-11 max-sm:px-3 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground";
 
 export function DropdownMenuItem({ className, destructive, ...props }: React.ComponentProps<typeof MenuPrimitive.Item> & { destructive?: boolean }) {
   return <MenuPrimitive.Item className={cn(menuItem, destructive && 'text-destructive data-[highlighted]:text-destructive [&_svg]:!text-destructive', className)} {...props} />;
 }
 export function DropdownMenuLabel({ className, ...props }: React.ComponentProps<typeof MenuPrimitive.Label>) {
-  return <MenuPrimitive.Label className={cn('px-2 py-1.5 font-mono text-[10.5px] font-medium tracking-wider text-muted-foreground uppercase', className)} {...props} />;
+  return <MenuPrimitive.Label className={cn('px-2 py-1.5 font-mono text-[11px] font-semibold tracking-wider text-foreground/75 uppercase', className)} {...props} />;
 }
 export function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof MenuPrimitive.Separator>) {
   return <MenuPrimitive.Separator className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />;
 }
 export function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'span'>) {
-  return <span className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)} {...props} />;
+  return <span className={cn('ml-auto text-xs tracking-widest text-foreground/70', className)} {...props} />;
 }
 
 // ─── Popover ──────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export function CommandItem({ className, ...props }: React.ComponentProps<typeof
   return (
     <CommandPrimitive.Item
       className={cn(
-        "relative flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2 py-2 text-sm outline-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
+        "relative flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2 py-2 text-sm outline-none max-sm:min-h-11 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
         className,
       )}
       {...props}

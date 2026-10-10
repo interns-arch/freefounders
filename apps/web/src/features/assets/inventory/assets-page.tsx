@@ -8,7 +8,8 @@ import {
   humanize,
   OWNERSHIP_TYPES,
 } from '@eam/shared';
-import { ArrowRightLeft, Boxes, LayoutGrid, List, Plus, Printer, ScanLine, Search, Tags, X } from 'lucide-react';
+import { ArrowRightLeft, Boxes, LayoutGrid, List, Plus, Printer, ScanLine, Tags, X } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
 import { Fragment, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AssetStatusBadge, HolderLabel } from '@/components/common/badges';
@@ -16,7 +17,7 @@ import { type Column, DataTable, Pagination } from '@/components/common/data-tab
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Combobox } from '@/features/assets/components/pickers';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/input';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { useAuth } from '@/features/assets/lib/auth';
@@ -105,7 +106,7 @@ export default function AssetsPage() {
         <div className="flex flex-col gap-0.5">
           <AssetStatusBadge status={a.status} />
           {a.trackingMode === 'QUANTITY' && (
-            <span className="text-[11px] text-muted-foreground tabular">
+            <span className="text-xs text-muted-foreground tabular">
               {a.consumable ? `${a.availableQuantity} left` : `${a.availableQuantity} of ${a.quantity} free`}
             </span>
           )}
@@ -226,15 +227,7 @@ export default function AssetsPage() {
         {/* Filter bar */}
         <div className="space-y-2 border-b bg-muted/20 p-3">
           <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, tag, serial, holder, specs…" className="pl-8" aria-label="Search assets" />
-            {search && (
-              <button type="button" className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setSearch('')} aria-label="Clear search">
-                <X className="size-3.5" />
-              </button>
-            )}
-            </div>
+            <SearchField className="flex-1" label="Search assets" placeholder="Search name, tag, serial, holder, specs…" value={search} onChange={setSearch} />
             <div className="flex shrink-0 rounded-lg border bg-card p-0.5">
               <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('table')} aria-label="Table view" aria-pressed={view === 'table'} className={cn(view === 'table' && 'bg-primary/10 text-primary hover:bg-primary/15')}>
                 <List />

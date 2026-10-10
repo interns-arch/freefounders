@@ -1,5 +1,6 @@
 import { humanize, PRIORITIES, TICKET_STATUSES, type TicketStatus } from '@eam/shared';
-import { AlertTriangle, HelpCircle, LifeBuoy, Plus, Search, SearchX, Wrench } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { AlertTriangle, HelpCircle, LifeBuoy, Plus, SearchX, Wrench } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -9,7 +10,7 @@ import { Field } from '@/components/common/form';
 import { DetailList, EmptyState, PageHeader } from '@/components/common/page';
 import { Timeline } from '@/features/assets/components/timeline';
 import { Button } from '@/components/ui/button';
-import { Input, NativeSelect, Textarea } from '@/components/ui/input';
+import { NativeSelect, Textarea } from '@/components/ui/input';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/overlays';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
@@ -111,10 +112,7 @@ export default function TicketsPage() {
       </div>
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tickets…" className="pl-8" />
-          </div>
+          <SearchField className="relative max-w-md" label="Search tickets" placeholder="Search tickets…" value={search} onChange={setSearch} />
         </div>
         <DataTable
           columns={columns}

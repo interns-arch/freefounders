@@ -37,7 +37,7 @@ export function AttributeFilters({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="h-9">
-          <SlidersHorizontal /> Specs {active > 0 && <span className="rounded bg-primary px-1.5 text-[11px] text-primary-foreground">{active}</span>}
+          <SlidersHorizontal /> Specs {active > 0 && <span className="rounded bg-primary px-1.5 text-xs text-primary-foreground">{active}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0">

@@ -1,12 +1,12 @@
 import { humanize } from '@eam/shared';
-import { Pencil, Plus, Search, Store, Trash2 } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { Pencil, Plus, Store, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable, Pagination } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge, Card } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { errorMessage } from '@freefounders/core';
@@ -120,10 +120,7 @@ export default function OrgPage({ kind }: { kind: OrgKind }) {
       />
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${TITLES[kind].title.toLowerCase()}…`} className="pl-8" />
-          </div>
+          <SearchField className="max-w-md" label={`Search ${TITLES[kind].title.toLowerCase()}`} placeholder={`Search ${TITLES[kind].title.toLowerCase()}…`} value={search} onChange={setSearch} />
         </div>
         <DataTable
           columns={columns}

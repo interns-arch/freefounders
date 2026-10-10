@@ -155,7 +155,7 @@ function QueueRow({ item, compact }: { item: QueueItem; compact?: boolean }) {
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         <EnumBadge value={item.priority} tones={PRIORITY_TONE} dot={false} />
-        <span className={cn('whitespace-nowrap text-[11px]', item.overdue ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
+        <span className={cn('whitespace-nowrap text-xs', item.overdue ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
           {item.overdue ? `Overdue · ${item.kind === 'ONBOARDING' ? 'joined' : 'needed'} ${formatDate(item.dueDate)}` : item.dueDate ? `${item.kind === 'ONBOARDING' ? 'Joins' : 'Needed'} ${formatDate(item.dueDate)}` : relativeTime(item.createdAt)}
         </span>
       </div>

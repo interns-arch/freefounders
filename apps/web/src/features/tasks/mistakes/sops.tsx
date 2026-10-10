@@ -3,14 +3,15 @@
  * Old versions are kept (retired), so an old mistake is still judged against the process that existed then.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import { type Sop, useRetireSop, useSaveSop, useSops, useTaskDepartments } from '@freefounders/core/tasks';
-import { BookOpen, Plus, Search } from 'lucide-react';
+import { BookOpen, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
 import { Card, Checkbox, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { ProofreadText } from '../shared/proofread-text';
@@ -57,10 +58,7 @@ export function SopRegister() {
         <strong>process failure</strong> (the process never said to do it). Old versions are kept, so an old mistake is still judged against the process that existed then.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input type="search" aria-label="Search a process" placeholder="Search a process…" className="pl-8" value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
+        <SearchField className="relative min-w-48 flex-1 sm:max-w-sm" label="Search a process" placeholder="Search a process…" value={q} onChange={setQ} />
         <span className="text-xs text-muted-foreground">
           {shown.length} process{shown.length === 1 ? '' : 'es'}
         </span>
@@ -208,6 +206,7 @@ function SopForm({ initial, onClose, onSaved }: { initial: Sop | null; onClose: 
     <form onSubmit={submit} className="grid gap-4">
       <DialogHeader>
         <DialogTitle>{initial ? `${initial.title} — ${initial.version}` : 'Write a process'}</DialogTitle>
+        <DialogDescription>Step-by-step instructions the team follows so the same mistake is not repeated.</DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5 sm:col-span-2">

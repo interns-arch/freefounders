@@ -3,6 +3,7 @@
  * favourites; tasks.assign creates collections and removes any link (others remove only their own).
  */
 import { errorMessage, useAccess } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import {
   type Link as SharedLink,
   type LinkCollection,
@@ -14,13 +15,13 @@ import {
   useLinks,
   useToggleLinkFavorite,
 } from '@freefounders/core/tasks';
-import { ExternalLink, FolderPlus, Link2, Plus, Search, Star, Trash2 } from 'lucide-react';
+import { ExternalLink, FolderPlus, Link2, Plus, Star, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, Panel } from '../general/parts';
@@ -77,10 +78,7 @@ export function LinksPage() {
         }
       />
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-44 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input type="search" aria-label="Search links" placeholder="Search links…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <SearchField className="relative min-w-44 flex-1" label="Search links" placeholder="Search links…" value={search} onChange={setSearch} />
         <NativeSelect aria-label="Collection" className="w-auto min-w-40" value={collection} onChange={(e) => setCollection(e.target.value ? Number(e.target.value) : '')}>
           <option value="">All collections</option>
           {all?.map((c) => (
@@ -229,6 +227,7 @@ function AddLinkForm({ collections, canManage, onClose }: { collections: LinkCol
     <form onSubmit={submit} className="grid gap-4">
       <DialogHeader>
         <DialogTitle>Add link</DialogTitle>
+        <DialogDescription>A web address the team keeps coming back to.</DialogDescription>
       </DialogHeader>
       <div className="grid gap-1.5">
         <Label htmlFor="l-title">Title *</Label>

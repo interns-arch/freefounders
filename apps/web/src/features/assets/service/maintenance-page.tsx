@@ -1,5 +1,6 @@
 import { humanize } from '@eam/shared';
-import { CheckCircle2, Play, Plus, Search, Wrench, X } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { CheckCircle2, Play, Plus, Wrench, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -138,10 +139,7 @@ export default function MaintenancePage() {
       </div>
       <Card className="overflow-hidden">
         <div className="border-b p-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search work orders, assets…" className="pl-8" />
-          </div>
+          <SearchField className="relative max-w-md" label="Search work orders, assets" placeholder="Search work orders, assets…" value={search} onChange={setSearch} />
         </div>
         <DataTable
           columns={columns}

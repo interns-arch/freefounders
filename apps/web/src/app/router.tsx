@@ -6,7 +6,7 @@ import { attendanceRoutes, hrRoutes } from '@/features/hr/routes';
 import { PublicFormPage } from '@/features/tasks/forms/routes';
 import { tasksRoutes } from '@/features/tasks/routes';
 import { AccountPage } from './pages/account';
-import { ChooserPage } from './pages/chooser';
+import { HomePage } from './pages/home';
 import { LoginPage } from './pages/login';
 import { NotFound, RouteError } from './pages/errors';
 import { RequireSession } from './session-guard';
@@ -39,11 +39,12 @@ export const router = createBrowserRouter([
     element: <RequireSession />,
     errorElement: <RouteError />,
     children: [
-      { index: true, element: <ChooserPage /> },
       { path: 'account', element: <AccountPage /> },
       {
         element: <AppShell />,
         children: [
+          // Home (PLAN.md §19.14): attendance first, then the other areas; /?choose is a plain alias, /?home=1 skips the phone redirect.
+          { index: true, element: <HomePage /> },
           ...adminRoutes,
           { path: 'attendance', children: attendanceRoutes },
           { path: 'tasks', children: area([...tasksRoutes, ...hrRoutes]) },

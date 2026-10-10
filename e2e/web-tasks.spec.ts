@@ -17,7 +17,7 @@ async function signIn(page: Page, login = OWNER.login, password = OWNER.password
   await page.getByLabel('Email, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
 }
 
 const views = (page: Page) => page.getByRole('navigation', { name: 'Task views' }).first();

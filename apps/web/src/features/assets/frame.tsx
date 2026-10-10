@@ -18,6 +18,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
+  DialogDescription,
 } from '@/components/ui/overlays';
 import { useHotkeys, useScannerInput } from '@/lib/hotkeys';
 import { SearchPalette } from './components/search-palette';
@@ -152,6 +153,7 @@ function FrameInner({ children }: { children: ReactNode }) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Keyboard shortcuts</DialogTitle>
+            <DialogDescription>Work faster without the mouse.</DialogDescription>
           </DialogHeader>
           <ul className="divide-y text-sm">
             {SHORTCUTS.map(([k, v]) => (

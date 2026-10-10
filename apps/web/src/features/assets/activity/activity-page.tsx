@@ -1,5 +1,6 @@
 import { HISTORY_ENTITY_TYPES, humanize } from '@eam/shared';
-import { Search, ShieldCheck } from 'lucide-react';
+import { SearchField } from '@/components/common/search-field';
+import { ShieldCheck } from 'lucide-react';
 import { Pagination } from '@/components/common/data-table';
 import { ErrorState, PageHeader } from '@/components/common/page';
 import { Timeline } from '@/features/assets/components/timeline';
@@ -26,10 +27,7 @@ export default function ActivityPage() {
       />
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b p-3">
-          <div className="relative min-w-52 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activity, people, assets…" className="pl-8" />
-          </div>
+          <SearchField className="relative min-w-52 flex-1" label="Search activity" placeholder="Search activity, people, assets…" value={search} onChange={setSearch} />
           <NativeSelect className="w-auto" value={f.entityType ?? ''} onChange={(e) => set({ entityType: e.target.value })}>
             <option value="">Everything</option>
             {HISTORY_ENTITY_TYPES.map((t) => (

@@ -16,7 +16,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
 import { ErrorNote } from '../general/parts';
 import { toLocalInput } from '../shared/format';
 
@@ -91,6 +91,7 @@ export function LeadForm({ initial, onClose, onSaved }: { initial: Lead | null; 
     <form onSubmit={submit} className="grid gap-4">
       <DialogHeader>
         <DialogTitle>{initial ? 'Edit lead' : 'Add lead'}</DialogTitle>
+        <DialogDescription>Only the name is required; add the rest as you learn it.</DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5 sm:col-span-2">

@@ -63,6 +63,7 @@ export default function OnboardingForm({ open, onOpenChange, defaults }: FormPro
     <FormSheet
       open={open}
       onOpenChange={onOpenChange}
+      errors={form.formState.errors}
       title="New joiner"
       description="Plan their first day: add them now, list what they should get, and IT prepares it before they join."
       onSubmit={submit}

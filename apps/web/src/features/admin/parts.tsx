@@ -23,7 +23,7 @@ export function AppChip({ app, className }: { app: string; className?: string })
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11.5px] font-semibold leading-[1.5] whitespace-nowrap',
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.5] whitespace-nowrap',
         APP_TONE[app] ?? 'border-border bg-muted text-muted-foreground',
         className,
       )}
@@ -43,7 +43,7 @@ export function Pill({ tone = 'neutral', children, className }: { tone?: 'neutra
     info: 'border-info/25 bg-info/10 text-info',
     success: 'border-success/25 bg-success/10 text-success',
   }[tone];
-  return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-[1.5] whitespace-nowrap', cls, className)}>{children}</span>;
+  return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.5] whitespace-nowrap', cls, className)}>{children}</span>;
 }
 
 export function ErrorNote({ children, className }: { children: ReactNode; className?: string }) {

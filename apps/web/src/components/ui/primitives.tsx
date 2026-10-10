@@ -15,7 +15,7 @@ export function CardTitle({ className, ...props }: React.ComponentProps<'h3'>) {
   return <h3 className={cn('text-[15px] font-bold tracking-tight', className)} {...props} />;
 }
 export function CardDescription({ className, ...props }: React.ComponentProps<'p'>) {
-  return <p className={cn('text-[13px] text-muted-foreground', className)} {...props} />;
+  return <p className={cn('text-sm text-muted-foreground', className)} {...props} />;
 }
 export function CardContent({ className, ...props }: React.ComponentProps<'div'>) {
   return <div className={cn('px-5 pb-5', className)} {...props} />;
@@ -23,7 +23,7 @@ export function CardContent({ className, ...props }: React.ComponentProps<'div'>
 
 // ─── Badge ────────────────────────────────────────────────────────────────
 export const badgeVariants = cva(
-  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11.5px] font-semibold leading-[1.5] [&>svg]:size-3',
+  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.5] [&>svg]:size-3',
   {
     variants: {
       tone: {
@@ -87,7 +87,8 @@ export function Checkbox({ className, ...props }: React.ComponentProps<typeof Ch
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        'peer size-4 shrink-0 cursor-pointer rounded-[4px] border border-input bg-card shadow-xs outline-none transition-shadow focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground',
+        // The box stays 16 px; on phones an invisible pseudo-element widens the tap area to about 44 px without moving anything.
+        "peer relative size-4 shrink-0 cursor-pointer rounded-[4px] border border-input bg-card shadow-xs outline-none transition-shadow focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground max-sm:before:absolute max-sm:before:-inset-3.5 max-sm:before:content-['']",
         className,
       )}
       {...props}
@@ -104,7 +105,7 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input hover:data-[state=unchecked]:bg-input/80',
+        "peer relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input hover:data-[state=unchecked]:bg-input/80 max-sm:before:absolute max-sm:before:-inset-3 max-sm:before:content-['']",
         className,
       )}
       {...props}
@@ -117,13 +118,13 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 export const Tabs = TabsPrimitive.Root;
 export function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
-  return <TabsPrimitive.List className={cn('no-scrollbar inline-flex h-10 w-full items-center gap-1 overflow-x-auto overflow-y-hidden border-b', className)} {...props} />;
+  return <TabsPrimitive.List className={cn('no-scrollbar inline-flex h-10 w-full items-center gap-1 overflow-x-auto overflow-y-hidden border-b max-sm:h-11', className)} {...props} />;
 }
 export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        '-mb-px inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 text-sm font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground data-[state=active]:border-primary data-[state=active]:text-primary [&_svg]:size-4',
+        '-mb-px inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-t-md border-b-2 border-transparent px-3 text-sm font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:ring-inset data-[state=active]:border-primary data-[state=active]:text-primary max-sm:h-11 [&_svg]:size-4',
         className,
       )}
       {...props}

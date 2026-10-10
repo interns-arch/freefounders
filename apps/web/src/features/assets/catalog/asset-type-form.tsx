@@ -53,7 +53,7 @@ export default function AssetTypeForm({ open, onOpenChange, record, defaults }: 
   });
 
   return (
-    <FormSheet open={open} onOpenChange={onOpenChange} size="sm" title={editing ? 'Edit asset type' : 'New asset type'} description="Any kind of asset: define it once, then add its own fields." onSubmit={submit} submitting={save.isPending}>
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={onOpenChange} size="sm" title={editing ? 'Edit asset type' : 'New asset type'} description="Any kind of asset: define it once, then add its own fields." onSubmit={submit} submitting={save.isPending}>
       <div className="grid gap-4">
         <Field label="Category" required error={e('categoryId')}>
           <NativeSelect {...form.register('categoryId')}>

@@ -124,23 +124,25 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
       description={person ? undefined : 'They can sign in with their email, employee ID or username.'}
       onSubmit={submit}
       submitting={create.isPending || update.isPending}
+      errors={errors}
+      errorLabels={{ fullName: 'Full name', email: 'Email', employeeCode: 'Employee ID', mobile: 'Mobile', platformRole: 'Access level', departmentId: 'Department', designation: 'Designation', reportsTo: 'Reports to', joinDate: 'Joining date', 'login.username': 'Username', 'login.password': 'Password' }}
     >
       <FormSection title="Who they are">
         <Field label="Full name" required htmlFor="pf-name" error={errors.fullName}>
-          <Input id="pf-name" value={f.fullName} onChange={set('fullName')} required autoFocus />
+          <Input id="pf-name" name="fullName" value={f.fullName} onChange={set('fullName')} required autoFocus />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Email" htmlFor="pf-email" error={errors.email}>
-            <Input id="pf-email" type="email" value={f.email} onChange={set('email')} />
+            <Input id="pf-email" name="email" type="email" value={f.email} onChange={set('email')} />
           </Field>
           <Field label="Employee ID" htmlFor="pf-code" error={errors.employeeCode}>
-            <Input id="pf-code" value={f.employeeCode} onChange={set('employeeCode')} />
+            <Input id="pf-code" name="employeeCode" value={f.employeeCode} onChange={set('employeeCode')} />
           </Field>
           <Field label="Mobile" htmlFor="pf-mobile" error={errors.mobile}>
-            <Input id="pf-mobile" value={f.mobile} onChange={set('mobile')} inputMode="tel" />
+            <Input id="pf-mobile" name="mobile" value={f.mobile} onChange={set('mobile')} inputMode="tel" />
           </Field>
           <Field label="Access level" htmlFor="pf-level" error={errors.platformRole} hint={levelLocked ? undefined : 'Admins can manage people, roles and settings.'}>
-            <NativeSelect id="pf-level" value={f.platformRole} onChange={set('platformRole')} disabled={levelLocked}>
+            <NativeSelect id="pf-level" name="platformRole" value={f.platformRole} onChange={set('platformRole')} disabled={levelLocked}>
               {levelOptions.map((l) => (
                 <option key={l} value={l}>
                   {PLATFORM_ROLE_LABELS[l]}
@@ -153,7 +155,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
       <FormSection title="At work" description="Department, manager and joining date reach every app.">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Department" htmlFor="pf-dept" error={errors.departmentId}>
-            <NativeSelect id="pf-dept" value={f.departmentId} onChange={set('departmentId')}>
+            <NativeSelect id="pf-dept" name="departmentId" value={f.departmentId} onChange={set('departmentId')}>
               <option value="">—</option>
               {(depts.data ?? [])
                 .filter((d) => d.active || d.id === f.departmentId)
@@ -165,10 +167,10 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
             </NativeSelect>
           </Field>
           <Field label="Designation" htmlFor="pf-designation" error={errors.designation}>
-            <Input id="pf-designation" value={f.designation} onChange={set('designation')} maxLength={80} placeholder="e.g. Sales Executive" />
+            <Input id="pf-designation" name="designation" value={f.designation} onChange={set('designation')} maxLength={80} placeholder="e.g. Sales Executive" />
           </Field>
           <Field label="Reports to" htmlFor="pf-manager" error={errors.reportsTo}>
-            <NativeSelect id="pf-manager" value={f.reportsTo} onChange={set('reportsTo')}>
+            <NativeSelect id="pf-manager" name="reportsTo" value={f.reportsTo} onChange={set('reportsTo')}>
               <option value="">— nobody (approvals go to admins) —</option>
               {(everyone.data ?? [])
                 .filter((p) => p.id !== person?.id && (p.status === 'active' || p.id === f.reportsTo))
@@ -180,7 +182,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
             </NativeSelect>
           </Field>
           <Field label="Joining date" htmlFor="pf-join" error={errors.joinDate}>
-            <Input id="pf-join" type="date" value={f.joinDate} onChange={set('joinDate')} />
+            <Input id="pf-join" name="joinDate" type="date" value={f.joinDate} onChange={set('joinDate')} />
           </Field>
         </div>
       </FormSection>
@@ -196,10 +198,10 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
             {f.withLogin && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Username (optional)" htmlFor="pf-username" error={errors['login.username']}>
-                  <Input id="pf-username" value={f.username} onChange={set('username')} autoComplete="off" />
+                  <Input id="pf-username" name="login.username" value={f.username} onChange={set('username')} autoComplete="off" />
                 </Field>
                 <Field label="Password (blank = generate one)" htmlFor="pf-password" error={errors['login.password']}>
-                  <Input id="pf-password" type="text" value={f.password} onChange={set('password')} autoComplete="off" />
+                  <Input id="pf-password" name="login.password" type="text" value={f.password} onChange={set('password')} autoComplete="off" />
                 </Field>
               </div>
             )}
@@ -452,11 +454,11 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
           <>
             <dl className="grid gap-3 rounded-lg border border-primary/20 bg-accent/40 p-4 text-sm">
               <div className="grid gap-1">
-                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Sign in with</dt>
+                <dt className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Sign in with</dt>
                 <dd className="font-mono font-semibold break-all">{done.username}</dd>
               </div>
               <div className="grid gap-1">
-                <dt className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Password</dt>
+                <dt className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Password</dt>
                 <dd>
                   <code data-testid="new-password" className="block rounded-md border bg-card px-3 py-2 font-mono text-xl font-semibold tracking-wide break-all select-all">
                     {done.password}

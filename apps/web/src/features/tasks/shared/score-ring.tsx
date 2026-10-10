@@ -15,7 +15,7 @@ export function ScoreRing({ value, size = 34, className }: { value: number | nul
       style={{ width: size, height: size, background: `conic-gradient(${colour} ${pct * 3.6}deg, var(--muted) 0)` }}
     >
       <span
-        className="flex items-center justify-center rounded-full bg-card text-[11px] font-semibold tabular"
+        className="flex items-center justify-center rounded-full bg-card text-xs font-semibold tabular"
         style={{ width: size - 8, height: size - 8 }}
       >
         {scored ? Math.round(pct) : '—'}

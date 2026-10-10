@@ -1,9 +1,10 @@
 import { closestCenter, DndContext, type DragEndEvent, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SearchField } from '@/components/common/search-field';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { buildAttributesSchema, FIELD_TYPE_LABELS } from '@eam/shared';
 
-import { ChevronRight, Eye, GripVertical, Hash, Lock, Package, Pencil, Plus, Search, Shapes, Trash2 } from 'lucide-react';
+import { ChevronRight, Eye, GripVertical, Hash, Lock, Package, Pencil, Plus, Shapes, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
@@ -11,7 +12,6 @@ import { attributesToForm, DynamicFields } from '@/features/assets/components/dy
 import { useZodForm } from '@/components/common/form';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { errorMessage } from '@freefounders/core';
@@ -71,10 +71,7 @@ export default function CatalogPage() {
       <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
         <Card className="h-fit overflow-hidden lg:sticky lg:top-20">
           <div className="border-b p-2.5">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter types…" className="h-8 pl-8 text-[13px]" />
-            </div>
+            <SearchField className="relative" label="Filter types" placeholder="Filter types…" value={filter} onChange={setFilter} inputClassName="h-8 text-[13px]" />
           </div>
           <nav className="max-h-[70vh] overflow-y-auto p-1.5 scrollbar-thin">
             {categories.isLoading && Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="m-1 h-8" />)}
@@ -113,7 +110,7 @@ export default function CatalogPage() {
                         >
                           <span className="flex-1 truncate">{t.name}</span>
                           {t.trackingMode === 'QUANTITY' && <Hash className="size-3" />}
-                          <span className="text-[11px] tabular">{t.assetCount}</span>
+                          <span className="text-xs tabular">{t.assetCount}</span>
                         </button>
                       ))}
                       <button type="button" onClick={() => quickAdd.open('assetType', { defaults: { categoryId: c.id } })} className="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-left text-[13px] text-primary hover:bg-primary/5">

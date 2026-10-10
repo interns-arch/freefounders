@@ -1,11 +1,12 @@
 import { useAccess } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import { type DashboardCounts, type TaskDashboard, useTaskCategoryNames, useTaskDashboard } from '@freefounders/core/tasks';
 import { BarElement, CategoryScale, Chart as ChartJS, LinearScale, Tooltip } from 'chart.js';
-import { AlarmClock, CheckCircle2, CircleDashed, Hourglass, Loader, Search, Timer } from 'lucide-react';
+import { AlarmClock, CheckCircle2, CircleDashed, Hourglass, Loader, Timer } from 'lucide-react';
 import { type ComponentType, useEffect, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { EmptyState, ErrorState } from '@/components/common/page';
-import { Input, NativeSelect } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/input';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { RangePicker, rangeParams, rangeReady } from '@/features/tasks/shared';
@@ -86,10 +87,7 @@ export function DashboardTab({ onTile }: { onTile: (tab: 'my' | 'delegated', fil
             </option>
           ))}
         </NativeSelect>
-        <div className="relative min-w-48 flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input type="search" aria-label="Search tasks" placeholder="Search tasks…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
-        </div>
+        <SearchField className="relative min-w-48 flex-1 sm:max-w-xs" label="Search tasks" placeholder="Search tasks…" value={search} onChange={setSearch} />
       </div>
 
       {dash.error ? (

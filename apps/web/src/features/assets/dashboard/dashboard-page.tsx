@@ -296,7 +296,7 @@ function RequestProgress({ status }: { status: PersonalDashboard['requests'][num
       {REQUEST_STEPS.map((step, i) => (
         <div key={step} className="flex flex-1 flex-col gap-1">
           <span className={cn('h-1.5 rounded-full', i <= reached ? (reached === 2 ? 'bg-success' : 'bg-primary') : 'bg-muted')} />
-          <span className={cn('text-[10px]', i === reached ? 'font-medium text-foreground' : 'text-muted-foreground')}>{step}</span>
+          <span className={cn('text-xs', i === reached ? 'font-medium text-foreground' : 'text-muted-foreground')}>{step}</span>
         </div>
       ))}
     </div>
@@ -330,7 +330,7 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
           {me?.employee && links.ready && (
             <Link to={`/assets/employees/${me.employee.id}`} className="shrink-0 rounded-xl bg-white p-1.5 shadow-md transition active:scale-95" aria-label="Open my QR">
               <QRCode value={links.person(me.employee.employeeCode)} size={64} />
-              <span className="block pt-0.5 text-center text-[10px] font-semibold text-primary">My QR</span>
+              <span className="block pt-0.5 text-center text-xs font-semibold text-primary">My QR</span>
             </Link>
           )}
         </div>
@@ -439,7 +439,7 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
                       {r.quantity > 1 ? `${r.quantity} × ` : ''}
                       {r.typeName}
                     </span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">{relativeTime(r.createdAt)}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(r.createdAt)}</span>
                   </div>
                   <RequestProgress status={r.status} />
                   {r.decisionNote && <p className="mt-2 text-xs text-muted-foreground">IT: {r.decisionNote}</p>}

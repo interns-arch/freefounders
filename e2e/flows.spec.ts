@@ -17,7 +17,7 @@ async function signIn(page: Page) {
   await page.getByLabel('Email, username or employee ID').fill(OWNER.login);
   await page.getByLabel('Password').fill(OWNER.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
 }
 
 /** A person with Tasks and Assets (through a role made for the test), reporting to the owner. */

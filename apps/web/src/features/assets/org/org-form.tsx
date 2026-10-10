@@ -105,7 +105,7 @@ export default function OrgForm({ kind, open, onOpenChange, record, defaults }: 
   };
 
   return (
-    <FormSheet open={open} onOpenChange={onOpenChange} size="sm" title={editing ? `Edit ${meta.label.toLowerCase()}` : `Add ${meta.label.toLowerCase()}`} onSubmit={submit} submitting={save.isPending}>
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={onOpenChange} size="sm" title={editing ? `Edit ${meta.label.toLowerCase()}` : `Add ${meta.label.toLowerCase()}`} onSubmit={submit} submitting={save.isPending}>
       <div className="grid gap-4">
         {meta.fields.map((f) => (
           <Field key={f} label={LABELS[f]} required={f === 'name'} error={e(f)}>

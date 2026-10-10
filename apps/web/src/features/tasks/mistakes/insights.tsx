@@ -117,7 +117,7 @@ export function MistakeInsights({ isAdmin }: { isAdmin: boolean }) {
 function Stat({ label, value, alert }: { label: string; value: React.ReactNode; alert?: boolean }) {
   return (
     <div className={cn('rounded-lg border p-2.5', alert && 'border-destructive/40 bg-destructive/5')}>
-      <dt className="font-mono text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{label}</dt>
+      <dt className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{label}</dt>
       <dd className={cn('mt-0.5 font-mono text-lg font-semibold tabular-nums', alert && 'text-destructive')}>{value}</dd>
     </div>
   );

@@ -20,7 +20,7 @@ edit, commit, push or switch branches in the original folders.
 services/platform/  NestJS: companies, people, single login (EdDSA tokens + JWKS), people admin
 services/tasks/     Django 6 API (backend/)
 services/assets/    NestJS API (apps/api) + shared Zod (packages/shared, also used by apps/web)
-apps/web/           THE web app (Phase 6, PLAN.md §18): sign-in, chooser, Admin, Tasks, HR, Assets screens
+apps/web/           THE web app (Phase 6, PLAN.md §18): sign-in, Home, Admin, Tasks, HR, Assets screens
 packages/core/      shared logic for web + mobile: HTTP client, session, typed APIs + hooks per area (no DOM)
 packages/theme/     design tokens (tokens.css for web, src/tokens.ts for mobile; kept identical by a check)
 infra/gateway/      dev-gateway.mjs (one address, routed by path) + Caddyfile (prod draft)
@@ -34,8 +34,11 @@ Phase 7 adds `apps/mobile`.
 hex/rgb/oklch). Each area owns `src/features/<area>/` and `packages/core/src/<area>/`. Same URLs as the old apps
 (`/tasks/…`, `/assets/…`). **Every module is in the new app** (PLAN.md §19.10); the old web apps, the Capacitor shell and
 `apps/portal` were deleted in §19.13 (git history has them). The services are APIs only.
-Attendance is its own workspace at `/attendance/<tab>` (HR screens; `/tasks/hr?tab=` redirects), and `/` is the Workspace
-Portal with punch-in (PLAN.md §19). Theme colours only: fixed Tailwind palette classes (blue-700…) are refused too.
+Attendance is its own area at `/attendance/<tab>` (HR screens; `/tasks/hr?tab=` redirects). `/` is **Home** inside the app
+frame (attendance card with punch-in first, then Tasks/Assets counts, admin shortcuts; PLAN.md §19.14); on phones `/` lands on
+`/attendance` and `/?home=1` opens Home. One menu for everything: sidebar groups Attendance / Tasks / Assets / Admin from
+`features/*/nav.ts`, phone bottom bar Attendance · Home · Tasks · Assets · More. Theme colours only: fixed Tailwind palette
+classes (blue-700…) are refused too.
 
 ## Whole suite with single login (usual way to work)
 ```

@@ -40,7 +40,7 @@ export default function CategoryForm({ open, onOpenChange, record }: FormProps) 
   });
 
   return (
-    <FormSheet open={open} onOpenChange={onOpenChange} size="sm" title={editing ? 'Edit category' : 'New category'} description="Groups asset types, e.g. IT, Vehicles, Safety." onSubmit={submit} submitting={save.isPending}>
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={onOpenChange} size="sm" title={editing ? 'Edit category' : 'New category'} description="Groups asset types, e.g. IT, Vehicles, Safety." onSubmit={submit} submitting={save.isPending}>
       <div className="grid gap-4">
         <Field label="Name" required error={e('name')}>
           <Input

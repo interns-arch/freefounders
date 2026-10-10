@@ -4,6 +4,7 @@
  * (PLAN.md §17.1), so they are shown read-only here with a link to People & access.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import {
   type ManagedUser,
   useManagedUsers,
@@ -16,7 +17,7 @@ import {
   useTeamDirectory,
   useUpdateManagedUser,
 } from '@freefounders/core/tasks';
-import { BarChart3, ExternalLink, Search, UserPlus, UsersRound } from 'lucide-react';
+import { BarChart3, ExternalLink, UserPlus, UsersRound } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
@@ -95,10 +96,7 @@ function NameCell({ id, name, sub, viewable }: { id: number; name: string; sub: 
 
 function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <div className="relative min-w-48 flex-1 sm:max-w-xs">
-      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input type="search" aria-label="Search team member" placeholder="Search team member…" className="pl-8" value={value} onChange={(e) => onChange(e.target.value)} />
-    </div>
+    <SearchField className="relative min-w-48 flex-1 sm:max-w-xs" label="Search team member" placeholder="Search team member…" value={value} onChange={onChange} />
   );
 }
 

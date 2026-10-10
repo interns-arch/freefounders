@@ -95,7 +95,7 @@ test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, r
   }
 });
 
-test('punch in and out from the Workspace Portal (PLAN.md §19.3); old /tasks/hr links open Attendance', async ({ browser, request }) => {
+test('punch in and out from Home (PLAN.md §19.3, §19.14); old /tasks/hr links open Attendance', async ({ browser, request }) => {
   const owner = await token(request);
   const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
   expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: false, face_enabled: false } })).ok()).toBeTruthy();
@@ -105,7 +105,7 @@ test('punch in and out from the Workspace Portal (PLAN.md §19.3); old /tasks/hr
     const page = await context.newPage();
     await page.goto('/');
     await signIn(page, person.login, person.password);
-    await expect(page.getByRole('heading', { name: 'Choose your workspace' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     const card = page.getByRole('region', { name: 'Attendance & Shifts' });
     await expect(card.getByText('Not checked in')).toBeVisible();
     await card.getByRole('button', { name: 'Punch in' }).click();

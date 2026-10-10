@@ -1,10 +1,7 @@
 import { Banknote, CalendarCheck, CalendarDays, CalendarHeart, ClipboardCheck, Clock, Settings2, Users, Wallet } from 'lucide-react';
 import type { NavItem } from '@/app/nav';
 
-/** The Tasks menu keeps a way into Attendance, where the old app had it (People section). */
-export const HR_NAV: NavItem[] = [{ label: 'Attendance & leave', to: '/attendance', icon: CalendarCheck, group: 'People' }];
-
-/** Attendance workspace (PLAN.md §19.4): the HR screens, one entry per section. Same rules as the tabs on the page. */
+/** Attendance group of the one menu (PLAN.md §19.4, §19.14): the HR screens, one entry per section. Same rules as the tabs on the page. */
 export const ATTENDANCE_NAV: NavItem[] = [
   { label: 'Today', to: '/attendance', icon: Clock, end: true },
   { label: 'My attendance', to: '/attendance/history', icon: CalendarDays },

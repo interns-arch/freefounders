@@ -132,7 +132,7 @@ export function Panel({
 export function SectionHead({ children, className, actions }: { children: ReactNode; className?: string; actions?: ReactNode }) {
   return (
     <div className={cn('flex items-center justify-between gap-2 pt-1', className)}>
-      <h2 className="flex items-center gap-2 text-[11px] font-bold tracking-[0.1em] text-muted-foreground uppercase">
+      <h2 className="flex items-center gap-2 text-xs font-bold tracking-[0.1em] text-muted-foreground uppercase">
         <span aria-hidden className="h-3 w-1 rounded-full bg-gradient-to-b from-brand-2 to-primary" />
         {children}
       </h2>
@@ -188,7 +188,7 @@ export function Tile({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <p className="font-mono text-[10.5px] leading-[1.2] font-semibold tracking-[0.08em] text-muted-foreground uppercase">{label}</p>
+        <p className="font-mono text-[11px] leading-[1.2] font-semibold tracking-[0.08em] text-muted-foreground uppercase">{label}</p>
         <p className={cn('mt-0.5 font-mono text-[22px] leading-tight font-bold tracking-tight whitespace-nowrap tabular-nums sm:text-[25px]', alert && 'text-destructive')}>{value}</p>
         {sub && <div className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</div>}
       </div>

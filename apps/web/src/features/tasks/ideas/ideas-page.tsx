@@ -3,6 +3,7 @@
  * tasks.assign (managers/admins) reviews: changes the status and can remove any idea.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
+import { SearchField } from '@/components/common/search-field';
 import {
   IDEA_PRIORITY_LABELS,
   IDEA_STATUS_LABELS,
@@ -19,13 +20,13 @@ import {
   useSetIdeaStatus,
   useVoteIdea,
 } from '@freefounders/core/tasks';
-import { ChevronUp, Lightbulb, MessageSquare, Plus, Search, Trash2, Users } from 'lucide-react';
+import { ChevronUp, Lightbulb, MessageSquare, Plus, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, Segmented, type Tone, fmtWhen } from '../general/parts';
@@ -96,10 +97,7 @@ export function IdeasPage() {
             </option>
           ))}
         </NativeSelect>
-        <div className="relative min-w-44 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input type="search" aria-label="Search ideas" placeholder="Search ideas…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <SearchField className="relative min-w-44 flex-1" label="Search ideas" placeholder="Search ideas…" value={search} onChange={setSearch} />
       </div>
       <ErrorNote>{err}</ErrorNote>
       {!q.data && <Skeleton className="h-40 max-w-3xl" />}
@@ -259,6 +257,7 @@ function NewIdeaForm({ onClose }: { onClose: () => void }) {
     <form onSubmit={submit} className="grid gap-4">
       <DialogHeader>
         <DialogTitle>New idea</DialogTitle>
+        <DialogDescription>Share an improvement; the team can vote and comment on it.</DialogDescription>
       </DialogHeader>
       <div className="grid gap-1.5">
         <Label htmlFor="i-title">Title *</Label>

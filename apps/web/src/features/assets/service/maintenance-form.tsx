@@ -39,7 +39,7 @@ export default function MaintenanceForm({ open, onOpenChange, defaults }: FormPr
   });
 
   return (
-    <FormSheet open={open} onOpenChange={onOpenChange} size="sm" title="Log maintenance" description="Repairs, servicing, inspections and calibration." onSubmit={submit} submitting={save.isPending} submitLabel={startNow ? 'Start maintenance' : 'Schedule'}>
+    <FormSheet errors={form.formState.errors} open={open} onOpenChange={onOpenChange} size="sm" title="Log maintenance" description="Repairs, servicing, inspections and calibration." onSubmit={submit} submitting={save.isPending} submitLabel={startNow ? 'Start maintenance' : 'Schedule'}>
       <div className="grid gap-4">
         <Field label="Asset" required error={e('assetId')}>
           <EntityPicker
