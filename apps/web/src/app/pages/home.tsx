@@ -311,7 +311,7 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
   ) : a?.check_in && !a.check_out ? (
     <Pill tone="ok">Checked in {timeOf(a.check_in)}</Pill>
   ) : a?.check_out ? (
-    <Pill tone="info">Done · {hrs(a.working_minutes)}</Pill>
+    <Pill tone="info">Done for today{a.working_minutes ? ` · ${hrs(a.working_minutes)}` : ''}</Pill>
   ) : a && a.status !== 'not_checked_in' ? (
     <Pill tone="info">{a.status_display}</Pill>
   ) : (
@@ -353,7 +353,7 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
             </Button>
           ) : (
             <Button size="lg" variant="outline" className="h-13 w-full text-base" onClick={() => onOpen()} disabled={!d}>
-              {state === 'done' ? `Done for today · ${hrs(a?.working_minutes)}` : 'Open attendance'}
+              {state === 'done' ? `Done for today${a?.working_minutes ? ` · ${hrs(a.working_minutes)}` : ''}` : 'Open attendance'}
             </Button>
           )}
           <Checks p={p} />
