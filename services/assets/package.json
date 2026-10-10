@@ -9,12 +9,12 @@
   ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "npm run build -w @eam/shared && npm run build -w @eam/api && npm run build -w @eam/web",
+    "build": "npm run build -w @eam/shared && npm run build -w @eam/api",
     "start": "node scripts/start.mjs",
     "test": "node scripts/test.mjs",
     "db:reset": "node scripts/db-reset.mjs",
     "db:generate": "npm run db:generate -w @eam/api",
-    "typecheck": "npm run build -w @eam/shared && npm run typecheck -w @eam/api && npm run typecheck -w @eam/web"
+    "typecheck": "npm run build -w @eam/shared && npm run typecheck -w @eam/api"
   },
   "devDependencies": {
     "embedded-postgres": "17.10.0-beta.17",

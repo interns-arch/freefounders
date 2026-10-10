@@ -72,7 +72,6 @@ export function run(args, { env = {}, cwd = ROOT } = {}) {
 }
 
 export const TSC = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-export const VITE = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
 export const API_DIST = path.join(ROOT, 'apps', 'api', 'dist');
 
 /** This PC's address on the local network (e.g. 192.168.1.20), so phones can open QR links. */

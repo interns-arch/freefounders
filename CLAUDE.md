@@ -18,12 +18,11 @@ edit, commit, push or switch branches in the original folders.
 ## Layout
 ```
 services/platform/  NestJS: companies, people, single login (EdDSA tokens + JWKS), people admin
-services/tasks/     Django 6 API (backend/) + React 18 web (frontend/) + Capacitor shell (mobile/)
-services/assets/    NestJS API (apps/api) + React 19 web (apps/web) + shared Zod (packages/shared)
+services/tasks/     Django 6 API (backend/)
+services/assets/    NestJS API (apps/api) + shared Zod (packages/shared, also used by apps/web)
 apps/web/           THE web app (Phase 6, PLAN.md §18): sign-in, chooser, Admin, Tasks, HR, Assets screens
 packages/core/      shared logic for web + mobile: HTTP client, session, typed APIs + hooks per area (no DOM)
 packages/theme/     design tokens (tokens.css for web, src/tokens.ts for mobile; kept identical by a check)
-apps/portal/        the old portal (no longer served; replaced by apps/web)
 infra/gateway/      dev-gateway.mjs (one address, routed by path) + Caddyfile (prod draft)
 scripts/            setup / dev / smoke / check-web-rules      e2e/  Playwright browser tests
 ```
@@ -33,8 +32,8 @@ Phase 7 adds `apps/mobile`.
 **Web app rules** (checked before every typecheck/build by `scripts/check-web-rules.mjs`): screens under `apps/web/src/app` and
 `src/features` get data only from `@freefounders/core` hooks (no fetch, no HTTP client) and use theme colours only (no
 hex/rgb/oklch). Each area owns `src/features/<area>/` and `packages/core/src/<area>/`. Same URLs as the old apps
-(`/tasks/…`, `/assets/…`). **Every module is in the new app** (PLAN.md §19.10): the old web apps under `services/*/frontend`
-and `services/assets/apps/web` are no longer served or started (their APIs are); `/classic/…` is gone.
+(`/tasks/…`, `/assets/…`). **Every module is in the new app** (PLAN.md §19.10); the old web apps, the Capacitor shell and
+`apps/portal` were deleted in §19.13 (git history has them). The services are APIs only.
 Attendance is its own workspace at `/attendance/<tab>` (HR screens; `/tasks/hr?tab=` redirects), and `/` is the Workspace
 Portal with punch-in (PLAN.md §19). Theme colours only: fixed Tailwind palette classes (blue-700…) are refused too.
 
@@ -48,8 +47,7 @@ npm run rehearse-import   # CarTrends import rehearsal on demo data, against the
 ```
 Routes on :8080: `/api/platform/*` Platform (:4000) · `/tasks/api/*` Django (:8000) · `/assets/api/*` NestJS (:3000) ·
 `/media/*` Django · everything else the new web app (:5176). `/f/<token>?c=<company>` is the public web-form page. Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
-Single login is a build/env switch, off by default so each app still runs standalone:
-- old web apps (standalone only now): `VITE_PLATFORM_LOGIN=true` (see `src/platform.js`, `src/lib/platform.ts`)
+Single login is an env switch on the APIs, off by default so each API still runs standalone:
 - APIs: `PLATFORM_JWKS_URL` (Tasks, Assets); Platform: `TASKS_INTERNAL_URL`, `ASSETS_INTERNAL_URL`, `PLATFORM_SECRET`
 How it fits: PLAN.md §13. Tasks uses the Platform token directly (Bearer); Assets exchanges it for
 a 15-minute cookie session (`/api/auth/platform-session`) so photos/downloads keep working.
@@ -92,12 +90,11 @@ python -m venv .venv && .venv\Scripts\pip install -r requirements.txt
 set DATABASE_URL= & set NOTIF_SCHEDULER=false & .venv\Scripts\python manage.py test
 # multi-company tests need Postgres (start one: node services/platform/scripts/pg-up.mjs):
 set DATABASE_URL=postgres://postgres:postgres@localhost:5434/ff_tasks & set DB_SSLMODE=disable & .venv\Scripts\python manage.py test tenancy
-cd ../frontend && npm ci && npm run dev
 ```
 Assets (Node 22+; embedded Postgres on 5433):
 ```
 cd services/assets && npm ci
-npm run dev          # http://localhost:5173
+npm run dev          # API on http://localhost:3000/api
 npm run typecheck && npm test
 ```
 Web app: `npm ci` (root) then `npm run web:build` (rules + typecheck + build). Browser tests per area: `e2e/web-*.spec.ts`.

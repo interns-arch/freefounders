@@ -55,26 +55,6 @@ jobs:
           NOTIF_SCHEDULER: "false"
         run: python manage.py test tenancy accounts.tests_platform --noinput
 
-  tasks-frontend:
-    name: Tasks web (build)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/tasks/frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: services/tasks/frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build
-      - name: Build (FreeFounders single-login mode)
-        run: npm run build
-        env:
-          VITE_PLATFORM_LOGIN: "true"
-          VITE_BASE: /tasks/
 
   assets:
     name: Assets (typecheck + tests)
@@ -110,21 +90,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-  portal:
-    name: Portal (typecheck + build)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/portal
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: apps/portal/.node-version
-          cache: npm
-          cache-dependency-path: apps/portal/package-lock.json
-      - run: npm ci
-      - run: npm run build
 
   web:
     name: Web app (rules + typecheck + build)

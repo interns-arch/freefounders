@@ -21,7 +21,6 @@ const JWKS = 'http://127.0.0.1:4000/api/platform/.well-known/jwks.json';
 const missing = [
   ['services/platform/node_modules', 'services/platform'],
   ['services/assets/node_modules', 'services/assets'],
-  ['services/tasks/frontend/node_modules', 'services/tasks/frontend'],
   ['node_modules', '.'],
 ].filter(([dir]) => !existsSync(at(dir)));
 if (missing.length || !existsSync(TASKS_PY)) {
@@ -29,7 +28,7 @@ if (missing.length || !existsSync(TASKS_PY)) {
   process.exit(1);
 }
 
-const COLORS = { platform: 35, tasks: 32, 'tasks-job': 32, 'tasks-web': 92, assets: 33, web: 36 };
+const COLORS = { platform: 35, tasks: 32, 'tasks-job': 32, assets: 33, web: 36 };
 const children = [];
 let stopping = false;
 
@@ -76,8 +75,8 @@ console.log('• Migrating Tasks (every company)…');
 execFileSync(TASKS_PY, ['manage.py', 'migrate_companies'], { cwd: at('services/tasks/backend'), env: { ...process.env, ...djangoEnv }, stdio: 'ignore' });
 start('tasks', TASKS_PY, ['manage.py', 'runserver', '127.0.0.1:8000'], { cwd: 'services/tasks/backend', env: djangoEnv });
 start('tasks-job', TASKS_PY, ['manage.py', 'run_worker'], { cwd: 'services/tasks/backend', env: djangoEnv });
-// Assets API only: every screen is in the FreeFounders web app now (PLAN.md §19.10).
-start('assets', 'npm', ['run', 'dev'], { cwd: 'services/assets', env: { ...shared, EAM_API_ONLY: '1', PUBLIC_URL: process.env.PUBLIC_URL ?? 'http://localhost:8080' } });
+// Assets API (every screen is in the FreeFounders web app, PLAN.md §19.10).
+start('assets', 'npm', ['run', 'dev'], { cwd: 'services/assets', env: { ...shared, PUBLIC_URL: process.env.PUBLIC_URL ?? 'http://localhost:8080' } });
 // The FreeFounders web app (apps/web): everything else on :8080.
 start('web', 'npx', ['vite', '--host', '127.0.0.1', '--port', '5176', '--strictPort'], { cwd: 'apps/web' });
 

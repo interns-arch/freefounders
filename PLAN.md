@@ -1182,3 +1182,24 @@ Choices added the same day: Platform **59** tests (+3: each app gets only its ch
 anonymised; wrong hand-over people refused before any app is called and the person stays active; an app's 400 passed on, the
 person switched back on, or kept off when an earlier app already deleted); e2e 12 / 12 (+1: a person with a manager and an
 open task, deleted with the defaults → the task now belongs to the manager, row gone, sign-in refused).
+
+### 19.13 Clean-up: the old screens are deleted (2026-10-10)
+Founder: "delete all the unnecessary things … make it lightweight and fast … without losing" anything. After a read-only
+inventory the founder approved deleting the code nothing uses any more since §19.10 (recoverable from git history):
+
+| Deleted | Why it was safe |
+|---|---|
+| `services/tasks/frontend` (old Tasks web, React 18) | every screen is in `apps/web`; not started by `npm run dev` since §19.10 |
+| `services/tasks/mobile` (Capacitor shell of the old Tasks web) | wrapped the deleted web app; Phase 7 builds the real phone app |
+| `services/assets/apps/web` (old Assets web, React 19) | every screen is in `apps/web`; `@eam/shared` stays (apps/web uses it) |
+| `apps/portal` (Phase 1 portal) | replaced by `apps/web` in Phase 6 |
+
+Follow-ups in the same change: CI drops the "Tasks web" and "Portal" jobs; `scripts/setup.mjs` no longer installs the old
+Tasks web; the Assets dev script and package scripts are API-only (`EAM_API_ONLY` gone); the Assets API no longer serves a
+web build; the Tasks Dockerfile and `render-build.sh` build the API only (Django still answers 404 for non-API paths when no
+build exists). Unused web dependencies removed (Inter, JetBrains Mono fonts, replaced in §19.11). `@eam/shared` is marked
+side-effect free, so its zod schemas only load with the Assets screens that use them: the app's first download went from
+528 KB to 425 KB (gzip 158 KB to 128 KB).
+Kept on purpose (founder's choice): the old worktree `.claude/worktrees/prod-readiness-plan` and the test data in the demo
+database. Disk: about 210 MB of installed packages and builds went with the deleted folders; local test screenshots
+(34 MB) were cleared. CarTrends' live server is not affected: it runs from the original folders, which were not touched.

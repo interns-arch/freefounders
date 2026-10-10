@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# Render build script — builds the React app, then prepares Django.
+# Render build script — prepares Django (API only; the screens are the FreeFounders web app, apps/web).
 set -o errexit
-
-echo "--- frontend build ---"
-cd frontend
-npm ci
-npm run build
-cd ..
 
 echo "--- backend setup ---"
 cd backend

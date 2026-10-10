@@ -1,14 +1,14 @@
-// `npm run dev` — database, API (auto-restart) and web app (hot reload) in one command.
+// `npm run dev` — database and API (auto-restart) in one command. The screens are the FreeFounders web app (apps/web).
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
-import { API_DIST, ensureDatabase, localUrl, publicUrl, ROOT, run, startPostgres, TSC, VITE } from './pg.mjs';
+import { API_DIST, ensureDatabase, localUrl, publicUrl, ROOT, run, startPostgres, TSC } from './pg.mjs';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? localUrl('eam');
 const API_PORT = process.env.API_PORT ?? '3000';
 // PORT is set explicitly so an inherited PORT (e.g. from a preview tool) cannot move the API.
-const PUBLIC_URL = publicUrl(5173);
+const PUBLIC_URL = publicUrl(Number(process.env.API_PORT ?? 3000));
 const env = { DATABASE_URL, NODE_ENV: 'development', PORT: API_PORT, API_PORT, ...(PUBLIC_URL ? { PUBLIC_URL } : {}) };
 
 // A second `npm run dev` would crash on the busy ports; point at the running copy instead.
@@ -22,9 +22,9 @@ const running = await new Promise((resolve) => {
 });
 if (running) {
   console.log('\n  ✔ The app is already running (started in another window).');
-  console.log('  ➜ Open http://localhost:5173  (admin@cartrend.test / Demo@1234)');
+  console.log(`  ➜ API on http://localhost:${API_PORT}/api`);
   if (PUBLIC_URL) console.log(`  ➜ On a phone (same Wi-Fi): ${PUBLIC_URL}`);
-  console.log('  To restart it, close the other window first (or run: npx kill-port 3000 5173), then run npm run dev again.\n');
+  console.log('  To restart it, close the other window first (or run: npx kill-port 3000), then run npm run dev again.\n');
   process.exit(0);
 }
 const portBusy = (port) =>
@@ -32,9 +32,7 @@ const portBusy = (port) =>
     const srv = net.createServer().once('error', () => resolve(true)).once('listening', () => srv.close(() => resolve(false)));
     srv.listen(Number(port));
   });
-// EAM_API_ONLY=1: the FreeFounders web app (apps/web) serves the screens; start only the API.
-const API_ONLY = process.env.EAM_API_ONLY === '1';
-for (const port of API_ONLY ? [API_PORT] : [API_PORT, '5173']) {
+for (const port of [API_PORT]) {
   if (await portBusy(port)) {
     console.error(`\n  ✖ Port ${port} is already in use by another program (maybe an old copy of this app).`);
     console.error(`    Free it with:  npx kill-port ${port}   then run npm run dev again.\n`);
@@ -54,8 +52,6 @@ const children = [
   spawn(process.execPath, [TSC, '-b', '-w', '--preserveWatchOutput', 'apps/api'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } }),
   // Watch only the compiled API: plain --watch also restarts when node_modules files are first loaded.
   spawn(process.execPath, ['--watch-path', API_DIST, path.join(API_DIST, 'main.js')], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, ...env } }),
-  // --host: reachable from phones on the same Wi-Fi (for QR codes).
-  ...(API_ONLY ? [] : [spawn(process.execPath, [VITE, '--host'], { cwd: path.join(ROOT, 'apps', 'web'), stdio: 'inherit', env: { ...process.env, ...env } })]),
 ];
 // Only surface compiler errors from the watcher.
 children[0].stdout.on('data', (buf) => {
@@ -63,7 +59,7 @@ children[0].stdout.on('data', (buf) => {
   if (/error TS/.test(text)) process.stdout.write(text);
 });
 
-console.log('\n  ➜ Open http://localhost:5173  (admin@cartrend.test / Demo@1234)');
+console.log(`\n  ➜ API on http://localhost:${API_PORT}/api`);
 console.log(PUBLIC_URL ? `  ➜ On a phone (same Wi-Fi): ${PUBLIC_URL} — QR codes use this address\n` : '  ! No network address found: QR codes will only open on this PC\n');
 
 let stopping = false;

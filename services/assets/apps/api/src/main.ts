@@ -4,8 +4,6 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
 import { AppModule } from './app.module';
 import { companyMiddleware } from './common/company.middleware';
 import { AllExceptionsFilter } from './common/exception.filter';
@@ -54,22 +52,6 @@ export async function createApp() {
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableShutdownHooks();
 
-  // In production the API also serves the built web app (single origin, no CORS).
-  const webDist = path.resolve(__dirname, '../../web/dist');
-  if (existsSync(path.join(webDist, 'index.html'))) {
-    // redirect: false — "/assets" is an app route, not the build's assets/ folder.
-    // Hashed build files never change; everything else (the page itself, the icon) is re-checked so updates show up.
-    app.useStaticAssets(webDist, {
-      index: false,
-      redirect: false,
-      setHeaders: (res, file) => res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(file) ? 'public, max-age=31536000, immutable' : 'no-cache'),
-    });
-    app.use((req: Request, res: Response, next: NextFunction) => {
-      if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(webDist, 'index.html'));
-    });
-  }
   return app;
 }
 

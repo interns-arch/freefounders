@@ -11,7 +11,7 @@ const run = (cmd, args, cwd) => {
 };
 
 // '.' = the root workspace: the web app (apps/web) and the shared packages (packages/*).
-for (const dir of ['.', 'services/platform', 'services/assets', 'services/tasks/frontend']) run('npm', ['ci', '--no-audit', '--no-fund'], dir);
+for (const dir of ['.', 'services/platform', 'services/assets']) run('npm', ['ci', '--no-audit', '--no-fund'], dir);
 
 const backend = 'services/tasks/backend';
 const venvPy = path.join(ROOT, backend, WIN ? '.venv/Scripts/python.exe' : '.venv/bin/python');
