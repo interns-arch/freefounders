@@ -6,7 +6,7 @@ import * as Location from 'expo-location';
 
 export type PositionResult =
   | { ok: true; latitude: number; longitude: number; accuracy: number | null }
-  | { ok: false; message: string; openSettings?: boolean };
+  | { ok: false; message: string; openSettings?: boolean; permission?: boolean };
 
 function timeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -29,11 +29,12 @@ export async function currentPosition(): Promise<PositionResult> {
   if (!perm.granted && perm.canAskAgain) perm = await Location.requestForegroundPermissionsAsync();
   if (!perm.granted) {
     return perm.canAskAgain
-      ? { ok: false, message: 'FreeFounders needs your location (your company checks that you are at the office). Try again and choose "Allow".' }
+      ? { ok: false, message: 'FreeFounders needs your location (your company checks that you are at the office). Tap "Allow location" and choose "Allow".', permission: true }
       : {
           ok: false,
           message: 'Location is blocked for this app. Open the phone’s Settings → Apps → FreeFounders (or Expo Go) → Permissions → Location, choose "Allow only while using the app", then try again.',
           openSettings: true,
+          permission: true,
         };
   }
   if (!(await Location.hasServicesEnabledAsync())) {

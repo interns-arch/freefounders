@@ -118,6 +118,11 @@ export function TodayTab() {
         </div>
       </section>
       <ErrorNote>{p.err}</ErrorNote>
+      {p.fix && (
+        <Button size="lg" className="h-12 w-full max-w-2xl rounded-xl" onClick={p.fix.run}>
+          <MapPin className="size-5" /> {p.fix.label}
+        </Button>
+      )}
       <OkNote className="text-base">{p.msg}</OkNote>
       <div className="grid max-w-2xl grid-cols-2 gap-3 md:grid-cols-4">
         <Tile icon={LogIn} tone="success" label="Check in" value={time(a?.check_in)} />

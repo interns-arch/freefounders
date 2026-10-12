@@ -87,9 +87,17 @@ export function Shell() {
         switch (r.type) {
           case 'location': {
             const pos = await currentPosition();
-            send(pos.ok ? replyOk(r.id, { latitude: pos.latitude, longitude: pos.longitude, accuracy: pos.accuracy }) : replyError(r.id, pos.message));
+            send(
+              pos.ok
+                ? replyOk(r.id, { latitude: pos.latitude, longitude: pos.longitude, accuracy: pos.accuracy })
+                : replyError(r.id, pos.message, pos.permission ? { code: 'permission', permission: 'location', settings: !!pos.openSettings } : undefined),
+            );
             return;
           }
+          case 'open-settings':
+            await Linking.openSettings();
+            send(replyOk(r.id));
+            return;
           case 'photo':
             if (selfie) return send(replyError(r.id, 'The camera is already open.'));
             setSelfie(r);

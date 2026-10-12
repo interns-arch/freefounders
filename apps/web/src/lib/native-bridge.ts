@@ -17,13 +17,17 @@ export interface AppInfo {
   version: string;
 }
 
-export type AppRequestType = 'location' | 'photo' | 'download' | 'print';
+export type AppRequestType = 'location' | 'photo' | 'download' | 'print' | 'open-settings';
 
 interface Reply {
   id: string;
   ok: boolean;
   data?: unknown;
   error?: string;
+  /** Why it failed, when the person can fix it: a permission the phone blocked (settings = only in the phone's Settings). */
+  code?: 'permission';
+  permission?: 'location' | 'camera';
+  settings?: boolean;
 }
 
 declare global {
@@ -43,6 +47,8 @@ export const isInApp = () => appInfo() !== null;
 
 /** An answer from the app that says no (`code` is "cancelled", "timeout" or "failed"). */
 export class AppRequestError extends Error {
+  /** Set when the phone blocked a permission: which one, and whether only the phone's Settings can allow it again. */
+  blocked?: { permission: 'location' | 'camera'; settings: boolean };
   constructor(
     message: string,
     readonly code: 'cancelled' | 'timeout' | 'failed' = 'failed',
@@ -57,6 +63,7 @@ const TIMEOUTS: Record<AppRequestType, number> = {
   photo: 10 * 60_000, // the person is taking a selfie
   download: 60_000,
   print: 10 * 60_000,
+  'open-settings': 30_000,
 };
 
 const pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -79,7 +86,9 @@ function onMessage(event: Event) {
   if (reply.ok) waiting.resolve(reply.data ?? null);
   else {
     const msg = reply.error || 'The app could not do that.';
-    waiting.reject(new AppRequestError(msg === 'cancelled' ? 'Cancelled.' : msg, msg === 'cancelled' ? 'cancelled' : 'failed'));
+    const err = new AppRequestError(msg === 'cancelled' ? 'Cancelled.' : msg, msg === 'cancelled' ? 'cancelled' : 'failed');
+    if (reply.code === 'permission' && reply.permission) err.blocked = { permission: reply.permission, settings: !!reply.settings };
+    waiting.reject(err);
   }
 }
 
@@ -179,4 +188,9 @@ export async function printPage(): Promise<void> {
   } catch (e) {
     if (!(e instanceof AppRequestError)) throw e;
   }
+}
+
+/** Phone app: opens this app's page in the phone's Settings (to allow a blocked permission). */
+export async function openAppSettings(): Promise<void> {
+  if (isInApp()) await appRequest('open-settings').catch(() => {});
 }

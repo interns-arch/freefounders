@@ -17,6 +17,7 @@
 
 export type AppRequest =
   | { id: string; type: 'location' }
+  | { id: string; type: 'open-settings' }
   | { id: string; type: 'photo'; title: string; optional: boolean }
   | { id: string; type: 'download'; filename: string; mime: string; base64: string }
   | { id: string; type: 'print'; html: string };
@@ -50,6 +51,8 @@ export function parseMessage(raw: unknown): Parsed {
   switch (m.type) {
     case 'location':
       return { kind: 'request', request: { id, type: 'location' } };
+    case 'open-settings':
+      return { kind: 'request', request: { id, type: 'open-settings' } };
     case 'photo':
       return {
         kind: 'request',
@@ -70,7 +73,8 @@ export function parseMessage(raw: unknown): Parsed {
 }
 
 export const replyOk = (id: string, data: unknown = null) => JSON.stringify({ id, ok: true, data });
-export const replyError = (id: string, error: string) => JSON.stringify({ id, ok: false, error });
+/** `extra` tells the web why (e.g. {code: 'permission', permission: 'location', settings: true}) so it can offer "Allow". */
+export const replyError = (id: string, error: string, extra?: Record<string, unknown>) => JSON.stringify({ ...extra, id, ok: false, error });
 
 /**
  * "scheme://host[:port]" of an http(s) address, lower-case, without a default port; null for anything else. Plain string

@@ -7,8 +7,8 @@
 import { errorMessage } from '@freefounders/core';
 import { type AttendanceToday, useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
 import { useState } from 'react';
-import { AppRequestError, appRequest, isInApp } from '@/lib/native-bridge';
-import { currentPosition } from './face';
+import { AppRequestError, appRequest, isInApp, openAppSettings } from '@/lib/native-bridge';
+import { LocationBlockedError, currentPosition } from './face';
 import { FaceCapture } from './face-capture';
 
 type Which = 'check_in' | 'check_out';
@@ -26,18 +26,24 @@ export function usePunch(onDone?: (which: Which) => void) {
   const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null);
   const [appCamera, setAppCamera] = useState(false);
   const [inApp] = useState(isInApp);
+  /** Location was blocked on the last try: the punch to retry and whether only the phone's Settings can allow it. */
+  const [blocked, setBlocked] = useState<{ which: Which; settings: boolean } | null>(null);
 
   const send = async (which: Which, faceDescriptor?: number[] | null, photo?: string | null) => {
     setErr('');
     setMsg('');
+    setBlocked(null);
     setLocating(true);
     let pos: { latitude?: number; longitude?: number };
+    const required = !!q.data?.geofence_enabled;
     try {
       // In the app the location is asked for only when the company checks it, and its reason is shown when it fails.
-      pos = inApp ? (q.data?.geofence_enabled ? await currentPosition({ required: true }) : {}) : await currentPosition();
+      pos = inApp ? (required ? await currentPosition({ required: true }) : {}) : await currentPosition({ required });
     } catch (e) {
       setLocating(false);
       setErr(e instanceof Error ? e.message : 'Your location could not be found.');
+      if (e instanceof AppRequestError && e.blocked?.permission === 'location') setBlocked({ which, settings: e.blocked.settings });
+      else if (e instanceof LocationBlockedError) setBlocked({ which, settings: false });
       return;
     }
     setLocating(false);
@@ -103,5 +109,12 @@ export function usePunch(onDone?: (which: Which) => void) {
       />
     ) : null;
 
-  return { query: q, data, usesCamera, markIt, busy, waitingForCamera: !!camFor || appCamera, msg, err, camera, position };
+  /** A one-tap way out of a blocked permission, shown next to the error: ask again, or open the phone's Settings. */
+  const fix = blocked
+    ? blocked.settings
+      ? { label: 'Open settings to allow location', run: () => void openAppSettings() }
+      : { label: 'Allow location', run: () => markIt(blocked.which) }
+    : null;
+
+  return { query: q, data, usesCamera, markIt, busy, waitingForCamera: !!camFor || appCamera, msg, err, fix, camera, position };
 }

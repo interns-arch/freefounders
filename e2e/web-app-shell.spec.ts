@@ -57,9 +57,9 @@ async function newPerson(request: APIRequestContext, owner: string) {
 type Logged = { type?: string; id?: string; title?: string; optional?: boolean; filename?: string; mime?: string; base64?: string };
 
 /** A context that looks like the Android shell: phone size, the app marker and a fake native bridge. */
-async function shellContext(browser: Browser) {
+async function shellContext(browser: Browser, opts: { locationBlocked?: boolean } = {}) {
   const ctx = await browser.newContext(PHONE);
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript((blocked: boolean) => {
     const w = window as unknown as Record<string, unknown>;
     const log: unknown[] = [];
     w.__shellLog = log;
@@ -70,7 +70,11 @@ async function shellContext(browser: Browser) {
         const m = JSON.parse(raw) as { id?: string; type: string };
         log.push(m);
         if (!m.id) return;
-        if (m.type === 'location') return reply({ id: m.id, ok: true, data: { latitude: 12.9716, longitude: 77.5946, accuracy: 6 } });
+        if (m.type === 'location')
+          return blocked
+            ? reply({ id: m.id, ok: false, error: 'Location is blocked for this app.', code: 'permission', permission: 'location', settings: true })
+            : reply({ id: m.id, ok: true, data: { latitude: 12.9716, longitude: 77.5946, accuracy: 6 } });
+        if (m.type === 'open-settings') return reply({ id: m.id, ok: true, data: null });
         if (m.type === 'photo') {
           // What the app's front camera hands back: a real JPEG as a data URL.
           const c = document.createElement('canvas');
@@ -85,7 +89,7 @@ async function shellContext(browser: Browser) {
         return reply({ id: m.id, ok: false, error: `unknown ${m.type}` });
       },
     };
-  });
+  }, !!opts.locationBlocked);
   return ctx;
 }
 
@@ -158,4 +162,42 @@ test('in the app: a report download goes to the app, not the browser', async ({ 
   ]);
   expect(browserDownloads).toBe(0);
   await ctx.close();
+});
+
+test('location blocked → an Allow button: the app opens its Settings; the browser asks again', async ({ browser, request }) => {
+  const owner = await token(request);
+  const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
+  const restore = Object.fromEntries(['photo', 'geofence_enabled', 'face_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: true, face_enabled: false } })).ok()).toBeTruthy();
+  const person = await newPerson(request, owner);
+  try {
+    // In the app: the phone blocked location for good → "Open settings to allow location" asks the app to open Settings.
+    const ctx = await shellContext(browser, { locationBlocked: true });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await signIn(page, person.login, person.password);
+    await expect(page).toHaveURL(/\/attendance/);
+    await page.getByRole('button', { name: 'Check in' }).click();
+    await expect(page.getByText('Location is blocked for this app.')).toBeVisible();
+    await page.getByRole('button', { name: 'Open settings to allow location' }).click();
+    await expect.poll(async () => (await shellLog(page)).some((m) => m.type === 'open-settings')).toBe(true);
+    await ctx.close();
+
+    // In a browser that refused location: "Allow location" tries again (the browser asks again when it may).
+    const web = await browser.newContext(PHONE);
+    const wp = await web.newPage();
+    await wp.goto('/');
+    await signIn(wp, person.login, person.password);
+    await wp.getByRole('button', { name: 'Check in' }).click();
+    await expect(wp.getByText(/Your browser is blocking location for this site/)).toBeVisible();
+    await expect(wp.getByRole('button', { name: 'Allow location' })).toBeVisible();
+    await web.grantPermissions(['geolocation']);
+    await web.setGeolocation({ latitude: 12.9716, longitude: 77.5946 });
+    await wp.getByRole('button', { name: 'Allow location' }).click();
+    await expect(wp.getByText(/Your browser is blocking location for this site/)).toHaveCount(0);
+    await web.close();
+  } finally {
+    await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
+    await person.remove();
+  }
 });

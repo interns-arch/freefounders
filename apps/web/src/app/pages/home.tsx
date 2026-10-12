@@ -335,10 +335,17 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
             {p.err && (
               <p role="alert" className="mb-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
                 {p.err}{' '}
-                <button type="button" className="cursor-pointer font-medium underline" onClick={() => onOpen('/attendance/history')}>
-                  Request a correction
-                </button>
+                {!p.fix && (
+                  <button type="button" className="cursor-pointer font-medium underline" onClick={() => onOpen('/attendance/history')}>
+                    Request a correction
+                  </button>
+                )}
               </p>
+            )}
+            {p.fix && (
+              <Button size="lg" className="mb-2 h-12 w-full" onClick={p.fix.run}>
+                {p.fix.label}
+              </Button>
             )}
             {p.msg && (
               <p role="status" className="mb-2 rounded-lg border border-success/30 bg-success/8 px-3 py-2 text-sm text-success">

@@ -85,12 +85,24 @@ export async function currentPosition(options: { required?: boolean } = {}): Pro
       return {};
     }
   }
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve({});
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
-      () => resolve({}),
+      (e) => {
+        // Location is needed (office geofence) and the browser refused: say how to allow it.
+        if (options.required && e.code === e.PERMISSION_DENIED) reject(new LocationBlockedError());
+        else resolve({});
+      },
       { timeout: 8000, enableHighAccuracy: true },
     );
   });
+}
+
+/** The browser blocked location for this site while the company checks the office location. */
+export class LocationBlockedError extends Error {
+  constructor() {
+    super('Your browser is blocking location for this site, and your company checks that you are at the office. Tap "Allow location"; if nothing pops up, click the lock icon next to the address → Location → Allow, then try again.');
+    this.name = 'LocationBlockedError';
+  }
 }
