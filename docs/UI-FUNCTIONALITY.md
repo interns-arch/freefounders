@@ -28,6 +28,20 @@ Generated from the code on 2026-10-08. Source of truth if anything here disagree
 > out). Sign-in: "Show" / "Hide" on the password. Keyboard: Alt+1..4 = Home / Attendance / Tasks / Assets, `?` = shortcuts.
 > The "Workspace chooser" section below describes the old page.
 
+> **Update 2026-10-10, later (PLAN.md §19.15): attendance for managers.** Attendance section bar: "Team" became **"Live team"**
+> (`/attendance/team`), plus **"Daily"** (`/attendance/daily?date=`), **"Dashboard"** (`/attendance/dashboard`) and **"Reports"**
+> (`/attendance/reports`), for approvers, HR and view-all; menu (Manage): "Live attendance", "Daily attendance", "Dashboard",
+> "Reports". Live/Daily: tiles that filter (group "Filter by status": Present, Late, Not checked in / Absent, On leave, Off /
+> holiday, Checked out), "Search staff", "Department", "Showing N of M staff", per row "History of {name}" and (HR) "Mark {name}"
+> (dialog: Mark as present / half day / absent + Reason); Live says "Live · {day}", refreshes every minute ("Refresh");
+> Daily has "Previous day" / "Date" / "Next day" / "Today". Dashboard: "Previous month" / "Next month", search, department,
+> "Show inactive staff", sortable table (Employee, Employee ID, Phone, Present, Absent, Half day, Late, Leave, Off / hol.,
+> Hours; phones: one "Month" line of chips), a row opens `/attendance/history?user=&name=&from=` with "Back to …",
+> "Download report" (monthly summary XLSX), "Import attendance" (HR). Reports: "Report type", Date / Month / From–To,
+> "Department", "Format" (Excel (XLSX) / CSV), "Download", "Import attendance" (HR); "Recent downloads" (this device, last 10,
+> "Download again"). Import dialog: template "XLSX" / "CSV", "Attendance file (.xlsx or .csv)", "Check file", preview table
+> (OK / Error + reason), "Import N rows", then "Created · Updated · Skipped" and "Done".
+
 > **Update 2026-10-09, later (PLAN.md §19.10): no more classic screens.** §0.6 is void: Leads (`/tasks/leads`, `?lead=`), AI inbox
 > (`/tasks/intake`), Mistakes & SOPs (`/tasks/mistakes`, `?tab=sops`, `?open=`), Forms (`/tasks/forms`, `/tasks/forms/:id`,
 > `…/submissions`, `…/fill`; public `/f/:token?c=<company>`), Links (`/tasks/links`), Idea board (`/tasks/ideas`), Payroll & My

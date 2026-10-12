@@ -137,6 +137,10 @@ class User(AbstractUser):
     # Platform provisions the user; Platform tokens are only accepted for a
     # user whose id here matches the token's subject.
     platform_person_id = models.UUIDField(null=True, blank=True, unique=True, editable=False)
+    # From the Platform's People directory (PLAN.md §17.1, §19.15): shown on the attendance lists and
+    # reports, and how an attendance import finds the person. Blank on a standalone install.
+    employee_code = models.CharField(max_length=40, blank=True, default="", db_index=True)
+    designation = models.CharField(max_length=120, blank=True, default="")
 
     @property
     def is_admin_role(self) -> bool:

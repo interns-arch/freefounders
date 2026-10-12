@@ -112,6 +112,8 @@ def provision(request):
             user.set_unusable_password()
             created = True
         user.platform_person_id = person_id
+        if code:
+            user.employee_code = code[:40]
         user.save()
     return Response(
         {"userId": user.pk, "username": user.username, "created": created, "active": user.is_active},
@@ -252,6 +254,12 @@ def _import_people(data):
                 manager = None
             if (manager.pk if manager else None) != user.reporting_manager_id:
                 fields["reporting_manager"] = manager
+            # Employee code and designation (PLAN.md §19.15); only when the Platform sends them.
+            for key, field, size in (("employeeCode", "employee_code", 40), ("designation", "designation", 120)):
+                if key in p:
+                    value = _clean(p.get(key))[:size]
+                    if getattr(user, field) != value:
+                        fields[field] = value
             active = p.get("status", "active") == "active"
             if user.is_active != active:
                 fields["is_active"] = active

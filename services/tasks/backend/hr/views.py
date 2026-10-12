@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import status as http, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.negotiation import DefaultContentNegotiation
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -73,6 +74,24 @@ def _target_user(request, param="user"):
     if not target:
         raise PermissionDenied("You cannot view this employee's records.")
     return target
+
+
+class _FileNegotiation(DefaultContentNegotiation):
+    """File endpoints take ?format=xlsx|csv as their own parameter (DRF would read it as a renderer); errors stay JSON."""
+
+    def select_renderer(self, request, renderers, format_suffix=None):
+        return renderers[0], renderers[0].media_type
+
+
+def _file(content: bytes, filename: str):
+    from django.http import HttpResponse
+    kind = ("text/csv; charset=utf-8" if filename.endswith(".csv")
+            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    res = HttpResponse(content, content_type=kind)
+    res["Content-Disposition"] = f'attachment; filename="{filename}"'
+    res["Access-Control-Expose-Headers"] = "Content-Disposition"
+    res["Cache-Control"] = "no-store"
+    return res
 
 
 # ------------------------------------------------------------ attendance
@@ -163,6 +182,61 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"], permission_classes=[HasCapability.of("hr.approve")])
     def team_today(self, request):
         return Response(services.today_summary(list(managed_users(request.user))))
+
+    # ---- attendance for managers (PLAN.md §19.15): live / daily / dashboard / reports / import
+
+    def _team(self, request):
+        from . import team
+        p = request.query_params
+        return team.team_users(request.user, inactive=p.get("inactive") in ("1", "true"),
+                               department=p.get("department", ""), q=p.get("q", ""))
+
+    @action(detail=False, methods=["get"])
+    def team_day(self, request):
+        """Everyone's status for one day (default today)."""
+        from . import team
+        day = team.parse_day(request.query_params["date"]) if request.query_params.get("date") else timezone.localdate()
+        return Response(team.team_day(self._team(request), day))
+
+    @action(detail=False, methods=["get"])
+    def team_month(self, request):
+        """Per-person totals for a month (the attendance dashboard)."""
+        from . import team
+        year, month, first, last = team.parse_month(request.query_params)
+        return Response(team.team_month(self._team(request), year, month, first, last))
+
+    @action(detail=False, methods=["get"], content_negotiation_class=_FileNegotiation)
+    def report(self, request):
+        """A report file: ?type=daily|monthly_summary|monthly_register|late|leave&format=xlsx|csv."""
+        from . import team
+        kind = request.query_params.get("type", "daily")
+        fmt = request.query_params.get("format", "xlsx")
+        if kind not in team.REPORT_TYPES:
+            raise ValidationError({"type": f"Use one of: {', '.join(team.REPORT_TYPES)}."})
+        if fmt not in ("xlsx", "csv"):
+            raise ValidationError({"format": "Use xlsx or csv."})
+        title, stem, header, rows = team.build_report(kind, self._team(request), request.query_params)
+        return _file(team.to_xlsx(title, header, rows) if fmt == "xlsx" else team.to_csv(header, rows), f"{stem}.{fmt}")
+
+    @action(detail=False, methods=["get"], permission_classes=[HasCapability.of("hr.manage")],
+            content_negotiation_class=_FileNegotiation)
+    def import_template(self, request):
+        from . import team
+        if request.query_params.get("format", "xlsx") == "csv":
+            return _file(team.to_csv(team.TEMPLATE_HEADER, []), "attendance-import-template.csv")
+        return _file(team.to_xlsx("Attendance", team.TEMPLATE_HEADER, [], extra_sheet=("How to fill", team.TEMPLATE_NOTES)),
+                     "attendance-import-template.xlsx")
+
+    @action(detail=False, methods=["post"], url_path="import", permission_classes=[HasCapability.of("hr.manage")],
+            parser_classes=[MultiPartParser, FormParser])
+    def import_rows(self, request):
+        """Upload an XLSX/CSV of days: dry_run=true (default) previews, dry_run=false applies in one transaction."""
+        from . import team
+        upload = request.FILES.get("file")
+        if not upload:
+            raise ValidationError({"file": "Choose a file to upload."})
+        dry_run = str(request.data.get("dry_run", "true")).lower() not in ("false", "0", "no")
+        return Response(team.import_attendance(upload, request.user, dry_run=dry_run))
 
     @action(detail=False, methods=["post"], permission_classes=[HasCapability.of("hr.manage")])
     def manual_mark(self, request):

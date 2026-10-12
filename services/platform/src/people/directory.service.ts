@@ -170,6 +170,8 @@ export class DirectoryService {
             designation: p.designation,
             reportsTo: p.reportsTo,
             joinDate: p.joinDate,
+            // Attendance lists, reports and the attendance import match on it (PLAN.md §19.15).
+            employeeCode: p.employeeCode,
           })),
         });
         result[app] = res.applied ? 'ok' : 'stale';

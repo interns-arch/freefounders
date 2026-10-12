@@ -3,3 +3,4 @@ export * from './attendance';
 export * from './leave';
 export * from './settings';
 export * from './payroll';
+export * from './team';

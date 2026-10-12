@@ -65,3 +65,15 @@ class PeopleSyncTests(TestCase):
         data = self.api.get("/api/internal/people").json()
         mia = next(p for p in data["people"] if p["personId"] == str(self.mia_pid))
         self.assertEqual(mia, {"personId": str(self.mia_pid), "departmentCode": "sales", "reportsTo": str(self.boss_pid)})
+
+    def test_employee_code_and_designation_arrive(self):
+        """Shown on the attendance lists and used by the attendance import (PLAN.md §19.15)."""
+        self.push(people=[{"personId": str(self.mia_pid), "status": "active", "employeeCode": " CT-007 ", "designation": "Driver"}])
+        self.mia.refresh_from_db()
+        self.assertEqual((self.mia.employee_code, self.mia.designation), ("CT-007", "Driver"))
+        self.push(version=2, people=[{"personId": str(self.mia_pid), "status": "active"}])
+        self.mia.refresh_from_db()
+        self.assertEqual(self.mia.employee_code, "CT-007", "left alone when the push does not carry it")
+        self.push(version=3, people=[{"personId": str(self.mia_pid), "status": "active", "employeeCode": None, "designation": None}])
+        self.mia.refresh_from_db()
+        self.assertEqual((self.mia.employee_code, self.mia.designation), ("", ""))

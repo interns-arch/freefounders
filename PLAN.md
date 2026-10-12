@@ -1244,3 +1244,63 @@ context lands on `/attendance` and its bottom bar's Home tab opens `/?home=1`, a
 Not in this change (owned by the HR screens): on phones the Today page shows its four tiles before the mark-attendance
 card; moving the card first would put the punch buttons higher.
 
+
+### 19.15 Attendance for managers: live, daily, dashboard, reports, import (2026-10-10)
+Founder showed the SalaryBox screens CarTrends uses today (Live / Daily attendance, Attendance Dashboard, Download Reports) as
+ideas for our Attendance section. Everything that existed stays; four sections and an import were added.
+
+**Who sees what.** Approvers (hr.approve, or a reports-to manager under the "manager approves" rule) see their team: their
+department (hr.approve) and/or their direct reports (manager rule). hr.manage and tasks.view_all see the whole company. Anyone
+else gets 403. Import and the template are hr.manage only. All of it runs in the request's company schema (`TENANCY=schemas`).
+
+**Screens** (`apps/web/src/features/hr/`: `live.tsx`, `daily.tsx`, `dashboard.tsx`, `reports.tsx`, `import-dialog.tsx`; data
+from `packages/core/src/hr/team.ts`)
+- **Live team** `/attendance/team` (menu "Live attendance"; replaces the old Team tab, same URL): tiles Present · Late · Not
+  checked in · On leave · Off / holiday · Checked out (each filters the list), search (name, phone, employee ID), department,
+  rows with avatar, employee ID / designation, status + Late / Left early / No check-out flags, in/out with punch photos, hours,
+  "History", and "Mark" for HR (present / half day / absent + reason, any date up to today). Refreshes every 60 s.
+- **Daily attendance** `/attendance/daily?date=YYYY-MM-DD`: the same list for any day, ← / → / Today; past working days with no
+  punch show Absent, plus holiday / week-off / leave; future days "Upcoming".
+- **Attendance dashboard** `/attendance/dashboard`: month picker, department, search, "Show inactive staff", "Showing N staff";
+  sortable columns Present (late days included), Absent, Half day, Late (late check-ins), Leave, Off / holiday, Hours; a row
+  opens that person's month calendar (`/attendance/history?user=<id>&name=&from=dashboard`, the existing MonthView); "Download
+  report" (monthly summary XLSX) and "Import attendance" (HR).
+- **Reports** `/attendance/reports`: report type, period, department, XLSX or CSV, "Download" (made on the spot, no queue).
+  "Recent downloads" is kept on this device only (localStorage `ff-attendance-reports`, last 10) with "Download again".
+
+**API** (Tasks, `hr/team.py` + actions on the attendance viewset)
+- `GET /attendance/team_day/?date=&department=&q=&inactive=0|1` → `{date, is_today, holiday, week_off, rows, departments}`;
+  a stored row wins, else holiday → week-off → future: null → today: `not_checked_in` → past: `absent` (the
+  `monthly_report` rule). Three queries whatever the team size.
+- `GET /attendance/team_month/?year=&month=&department=&q=&inactive=` → per person `totals` (same shape and numbers as
+  `monthly_report`), `present_days`, `late_marks`, `working_minutes`, `total_hours`. One query for the month's rows, one for
+  holidays (approved leave is already stored as leave rows).
+- `GET /attendance/report/?type=…&format=xlsx|csv` → attachment. Types: `daily` (`date`; ID, name, department, designation,
+  phone, status, in, out, hours, late, early out, note), `monthly_summary` (`year`,`month`), `monthly_register` (`year`,`month`;
+  muster roll, one column per day with P / A / H / L / WO / HO, late = P, then the counts), `late` (`from`,`to`; date, person,
+  check in, minutes late against the work start, check out, hours), `leave` (`from`,`to`; leave requests touching the range, any
+  status). At most 366 days. XLSX via openpyxl (pinned 3.1.5): bold, frozen header, column widths, dates as text dd-mm-yyyy;
+  CSV in UTF-8 with a BOM (Excel). Names like `attendance-daily-2026-10-10.xlsx`, `attendance-register-2026-10.csv`.
+- `GET /attendance/import_template/?format=xlsx|csv` and `POST /attendance/import/` (multipart `file`, `dry_run=true|false`) →
+  `{rows:[{line, employee_id, name, date, status, check_in, check_out, note, ok, error}], created, updated, skipped, skipped_rows}`.
+- `manual_mark` already took an optional `date` (today or earlier); the screen now sends it with present / half day / absent.
+- The file endpoints read `?format=` themselves (DRF would treat it as a renderer); errors stay JSON.
+
+**Import format.** Columns (header row required, names matched loosely): Employee ID, Date (YYYY-MM-DD; dd-mm-yyyy and Excel
+dates accepted), Check in (HH:MM), Check out (HH:MM), Status (present / half_day / absent / leave; blank = worked out from the
+times), Note. People are matched by employee ID, then username, inactive people included (old history). Row errors: missing or
+unknown employee, bad / future date, bad time, check-out without check-in or before it, unknown status, times on an absent /
+leave day, the same person and date twice. Applying writes every good row in one transaction, computed like a punch (late
+against work start + grace, early out against work end, working minutes; "present" becomes "late" when late; a blank status
+with too few hours becomes a half day), note "Imported by {name} on {dd-mm-yyyy}[: note]". An existing day is overwritten
+(re-importing updates, never duplicates). At most 2 MB / 5,000 rows per file.
+
+**Employee ID and designation in Tasks.** Tasks had neither, so `accounts.User` got `employee_code` and `designation` (migration
+0020). Provision stores the employee code; the People push (§17.1) now also carries `employeeCode` (Platform
+`directory.service.ts`) and Tasks stores both when present. Assets ignores the extra field.
+
+**Removed:** the old Team tab (`TeamTab`) and its `useTeamToday` hook (the `team_today` endpoint stays for the API tests).
+
+**Tests.** Tasks `hr/tests_team_views.py` (22: scope, classification, month totals = `monthly_report`, no query per person,
+XLSX/CSV contents, import validation, apply, re-import, XLSX cells, manual mark date) + 1 people-sync test; Platform integration
+test updated for `employeeCode`. e2e `web-attendance-team.spec.ts` (3: Live/Daily/Dashboard, Reports XLSX+CSV, Import → Daily).

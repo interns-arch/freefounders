@@ -1,4 +1,4 @@
-/** Attendance: today, check in/out, the monthly view, corrections, team today, punch photos (old pages/HR.jsx). */
+/** Attendance: today, check in/out, the monthly view, corrections, manual mark, punch photos (old pages/HR.jsx). Team views: team.ts. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
 import type { UserBrief } from '../tasks/types';
@@ -151,35 +151,13 @@ export function usePendingCorrections(enabled = true) {
   });
 }
 
-export interface TeamTodayRow {
-  user_id: number;
-  name: string;
-  department: string;
-  status: AttendanceStatus;
-  check_in: string | null;
-  check_out: string | null;
-  working_minutes: number;
-  attendance_id: number | null;
-  has_check_in_photo: boolean;
-  has_check_out_photo: boolean;
-}
+export type ManualMarkStatus = 'present' | 'half_day' | 'absent';
 
-export interface TeamToday {
-  date: string;
-  counts: Partial<Record<AttendanceStatus, number>>;
-  rows: TeamTodayRow[];
-}
-
-/** GET /attendance/team_today/ */
-export function useTeamToday(enabled = true) {
-  return useQuery({ queryKey: ['hr', 'team-today'], queryFn: () => tasksApi.get<TeamToday>('/attendance/team_today/'), enabled });
-}
-
-/** POST /attendance/manual_mark/ {user, status, reason} (hr.manage). */
+/** POST /attendance/manual_mark/ {user, status, reason, date?} (hr.manage). `date` (YYYY-MM-DD, today or earlier) defaults to today. */
 export function useManualMark() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { user: number; status: 'present'; reason: string }) => tasksApi.post('/attendance/manual_mark/', body),
+    mutationFn: (body: { user: number; status: ManualMarkStatus; reason: string; date?: string }) => tasksApi.post('/attendance/manual_mark/', body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hr'] }),
   });
 }

@@ -1,118 +1,14 @@
-/** HR → Team (who is in today, with punch photos; manual mark) and Approvals (leave + corrections). */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { type TeamTodayRow, useManualMark, usePendingCorrections, usePendingLeaves, useReviewHrRequest, useTeamToday } from '@freefounders/core/hr';
-import { ArrowLeft, CalendarCheck, Check, ClipboardCheck, Clock3, Inbox, Palmtree, Sun, UserRoundX, X } from 'lucide-react';
+/** HR → Approvals (leave + corrections). Who is in today lives in live.tsx / daily.tsx (PLAN.md §19.15). */
+import { errorMessage } from '@freefounders/core';
+import { usePendingCorrections, usePendingLeaves, useReviewHrRequest } from '@freefounders/core/hr';
+import { Check, ClipboardCheck, Inbox, Palmtree, X } from 'lucide-react';
 import { useState } from 'react';
-import { useConfirm } from '@/components/common/confirm';
-import { EmptyState, ErrorState } from '@/components/common/page';
+import { EmptyState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, Card, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { Chip, CountPill, ErrorNote, OkNote, Tile, fmtDay, fmtTime } from '../tasks/general/parts';
-import { MonthView } from './attendance';
-import { AttendanceChip, PunchPhoto, hrs } from './parts';
-
-export function TeamTab() {
-  const access = useAccess();
-  const canManage = access.tasks.can('hr.manage');
-  const q = useTeamToday();
-  const mark = useManualMark();
-  const confirm = useConfirm();
-  const [msg, setMsg] = useState('');
-  const [viewing, setViewing] = useState<TeamTodayRow | null>(null);
-
-  const markPresent = async (r: TeamTodayRow) => {
-    setMsg('');
-    const ok = await confirm({
-      title: `Mark ${r.name} present?`,
-      note: { label: 'Reason', placeholder: 'e.g. face lock not working', required: true },
-      confirmText: 'Mark present',
-    });
-    if (!ok.confirmed) return;
-    mark.mutate({ user: r.user_id, status: 'present', reason: ok.note }, { onSuccess: () => setMsg(`${r.name} marked present ✅`) });
-  };
-
-  if (viewing)
-    return (
-      <div className="space-y-3">
-        <Button variant="outline" size="sm" onClick={() => setViewing(null)}>
-          <ArrowLeft /> Back to team
-        </Button>
-        <MonthView userId={viewing.user_id} userName={viewing.name} />
-      </div>
-    );
-  if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
-  if (!q.data) return <Skeleton className="h-64 max-w-4xl" />;
-  const c = q.data.counts;
-
-  return (
-    <div className="max-w-5xl space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-        <Tile icon={CalendarCheck} tone="success" label="Present" value={c.present || 0} />
-        <Tile icon={Clock3} tone="warning" label="Late" value={c.late || 0} alert={(c.late ?? 0) > 0} />
-        <Tile icon={Sun} tone="warning" label="Half Day" value={c.half_day || 0} />
-        <Tile icon={Palmtree} tone="info" label="On Leave" value={c.leave || 0} />
-        <Tile icon={UserRoundX} tone="neutral" label="Not checked in" value={c.not_checked_in || 0} alert={(c.not_checked_in ?? 0) > 0} />
-      </div>
-      {mark.error && <ErrorNote>{errorMessage(mark.error)}</ErrorNote>}
-      <OkNote>{msg}</OkNote>
-      <Card className="overflow-hidden">
-        <Table>
-          <THead>
-            <TR>
-              <TH>Employee</TH>
-              <TH>Department</TH>
-              <TH>Status</TH>
-              <TH>In</TH>
-              <TH>Out</TH>
-              <TH>Worked</TH>
-              <TH />
-            </TR>
-          </THead>
-          <TBody>
-            {q.data.rows.map((r) => (
-              <TR key={r.user_id}>
-                <TD className="font-medium">
-                  <span className="flex items-center gap-2">
-                    <Avatar name={r.name} className="size-7" />
-                    {r.name}
-                  </span>
-                </TD>
-                <TD>{r.department}</TD>
-                <TD>
-                  <AttendanceChip status={r.status} />
-                </TD>
-                <TD className="whitespace-nowrap">
-                  {fmtTime(r.check_in)}
-                  {r.has_check_in_photo && <PunchPhoto id={r.attendance_id} which="in" label={`${r.name} check-in photo`} />}
-                </TD>
-                <TD className="whitespace-nowrap">
-                  {fmtTime(r.check_out)}
-                  {r.has_check_out_photo && <PunchPhoto id={r.attendance_id} which="out" label={`${r.name} check-out photo`} />}
-                </TD>
-                <TD>{hrs(r.working_minutes)}</TD>
-                <TD>
-                  <div className="flex justify-end gap-1.5">
-                    <Button size="xs" variant="outline" aria-label={`History of ${r.name}`} onClick={() => setViewing(r)}>
-                      History
-                    </Button>
-                    {canManage && r.status !== 'present' && r.status !== 'late' && (
-                      <Button size="xs" aria-label={`Mark ${r.name} present`} onClick={() => markPresent(r)}>
-                        Mark present
-                      </Button>
-                    )}
-                  </div>
-                </TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      </Card>
-    </div>
-  );
-}
+import { Chip, CountPill, ErrorNote, fmtDay, fmtTime } from '../tasks/general/parts';
 
 export function ApprovalsTab() {
   const leaves = usePendingLeaves();
