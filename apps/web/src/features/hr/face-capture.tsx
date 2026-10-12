@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { isInApp } from '@/lib/native-bridge';
 import { ErrorNote } from '../tasks/general/parts';
 import { cameraSupported, describeFace, grabPhoto, loadFace } from './face';
 
@@ -42,6 +43,11 @@ export function FaceCapture({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (face && isInApp()) {
+        // No face matching in the phone app (founder, 2026-10-12; PLAN.md §19.17).
+        setErr('Face check does not run in the FreeFounders phone app. Open FreeFounders in a browser to enrol or check a face.');
+        return;
+      }
       if (!cameraSupported()) {
         setErr('This device or browser has no camera access. Use a phone or a laptop with a webcam, over HTTPS.');
         return;

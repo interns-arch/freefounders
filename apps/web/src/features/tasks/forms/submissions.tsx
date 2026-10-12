@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { ErrorNote, Panel, fmtWhen } from '../general/parts';
+import { downloadBlob } from '../shared/csv';
 
 export function FormSubmissionsPage() {
   const { formId } = useParams();
@@ -22,13 +23,7 @@ export function FormSubmissionsPage() {
   const download = () => {
     setErr('');
     exportCsv.mutate(id, {
-      onSuccess: (blob) => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `${form.data?.name ?? 'form'}-submissions.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      },
+      onSuccess: (blob) => void downloadBlob(`${form.data?.name ?? 'form'}-submissions.csv`, blob),
       onError: (e) => setErr(errorMessage(e)),
     });
   };

@@ -1,85 +1,103 @@
-# FreeFounders Android app (Expo)
+# FreeFounders Android app (Expo): the web app in a native shell
 
-Phase 7 (PLAN.md §7, §19.16). Steps 1–2 are built: sign-in (stays signed in), Attendance first (punch in / out with GPS
-+ selfie, today's status, my month calendar), Leave (balances, apply, my requests, cancel), Holidays, More (profile,
-change password on the web, sign out). Light or dark follows the phone; the company brand colour replaces the green.
+PLAN.md §19.17. The phone app **is the FreeFounders web app** (`apps/web`): the same screens, look and features (Home
+with attendance first, Attendance / Tasks / Assets / Admin, the bottom bar…), shown full-screen in a WebView. The shell
+adds only what a WebView cannot do by itself:
 
-## Try it on your Android phone (same Wi-Fi as this PC)
+| Native part | Why |
+|---|---|
+| Punch **location** (expo-location, high accuracy, 10 s) | Android's WebView refuses the browser's GPS on plain `http://` |
+| Punch **selfie** (expo-camera front camera, Retake / Use photo, JPEG 0.6, ≤ 720 px) | same for the browser camera; and a better camera |
+| **Downloads** (reports CSV/XLSX, payroll, form submissions, Assets photos) → saved + Android share sheet | a WebView cannot save files |
+| **Print** (ID cards, labels) → Android print dialog (also "Save as PDF") | a WebView cannot print |
+| Back button, pull-to-refresh, splash, "Can't reach FreeFounders" screen with a server-address field | |
+| Links to other sites, `tel:`, `mailto:`, WhatsApp → the phone's apps | |
 
-1. On the PC, start FreeFounders as usual: `npm run dev` (repo root). It prints the address for phones, e.g.
-   `http://192.168.2.72:8080`.
-2. First time only: `npm --prefix apps/mobile ci` (or `npm run setup`, which now installs the app too).
-3. If your PC's Wi-Fi address is not `192.168.2.72` (see `ipconfig` → IPv4 Address): copy `apps/mobile/.env.example`
-   to `apps/mobile/.env` and put your address in `EXPO_PUBLIC_API_URL`. Never commit `.env`.
-4. Start the app server: `npm run mobile` (repo root). It prints a QR code.
-5. On the phone: install **Expo Go** from the Play Store, connect to the **same Wi-Fi**, open Expo Go and scan the QR.
-6. Sign in (e.g. `owner` / `Demo@1234` on the demo data). Attendance opens first.
+**No face matching in the app** (founder, 2026-10-12): if the company has face check on, punching in the app shows
+"Face check is on for your company; the app punches with a selfie only — ask your admin to switch face check off in
+Attendance → HR settings" and nothing is sent. In a normal browser everything works exactly as before.
 
-**Windows Firewall:** the first time, Windows may ask whether Node.js may use the network. Tick **Private networks** and
-allow it — otherwise the phone cannot reach the PC (ports 8080 for FreeFounders and 8081 for the app server). If you
-clicked "Cancel" earlier: Windows Security → Firewall → Allow an app → Node.js → tick Private.
+Sign-in is the web's own: the refresh cookie is kept in the WebView's cookie store, so the app opens signed in.
 
-**If the phone says "Cannot reach FreeFounders":** check both are on the same Wi-Fi (not a guest network), that
-`npm run dev` is running, and open `http://<PC address>:8080/api/platform/health` in the phone's browser — it should
-say `{"ok":true,...}`.
+## Try it on your Android phone
 
-**Permissions:** the app asks for Location (only when your company has an office geofence) and Camera (only when your
-company keeps a punch photo). In Expo Go they are asked for "Expo Go". If you said "Don't allow", the app shows an
-"Open settings" button.
+1. On the PC: `npm run dev` (repo root). It prints the addresses for phones, e.g. `http://192.168.137.1:8080`
+   (laptop hotspot) and `http://192.168.2.72:8080` (office Wi-Fi). Switch the hotspot on **before** `npm run dev`, or
+   restart it after: the Tasks API accepts the PC's network addresses that exist when the suite starts.
+2. First time only: `npm --prefix apps/mobile ci` (or `npm run setup`).
+3. Start the app server: `npm run mobile` (repo root). It prints a QR code.
+4. Phone: connect to the laptop's hotspot (or the same Wi-Fi), install **Expo Go** from the Play Store, scan the QR.
+5. The web app opens (sign in once, e.g. `owner` / `Demo@1234` on demo data). On a phone it lands on Attendance.
 
-## What the punch does
+**Which address the app opens:** `EXPO_PUBLIC_WEB_URL` from `apps/mobile/.env` (copy `.env.example`; never commit
+`.env`; restart `npm run mobile` after a change), else `app.json` `extra.webUrl` (`http://192.168.137.1:8080`).
+**On the phone** the address can be changed without rebuilding: when the page cannot load, the "Can't reach
+FreeFounders" screen shows the address, **Try again** and **Change server address** (kept on the phone; "Use the
+default" goes back). Check the server from the phone's own browser: `http://<PC address>:8080/api/platform/health`.
 
-Tap **Punch in** → face check on for the company? the app stops and says so (no face matching on the phone; ask the
-admin to switch face check off in Attendance → HR settings) → location (high accuracy, 10 s) when the company has a
-geofence → front-camera selfie (JPEG, quality 0.6, at most 720 px, Retake / Use photo; "Punch without a photo" when the
-photo is optional) → `POST /tasks/api/attendance/check_in/` with `latitude`, `longitude`, `photo` (data URL). The
-server decides; its answer (e.g. "You are 840 m from Head Office…") is shown as-is. Punch out is the same.
+**Windows Firewall:** allow Node.js on **Private networks** (ports 8080 and 8081), otherwise the phone cannot reach the PC.
 
-## How the monorepo is wired
+**Permissions** (asked for "Expo Go" while testing): Location the first time a punch needs it (office geofence on) or
+"use my location" in HR settings; Camera for the punch selfie, and the first time a photo picker is opened (so
+"Camera" is offered next to the gallery). Blocked? Android Settings → Apps → Expo Go → Permissions.
 
-- `apps/mobile` is **not** in the root npm workspace. It has its own `node_modules` and `package-lock.json`, because
-  Expo SDK 57 pins React 19.2.3 / React Native 0.86 while the web app uses React 19.3 — in one workspace there would
-  be two Reacts. The root `npm ci`, the web build and the web lockfile are untouched.
-- The shared code is used **from source**: `@freefounders/core` (`packages/core`) and `@freefounders/theme/native`
-  (`packages/theme/src/tokens.native.ts`).
-  - Metro (`metro.config.js`): `watchFolders` = `packages/core`, `packages/theme`; a `resolveRequest` maps
-    `@freefounders/*` through each package's `exports`, and makes every bare import inside `packages/*` (`react`,
-    `@tanstack/react-query`, …) resolve from **this app's** `node_modules`. Result: one React in the bundle (checked
-    with the export's source map: 0 files from the root `node_modules`). Metro only reads `apps/mobile/node_modules`.
-  - TypeScript (`tsconfig.json` `paths`): the same mapping, and `react` / `@tanstack/react-query` pinned to this app's
-    copies so the shared hooks type-check against the same React. Because Expo would otherwise apply these `paths` to
-    the bundle too, `app.json` sets `experiments.tsconfigPaths: false` and Metro resolves the app's `@/` alias itself.
-- `@freefounders/core` is set up in `src/lib/core.ts`: `configureCore({ origin: API_URL, refreshStore })`. The refresh
-  store (`src/lib/refresh-store.ts`) keeps the refresh token in `expo-secure-store`; having one makes core sign in with
-  `client: 'mobile'` (the Platform returns the refresh token in the body) and send it on refresh / sign-out. The access
-  token stays in memory; Tasks accepts it as a Bearer token.
-- Colours: React Native cannot draw `oklch()`, so `packages/theme/src/tokens.native.ts` is a **generated** hex copy of
-  `tokens.ts` (`node packages/theme/scripts/build-native.mjs`). `scripts/check-web-rules.mjs` (run before every web
-  typecheck/build) fails when it is out of date. `src/lib/theme.tsx` = tokens + phone light/dark + brand colour.
-- Font: Plus Jakarta Sans via `@expo-google-fonts/plus-jakarta-sans` (only the five weights used).
+## The bridge
+
+The shell puts `window.FreeFoundersApp = { platform: 'android', version, camera }` into every page before it loads
+(`src/lib/injected.ts`). The web side is `apps/web/src/lib/native-bridge.ts` (`isInApp()`, `appRequest()`,
+`saveFile()`, `printPage()`); it is used only when `window.FreeFoundersApp` and `window.ReactNativeWebView` exist.
+
+```
+web → app   window.ReactNativeWebView.postMessage(JSON)
+  {"id":"r1","type":"location"}
+  {"id":"r2","type":"photo","title":"Check in","optional":false}
+  {"id":"r3","type":"download","filename":"attendance-daily-2026-10-12.xlsx","mime":"…","base64":"…"}
+  {"id":"r4","type":"print","html":"<html>…"}
+app → web   webview.postMessage(JSON)  → a "message" event on document (Android)
+  {"id":"r1","ok":true,"data":{"latitude":12.97,"longitude":77.59,"accuracy":8}}
+  {"id":"r2","ok":true,"data":"data:image/jpeg;base64,…"}      (data null = "Punch without a photo", optional only)
+  {"id":"r2","ok":false,"error":"cancelled"}
+  {"id":"r3","ok":true,"data":{"saved":true,"name":"…"}}
+  {"id":"rX","ok":false,"error":"<message for the person>"}
+events from the injected script (no id, no answer)
+  {"type":"scroll","atTop":true}        pull-to-refresh only when the page is scrolled to the top
+  {"type":"camera-for-files"}           a photo picker wants the camera permission first
+```
+
+The injected script also answers `navigator.geolocation.getCurrentPosition` with the app's GPS (ids `g…`).
+Punch inside the app (`apps/web/src/features/hr/punch.tsx`): face check on → the message above, no punch; photo
+off/optional/required → none / native camera with "Punch without a photo" / native camera; location only when the
+company has a geofence, and the app's reason is shown when it fails (GPS off, blocked, no fix in 10 s).
 
 ## Checks
 
 ```
-npm --prefix apps/mobile run typecheck     # tsc --noEmit (app + the shared core/theme sources)
-npm --prefix apps/mobile test              # node:test: oklch→hex, secure-store refresh adapter, punch payload, dates
-cd apps/mobile && npx expo export --platform android   # the whole JS bundle builds
+npm --prefix apps/mobile run typecheck     # tsc --noEmit
+npm --prefix apps/mobile test              # node:test: bridge protocol, links, server address, injected script, files, selfie size, oklch
+cd apps/mobile && npx expo export --platform android   # the JS bundle builds
 cd apps/mobile && npx expo-doctor
+npx --prefix e2e playwright test -c e2e/playwright.config.ts web-app-shell.spec.ts   # the web app inside a simulated shell
 ```
 
 ## Layout
 
 ```
-src/app/_layout.tsx            providers, fonts, sign-in gate, "Cannot reach FreeFounders" screen
-src/app/index.tsx              / → Attendance or sign-in
-src/app/(auth)/sign-in.tsx     sign-in
-src/app/(tabs)/                attendance · leave · holidays · more (bottom tabs)
-src/app/leave-apply.tsx        apply for leave (modal)
-src/features/attendance/       punch card, punch flow (use-punch), selfie camera, month calendar
-src/features/leave/            balances + my requests
-src/components/ui.tsx          Text, Card, Button (≥ 48 dp), Pill, Notice, Skeleton, ErrorState, Field…
-src/lib/                       core wiring, API address, theme, punch rules + payload, location, dates, colours
-test/                          unit tests (node --test)
+src/app/_layout.tsx, index.tsx   one screen: the shell
+src/shell/shell.tsx              WebView + bridge + back button + pull-to-refresh + splash + offline screen
+src/shell/selfie-camera.tsx      the punch selfie (front camera)
+src/shell/offline-screen.tsx     "Can't reach FreeFounders" + server address
+src/lib/protocol.ts              bridge messages, link rules, server address (pure, tested)
+src/lib/injected.ts              the script injected before each page (tested)
+src/lib/files.ts, photo.ts       file names / base64, selfie size (pure, tested)
+src/lib/location.ts, native-actions.ts, server-url.ts, palette.ts   native helpers, theme colours (tokens.native.ts)
 ```
 
-Not yet: Home, Tasks, Assets, push notifications, documents on leave, a staging server, EAS builds (see PLAN.md §19.16).
+`apps/mobile` is outside the root npm workspace (Expo pins its own React). The only shared code it reads is
+`@freefounders/theme/native` (hex copy of the design tokens, generated by `packages/theme/scripts/build-native.mjs` and
+checked by `scripts/check-web-rules.mjs`), for the splash, status bar and the shell's own screens.
+
+The first version (separate React Native screens, §19.16) is in git history (commit `af2efa3`).
+
+Not yet: push notifications through the shell, EAS builds (an APK needs `usesCleartextTraffic` for local `http://`,
+or an https staging server), the Assets QR scanner and Tasks voice notes in the app (both use the browser camera /
+microphone, which a WebView allows only on https).

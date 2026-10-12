@@ -3,6 +3,8 @@
  * someone opens the camera with the face check on. What leaves this file is a 128-number descriptor, never an image.
  * The models are static files of this web app (public/models), loaded by the library itself.
  */
+import { appRequest, isInApp } from '@/lib/native-bridge';
+
 type FaceApi = typeof import('@vladmandic/face-api');
 
 let faceapi: FaceApi | null = null;
@@ -68,8 +70,21 @@ export function grabPhoto(video: HTMLVideoElement): string {
   return canvas.toDataURL('image/jpeg', 0.7);
 }
 
-/** The phone's position, or {} when it is denied/unavailable (the server then decides). */
-export function currentPosition(): Promise<{ latitude?: number; longitude?: number }> {
+/**
+ * The phone's position, or {} when it is denied/unavailable (the server then decides). Inside the FreeFounders phone app
+ * the app's GPS is used (a WebView only allows the browser's geolocation on https); with `required`, the app's reason
+ * (location blocked, GPS off, no fix in 10 s) is thrown instead of returning {}.
+ */
+export async function currentPosition(options: { required?: boolean } = {}): Promise<{ latitude?: number; longitude?: number }> {
+  if (isInApp()) {
+    try {
+      const p = await appRequest<{ latitude: number; longitude: number }>('location');
+      return { latitude: p.latitude, longitude: p.longitude };
+    } catch (e) {
+      if (options.required) throw e;
+      return {};
+    }
+  }
   return new Promise((resolve) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve({});
     navigator.geolocation.getCurrentPosition(

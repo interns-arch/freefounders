@@ -11,7 +11,7 @@
     "ios": {
       "bundleIdentifier": "com.freefounders.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "FreeFounders takes a selfie when you punch in or out, because your company keeps a photo of every punch.",
+        "NSCameraUsageDescription": "FreeFounders takes a selfie when you punch in or out, and lets you take photos for attachments.",
         "NSLocationWhenInUseUsageDescription": "FreeFounders checks that you are at your office when you punch in or out."
       }
     },
@@ -23,8 +23,15 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.CAMERA", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"],
-      "blockedPermissions": ["android.permission.RECORD_AUDIO", "android.permission.ACCESS_BACKGROUND_LOCATION"],
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
@@ -45,22 +52,24 @@
           "locationWhenInUsePermission": "FreeFounders checks that you are at your office when you punch in or out."
         }
       ],
-      "@react-native-community/datetimepicker",
       [
         "expo-splash-screen",
         {
           "backgroundColor": "#f2f6f4",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76,
-          "dark": { "backgroundColor": "#060d0a" }
+          "dark": {
+            "backgroundColor": "#060d0a"
+          }
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "tsconfigPaths": false
     },
     "extra": {
-      "apiUrl": "http://192.168.2.72:8080"
+      "webUrl": "http://192.168.137.1:8080"
     }
   }
 }

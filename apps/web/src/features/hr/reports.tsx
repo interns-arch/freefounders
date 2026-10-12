@@ -56,7 +56,7 @@ export function useReportDownload() {
   const run = async ({ type, format, date, year, month, from, to, department }: AttendanceReportInput) => {
     const r: AttendanceReportInput = { type, format, date, year, month, from, to, department };
     const { filename, blob } = await dl.mutateAsync(r);
-    downloadBlob(filename, blob);
+    void downloadBlob(filename, blob);
     const entry: Recent = { ...r, at: new Date().toISOString(), label: ATTENDANCE_REPORT_TYPES.find((t) => t.value === r.type)?.label ?? r.type, period: periodText(r) };
     const next = [entry, ...readRecent()].slice(0, 10);
     try {

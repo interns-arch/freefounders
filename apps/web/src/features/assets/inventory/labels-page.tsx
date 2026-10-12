@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
 import { useAssetsByIds } from '@freefounders/core/assets';
 import { cn } from '@/lib/utils';
+import { printPage } from '@/lib/native-bridge';
 
 /** Printable QR + barcode labels for one or many assets. */
 export default function LabelsPage() {
@@ -36,7 +37,7 @@ export default function LabelsPage() {
                 <option value="md">Standard (3 per row)</option>
                 <option value="sm">Small (4 per row)</option>
               </NativeSelect>
-              <Button onClick={() => window.print()}>
+              <Button onClick={() => void printPage()}>
                 <Printer /> Print
               </Button>
             </>

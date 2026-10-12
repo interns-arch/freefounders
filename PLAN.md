@@ -1368,3 +1368,45 @@ unchanged.
 needs the Assets cookie session from the phone) → approvals for managers → push notifications (expo-notifications; needs a
 development build) → leave documents (document picker + multipart) → a staging server with HTTPS → EAS builds (APK for
 testers, then Play Store; `usesCleartextTraffic` only for local http) → iPhone.
+
+### 19.17 Phone app = the web app in a native shell (2026-10-12)
+**Founder's decision** (after trying §19.16 on the phone): "it appears to be a completely different product, I want the
+previous one as it is." → The Android app shows **the FreeFounders web app itself** (same screens, look and features:
+Home with attendance first, Attendance / Tasks / Assets / Admin, the phone bottom bar) in a full-screen
+`react-native-webview`. One product, one code base for screens; every web change reaches the phone at once. The decisions
+of §19.16 stand: Android first, **no face matching in the app** (selfie stored + GPS geofence only), local testing over the
+laptop's hotspot (`http://192.168.137.1:8080`) or the office Wi-Fi.
+
+**What is native** (`apps/mobile`, Expo SDK 57, runs in Expo Go):
+- **Punch location + selfie** through a small bridge (`postMessage` both ways, request ids; protocol in
+  `apps/mobile/README.md`). Needed because Android's WebView allows the browser camera and GPS only on https/localhost,
+  and the native camera/GPS are better anyway. Web side: `apps/web/src/lib/native-bridge.ts`; `features/hr/face.ts`
+  `currentPosition()` and `features/hr/punch.tsx` use it only when `window.FreeFoundersApp` is set. In the app: face check
+  on → the message "Face check is on for your company; the app punches with a selfie only — ask your admin to switch face
+  check off in Attendance → HR settings", no punch (face enrolment also refuses in the app); photo optional/required →
+  native front camera (Retake / Use photo, "Punch without a photo" when optional); location only with a geofence, with the
+  app's own reason when it fails. Outside the app nothing changed (e2e).
+- **Downloads**: `downloadCSV`/`downloadBlob` (reports, payroll, templates, team reports, form submissions — the last one
+  now uses `downloadBlob` too) and `<a download>` links (Assets photos) go to the app → saved in its cache → Android share
+  sheet. **Print** (ID cards, labels) → Android print dialog via expo-print.
+- Back button (web history, else leave), pull-to-refresh (only when the page is at the top), splash until the first page,
+  "Can't reach FreeFounders" with Try again and a **server address field** (kept on the phone), status bar light/dark from
+  the phone, other sites / `tel:` / `mailto:` / WhatsApp open outside, photo pickers offer the camera (permission asked on
+  first use), `navigator.geolocation` answered by the app (HR settings "use my location").
+- Removed (git history keeps them): the separate RN sign-in, tabs (attendance, leave, holidays, more), leave-apply, UI kit,
+  fonts, core wiring and their tests. Kept: selfie camera, location helper, `tokens.native.ts` + its check, the two core
+  fixes in `packages/core/src/session.ts`.
+
+**Tests:** `npm run mobile:check` (tsc + 17 node:test: bridge protocol, link rules, server address, injected script in a
+fake page, file names/base64, selfie size, oklch); `npx expo-doctor` 21/21; `npx expo export --platform android` builds;
+e2e `web-app-shell.spec.ts` simulates the shell (fake `ReactNativeWebView`): punch with the app camera stores the photo,
+face check on shows the message and sends nothing, a report download goes to the app.
+
+**Known limits:** Assets QR scanner and Tasks voice notes use the browser camera/microphone → need https (staging). QR codes
+point at `PUBLIC_URL` (dev default `http://localhost:8080`; start `npm run dev` with `PUBLIC_URL=http://192.168.137.1:8080`
+to print codes a phone can open). Django accepts the PC's network addresses present when `npm run dev` starts: switch the
+hotspot on first, or restart.
+
+**Next:** push notifications through the shell (expo-notifications in a development build; the web asks the bridge for a
+push token and the Platform stores it per person) → a staging server with HTTPS → EAS builds (APK for testers, then Play
+Store) → iPhone.

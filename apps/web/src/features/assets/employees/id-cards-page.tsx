@@ -4,6 +4,7 @@ import { LocalQrWarning, QRCode, useQrLinks } from '@/components/common/codes';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { useEmployeesByIds } from '@freefounders/core/assets';
+import { printPage } from '@/lib/native-bridge';
 
 /** Printable ID cards: one QR per person. Scanning a card opens that person and their assets. */
 export default function IdCardsPage() {
@@ -38,7 +39,7 @@ export default function IdCardsPage() {
           title="ID cards"
           description={`${people.length} card${people.length === 1 ? '' : 's'}. Scanning a card shows everything assigned to that person.`}
           actions={
-            <Button onClick={() => window.print()}>
+            <Button onClick={() => void printPage()}>
               <Printer /> Print
             </Button>
           }

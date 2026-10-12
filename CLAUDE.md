@@ -21,15 +21,15 @@ services/platform/  NestJS: companies, people, single login (EdDSA tokens + JWKS
 services/tasks/     Django 6 API (backend/)
 services/assets/    NestJS API (apps/api) + shared Zod (packages/shared, also used by apps/web)
 apps/web/           THE web app (Phase 6, PLAN.md §18): sign-in, Home, Admin, Tasks, HR, Assets screens
-apps/mobile/        Android app (Expo SDK 57, Expo Router; Phase 7, PLAN.md §19.16): sign-in, Attendance, Leave, Holidays, More
+apps/mobile/        Android app = the web app in a native Expo shell (WebView + bridge: punch GPS/selfie, downloads, print; PLAN.md §19.17)
 packages/core/      shared logic for web + mobile: HTTP client, session, typed APIs + hooks per area (no DOM)
 packages/theme/     design tokens (tokens.css for web, src/tokens.ts; src/tokens.native.ts = generated hex copy for mobile; all checked)
 infra/gateway/      dev-gateway.mjs (one address, routed by path) + Caddyfile (prod draft)
 scripts/            setup / dev / smoke / check-web-rules      e2e/  Playwright browser tests
 ```
 The repo root is an npm workspace for `apps/web` + `packages/*` (one `npm ci` at the root); the services keep their own installs.
-`apps/mobile` is NOT in the workspace (own `node_modules`: Expo pins another React); Metro + tsconfig read `packages/*` from
-source and force one React (apps/mobile/README.md). After changing theme tokens run `node packages/theme/scripts/build-native.mjs`.
+`apps/mobile` is NOT in the workspace (own `node_modules`: Expo pins another React); it reads only `@freefounders/theme/native`
+from source. Its web side is `apps/web/src/lib/native-bridge.ts` (used only inside the app; apps/mobile/README.md). After changing theme tokens run `node packages/theme/scripts/build-native.mjs`.
 
 **Web app rules** (checked before every typecheck/build by `scripts/check-web-rules.mjs`): screens under `apps/web/src/app` and
 `src/features` get data only from `@freefounders/core` hooks (no fetch, no HTTP client) and use theme colours only (no

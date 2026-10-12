@@ -1,18 +1,18 @@
 /**
- * The punch selfie (PLAN.md §19.16): front camera, JPEG, longer side at most 720 px, quality 0.6, sent as a data URL
- * in the punch's `photo` field. Preview with Retake / Use photo. No face matching on the phone.
+ * The punch selfie (PLAN.md §19.16, §19.17), opened when the web app asks the bridge for a `photo`: front camera, JPEG,
+ * longer side at most 720 px, quality 0.6, handed back as a data URL. Preview with Retake / Use photo. No face matching.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useRef, useState } from 'react';
-import { Image, Linking, Modal, StyleSheet, View } from 'react-native';
+import { Image, Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, IconButton, Notice, T } from '@/components/ui';
-import { fitWithin } from '@/lib/punch';
-import { useTheme } from '@/lib/theme';
+import { usePalette } from '@/lib/palette';
+import { fitWithin, jpegDataUrl } from '@/lib/photo';
+import { Button, Note, T } from './ui';
 
-export interface Selfie {
+interface Selfie {
   uri: string;
   base64: string;
 }
@@ -40,10 +40,11 @@ export function SelfieCamera({
   /** The company keeps a photo when there is one, but does not require it. */
   optional: boolean;
   onCancel: () => void;
-  /** null = punch without a photo (only when optional). */
-  onDone: (selfie: Selfie | null) => void;
+  /** A JPEG data URL, or null = punch without a photo (only when optional). */
+  onDone: (photo: string | null) => void;
 }) {
-  const { colors, radius } = useTheme();
+  const colors = usePalette();
+  const radius = colors.radius;
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
@@ -76,7 +77,7 @@ export function SelfieCamera({
     const s = shot;
     setShot(null);
     setReady(false);
-    onDone(s);
+    if (s) onDone(jpegDataUrl(s.base64));
   };
 
   let body;
@@ -86,18 +87,18 @@ export function SelfieCamera({
     body = (
       <View style={styles.center}>
         <Ionicons name="camera-outline" size={48} color={colors.mutedForeground} />
-        <T variant="heading" style={{ textAlign: 'center' }}>
+        <T size={20} weight="700" style={{ textAlign: 'center' }}>
           Allow the camera for your punch selfie
         </T>
         <T muted style={{ textAlign: 'center' }}>
           Your company keeps a photo of every punch. The photo is sent only with your punch.
         </T>
         {permission.canAskAgain ? (
-          <Button label="Allow camera" icon="camera" onPress={() => void requestPermission()} big style={{ alignSelf: 'stretch' }} />
+          <Button label="Allow camera" icon="camera" onPress={() => void requestPermission()} style={{ alignSelf: 'stretch' }} />
         ) : (
           <>
-            <Notice tone="warning">Camera access is blocked for this app. Open Settings → Permissions → Camera → Allow, then come back.</Notice>
-            <Button label="Open settings" icon="settings-outline" onPress={() => void Linking.openSettings()} big style={{ alignSelf: 'stretch' }} />
+            <Note>Camera access is blocked for this app. Open Settings → Permissions → Camera → Allow, then come back.</Note>
+            <Button label="Open settings" icon="settings-outline" onPress={() => void Linking.openSettings()} style={{ alignSelf: 'stretch' }} />
           </>
         )}
         {optional ? <Button label="Punch without a photo" variant="ghost" onPress={() => onDone(null)} /> : null}
@@ -109,7 +110,7 @@ export function SelfieCamera({
         <Image source={{ uri: shot.uri }} style={[styles.preview, { borderRadius: radius + 4 }]} resizeMode="cover" accessibilityLabel="Your selfie" />
         <View style={styles.row}>
           <Button label="Retake" icon="refresh" variant="outline" onPress={() => setShot(null)} style={{ flex: 1 }} />
-          <Button label="Use photo" icon="checkmark" onPress={use} style={{ flex: 1 }} big />
+          <Button label="Use photo" icon="checkmark" onPress={use} style={{ flex: 1 }} />
         </View>
       </View>
     );
@@ -127,11 +128,11 @@ export function SelfieCamera({
             accessibilityLabel="Front camera preview"
           />
         </View>
-        {error ? <Notice tone="danger">{error}</Notice> : null}
+        {error ? <Note tone="danger">{error}</Note> : null}
         <T muted style={{ textAlign: 'center' }}>
           Hold the phone at eye level, in good light.
         </T>
-        <Button label={busy ? 'Taking photo…' : 'Take photo'} icon="camera" onPress={() => void take()} loading={busy} disabled={!ready} big />
+        <Button label={busy ? 'Taking photo…' : 'Take photo'} icon="camera" onPress={() => void take()} loading={busy} disabled={!ready} />
         {optional ? <Button label="Punch without a photo" variant="ghost" onPress={() => onDone(null)} /> : null}
       </View>
     );
@@ -141,8 +142,10 @@ export function SelfieCamera({
     <Modal visible={visible} animationType="slide" onRequestClose={close} statusBarTranslucent>
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <IconButton icon="close" label="Cancel" onPress={close} />
-          <T variant="heading" accessibilityRole="header" style={{ flex: 1 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={close} hitSlop={8} style={styles.close}>
+            <Ionicons name="close" size={26} color={colors.foreground} />
+          </Pressable>
+          <T size={18} weight="700" accessibilityRole="header" style={{ flex: 1 }}>
             {title}
           </T>
         </View>
@@ -153,6 +156,7 @@ export function SelfieCamera({
 }
 
 const styles = StyleSheet.create({
+  close: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4, paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
   preview: { flex: 1, width: '100%', maxHeight: 520, alignSelf: 'center', aspectRatio: 3 / 4 },
