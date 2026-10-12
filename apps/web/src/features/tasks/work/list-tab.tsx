@@ -1,5 +1,6 @@
 import { errorMessage, useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import {
   type DelegatedSummary,
   type PersonOption,
@@ -88,7 +89,9 @@ export function TaskListTab({
     },
     { enabled: customReady },
   );
-  const rows = list.data?.rows ?? [];
+  const rows = useMemo(() => list.data?.rows ?? [], [list.data]);
+  // Counts use every row; only the first 50 are drawn (weak phones), "Load more" adds the next ones.
+  const more = useShowMore(rows, { reset: [scope, status, overdue, recurring, fDone, range, custom, person, dept, values.q ?? ''] });
 
   // Delegated: I can hand work to anyone, so the filter lists everyone I can assign to.
   const filterPeople = useMemo<PersonRow[]>(() => {
@@ -261,7 +264,7 @@ export function TaskListTab({
           <EmptyState icon={ClipboardList} title={EMPTY[scope]} description={overdue || recurring || status !== 'open' ? 'Try clearing a filter above.' : scope === 'my' ? 'New tasks assigned to you will show up here.' : undefined} />
         ) : (
           <ul className="divide-y" aria-label="Tasks">
-            {rows.map((t) => (
+            {more.visible.map((t) => (
               <TaskRow
                 key={t.id}
                 t={t}
@@ -281,6 +284,7 @@ export function TaskListTab({
             ))}
           </ul>
         )}
+        {!list.isLoading && customReady && !list.error && <ShowMore {...more.footer} noun="tasks" className="border-t" />}
       </Card>
       {dialogs.element}
     </div>

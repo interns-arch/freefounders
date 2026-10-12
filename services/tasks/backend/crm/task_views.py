@@ -18,6 +18,7 @@ from accounts.permissions import HasCapability, has_capability
 from notifications.service import notify
 
 from config import llm
+from config.images import compress_upload
 
 from .ai_tasks import (draft_from_speech, draft_task, proofread,
                        review_sentence, summarize_task)
@@ -426,9 +427,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         scope = p.get("scope")
         if scope == "deleted":
             # The Deleted Tasks bin -- admin only
-            if not has_capability(user, "tasks.view_all"):
+            if not has_capability(user, "tasks.bin"):
                 from rest_framework.exceptions import PermissionDenied as PD
-                raise PD("Only an admin can view deleted tasks.")
+                raise PD("Your role does not include the Deleted tasks bin.")
             return (visible_tasks(user, include_deleted=True)
                     .filter(deleted_at__isnull=False).order_by("-deleted_at"))
         qs = visible_tasks(user)
@@ -732,7 +733,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["deleted_at"])
         act(instance, self.request.user, "Moved to Deleted Tasks")
 
-    @action(detail=True, methods=["post"], permission_classes=[HasCapability.of("tasks.view_all")])
+    @action(detail=True, methods=["post"], permission_classes=[HasCapability.of("tasks.bin")])
     def restore(self, request, pk=None):
         task = Task.objects.filter(pk=pk, deleted_at__isnull=False).first()
         if not task:
@@ -1283,17 +1284,19 @@ class TaskViewSet(viewsets.ModelViewSet):
             return start, end
         return _range_bounds(rng, now)
 
-    def _report_users(self, user, only_id=None):
+    def _report_users(self, user, only_id=None, wide=True):
         """People this viewer may see task data for: admin -> everyone,
         department viewer -> their department, and ANYONE -> their own direct
         reports (matching visible_tasks, so a lead with reports outside their
-        department still sees that team). ?user= narrows to one of them."""
+        department still sees that team). ?user= narrows to one of them.
+        wide=False (a report without the Reports permission): only themself
+        and their direct reports."""
         from django.db.models import Q as _Q
-        if has_capability(user, "tasks.view_all"):
+        if wide and has_capability(user, "tasks.view_all"):
             users = list(User.objects.filter(is_active=True))
         else:
             scope = _Q(pk=user.pk) | _Q(reporting_manager=user)
-            if has_capability(user, "tasks.view_department"):
+            if wide and has_capability(user, "tasks.view_department"):
                 scope |= _Q(department=user.department)
             users = list(User.objects.filter(is_active=True).filter(scope).distinct())
         if only_id:
@@ -1497,7 +1500,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         now = timezone.now()
         p = request.query_params
         start, end = self._report_bounds(p, now)
-        users = self._report_users(request.user, only_id=p.get("user"))
+        # Reports (PLAN.md §19.19) reach everyone whose tasks they see; without it, themself and their reports.
+        users = self._report_users(request.user, only_id=p.get("user"),
+                                   wide=has_capability(request.user, "tasks.reports"))
         today = timezone.localtime(now).date()
 
         users_by_id = {u.pk: u for u in users}
@@ -1592,7 +1597,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     REWORK_FLAG = 2             # this many completions sent back
 
     @action(detail=False, methods=["post"],
-            permission_classes=[HasCapability.of("tasks.view_all")])
+            permission_classes=[HasCapability.of("tasks.team_performance")])
     def send_overdue_email(self, request):
         """Send the Monday email right now to every active person: overdue
         tasks or "pipeline is clear", plus their performance. Safe to repeat:
@@ -1623,7 +1628,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                       "leave_days": v["leave_days"], "working_days": n} for uid, v in out.items()}
 
     @action(detail=False, methods=["get"],
-            permission_classes=[HasCapability.of("tasks.view_all")])
+            permission_classes=[HasCapability.of("tasks.team_performance")])
     def team_report(self, request):
         """The founder's view: every employee scored over the range and
         ranked, using the SAME score the Employees report shows, plus the
@@ -1635,7 +1640,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         now = timezone.now()
         p = request.query_params
         start, end = self._report_bounds(p, now)
-        users = self._report_users(request.user)
+        users = list(User.objects.filter(is_active=True))   # Team performance: the whole company
         today = timezone.localtime(now).date()
         name_of = {u.pk: (u.get_full_name() or u.username) for u in users}
         meta = {u.pk: (u.get_role_display(), u.get_department_display()) for u in users}
@@ -2128,7 +2133,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         now = timezone.now()
         p = request.query_params
         start, end = self._report_bounds(p, now)
-        users = self._report_users(request.user)
+        users = self._report_users(request.user, wide=has_capability(request.user, "tasks.reports"))
         qs = (Task.objects.filter(assigned_to__in=users, deleted_at__isnull=True,
                                   effort_minutes__isnull=False,
                                   assignee_estimate_minutes__isnull=False)
@@ -2182,6 +2187,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 "needs": "actual_minutes"})
 
         for f in proof:
+            f = compress_upload(f)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
             TaskAttachment.objects.create(task=task, file=f, filename=f.name[:255],
                                           uploaded_by=request.user)
         old_status = task.status
@@ -2293,6 +2299,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 raise ValidationError(
                     {"file": f"{f.name} is larger than 10 MB — compress it or share a link."})
         for f in uploaded[:5]:
+            f = compress_upload(f)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
             TaskAttachment.objects.create(task=task, file=f, filename=f.name[:255],
                                           uploaded_by=request.user)
             act(task, request.user, f"Attached: {f.name[:120]}")
@@ -2341,7 +2348,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         elif scope == "delegated":
             qs = qs.filter(created_by=user).exclude(assigned_to=user)
         elif scope == "group":
-            if not (has_capability(user, "tasks.view_all") or has_capability(user, "tasks.view_department")):
+            if not has_capability(user, "tasks.reports"):
                 raise PermissionDenied("Your role has no group report.")
         if p.get("category"):
             qs = qs.filter(category__iexact=p["category"])
@@ -2907,8 +2914,8 @@ class TaskSettingsView(viewsets.ViewSet):
         return Response(TaskSettingsSerializer(TaskSettings.get()).data)
 
     def create(self, request):   # POST /api/task-settings/
-        if not has_capability(request.user, "settings.manage"):
-            raise PermissionDenied("Only an admin can change task policies.")
+        if not has_capability(request.user, "tasks.settings"):
+            raise PermissionDenied("Your role does not include Task settings.")
         cfg = TaskSettings.get()
         ser = TaskSettingsSerializer(cfg, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
@@ -2917,7 +2924,7 @@ class TaskSettingsView(viewsets.ViewSet):
 
 
 class TaskTemplateViewSet(viewsets.ModelViewSet):
-    """Templates: everyone reads/uses, only assigners (admin/managers) manage."""
+    """Templates: everyone reads/uses, the Task templates permission manages."""
     serializer_class = TaskTemplateSerializer
     queryset = TaskTemplate.objects.select_related("created_by").all()
     pagination_class = None
@@ -2925,7 +2932,7 @@ class TaskTemplateViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
             return [IsAuthenticated()]
-        return [HasCapability.of("tasks.assign")()]
+        return [HasCapability.of("templates.manage")()]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -2985,12 +2992,13 @@ class TaskActivityViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class HolidayViewSet(viewsets.ModelViewSet):
-    """Company holiday calendar: everyone reads, admin manages."""
+    """Company holiday calendar: Holidays reads, Manage holidays changes it."""
     serializer_class = HolidaySerializer
     queryset = Holiday.objects.all()
     pagination_class = None
 
     def get_permissions(self):
+        from accounts.permissions import HasPermission
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated()]
-        return [HasCapability.of("settings.manage")()]
+            return [HasPermission.of("holidays.view", "holidays.manage")()]
+        return [HasCapability.of("holidays.manage")()]

@@ -223,19 +223,40 @@ export interface AppDeleteResult {
   anonymised?: boolean;
 }
 
+/**
+ * When an app's catalogue gets a new version, roles saved before it are upgraded once (PLAN.md §19.19): a role that
+ * matches a rule gets the permission at the rule's scope (the widest wins). `everyone`: any role with a permission in
+ * that app; `from` (+ `fromScopes`): a role that had that permission; `minLevel`: a role at that level or above.
+ */
+export interface UpgradeRule {
+  everyone?: boolean;
+  from?: string;
+  fromScopes?: string[];
+  minLevel?: number;
+  scope?: string;
+}
 export interface CataloguePermission {
   key: string;
   label: string;
   group: string;
+  /** One line shown under the permission in the role builder. */
+  description?: string;
   /** Allowed scopes, or null for a yes/no permission. */
   scopes: string[] | null;
-  /** Only the locked Super Admin role gets it by default (e.g. deleting admins' work). */
+  /** Only the locked Owner (Super Admin) role gets it by default (e.g. deleting admins' work). */
   superAdminOnly?: boolean;
+  /** An old blank scope means this one (a permission that gained scopes). */
+  legacyScope?: string;
+  upgrade?: UpgradeRule[];
 }
 export interface AppCatalogue {
   app: string;
   scopes: string[];
   permissions: CataloguePermission[];
+  /** Catalogue version (missing = 1). */
+  version?: number;
+  /** Permissions that no longer exist on their own; the upgrade replaces them. */
+  retired?: string[];
 }
 export interface AppAccessExport {
   version: number;

@@ -209,11 +209,19 @@ export class PeopleService {
     }
   }
 
-  /** Only an owner may create, promote to, or change an owner. */
+  /** Only an owner may create, promote to, or change an owner; a member (with an Admin permission) only members. */
   private assertRoleChange(caller: Caller, targetRole: string | undefined, currentRole?: string) {
     if ((targetRole === 'owner' || currentRole === 'owner') && caller.role !== 'owner') {
       throw new ForbiddenException('Only an owner can change owners');
     }
+    if (caller.role === 'member' && ((targetRole && targetRole !== 'member') || (currentRole && currentRole !== 'member'))) {
+      throw new ForbiddenException('Only an owner or admin can change admins');
+    }
+  }
+
+  /** People admin by a member with an Admin permission reaches members only (PLAN.md §19.19). */
+  private assertMemberTarget(caller: Caller, target: { platformRole: string }) {
+    if (caller.role === 'member' && target.platformRole !== 'member') throw new ForbiddenException('Only an owner or admin can change admins');
   }
 
   async create(caller: Caller, input: PersonCreate) {
@@ -304,6 +312,7 @@ export class PeopleService {
     if (p.platformRole === 'owner' && caller.role !== 'owner' && caller.personId !== id) {
       throw new ForbiddenException('Only an owner can reset an owner’s password');
     }
+    if (caller.personId !== id) this.assertMemberTarget(caller, p);
     await this.assertIdentifiersFree(id, input.username, null);
     const [existing] = await this.dbs.db.select().from(logins).where(eq(logins.personId, id)).limit(1);
     const username = input.username !== undefined ? input.username : (existing?.username ?? null);
@@ -322,6 +331,7 @@ export class PeopleService {
   async removeLogin(caller: Caller, id: string) {
     const p = await this.get(caller, id);
     if (id === caller.personId) throw badRequest('You cannot remove your own login');
+    this.assertMemberTarget(caller, p);
     if (p.platformRole === 'owner') await this.assertAnotherOwner(caller.companyId, id);
     await this.dbs.db.delete(logins).where(eq(logins.personId, id));
     await this.auth.revokeAll(id);
@@ -338,7 +348,7 @@ export class PeopleService {
    * then the Platform rows; then the directory push.
    */
   async deletePerson(caller: Caller, id: string, confirm: string, options?: DeleteOptions) {
-    if (caller.role !== 'owner' && caller.role !== 'admin') throw new ForbiddenException('Only admins can delete people');
+    if (caller.permissions && !caller.permissions.has('people.delete')) throw new ForbiddenException('You do not have permission to do this');
     const p = await this.get(caller, id);
     if (id === caller.personId) throw badRequest('You cannot delete yourself');
     if (p.platformRole === 'owner') throw new ForbiddenException('The owner cannot be deleted');
@@ -427,6 +437,7 @@ export class PeopleService {
   async grantApp(caller: Caller, id: string, app: string, appRole?: string) {
     if (!(APPS as readonly string[]).includes(app)) throw notFound('App');
     const p = await this.get(caller, id);
+    this.assertMemberTarget(caller, p);
     const [company] = await this.dbs.db.select({ enabledApps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
     if (!company?.enabledApps.includes(app)) throw badRequest(`Your plan does not include ${app}`);
     const [login] = await this.dbs.db.select({ username: logins.username }).from(logins).where(eq(logins.personId, id)).limit(1);
@@ -451,7 +462,7 @@ export class PeopleService {
 
   /** Takes an app away. Signs the person out so their next token no longer lists it. */
   async revokeApp(caller: Caller, id: string, app: string) {
-    await this.get(caller, id);
+    this.assertMemberTarget(caller, await this.get(caller, id));
     await this.dbs.db.delete(personApps).where(and(eq(personApps.personId, id), eq(personApps.app, app)));
     await this.auth.revokeAll(id);
     return { ok: true };

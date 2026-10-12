@@ -9,16 +9,18 @@ import { type Access, useAccess } from '@freefounders/core';
 import { useAssetsDashboard } from '@freefounders/core/assets';
 import { nearestOffice, useHrConfig, useLeaveBalances, useOfficeLocations, usePendingCorrections, usePendingLeaves } from '@freefounders/core/hr';
 import { useMyTaskTiles, useWaitingCounts } from '@freefounders/core/tasks';
-import { ArrowRight, Camera, Fingerprint, LogIn, LogOut, MapPin, ScanFace, ScanLine, Settings2, ShieldCheck, Users } from 'lucide-react';
+import { ADMIN_SCREENS } from '@/features/admin/nav';
+import { ArrowRight, Camera, Fingerprint, LogIn, LogOut, MapPin, ScanLine, Settings2, ShieldCheck, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
+import { useMinuteClock } from '@/lib/lite';
 import { cn } from '@/lib/utils';
 import { hrs } from '@/features/hr/parts';
 import { usePunch } from '@/features/hr/punch';
-import { currentPosition } from '@/features/hr/face';
+import { currentPosition } from '@/features/hr/device';
 import { type Workspace, WORKSPACE_HOME } from '../nav';
 import { safeNext } from '../session-guard';
 import { WORKSPACE_LOOK, workspacesFor } from '../workspaces';
@@ -41,16 +43,6 @@ const ampm = (hhmm: string | undefined) => {
 
 /** Phones: a person with Attendance lands on the full Today page (marking attendance is the priority on mobile). */
 const isPhone = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches;
-
-/** The time to the minute (no per-second re-renders). */
-function useNow() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 15_000);
-    return () => clearInterval(t);
-  }, []);
-  return now;
-}
 
 /** Where the person is, only if they already allowed location for this site (no prompt on page open, §19.3). */
 function useKnownPosition(wanted: boolean) {
@@ -86,7 +78,7 @@ export function HomePage() {
     if (access.platform && next) navigate(next, { replace: true });
   }, [access.platform, next, navigate]);
 
-  const workspaces = access.platform ? workspacesFor(access.apps, access.isAdmin) : [];
+  const workspaces = access.platform ? workspacesFor(access.apps, access.admin.any) : [];
   const cards = workspaces.filter((w): w is Exclude<Workspace, 'admin'> => w !== 'admin');
 
   // Keys 1, 2, 3 open the cards in the order shown (not while typing in a field).
@@ -146,12 +138,12 @@ export function HomePage() {
         </div>
       )}
 
-      {access.isAdmin && <AdminRow onOpen={open} />}
+      {access.admin.any && <AdminRow onOpen={open} />}
     </div>
   );
 }
 
-/** Shift hours and anything that will matter at the punch (outside the office, selfie, face not set up). */
+/** Shift hours and anything that will matter at the punch (outside the office, selfie). */
 function Checks({ p }: { p: ReturnType<typeof usePunch> }) {
   const cfg = useHrConfig();
   const offices = useOfficeLocations();
@@ -161,7 +153,6 @@ function Checks({ p }: { p: ReturnType<typeof usePunch> }) {
   const d = p.data;
   const warnings: Array<{ icon: typeof MapPin; text: string }> = [];
   if (d?.geofence_enabled && near && !near.inside) warnings.push({ icon: MapPin, text: `${near.metres} m from ${near.office.name}` });
-  if (d?.face_enabled && !d.face_enrolled && !d.face_self_enroll) warnings.push({ icon: ScanFace, text: 'Face not enrolled — ask an admin' });
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px]">
       <span className="text-muted-foreground">
@@ -279,9 +270,11 @@ function Count({ label, value, alert, to, small }: { label: string; value: numbe
 /** Mark attendance: the first thing on Home. Full width; on wide screens the punch side and today's numbers sit side by side. */
 function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string) => void }) {
   const p = usePunch();
+  // Punching in is a permission like any other (PLAN.md §19.19); without it the card only opens Attendance.
+  const punches = useAccess().tasks.can('attendance.punch');
   const cfg = useHrConfig();
   const balances = useLeaveBalances();
-  const now = useNow();
+  const now = useMinuteClock();
   const approves = !!cfg.data?.can_approve;
   const leaves = usePendingLeaves(approves);
   const corrections = usePendingCorrections(approves);
@@ -353,7 +346,7 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
               </p>
             )}
           </div>
-          {state === 'in' || state === 'out' ? (
+          {punches && (state === 'in' || state === 'out') ? (
             <Button size="lg" className="h-13 w-full text-base" disabled={p.busy} loading={p.busy && !p.waitingForCamera} onClick={() => p.markIt(state === 'in' ? 'check_in' : 'check_out')}>
               {p.usesCamera ? <Fingerprint /> : state === 'in' ? <LogIn /> : <LogOut />}
               {state === 'in' ? 'Punch in' : 'Punch out'}
@@ -493,11 +486,13 @@ function AssetsCard({ index, access, onOpen }: { index: number; access: Access; 
 
 /** Admin: three plain buttons on one row (no extra requests on this page). */
 function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
+  const access = useAccess();
+  // Only the Admin screens this person's permissions open (PLAN.md §19.19).
   const items = [
-    { name: 'People & access', blurb: 'People, roles, passwords', to: '/people', icon: Users },
-    { name: 'Roles', blurb: 'Permissions and duties', to: '/roles', icon: ShieldCheck },
-    { name: 'Settings', blurb: 'Company, modules, departments', to: '/settings', icon: Settings2 },
-  ];
+    { name: 'People & access', blurb: 'People, roles, passwords', to: '/people', icon: Users, show: ADMIN_SCREENS.people },
+    { name: 'Roles', blurb: 'Permissions and duties', to: '/roles', icon: ShieldCheck, show: ADMIN_SCREENS.roles },
+    { name: 'Settings', blurb: 'Company, modules, departments', to: '/settings', icon: Settings2, show: ADMIN_SCREENS.settings },
+  ].filter((x) => x.show(access));
   return (
     <section aria-labelledby="admin-title">
       <h2 id="admin-title" className="mb-3 text-base font-bold tracking-tight">

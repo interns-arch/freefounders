@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Chip, ErrorNote, SectionHead, type Tone, fmtDay } from '../tasks/general/parts';
+import { compressImage } from '@/lib/compress-image';
 import { cn } from '@/lib/utils';
 
 const LEAVE_TONE: Record<LeaveRequest['status'], Tone> = { pending: 'warning', approved: 'success', rejected: 'danger', cancelled: 'neutral' };
@@ -172,7 +173,16 @@ function ApplyForm({ types, onClose }: { types: LeaveType[]; onClose: () => void
       {selected?.requires_document && (
         <div className="grid gap-1.5">
           <Label htmlFor="lv-doc">Supporting document * ({selected.name})</Label>
-          <Input id="lv-doc" type="file" onChange={(e) => setDoc(e.target.files?.[0] ?? null)} />
+          <Input
+            id="lv-doc"
+            type="file"
+            onChange={(e) => {
+              const picked = e.target.files?.[0] ?? null;
+              setDoc(picked);
+              // A photo of the document goes up smaller (PLAN.md §19.20); swapped in when ready.
+              if (picked) void compressImage(picked, 'document').then((small) => setDoc((cur) => (cur === picked ? small : cur)));
+            }}
+          />
         </div>
       )}
       {apply.error && <ErrorNote>{errorMessage(apply.error)}</ErrorNote>}
@@ -190,7 +200,7 @@ function ApplyForm({ types, onClose }: { types: LeaveType[]; onClose: () => void
 
 export function HolidaysTab() {
   const access = useAccess();
-  const canManage = access.tasks.can('settings.manage');
+  const canManage = access.tasks.can('holidays.manage');
   const q = useHolidays();
   const add = useAddHoliday();
   const del = useDeleteHoliday();

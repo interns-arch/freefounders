@@ -37,7 +37,7 @@ const fail = (e: unknown) => toast.error(errorMessage(e));
 
 /** Reusable task blueprints; "Use" opens the Add task form filled from the template. */
 export function TemplatesTab({ onUse }: { onUse: (t: TaskTemplate) => void }) {
-  const canManage = useAccess().tasks.can('tasks.assign');
+  const canManage = useAccess().tasks.can('templates.manage');
   const confirm = useConfirm();
   const q = useTaskTemplates();
   const del = useDeleteTaskTemplate();
@@ -192,7 +192,7 @@ function TemplateDialog({ onClose }: { onClose: () => void }) {
 
 /** Industry task template directory: industries → categories → templates; preview the steps, then use one. */
 export function DirectoryTab() {
-  const canManageTemplates = useAccess().tasks.can('tasks.assign');
+  const canManageTemplates = useAccess().tasks.can('templates.manage');
   const industries = useDirectoryIndustries();
   const [industry, setIndustry] = useState<DirectoryIndustry | null>(null);
   const [category, setCategory] = useState('');

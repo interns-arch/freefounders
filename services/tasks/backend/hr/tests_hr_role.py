@@ -49,8 +49,9 @@ class HrManagerRoleTests(Base):
         me = self.client.get("/api/auth/me").data
         self.assertEqual(me["role_display"], "HR Manager")
         caps = set(me["capabilities"])
-        self.assertIn("hr.manage", caps)
-        self.assertIn("hr.approve", caps)
+        # What "HR administrator" (hr.manage) covered, one permission each since §19.19.
+        self.assertTrue({"hr.approve_all", "hr.settings", "payroll.run", "payroll.salaries", "hr.import", "hr.mark",
+                         "hr.live_all", "hr.daily_all", "hr.dashboard_all", "hr.reports_all"} <= caps)
         self.assertIn("users.manage", caps)
         # No sales access whatsoever
         self.assertFalse({c for c in caps if c.startswith("leads.")})

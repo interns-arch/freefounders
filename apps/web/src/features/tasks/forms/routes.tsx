@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 import type { RouteObject } from 'react-router';
 import { RequireTasks } from '../general/parts';
+import { TASKS_SCREENS } from '../nav';
 
 // Loaded when first opened (smaller first download; the shell shows a loader meanwhile).
 const FormsPage = lazy(() => import('./page').then((m) => ({ default: m.FormsPage })));
@@ -9,11 +10,11 @@ const FormSubmissionsPage = lazy(() => import('./submissions').then((m) => ({ de
 const FillFormPage = lazy(() => import('./fill').then((m) => ({ default: m.FillFormPage })));
 
 const gate = (what: string, el: React.ReactNode) => (
-  <RequireTasks allow={(a) => a.tasks.module('forms')} what={what}>
+  <RequireTasks allow={(a) => a.tasks.module('forms') && TASKS_SCREENS.forms(a)} what={what}>
     {el}
   </RequireTasks>
 );
-const build = (el: React.ReactNode) => <RequireTasks allow={(a) => a.tasks.module('forms') && a.tasks.can('tasks.assign')} what="the form builder">{el}</RequireTasks>;
+const build = (el: React.ReactNode) => <RequireTasks allow={(a) => a.tasks.module('forms') && (a.tasks.can('forms.build') || a.tasks.can('forms.all'))} what="the form builder">{el}</RequireTasks>;
 
 /** /tasks/forms (?view=manage), /tasks/forms/:formId (builder), …/submissions, …/fill. */
 export const formsRoutes: RouteObject[] = [

@@ -1,11 +1,21 @@
 import { type Access, useMarkNotificationsRead, useNotifications, useSignOut } from '@freefounders/core';
-import { Bell, CheckCheck, ChevronDown, Keyboard, KeyRound, LogOut, Moon, Sun } from 'lucide-react';
+import { Bell, CheckCheck, ChevronDown, Feather, Keyboard, KeyRound, LogOut, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/overlays';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/overlays';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlays';
 import { Avatar } from '@/components/ui/primitives';
+import { type LiteChoice, useLite } from '@/lib/lite';
 import { cn } from '@/lib/utils';
 
 /** FreeFounders mark, or the company's logo and short name (Settings Center). */
@@ -143,11 +153,12 @@ export function NotificationsBell() {
   );
 }
 
-/** The account menu in the header (one place on every screen): light/dark, shortcuts, change password, sign out. */
+/** The account menu in the header (one place on every screen): light/dark, lite mode, shortcuts, change password, sign out. */
 export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?: () => void }) {
   const navigate = useNavigate();
   const signOut = useSignOut();
   const theme = useTheme();
+  const lite = useLite();
   const name = access.platform?.person.fullName ?? access.claims?.name ?? '';
   const role = access.tasks.me?.role_display ?? access.assets.me?.role.name ?? (access.isAdmin ? 'Admin' : 'Member');
   return (
@@ -178,6 +189,22 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         <DropdownMenuItem onSelect={() => theme.toggle()}>
           {theme.dark ? <Sun className="size-4" /> : <Moon className="size-4" />} {theme.dark ? 'Light mode' : 'Dark mode'}
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel id="lite-label" className="flex items-center gap-1.5">
+          <Feather className="size-3.5" aria-hidden /> Lite mode{lite.choice === 'auto' ? (lite.active ? ' · on' : ' · off') : ''}
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup aria-labelledby="lite-label" value={lite.choice} onValueChange={(v) => lite.setChoice(v as LiteChoice)}>
+          <DropdownMenuRadioItem value="auto" onSelect={(e) => e.preventDefault()}>
+            Auto <span className="ml-auto text-xs text-muted-foreground">for weak phones</span>
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="on" onSelect={(e) => e.preventDefault()}>
+            On
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="off" onSelect={(e) => e.preventDefault()}>
+            Off
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
         {onShortcuts && (
           <DropdownMenuItem onSelect={onShortcuts}>
             <Keyboard className="size-4" /> Keyboard shortcuts

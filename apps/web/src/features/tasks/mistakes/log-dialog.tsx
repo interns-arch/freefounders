@@ -1,4 +1,4 @@
-/** "Log a mistake": for yourself, or for someone on your team (tasks.assign). Admins can add a category on the spot. */
+/** "Log a mistake": for yourself, or for someone else (mistakes.log). mistakes.settings can add a category on the spot. */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { MISTAKE_SEVERITIES, type Mistake, type MistakeSeverity, useAddMistakeCategory, useLogMistake, useMistakeCategories, useSops, useTaskAssignees } from '@freefounders/core/tasks';
 import { Plus } from 'lucide-react';
@@ -12,8 +12,8 @@ import { ErrorNote } from '../general/parts';
 export function LogMistakeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (m: Mistake) => void }) {
   const access = useAccess();
   const me = access.tasks.me;
-  const canLogOthers = access.tasks.can('tasks.assign');
-  const canAddCategory = access.tasks.can('settings.manage');
+  const canLogOthers = access.tasks.can('mistakes.log');
+  const canAddCategory = access.tasks.can('mistakes.settings');
   const team = useTaskAssignees().data ?? [];
   const cats = useMistakeCategories();
   const sops = useSops().data ?? [];

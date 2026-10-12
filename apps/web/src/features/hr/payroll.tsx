@@ -1,5 +1,5 @@
 /**
- * Attendance → My Salary (everyone, module `payroll`) and Payroll (hr.manage): old pages/Payroll.jsx.
+ * Attendance → My Salary (payroll.self, module `payroll`) and Payroll (payroll.run / payroll.salaries): old pages/Payroll.jsx.
  * Payroll has three parts: monthly runs (draft → recalculate → finalise → CSV), salary structures and advances.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
@@ -39,22 +39,26 @@ const fmtDate = (d: string | null | undefined) => (d ? new Date(`${d}T00:00:00`)
 const monthName = (r: { month: number; year: number }) => `${MONTHS[r.month - 1]} ${r.year}`;
 const num = (v: string | number | null | undefined) => Number(v || 0);
 
-/* ───────────────────────── Payroll (hr.manage) ───────────────────────── */
+/* ─────────────── Payroll (Run payroll; Salaries and advances — PLAN.md §19.19) ─────────────── */
 
 export function PayrollTab() {
-  const [part, setPart] = useState<'runs' | 'salaries' | 'advances'>('runs');
+  const access = useAccess();
+  const runs = access.tasks.can('payroll.run');
+  const salaries = access.tasks.can('payroll.salaries');
+  const [chosen, setPart] = useState<'runs' | 'salaries' | 'advances'>(runs ? 'runs' : 'salaries');
+  const part = !runs && chosen === 'runs' ? 'salaries' : !salaries && chosen !== 'runs' ? 'runs' : chosen;
+  const options: Array<['runs' | 'salaries' | 'advances', string]> = [
+    ...(runs ? [['runs', 'Monthly payroll'] as ['runs', string]] : []),
+    ...(salaries
+      ? [
+          ['salaries', 'Salaries'] as ['salaries', string],
+          ['advances', 'Advances'] as ['advances', string],
+        ]
+      : []),
+  ];
   return (
     <div className="space-y-4">
-      <Segmented
-        label="Payroll sections"
-        value={part}
-        onChange={setPart}
-        options={[
-          ['runs', 'Monthly payroll'],
-          ['salaries', 'Salaries'],
-          ['advances', 'Advances'],
-        ]}
-      />
+      {options.length > 1 && <Segmented label="Payroll sections" value={part} onChange={setPart} options={options} />}
       {part === 'runs' && <Runs />}
       {part === 'salaries' && <Salaries />}
       {part === 'advances' && <Advances />}

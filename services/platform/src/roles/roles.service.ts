@@ -9,14 +9,26 @@ import { AuthService } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, people, personApps, personRoles, type RoleDuty, roleGrants, roles } from '../db/schema';
-import { type AppCatalogue, internalUrl, ProvisionClient } from '../provision/provision.client';
+import { type AppCatalogue, internalUrl, ProvisionClient, type UpgradeRule } from '../provision/provision.client';
+import { PLATFORM_APP, PLATFORM_CATALOGUE } from './platform-permissions';
 
-/** The two locked roles every company has. Their codes are new, so they never collide with an app's own roles. */
-export const SUPER_ADMIN = { code: 'ff_super_admin', name: 'Super Admin', description: 'Everything in every app. Cannot be edited.' };
-export const ADMIN = { code: 'ff_admin', name: 'Admin', description: 'Everything except the few Super Admin-only powers. Cannot be edited.' };
+/**
+ * The two roles every company starts with. Their codes are new, so they never collide with an app's own roles.
+ * Only Super Admin (the Owner role) is locked: it always has every permission, new ones included (PLAN.md §19.19).
+ */
+export const SUPER_ADMIN = {
+  code: 'ff_super_admin',
+  name: 'Super Admin',
+  description: 'Everything in every app, always (new permissions included). Cannot be edited, so the company can never lock itself out.',
+};
+export const ADMIN = { code: 'ff_admin', name: 'Admin', description: 'Starts with everything except the Owner-only powers. Edit it like any role.' };
+
+/** Apps a role can have permissions in: the company's apps, plus the Admin workspace itself. */
+export const GRANT_APPS = [...APPS, PLATFORM_APP] as const;
+export type GrantApp = (typeof GRANT_APPS)[number];
 
 const grantSchema = z.object({
-  app: z.enum(APPS),
+  app: z.enum(GRANT_APPS),
   permission: z.string().trim().min(1).max(60),
   scope: z.string().trim().max(20).optional().default(''),
 });
@@ -54,11 +66,59 @@ export const roleInputSchema = z.object({
   grants: z.array(grantSchema).max(500).optional().default([]),
   duties: z.array(dutySchema).max(50).optional(),
 });
+/** PATCH: only what is sent changes (no defaults, so a partial body never resets the level or the permissions). */
+export const roleUpdateSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(80).optional(),
+  description: z.string().trim().max(300).nullable().optional(),
+  colour: z.string().trim().max(20).nullable().optional(),
+  level: z.number().int().min(1).max(3).optional(),
+  grants: z.array(grantSchema).max(500).optional(),
+  duties: z.array(dutySchema).max(50).optional(),
+});
 export const personRolesSchema = z.object({ roleIds: z.array(z.string().uuid()).max(50) });
 export type RoleInput = z.infer<typeof roleInputSchema>;
 
-type Grant = { app: AppKey; permission: string; scope: string };
+type Grant = { app: GrantApp; permission: string; scope: string };
+type Catalogue = AppCatalogue & { app: GrantApp };
 const CATALOGUE_TTL_MS = 10 * 60_000;
+
+const ruleMatches = (rule: UpgradeRule, had: Map<string, string>, level: number) => {
+  if (rule.everyone) return true;
+  if (rule.minLevel != null) return level >= rule.minLevel;
+  if (rule.from) return had.has(rule.from) && (!rule.fromScopes?.length || rule.fromScopes.includes(had.get(rule.from)!));
+  return false;
+};
+
+/**
+ * One role's grants in one app, saved under an older catalogue -> the same powers in this one (PLAN.md §19.19). Generic:
+ * the app publishes the rules. Roles with no permission in the app stay empty there; retired permissions are replaced.
+ */
+export function upgradeGrants(grants: Map<string, string>, level: number, cat: AppCatalogue): Map<string, string> {
+  if (!grants.size) return new Map(grants);
+  const byKey = new Map(cat.permissions.map((p) => [p.key, p]));
+  const had = new Map(
+    [...grants].map(([k, v]) => {
+      const p = byKey.get(k);
+      return [k, p?.scopes && !p.scopes.includes(v) && p.legacyScope ? p.legacyScope : v] as const;
+    }),
+  );
+  const retired = new Set(cat.retired ?? []);
+  const out = new Map([...had].filter(([k]) => !retired.has(k)));
+  const rank = (s: string) => cat.scopes.indexOf(s);
+  for (const p of cat.permissions) {
+    for (const rule of p.upgrade ?? []) {
+      if (!ruleMatches(rule, had, level)) continue;
+      if (!p.scopes) {
+        out.set(p.key, '');
+        continue;
+      }
+      const scope = rule.scope && p.scopes.includes(rule.scope) ? rule.scope : p.scopes[0];
+      const now = out.get(p.key);
+      out.set(p.key, now !== undefined && rank(now) >= rank(scope) ? now : scope);
+    }
+  }
+  return out;
+}
 
 const slug = (s: string) =>
   s
@@ -90,9 +150,12 @@ export class RolesService {
     return (c?.apps ?? []).filter((a): a is AppKey => (APPS as readonly string[]).includes(a));
   }
 
-  /** What each of the company's apps offers, read from the apps themselves (cached for a few minutes). */
-  async catalogue(companyId: string): Promise<Array<AppCatalogue & { app: AppKey }>> {
-    const out: Array<AppCatalogue & { app: AppKey }> = [];
+  /**
+   * What each of the company's apps offers, read from the apps themselves (cached for a few minutes), then the Admin
+   * workspace's own permissions (PLAN.md §19.19).
+   */
+  async catalogue(companyId: string): Promise<Catalogue[]> {
+    const out: Catalogue[] = [];
     for (const app of await this.enabledApps(companyId)) {
       if (!internalUrl(app)) continue;
       const hit = this.catalogues.get(app);
@@ -104,7 +167,58 @@ export class RolesService {
       this.catalogues.set(app, { at: Date.now(), data });
       out.push({ ...data, app });
     }
+    out.push({ ...PLATFORM_CATALOGUE, app: PLATFORM_APP });
     return out;
+  }
+
+  /**
+   * Keeps the company's roles in step with the catalogues (PLAN.md §19.19): roles saved under an older catalogue
+   * version get the same powers in the new one, once; the Owner role always has every permission. Never throws (an app
+   * that cannot be reached is tried again next time).
+   */
+  async ensureUpgraded(companyId: string): Promise<Record<string, number>> {
+    const db = this.dbs.db;
+    try {
+      const cat = await this.catalogue(companyId);
+      const done = await db.transaction(async (tx) => {
+        const [c] = await tx.select({ upgrades: companies.accessUpgrades }).from(companies).where(eq(companies.id, companyId)).for('update');
+        const applied: Record<string, number> = { ...(c?.upgrades ?? {}) };
+        const todo = cat.filter((a) => (a.version ?? 1) > (applied[a.app] ?? 1));
+        if (todo.length) {
+          const roleRows = await tx.select({ id: roles.id, level: roles.level }).from(roles).where(eq(roles.companyId, companyId));
+          const all = roleRows.length ? await tx.select().from(roleGrants).where(inArray(roleGrants.roleId, roleRows.map((r) => r.id))) : [];
+          for (const role of roleRows) {
+            for (const app of todo) {
+              const mine = new Map(all.filter((g) => g.roleId === role.id && g.app === app.app).map((g) => [g.permission, g.scope]));
+              const next = upgradeGrants(mine, role.level, app);
+              if (next.size === mine.size && [...next].every(([k, v]) => mine.get(k) === v)) continue;
+              await tx.delete(roleGrants).where(and(eq(roleGrants.roleId, role.id), eq(roleGrants.app, app.app)));
+              if (next.size) await tx.insert(roleGrants).values([...next].map(([permission, scope]) => ({ roleId: role.id, app: app.app, permission, scope })));
+            }
+          }
+          for (const app of todo) applied[app.app] = app.version ?? 1;
+          await tx.update(companies).set({ accessUpgrades: applied }).where(eq(companies.id, companyId));
+          this.log.log(`Roles of company ${companyId} upgraded to ${todo.map((a) => `${a.app} v${a.version}`).join(', ')}`);
+        }
+        // The Owner role: every permission at its widest scope, whatever the apps offer today.
+        const [owner] = await tx.select({ id: roles.id }).from(roles).where(and(eq(roles.companyId, companyId), eq(roles.code, SUPER_ADMIN.code))).limit(1);
+        if (owner) {
+          const want = this.systemGrants(cat, true);
+          const have = await tx.select().from(roleGrants).where(eq(roleGrants.roleId, owner.id));
+          const same = want.length === have.length && want.every((w) => have.some((h) => h.app === w.app && h.permission === w.permission && h.scope === w.scope));
+          if (!same) {
+            await tx.delete(roleGrants).where(eq(roleGrants.roleId, owner.id));
+            if (want.length) await tx.insert(roleGrants).values(want.map((g) => ({ roleId: owner.id, ...g })));
+          }
+        }
+        return applied;
+      });
+      return Object.fromEntries(cat.map((a) => [a.app, done[a.app] ?? 1]));
+    } catch (err) {
+      this.log.warn(`Role catalogue check skipped for company ${companyId}: ${(err as Error).message}`);
+      const [c] = await db.select({ upgrades: companies.accessUpgrades }).from(companies).where(eq(companies.id, companyId)).limit(1);
+      return { ...(c?.upgrades ?? {}) };
+    }
   }
 
   private async validGrants(companyId: string, grants: Grant[]): Promise<Grant[]> {
@@ -127,18 +241,19 @@ export class RolesService {
     return out;
   }
 
-  /** The locked roles' permissions: every permission at its widest scope (Admin: without the Super Admin-only ones). */
-  private systemGrants(cat: AppCatalogue[] & Array<{ app: AppKey }>, superAdmin: boolean): Grant[] {
+  /** Every permission at its widest scope (the Owner role); without the Owner-only ones for the starting Admin role. */
+  private systemGrants(cat: Catalogue[], superAdmin: boolean): Grant[] {
     return cat.flatMap((c) =>
       c.permissions
         .filter((p) => superAdmin || !p.superAdminOnly)
-        .map((p) => ({ app: c.app as AppKey, permission: p.key, scope: p.scopes ? p.scopes[p.scopes.length - 1] : '' })),
+        .map((p) => ({ app: c.app, permission: p.key, scope: p.scopes ? p.scopes[p.scopes.length - 1] : '' })),
     );
   }
 
   // ─── roles ──────────────────────────────────────────────────────────────
 
   async list(caller: Caller, includeArchived = false) {
+    await this.ensureUpgraded(caller.companyId);
     const db = this.dbs.db;
     const rows = await db
       .select({
@@ -206,7 +321,7 @@ export class RolesService {
 
   async update(caller: Caller, id: string, input: Partial<RoleInput>) {
     const role = await this.getRole(caller.companyId, id);
-    if (role.system) throw new ForbiddenException(`${role.name} is a locked role`);
+    if (role.system) throw new ForbiddenException(`${role.name} is locked: it always has every permission`);
     if (role.archived) throw badRequest('This role is archived');
     if (input.name) await this.assertNameFree(caller.companyId, input.name, id);
     const grants = input.grants ? await this.validGrants(caller.companyId, input.grants as Grant[]) : null;
@@ -255,7 +370,7 @@ export class RolesService {
   /** Archives a role: nobody holds it any more (they lose apps it alone gave them); history keeps its name. */
   async archive(caller: Caller, id: string) {
     const role = await this.getRole(caller.companyId, id);
-    if (role.system) throw new ForbiddenException(`${role.name} is a locked role`);
+    if (role.system) throw new ForbiddenException(`${role.name} is locked: the company always keeps it`);
     const holders = await this.holders(id);
     await this.dbs.db.transaction(async (tx) => {
       await tx.update(roles).set({ archived: true, updatedAt: new Date() }).where(eq(roles.id, id));
@@ -362,6 +477,8 @@ export class RolesService {
    */
   async push(companyId: string, { retried = false } = {}): Promise<Record<string, string>> {
     const db = this.dbs.db;
+    // Which catalogue version the grants below are written in, per app (an app upgrades older ones itself).
+    const catalogueVersions = await this.ensureUpgraded(companyId);
     const [c] = await db
       .update(companies)
       .set({ accessVersion: sql`${companies.accessVersion} + 1` })
@@ -389,6 +506,7 @@ export class RolesService {
       try {
         const res = await this.provisioner.pushAccess(app, companyId, {
           version: c.version,
+          catalogueVersions,
           roles: payloadRoles,
           people: holders.map((h) => ({ personId: h.personId, roleIds: byPerson.get(h.personId) ?? [] })),
         });
@@ -423,17 +541,23 @@ export class RolesService {
     if (n > 0) return false;
     const cat = await this.catalogue(companyId);
     const appExports: Array<{ app: AppKey; data: Awaited<ReturnType<ProvisionClient['exportAccess']>> }> = [];
-    for (const c of cat) appExports.push({ app: c.app, data: await this.provisioner.exportAccess(c.app, companyId) });
+    for (const c of cat) {
+      if (c.app !== PLATFORM_APP) appExports.push({ app: c.app, data: await this.provisioner.exportAccess(c.app, companyId) });
+    }
 
     await db.transaction(async (tx) => {
       const used = new Set<string>([SUPER_ADMIN.name.toLowerCase(), ADMIN.name.toLowerCase()]);
+      // The apps' roles are already in today's catalogues: nothing to upgrade later.
+      await tx.update(companies).set({ accessUpgrades: Object.fromEntries(cat.map((a) => [a.app, a.version ?? 1])) }).where(eq(companies.id, companyId));
       const insertRole = async (v: { code: string; name: string; description?: string | null; level: number; system?: boolean }, grants: Grant[]) => {
         const [r] = await tx.insert(roles).values({ companyId, code: v.code, name: v.name, description: v.description ?? null, level: v.level, system: v.system ?? false }).returning({ id: roles.id });
         if (grants.length) await tx.insert(roleGrants).values(grants.map((g) => ({ roleId: r.id, ...g })));
         return r.id;
       };
       const superId = await insertRole({ ...SUPER_ADMIN, level: 3, system: true }, this.systemGrants(cat, true));
-      await insertRole({ ...ADMIN, level: 3, system: true }, this.systemGrants(cat, false));
+      // Admin starts with everything (but the Owner-only powers and the Admin workspace, which the admin access level
+      // gives) and is an ordinary role from then on.
+      await insertRole({ ...ADMIN, level: 3 }, this.systemGrants(cat, false).filter((g) => g.app !== PLATFORM_APP));
 
       const roleId = new Map<string, string>(); // `${app}:${local code}` -> platform role id
       for (const { app, data } of appExports) {

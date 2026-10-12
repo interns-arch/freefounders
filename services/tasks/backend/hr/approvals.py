@@ -1,7 +1,8 @@
 """Who approves leave and attendance corrections, and reminders for anything left waiting (PLAN.md §17.2).
 
 APPROVAL_LEAVE (company setting):
-  department -- today's rule: anyone with hr.approve in the requester's department (or hr.manage).
+  department -- today's rule: whoever's "Approve leave and corrections" scope covers the requester (Team: their
+                manager; Department: their department; Company: everyone; PLAN.md §19.19).
   manager    -- the requester's reports-to manager approves (and is notified), even without hr.approve;
                 the department approvers and HR can still act, e.g. when the manager is away.
 APPROVAL_REMIND_HOURS: a request still pending this long reminds its approver once; twice as long and it
@@ -44,8 +45,10 @@ def is_approver(user) -> bool:
 
 def reviewable_users(reviewer):
     """Whose leave and corrections this person may decide."""
-    from .views import managed_users
-    users = managed_users(reviewer)
+    from .team import people_in_scope
+    from .views import approve_scope
+    scope = approve_scope(reviewer)
+    users = people_in_scope(reviewer, scope) if scope else User.objects.none()
     if mode() == "manager":
         users = users | User.objects.filter(is_active=True, reporting_manager=reviewer)
     return users.distinct()
@@ -54,27 +57,42 @@ def reviewable_users(reviewer):
 def may_review(reviewer, target) -> bool:
     if reviewer.pk == target.pk:
         return False
-    from .views import can_approve, can_manage_hr
-    if can_manage_hr(reviewer):
+    from .views import approve_scope
+    scope = approve_scope(reviewer)
+    if scope == "company":
         return True
     if mode() == "manager" and manager_of(target) == reviewer:
         return True
-    return can_approve(reviewer) and target.is_active and target.department == reviewer.department
+    if not target.is_active or scope is None:
+        return False
+    mine = target.reporting_manager_id == reviewer.pk
+    return mine or (scope == "department" and target.department == reviewer.department)
+
+
+def approver_users():
+    """Everyone who approves for someone (any scope)."""
+    from accounts.access import users_with
+    return (users_with("hr.approve_team") | users_with("hr.approve") | users_with("hr.approve_all")).distinct()
 
 
 def approvers_for(target) -> list:
-    """Who is told about a new request (and reminded about it)."""
+    """Who is told about a new request (and reminded about it): the requester's own approvers (their manager with
+    Team scope, their department's approvers); else the company-wide approvers."""
     from accounts.access import users_with
     manager = manager_of(target)
     if mode() == "manager" and manager:
         return [manager]
-    people = list(users_with("hr.approve").filter(department=target.department).exclude(pk=target.pk))
-    return people or list(users_with("hr.manage").exclude(pk=target.pk))
+    # As before: whoever approves for the requester's department, company-wide approvers in it included.
+    people = list((users_with("hr.approve") | users_with("hr.approve_all")).distinct()
+                  .filter(department=target.department).exclude(pk=target.pk))
+    if manager and manager not in people and users_with("hr.approve_team").filter(pk=manager.pk).exists():
+        people.append(manager)
+    return people or list(users_with("hr.approve_all").exclude(pk=target.pk))
 
 
 def escalation_targets(target) -> list:
     from accounts.access import users_with
-    return list(users_with("hr.manage").exclude(pk=target.pk))
+    return list(users_with("hr.approve_all").exclude(pk=target.pk))
 
 
 def _describe(kind, obj) -> tuple[str, str]:

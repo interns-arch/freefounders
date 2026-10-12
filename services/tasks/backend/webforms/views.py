@@ -18,11 +18,15 @@ from .services import create_submission
 
 
 def can_build_forms(user) -> bool:
-    return has_capability(user, "tasks.assign")  # admin + managers
+    return has_capability(user, "forms.build") or has_capability(user, "forms.all")
 
 
 def can_manage_form(user, form: Form) -> bool:
-    return has_capability(user, "tasks.view_all") or form.created_by_id == user.id
+    return has_capability(user, "forms.all") or form.created_by_id == user.id
+
+
+def can_fill_forms(user) -> bool:
+    return any(has_capability(user, p) for p in ("forms.view", "forms.build", "forms.all"))
 
 
 def _extract_payload(request):
@@ -55,10 +59,12 @@ class FormViewSet(viewsets.ModelViewSet):
             if not can_build_forms(user):
                 raise PermissionDenied("Your role cannot manage forms.")
             qs = Form.objects.select_related("created_by").prefetch_related("fields")
-            if has_capability(user, "tasks.view_all"):
+            if has_capability(user, "forms.all"):
                 return qs
             return qs.filter(created_by=user)
-        # default: published forms anyone signed-in can fill
+        # default: published forms anyone with "Fill in forms" can fill
+        if not can_fill_forms(user):
+            raise PermissionDenied("Your role does not include forms.")
         return (Form.objects.filter(status=FormStatus.PUBLISHED)
                 .select_related("created_by").prefetch_related("fields"))
 
@@ -69,7 +75,8 @@ class FormViewSet(viewsets.ModelViewSet):
                 .filter(pk=self.kwargs["pk"]).first())
         if not form:
             raise NotFound("Form not found.")
-        if form.status == FormStatus.PUBLISHED or can_manage_form(self.request.user, form):
+        if can_manage_form(self.request.user, form) or (
+                form.status == FormStatus.PUBLISHED and can_fill_forms(self.request.user)):
             return form
         raise NotFound("Form not found.")
 
@@ -141,6 +148,8 @@ class FormViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
         """Signed-in (employee) submission of a published form."""
+        if not can_fill_forms(request.user):
+            raise PermissionDenied("Your role does not include forms.")
         form = Form.objects.filter(pk=pk, status=FormStatus.PUBLISHED).first()
         if not form:
             raise ValidationError({"detail": "This form is not accepting submissions."})

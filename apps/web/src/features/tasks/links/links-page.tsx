@@ -1,6 +1,6 @@
 /**
  * /tasks/links — shared company bookmarks in collections (old pages/Links.jsx). Everyone adds links and stars
- * favourites; tasks.assign creates collections and removes any link (others remove only their own).
+ * favourites; links.manage creates collections and removes any link (others remove only their own).
  */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
@@ -28,7 +28,7 @@ import { Chip, ErrorNote, Panel } from '../general/parts';
 
 export function LinksPage() {
   const access = useAccess();
-  const canManage = access.tasks.can('tasks.assign');
+  const canManage = access.tasks.can('links.manage');
   const me = access.tasks.me?.id;
   const [search, setSearch] = useState('');
   const [collection, setCollection] = useState<number | ''>('');

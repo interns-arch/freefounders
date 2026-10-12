@@ -12,6 +12,7 @@ from django.core.validators import validate_email
 from django.utils import timezone
 
 from crm.assignment import auto_assign
+from config.images import compress_upload
 from crm.models import EventType, Lead, LeadEvent, Task
 from notifications.service import notify
 
@@ -37,6 +38,7 @@ def validate_answers(form: Form, data: dict, files: dict):
                 if f.size > MAX_FILE_MB * 1024 * 1024:
                     errors[key] = f"{field.label}: file exceeds {MAX_FILE_MB} MB."
                 else:
+                    f = compress_upload(f)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
                     file_map[key] = f
                     answers[key] = f.name
             continue

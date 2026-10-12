@@ -1,6 +1,6 @@
 /**
  * /tasks/forms — web forms (old pages/Forms.jsx). "Fill": the published forms anyone signed in may fill.
- * "My forms" (?view=manage, tasks.assign): create, build, publish and read submissions.
+ * "My forms" (?view=manage, forms.build; forms.all sees every form): create, build, publish and read submissions.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type FormStatus, type WebForm, useCreateForm, useFormAction, useManagedForms, usePublishedForms } from '@freefounders/core/tasks';
@@ -19,7 +19,7 @@ export const FORM_STATUS_TONE: Record<FormStatus, Tone> = { draft: 'neutral', pu
 
 export function FormsPage() {
   const access = useAccess();
-  const canBuild = access.tasks.can('tasks.assign');
+  const canBuild = access.tasks.can('forms.build') || access.tasks.can('forms.all');
   const [params, setParams] = useSearchParams();
   const mode = canBuild && params.get('view') === 'manage' ? 'manage' : 'fill';
   const setMode = (m: 'fill' | 'manage') => {

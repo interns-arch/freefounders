@@ -115,6 +115,20 @@ const menuItem =
 export function DropdownMenuItem({ className, destructive, ...props }: React.ComponentProps<typeof MenuPrimitive.Item> & { destructive?: boolean }) {
   return <MenuPrimitive.Item className={cn(menuItem, destructive && 'text-destructive data-[highlighted]:text-destructive [&_svg]:!text-destructive', className)} {...props} />;
 }
+export const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup;
+/** A choice inside a DropdownMenuRadioGroup (role menuitemradio, aria-checked); a dot marks the chosen one. */
+export function DropdownMenuRadioItem({ className, children, ...props }: React.ComponentProps<typeof MenuPrimitive.RadioItem>) {
+  return (
+    <MenuPrimitive.RadioItem className={cn(menuItem, 'pl-8', className)} {...props}>
+      <span className="absolute left-2.5 flex size-3.5 items-center justify-center" aria-hidden>
+        <MenuPrimitive.ItemIndicator>
+          <span className="block size-2 rounded-full bg-primary" />
+        </MenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </MenuPrimitive.RadioItem>
+  );
+}
 export function DropdownMenuLabel({ className, ...props }: React.ComponentProps<typeof MenuPrimitive.Label>) {
   return <MenuPrimitive.Label className={cn('px-2 py-1.5 font-mono text-[11px] font-semibold tracking-wider text-foreground/75 uppercase', className)} {...props} />;
 }

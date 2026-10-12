@@ -38,6 +38,7 @@ class AccessSyncTests(TestCase):
                        {"app": "tasks", "permission": "payroll.steal", "scope": ""}],
         }]
         people = people if people is not None else [{"personId": str(self.person), "roleIds": [str(self.role_id)]}]
+        extra.setdefault("catalogueVersions", {"tasks": access.CATALOGUE_VERSION})   # an up-to-date Platform
         return self.api.put("/api/internal/access", {"version": version, "roles": roles, "people": people, **extra}, format="json")
 
     def test_needs_the_platform(self):

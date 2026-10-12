@@ -8,8 +8,10 @@ import { badRequest, notFound } from '../../common/http';
 import { DbService } from '../../db/db.service';
 import { allocationPhotos, allocations, assets, PHOTO_KINDS } from '../../db/schema';
 import { HistoryService } from '../../core/history.service';
+import { shrinkPhoto, sniff } from './photo-shrink';
 
-export const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+/** Raw size accepted per photo. Generous because every photo is shrunk before it is stored (PLAN.md §19.20). */
+export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
 export const MAX_PHOTOS_PER_UPLOAD = 6;
 
 export interface UploadedPhoto {
@@ -20,14 +22,6 @@ export interface UploadedPhoto {
 type PhotoKind = (typeof PHOTO_KINDS)[number];
 
 export const uploadDir = () => process.env.UPLOAD_DIR ?? path.resolve(__dirname, '../../../../../.data/uploads');
-
-/** Identifies the image from its bytes; the browser-supplied MIME type is not trusted. */
-function sniff(buf: Buffer): { mime: string; ext: string } | null {
-  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { mime: 'image/jpeg', ext: 'jpg' };
-  if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { mime: 'image/png', ext: 'png' };
-  if (buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return { mime: 'image/webp', ext: 'webp' };
-  return null;
-}
 
 @Injectable()
 export class PhotosService {
@@ -61,20 +55,22 @@ export class PhotosService {
       if (!alloc) throw notFound('Assignment');
     }
 
-    const saved: (typeof allocationPhotos.$inferInsert)[] = files.map((f, i) => {
-      const type = detected[i]!;
-      return {
+    const saved: (typeof allocationPhotos.$inferInsert)[] = [];
+    // One at a time: a big phone photo needs a lot of memory while it is decoded.
+    for (const [i, f] of files.entries()) {
+      const photo = (await shrinkPhoto(f.buffer, detected[i]))!;
+      saved.push({
         assetId,
         allocationId: alloc?.id ?? null,
         kind: kind as PhotoKind,
-        data: f.buffer,
-        fileName: `${randomUUID()}.${type.ext}`,
-        mimeType: type.mime,
-        sizeBytes: f.size,
+        data: photo.buffer,
+        fileName: `${randomUUID()}.${photo.ext}`,
+        mimeType: photo.mime,
+        sizeBytes: photo.buffer.length,
         uploadedBy: actor.userId,
         uploadedByName: actor.name,
-      };
-    });
+      });
+    }
     const inserted = await db.insert(allocationPhotos).values(saved).returning(PUBLIC_COLUMNS);
     const n = inserted.length;
     const label = assetPhoto ? 'asset' : kind === 'HANDOVER' ? 'handover' : 'return';
@@ -127,8 +123,9 @@ const PUBLIC_COLUMNS = {
   assetId: allocationPhotos.assetId,
   allocationId: allocationPhotos.allocationId,
   kind: allocationPhotos.kind,
+  mimeType: allocationPhotos.mimeType,
   uploadedByName: allocationPhotos.uploadedByName,
   createdAt: allocationPhotos.createdAt,
 };
 
-type PublicPhoto = { id: string; assetId: string; allocationId: string | null; kind: PhotoKind; uploadedByName: string | null; createdAt: Date };
+type PublicPhoto = { id: string; assetId: string; allocationId: string | null; kind: PhotoKind; mimeType: string; uploadedByName: string | null; createdAt: Date };

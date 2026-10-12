@@ -61,7 +61,7 @@ async function ownerPage(browser: Browser, path: string) {
 test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, request }) => {
   const owner = await token(request);
   const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
-  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false, face_enabled: false } })).ok()).toBeTruthy();
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false} })).ok()).toBeTruthy();
   const person = await newPerson(request, owner, 'Punch');
   try {
     const context = await browser.newContext({ permissions: ['camera'] });
@@ -82,6 +82,9 @@ test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, r
     await context.close();
 
     const { ctx, page: hr } = await ownerPage(browser, '/tasks/hr?tab=team');
+    // The list draws 50 staff at a time (PLAN.md §19.18): find the new person by their login (unique; a name search
+    // matches any of its words, i.e. every "E2E …" person).
+    await hr.getByLabel('Search staff').fill(person.login);
     const thumb = hr.getByRole('button', { name: `${person.name} check-in photo` });
     await expect(thumb).toBeVisible();
     await thumb.click();
@@ -89,7 +92,7 @@ test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, r
     await shot(hr, 'web-hr-team-photo');
     await ctx.close();
   } finally {
-    const restore = Object.fromEntries(['photo', 'geofence_enabled', 'face_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+    const restore = Object.fromEntries(['photo', 'geofence_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
     await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
     await person.remove();
   }
@@ -98,7 +101,7 @@ test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, r
 test('punch in and out from Home (PLAN.md §19.3, §19.14); old /tasks/hr links open Attendance', async ({ browser, request }) => {
   const owner = await token(request);
   const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
-  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: false, face_enabled: false } })).ok()).toBeTruthy();
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: false} })).ok()).toBeTruthy();
   const person = await newPerson(request, owner, 'Portal');
   try {
     const context = await browser.newContext();
@@ -121,7 +124,7 @@ test('punch in and out from Home (PLAN.md §19.3, §19.14); old /tasks/hr links 
     await expect(page.getByRole('navigation', { name: 'Attendance menu' }).getByRole('link', { name: 'My leave' })).toHaveAttribute('aria-current', 'page');
     await context.close();
   } finally {
-    const restore = Object.fromEntries(['photo', 'geofence_enabled', 'face_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+    const restore = Object.fromEntries(['photo', 'geofence_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
     await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
     await person.remove();
   }

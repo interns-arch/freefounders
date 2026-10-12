@@ -518,8 +518,9 @@ describe('role builder (Phase 3)', () => {
     assert.deepEqual(Object.keys(byCode).sort(), ['ff_admin', 'ff_super_admin', 'super_admin', 'warehouse']);
     assert.equal(byCode.super_admin.name, 'Super Admin (Tasks)', 'name clash with the locked role');
     assert.equal(byCode.ff_super_admin.system, true);
+    assert.equal(byCode.ff_admin.system, false, 'only the Owner role is locked (§19.19)');
     const perms = (code: string) => byCode[code].grants.map((g: { permission: string; scope: string }) => `${g.permission}@${g.scope}`).sort();
-    assert.deepEqual(perms('ff_super_admin'), ['tasks.assign@', 'tasks.delete_admin_work@', 'tasks.view@company']);
+    assert.deepEqual(perms('ff_super_admin'), ['company.settings@', 'people.delete@', 'people.exit@', 'people.manage@', 'people.passwords@', 'roles.manage@', 'tasks.assign@', 'tasks.delete_admin_work@', 'tasks.view@company'], 'the Owner role has every permission, the Admin workspace too');
     assert.deepEqual(perms('ff_admin'), ['tasks.assign@', 'tasks.view@company'], 'Super Admin-only powers are not in Admin');
     assert.deepEqual(perms('warehouse'), ['tasks.view@team'], 'unknown permissions are dropped');
     Object.assign(roleIds, { super: byCode.ff_super_admin.id, admin: byCode.ff_admin.id, warehouse: byCode.warehouse.id });
@@ -541,6 +542,8 @@ describe('role builder (Phase 3)', () => {
     assert.equal(cat.status, 200);
     assert.equal(cat.body[0].app, 'tasks');
     assert.equal(cat.body[0].permissions.length, 3);
+    assert.equal(cat.body.at(-1).app, 'platform', 'the Admin workspace is the last "app" in the role builder');
+    assert.equal(cat.body.at(-1).permissions.length, 6);
     const created = await call('POST', '/people', { token: admin.token, body: { fullName: 'Rita Roles', email: 'rita@acme.test', login: { username: 'rita', password: PASSWORD } } });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     ids.rita = created.body.person.id;
@@ -561,7 +564,12 @@ describe('role builder (Phase 3)', () => {
     assert.equal((await make({ name: 'X4', grants: [{ app: 'assets', permission: 'asset:view' }] })).status, 400, 'not in the plan');
     assert.equal((await make({ name: 'floor lead' })).status, 409);
     assert.equal((await call('PATCH', `/roles/${roleIds.super}`, { token: admin.token, body: { name: 'Boss' } })).status, 403);
-    assert.equal((await call('DELETE', `/roles/${roleIds.admin}`, { token: admin.token })).status, 403);
+    assert.equal((await call('DELETE', `/roles/${roleIds.super}`, { token: admin.token })).status, 403, 'the Owner role is never archived');
+    const renamed = await call('PATCH', `/roles/${roleIds.admin}`, { token: admin.token, body: { description: 'Edited like any role' } });
+    assert.equal(renamed.status, 200, 'the Admin role is an ordinary role now (§19.19)');
+    assert.equal(renamed.body.description, 'Edited like any role');
+    assert.equal((await make({ name: 'Admin desk', grants: [{ app: 'platform', permission: 'people.manage' }] })).status, 201, 'Admin permissions are role permissions');
+    assert.equal((await make({ name: 'X5', grants: [{ app: 'platform', permission: 'people.fly' }] })).status, 400);
     const copy = await call('POST', `/roles/${roleIds.floor}/duplicate`, { token: admin.token });
     assert.equal(copy.body.name, 'Floor Lead (copy)');
     assert.equal(copy.body.grants.length, 2);
@@ -618,6 +626,127 @@ describe('role builder (Phase 3)', () => {
     assert.equal(sent.length, 2, 'refused once as stale, then resent');
     assert.ok(sent[1] > sent[0] && sent[1] >= fakeAccessVersion - 0, 'the resend is past the app version');
     assert.deepEqual(accessPushes.at(-1)!.body.people.find((p: { personId: string }) => p.personId === ids.rita).roleIds, [roleIds.floor]);
+  });
+});
+
+describe('every feature is a permission (§19.19)', () => {
+  const made: Record<string, string> = {};
+  const role = async (name: string, grants: Array<{ app: string; permission: string; scope?: string }>, level = 1) => {
+    const admin = await login('admin@acme.test');
+    const res = await call('POST', '/roles', { token: admin.token, body: { name, level, grants } });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    return res.body.id as string;
+  };
+  const person = async (fullName: string, email: string, username: string, roleIds: string[], platformRole = 'member') => {
+    const owner = await login('olivia');
+    const res = await call('POST', '/people', { token: owner.token, body: { fullName, email, platformRole, login: { username, password: PASSWORD } } });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    const given = await call('PUT', `/people/${res.body.person.id}/roles`, { token: owner.token, body: { roleIds } });
+    assert.equal(given.status, 200, JSON.stringify(given.body));
+    return res.body.person.id as string;
+  };
+
+  test('a member with "Manage people" lists and adds people, but cannot touch roles, settings or admins', async () => {
+    made.peopleRole = await role('People desk', [{ app: 'platform', permission: 'people.manage' }]);
+    made.pam = await person('Pam People', 'pam19@acme.test', 'pam', [made.peopleRole]);
+    const pam = await login('pam');
+    const me = await call('GET', '/auth/me', { token: pam.token });
+    assert.deepEqual(me.body.permissions, ['people.manage']);
+    assert.equal((await call('GET', '/people', { token: pam.token })).status, 200);
+    assert.equal((await call('GET', '/roles', { token: pam.token })).status, 200, 'People & access shows role names');
+    const added = await call('POST', '/people', { token: pam.token, body: { fullName: 'Nina New', email: 'nina19@acme.test' } });
+    assert.equal(added.status, 201, JSON.stringify(added.body));
+    made.nina = added.body.person.id;
+    assert.equal((await call('PATCH', `/people/${made.nina}`, { token: pam.token, body: { designation: 'Clerk' } })).status, 200);
+    assert.equal((await call('POST', '/people', { token: pam.token, body: { fullName: 'Ada Admin', email: 'ada19@acme.test', platformRole: 'admin' } })).status, 403, 'cannot make admins');
+    assert.equal((await call('PATCH', `/people/${ids.admin}`, { token: pam.token, body: { designation: 'X' } })).status, 403, 'cannot change an admin');
+    assert.equal((await call('POST', '/roles', { token: pam.token, body: { name: 'Mine' } })).status, 403, 'not roles');
+    assert.equal((await call('PUT', `/people/${made.nina}/roles`, { token: pam.token, body: { roleIds: [] } })).status, 403);
+    assert.equal((await call('PATCH', '/company', { token: pam.token, body: { shortName: 'X' } })).status, 403, 'not settings');
+    assert.equal((await call('PUT', `/people/${made.nina}/login`, { token: pam.token, body: { username: 'nina' } })).status, 403, 'not passwords');
+    assert.equal((await call('DELETE', `/people/${made.nina}`, { token: pam.token, body: { confirm: 'Nina New' } })).status, 403, 'not delete');
+  });
+
+  test('each Admin permission opens exactly its own action; taking the role away closes it at once', async () => {
+    made.deskRole = await role('Settings and passwords', [
+      { app: 'platform', permission: 'company.settings' },
+      { app: 'platform', permission: 'people.passwords' },
+      { app: 'platform', permission: 'people.delete' },
+    ]);
+    made.sam = await person('Sal Settings', 'sal19@acme.test', 'sal', [made.deskRole]);
+    const sal = await login('sal');
+    assert.equal((await call('PATCH', '/company', { token: sal.token, body: { shortName: 'Acme' } })).status, 200);
+    assert.equal((await call('PUT', `/people/${made.nina}/login`, { token: sal.token, body: { username: 'nina2', password: PASSWORD } })).status, 200);
+    assert.equal((await call('PUT', `/people/${ids.admin}/login`, { token: sal.token, body: { password: PASSWORD } })).status, 403, "not an admin's password");
+    assert.equal((await call('POST', '/people', { token: sal.token, body: { fullName: 'Not Allowed' } })).status, 403);
+    assert.equal((await call('GET', '/roles', { token: sal.token })).status, 200, 'People & access opens for passwords');
+    assert.equal((await call('DELETE', `/people/${made.nina}`, { token: sal.token, body: { confirm: 'Nina New' } })).status, 200, 'deletes a member');
+    const owner = await login('olivia');
+    assert.equal((await call('PUT', `/people/${made.sam}/roles`, { token: owner.token, body: { roleIds: [] } })).status, 200);
+    assert.equal((await call('PATCH', '/company', { token: sal.token, body: { shortName: 'Acme' } })).status, 403, 'checked against the database on every call');
+  });
+
+  test('the owner is never locked out: everything without any role, and the Owner role cannot be edited', async () => {
+    const owner = await login('olivia');
+    const me = await call('GET', '/auth/me', { token: owner.token });
+    assert.deepEqual(me.body.permissions, ['company.settings', 'people.delete', 'people.exit', 'people.manage', 'people.passwords', 'roles.manage']);
+    const list = await call('GET', '/roles', { token: owner.token });
+    const superRole = list.body.find((r: { code: string }) => r.code === 'ff_super_admin');
+    assert.equal((await call('PATCH', `/roles/${superRole.id}`, { token: owner.token, body: { grants: [] } })).status, 403);
+    assert.equal((await call('DELETE', `/roles/${superRole.id}`, { token: owner.token })).status, 403);
+    const before = await call('PUT', `/people/${ids.owner}/roles`, { token: owner.token, body: { roleIds: [] } });
+    assert.equal(before.status, 200);
+    assert.equal((await call('GET', '/people', { token: owner.token })).status, 200, 'owners keep the Admin workspace without roles');
+    assert.equal((await call('PUT', `/people/${ids.owner}/roles`, { token: owner.token, body: { roleIds: [superRole.id] } })).status, 200);
+  });
+
+  test("a new catalogue version upgrades every role once; the Owner role follows the catalogue; pushes say which version", async () => {
+    const roles = app.get(RolesService);
+    const saved = JSON.parse(JSON.stringify(FAKE_CATALOGUE));
+    Object.assign(FAKE_CATALOGUE, {
+      version: 2,
+      retired: ['tasks.assign'],
+      permissions: [
+        ...FAKE_CATALOGUE.permissions.filter((p) => p.key !== 'tasks.assign'),
+        { key: 'tasks.give', label: 'Give tasks', group: 'Tasks', scopes: null, upgrade: [{ from: 'tasks.assign' }] },
+        { key: 'groups.create', label: 'Create groups', group: 'Tasks', scopes: null, upgrade: [{ from: 'tasks.assign' }] },
+        { key: 'notices.view', label: 'Notices', group: 'Notices', scopes: null, upgrade: [{ everyone: true }] },
+        { key: 'leads.delete', label: 'Delete leads', group: 'Leads', scopes: null, upgrade: [{ minLevel: 3 }] },
+        { key: 'hr.live', label: 'Live', group: 'Attendance', scopes: ['team', 'department', 'company'], upgrade: [{ from: 'tasks.view', fromScopes: ['company'], scope: 'company' }, { from: 'tasks.view', scope: 'team' }] },
+      ],
+    });
+    try {
+      (roles as unknown as { catalogues: Map<string, unknown> }).catalogues.clear();
+      const admin = await login('admin@acme.test');
+      const list = await call('GET', '/roles', { token: admin.token });
+      const byCode = Object.fromEntries(list.body.map((r: { code: string }) => [r.code, r]));
+      const perms = (code: string) => byCode[code].grants.filter((g: { app: string }) => g.app === 'tasks').map((g: { permission: string; scope: string }) => `${g.permission}@${g.scope}`).sort();
+      const floor = list.body.find((r: { name: string }) => r.name === 'Floor Lead');
+      assert.deepEqual(
+        floor.grants.map((g: { permission: string; scope: string }) => `${g.permission}@${g.scope}`).sort(),
+        ['groups.create@', 'hr.live@team', 'notices.view@', 'tasks.give@', 'tasks.view@department'],
+        'same powers in the new catalogue; the retired permission is replaced',
+      );
+      assert.ok(perms('ff_admin').includes('leads.delete@'), `Admin level gets what level 3 had: ${JSON.stringify(byCode.ff_admin)}`);
+      assert.ok(perms('ff_admin').includes('hr.live@company'), 'the widest matching scope');
+      assert.deepEqual(perms('warehouse'), ['hr.live@team', 'notices.view@', 'tasks.view@team']);
+      assert.deepEqual(perms('ff_super_admin'), ['groups.create@', 'hr.live@company', 'leads.delete@', 'notices.view@', 'tasks.delete_admin_work@', 'tasks.give@', 'tasks.view@company']);
+      const peopleDesk = list.body.find((r: { id: string }) => r.id === made.peopleRole);
+      assert.deepEqual(peopleDesk.grants.map((g: { app: string }) => g.app), ['platform'], 'a role without Tasks permissions gets none');
+      const [c] = await dbs.db.select({ upgrades: companies.accessUpgrades }).from(companies).where(eq(companies.id, ids.acme));
+      assert.equal(c.upgrades.tasks, 2);
+
+      // Once only: a permission an admin then takes away stays away.
+      const edited = await call('PATCH', `/roles/${floor.id}`, { token: admin.token, body: { grants: [{ app: 'tasks', permission: 'tasks.give' }] } });
+      assert.equal(edited.status, 200, JSON.stringify(edited.body));
+      const again = await call('GET', '/roles', { token: admin.token });
+      assert.equal(again.body.find((r: { id: string }) => r.id === floor.id).grants.length, 1);
+      assert.deepEqual(accessPushes.at(-1)!.body.catalogueVersions, { tasks: 2, platform: 1 });
+    } finally {
+      Object.keys(FAKE_CATALOGUE).forEach((k) => delete (FAKE_CATALOGUE as unknown as Record<string, unknown>)[k]);
+      Object.assign(FAKE_CATALOGUE, saved);
+      (roles as unknown as { catalogues: Map<string, unknown> }).catalogues.clear();
+    }
   });
 });
 

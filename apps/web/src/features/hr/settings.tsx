@@ -1,27 +1,23 @@
-/** HR → HR Settings (hr.manage): attendance rules (PLAN.md §16.1/§16.4/§17.2), office locations, face enrolment, leave types. */
+/** HR → HR Settings (hr.manage): attendance rules (PLAN.md §16.1/§16.4/§17.2), office locations, leave types. Punch = location + selfie, no face check (§19.18). */
 import { ApiError, errorMessage } from '@freefounders/core';
 import {
   type HrSettingValues,
   useAddLeaveType,
   useAddOffice,
   useDeleteOffice,
-  useFaceProfile,
-  useHrConfig,
   useHrSettings,
   useLeaveTypes,
   useOfficeLocations,
   useSaveHrSettings,
 } from '@freefounders/core/hr';
-import { useTeamDirectory } from '@freefounders/core/tasks';
-import { CalendarHeart, Camera, LocateFixed, MapPin, ScanFace, Settings2, X } from 'lucide-react';
+import { CalendarHeart, LocateFixed, MapPin, Settings2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Checkbox, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
-import { Chip, ErrorNote, OkNote, Panel } from '../tasks/general/parts';
-import { FaceCapture } from './face-capture';
+import { Chip, ErrorNote, Panel } from '../tasks/general/parts';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const PHOTO_LABELS: Record<string, string> = { off: 'Off', optional: 'Optional', required: 'Required at every punch' };
@@ -31,7 +27,6 @@ export function HrSettingsTab() {
     <div className="max-w-3xl space-y-4">
       <AttendanceRules />
       <Offices />
-      <FaceEnrolment />
       <LeaveTypes />
     </div>
   );
@@ -131,12 +126,6 @@ function AttendanceRules() {
           <label className="flex items-center gap-2">
             <Checkbox checked={!!form.geofence_enabled} onCheckedChange={(c) => setForm({ ...form, geofence_enabled: c === true })} /> Check location at check-in (needs an office below)
           </label>
-          <label className="flex items-center gap-2">
-            <Checkbox checked={!!form.face_enabled} onCheckedChange={(c) => setForm({ ...form, face_enabled: c === true })} /> Face check at check-in and check-out
-          </label>
-          <label className={cn('flex items-center gap-2', !form.face_enabled && 'opacity-60')}>
-            <Checkbox checked={!!form.face_self_enroll} disabled={!form.face_enabled} onCheckedChange={(c) => setForm({ ...form, face_self_enroll: c === true })} /> First face capture becomes the person’s face profile
-          </label>
         </div>
         {save.error && !Object.keys(fieldErrors).length && <ErrorNote className="mt-3">{errorMessage(save.error)}</ErrorNote>}
         <div className="mt-4 flex items-center gap-3">
@@ -222,80 +211,6 @@ function Offices() {
           Add office
         </Button>
       </div>
-    </Panel>
-  );
-}
-
-function FaceEnrolment() {
-  const config = useHrConfig().data;
-  const team = useTeamDirectory().data ?? [];
-  const face = useFaceProfile();
-  const [target, setTarget] = useState('');
-  const [capturing, setCapturing] = useState(false);
-  const [msg, setMsg] = useState('');
-  const name = team.find((t) => String(t.id) === target)?.name || 'Employee';
-  const error = face.enrol.error ?? face.remove.error;
-
-  return (
-    <Panel icon={ScanFace} tone="warning" title="Face attendance">
-      <p className="text-sm text-muted-foreground">
-        {config?.face_enabled
-          ? 'Face verification is ON — employees must pass a face check to mark attendance.'
-          : 'Face verification is currently OFF. Enrol faces here, then turn on “Face check at check-in and check-out” in the attendance rules above.'}
-      </p>
-      <p className="mt-1 text-sm text-muted-foreground">Only a numeric signature of the face is stored — never a photo. You can remove an employee’s profile at any time.</p>
-      {error && <ErrorNote className="mt-3">{errorMessage(error)}</ErrorNote>}
-      <OkNote className="mt-3">{msg}</OkNote>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <NativeSelect aria-label="Employee to enrol" className="w-auto min-w-52" value={target} onChange={(e) => setTarget(e.target.value)}>
-          <option value="">Choose an employee…</option>
-          {team.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </NativeSelect>
-        <Button disabled={!target} onClick={() => setCapturing(true)}>
-          <Camera /> Enrol face
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!target}
-          onClick={() => {
-            setMsg('');
-            face.remove.mutate(Number(target), {
-              onSuccess: () => {
-                setMsg(`${name}'s face profile removed.`);
-                setTarget('');
-              },
-            });
-          }}
-        >
-          Remove profile
-        </Button>
-      </div>
-      {capturing && (
-        <FaceCapture
-          title="Enrol employee face"
-          action="Save face"
-          hint="Ask the employee to look straight at the camera in good light."
-          onClose={() => setCapturing(false)}
-          onCapture={(d) => {
-            setCapturing(false);
-            setMsg('');
-            if (d)
-              face.enrol.mutate(
-                { user: Number(target), descriptor: d },
-                {
-                  onSuccess: () => {
-                    setMsg(`${name} enrolled ✅ — they can now mark attendance with their face.`);
-                    setTarget('');
-                  },
-                },
-              );
-          }}
-        />
-      )}
     </Panel>
   );
 }

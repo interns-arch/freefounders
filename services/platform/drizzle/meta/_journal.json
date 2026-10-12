@@ -43,6 +43,13 @@
       "when": 1791449271952,
       "tag": "0005_flows",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791793953176,
+      "tag": "0006_fine_grained_roles",
+      "breakpoints": true
     }
   ]
 }

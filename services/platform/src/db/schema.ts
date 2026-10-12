@@ -55,6 +55,8 @@ export const companies = platform.table('companies', {
   profileVersion: integer('profile_version').notNull().default(0),
   /** Same for the People directory (departments, reports-to, active), Phase 5. */
   peopleVersion: integer('people_version').notNull().default(0),
+  /** Per app, the permission-catalogue version the company's roles are written in (missing = 1; PLAN.md §19.19). */
+  accessUpgrades: jsonb('access_upgrades').$type<Record<string, number>>().notNull().default({}),
   ...timestamps,
 });
 
@@ -190,7 +192,7 @@ export const roles = platform.table(
     colour: text('colour'),
     /** 1 member, 2 manager, 3 admin. */
     level: integer('level').notNull().default(1),
-    /** Locked roles (Super Admin, Admin): everything, cannot be edited or deleted. */
+    /** The locked Owner role (Super Admin): every permission, always; cannot be edited or archived (§19.19). */
     system: boolean('system').notNull().default(false),
     /** Responsibilities (Phase 5): recurring duties and joining checklist, pushed to Tasks with the role. */
     duties: jsonb('duties').$type<RoleDuty[]>().notNull().default([]),

@@ -1,9 +1,9 @@
 /**
  * /attendance — the Attendance workspace (old pages/HR.jsx; PLAN.md §19.4). /attendance/<tab> opens a section directly:
  * history, leave, salary, holidays, team (live), daily, dashboard, reports, approvals, payroll, settings (old /tasks/hr?tab= links
- * redirect here). Salary and Payroll show only while the `payroll` module is on; Payroll needs hr.manage. The manager sections
- * (team, daily, dashboard, reports; PLAN.md §19.15) show to approvers, HR and view-all. /attendance/history?user=<id>&name=
- * opens someone else's month (the API checks they may).
+ * redirect here). Salary and Payroll show only while the `payroll` module is on. Each section is its own permission
+ * (PLAN.md §19.19, ATTENDANCE_SCREENS in nav.ts). /attendance/history?user=<id>&name= opens someone else's month (the API
+ * checks they may).
  */
 import { useAccess } from '@freefounders/core';
 import { useHrConfig } from '@freefounders/core/hr';
@@ -18,6 +18,7 @@ import { DashboardTab } from './dashboard';
 import { HolidaysTab, MyLeaveTab } from './leave';
 import { LiveTab } from './live';
 import { MySalaryTab, PayrollTab } from './payroll';
+import { ATTENDANCE_SCREENS as S } from './nav';
 import { ReportsTab } from './reports';
 import { HrSettingsTab } from './settings';
 import { ApprovalsTab } from './team';
@@ -35,29 +36,41 @@ export function HrPage() {
   const [params] = useSearchParams();
   if (!access.tasks.me) return <PageLoader />;
 
-  const can = access.tasks.can;
-  const payroll = access.tasks.module('payroll');
-  // Under the "manager approves" rule a manager without hr.approve still approves their team's leave.
-  const approves = can('hr.approve') || !!cfg.data?.can_approve;
-  // Everyone's attendance (PLAN.md §19.15): approvers see their team, HR and view-all the company.
-  const manages = approves || can('hr.manage') || can('tasks.view_all');
-  const tabs: Array<[Tab, string]> = [
-    ['today', 'Today'],
-    ['history', 'My Attendance'],
-    ['leave', 'My Leave'],
-    ...(payroll ? ([['salary', 'My Salary']] as Array<[Tab, string]>) : []),
-    ['holidays', 'Holidays'],
-    ...(manages
-      ? ([
-          ['team', 'Live team'],
-          ['daily', 'Daily'],
-          ['dashboard', 'Dashboard'],
-          ['reports', 'Reports'],
-        ] as Array<[Tab, string]>)
-      : []),
-    ...(approves ? ([['approvals', 'Approvals']] as Array<[Tab, string]>) : []),
-    ...(can('hr.manage') ? ([...(payroll ? [['payroll', 'Payroll']] : []), ['settings', 'HR Settings']] as Array<[Tab, string]>) : []),
-  ];
+  // Each section is its own permission (PLAN.md §19.19). Under the "manager approves" rule a reports-to manager
+  // also approves for, and sees, their own team (the API says so in screens / can_approve).
+  const screens = cfg.data?.screens ?? {};
+  const shown: Record<Tab, boolean> = {
+    today: true,
+    history: S.history(access),
+    leave: S.leave(access),
+    salary: S.salary(access),
+    holidays: S.holidays(access),
+    team: S.team(access) || !!screens.live,
+    daily: S.daily(access) || !!screens.daily,
+    dashboard: S.dashboard(access) || !!screens.dashboard,
+    reports: S.reports(access) || !!screens.reports,
+    approvals: S.approvals(access) || !!cfg.data?.can_approve,
+    payroll: S.payroll(access),
+    settings: S.settings(access),
+  };
+  // Someone else's month, opened from a manager's screen.
+  if (params.get('user') && (shown.team || shown.daily || shown.dashboard || shown.reports || shown.approvals)) shown.history = true;
+  const tabs = (
+    [
+      ['today', 'Today'],
+      ['history', 'My Attendance'],
+      ['leave', 'My Leave'],
+      ['salary', 'My Salary'],
+      ['holidays', 'Holidays'],
+      ['team', 'Live team'],
+      ['daily', 'Daily'],
+      ['dashboard', 'Dashboard'],
+      ['reports', 'Reports'],
+      ['approvals', 'Approvals'],
+      ['payroll', 'Payroll'],
+      ['settings', 'HR Settings'],
+    ] as Array<[Tab, string]>
+  ).filter(([v]) => shown[v]);
   const tab: Tab = (tabs.find(([v]) => v === asked)?.[0] ?? 'today') as Tab;
   const choose = (v: Tab) => navigate(v === 'today' ? '/attendance' : `/attendance/${v}`);
   const otherUser = tab === 'history' && params.get('user') ? Number(params.get('user')) : undefined;

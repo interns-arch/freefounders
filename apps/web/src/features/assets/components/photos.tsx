@@ -1,47 +1,38 @@
 import { Camera, ChevronLeft, ChevronRight, Download, ImagePlus, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { photoUrl, uploadAssetPhotos } from '@freefounders/core/assets';
 import type { AllocationPhoto } from '@freefounders/core/assets';
+import { compressImages, formatBytes, originalSize } from '@/lib/compress-image';
 import { cn, formatDateTime } from '@/lib/utils';
 
 const MAX_PHOTOS = 6;
-const MAX_EDGE = 1600;
 
-/** Phone photos are 3–10 MB; shrink to a 1600px JPEG (~300 KB) before upload. */
-async function compress(file: File): Promise<Blob> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
-    return blob ?? file;
-  } catch {
-    return file;
-  }
-}
-
+/** Shrinks the photos (≤ 1600 px, PLAN.md §19.20) unless the picker already did, then uploads them. */
 export async function uploadPhotos(assetId: string, allocationId: string | null, kind: AllocationPhoto['kind'], files: File[]) {
   const form = new FormData();
   if (allocationId) form.append('allocationId', allocationId);
   form.append('kind', kind);
-  for (const f of files) form.append('photos', await compress(f), f.name.replace(/\.\w+$/, '') + '.jpg');
+  for (const f of await compressImages(files, 'photo')) form.append('photos', f, f.name);
   return uploadAssetPhotos(assetId, form);
 }
 
 
 const KIND_LABEL: Record<AllocationPhoto['kind'], string> = { ASSET: 'Asset', HANDOVER: 'Handover', RETURN: 'Return' };
+const PHOTO_EXT: Record<string, string> = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' };
 
 
 /** Camera / gallery picker with previews. On phones the file input offers "Take photo". */
 export function PhotoPicker({ files, onChange, hint }: { files: File[]; onChange: (files: File[]) => void; hint?: string }) {
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
+  // Photos are shrunk as soon as they are picked, so the upload later is quick (PLAN.md §19.20). Each picked photo shows at
+  // once and is swapped for its smaller copy when that is ready; a photo sent before that is shrunk by uploadPhotos.
+  const latest = useRef(files);
+  latest.current = files;
+  const before = files.reduce((n, f) => n + (originalSize(f) ?? f.size), 0);
+  const after = files.reduce((n, f) => n + f.size, 0);
 
   return (
     <div>
@@ -72,12 +63,19 @@ export function PhotoPicker({ files, onChange, hint }: { files: File[]; onChange
                 const picked = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/') || !f.type);
                 onChange([...files, ...picked].slice(0, MAX_PHOTOS));
                 e.target.value = '';
+                void compressImages(picked, 'photo').then((small) => {
+                  const swap = new Map(picked.map((f, i) => [f, small[i]]));
+                  if (latest.current.some((f) => swap.get(f) !== undefined && swap.get(f) !== f)) onChange(latest.current.map((f) => swap.get(f) ?? f));
+                });
               }}
             />
           </label>
         )}
       </div>
-      <p className="mt-1.5 text-xs text-muted-foreground">{hint ?? `Optional · up to ${MAX_PHOTOS} photos of the asset's condition`}</p>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        {hint ?? `Optional · up to ${MAX_PHOTOS} photos of the asset's condition`}
+        {after < before && <span data-testid="photo-saving"> · {formatBytes(before)} → {formatBytes(after)}</span>}
+      </p>
     </div>
   );
 }
@@ -121,7 +119,7 @@ export function PhotoStrip({ photos, className, size = 'md' }: { photos: Allocat
               <div className="relative">
                 <img src={photoUrl(current)} alt="" className="max-h-[70vh] w-full rounded-lg bg-muted object-contain" />
                 <Button asChild size="sm" variant="secondary" className="absolute right-2 bottom-2 shadow">
-                  <a href={photoUrl(current)} download={`${current.kind.toLowerCase()}-photo-${current.createdAt.slice(0, 10)}-${open! + 1}.jpg`}>
+                  <a href={photoUrl(current)} download={`${current.kind.toLowerCase()}-photo-${current.createdAt.slice(0, 10)}-${open! + 1}.${PHOTO_EXT[current.mimeType ?? ''] ?? 'jpg'}`}>
                     <Download /> Download
                   </a>
                 </Button>

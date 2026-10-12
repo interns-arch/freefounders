@@ -10,6 +10,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { EmptyState } from '@/components/common/page';
 import { SearchField } from '@/components/common/search-field';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
@@ -58,7 +59,7 @@ export function useOpenHistory(from: string) {
 
 export function TeamDayView({ live }: { live: boolean }) {
   const access = useAccess();
-  const canMark = access.tasks.can('hr.manage');
+  const canMark = access.tasks.can('hr.mark');
   const [params, setParams] = useSearchParams();
   const today = todayLocal();
   const asked = params.get('date');
@@ -74,6 +75,8 @@ export function TeamDayView({ live }: { live: boolean }) {
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const shown = useMemo(() => rows.filter((r) => matches(r, filter)), [rows, filter]);
   const count = (f: Filter) => rows.filter((r) => matches(r, f)).length;
+  // Tiles and "Showing N of M staff" count everyone; the table draws the first 50 (weak phones), "Load more" adds the next.
+  const more = useShowMore(shown, { reset: [live, date, q, department, filter] });
   const isToday = date === today;
   const future = date > today;
   const setDate = (d: string) => {
@@ -235,7 +238,7 @@ export function TeamDayView({ live }: { live: boolean }) {
       <Card className="overflow-hidden">
         <DataTable
           columns={columns}
-          rows={data ? shown : undefined}
+          rows={data ? more.visible : undefined}
           rowKey={(r) => String(r.user_id)}
           loading={!data && !query.error}
           fetching={query.isFetching}
@@ -243,6 +246,7 @@ export function TeamDayView({ live }: { live: boolean }) {
           onRetry={() => query.refetch()}
           empty={<EmptyState title={rows.length ? 'Nobody matches this filter' : 'Nobody to show'} description={rows.length ? 'Pick another tile or clear the search.' : 'Try another department or search.'} className="py-8" />}
         />
+        {data && <ShowMore {...more.footer} noun="staff" className="border-t" />}
       </Card>
       {marking && (
         <MarkDialog
@@ -335,7 +339,7 @@ function MarkDialog({ row, date, onClose, onDone }: { row: TeamDayRow; date: str
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="mark-reason">Reason</Label>
-            <Textarea id="mark-reason" rows={2} maxLength={120} placeholder="e.g. face lock not working" value={reason} onChange={(e) => setReason(e.target.value)} aria-invalid={tried && !reason.trim()} aria-describedby={tried && !reason.trim() ? 'mark-reason-error' : undefined} />
+            <Textarea id="mark-reason" rows={2} maxLength={120} placeholder="e.g. phone GPS not working" value={reason} onChange={(e) => setReason(e.target.value)} aria-invalid={tried && !reason.trim()} aria-describedby={tried && !reason.trim() ? 'mark-reason-error' : undefined} />
             {tried && !reason.trim() && (
               <p id="mark-reason-error" className="text-sm text-destructive">
                 Enter a reason.

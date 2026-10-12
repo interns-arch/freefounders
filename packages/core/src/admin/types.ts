@@ -6,6 +6,15 @@ export type PlatformRole = 'owner' | 'admin' | 'member';
 export const PLATFORM_ROLE_LABELS: Record<PlatformRole, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 export const APP_NAMES: Record<AppKey, string> = { tasks: 'Tasks', assets: 'Assets' };
 
+/** Where a role's permissions live: the company's apps, plus the Admin workspace itself (PLAN.md §19.19). */
+export type GrantApp = AppKey | 'platform';
+export const GRANT_APP_NAMES: Record<GrantApp, string> = { ...APP_NAMES, platform: 'Admin' };
+
+/** The Admin workspace permissions (People & access, Roles, Settings). Owners and admins have them all. */
+export type AdminPermission = 'people.manage' | 'people.passwords' | 'people.exit' | 'people.delete' | 'roles.manage' | 'company.settings';
+/** Any of these opens People & access. */
+export const PEOPLE_SCREEN: AdminPermission[] = ['people.manage', 'people.passwords', 'people.exit', 'people.delete', 'roles.manage'];
+
 export interface AppInfo {
   app: AppKey;
   name: string;
@@ -117,8 +126,19 @@ export type Scope = 'own' | 'team' | 'department' | 'company';
 export const SCOPE_LABELS: Record<Scope, string> = { own: 'Own', team: 'Team', department: 'Department', company: 'Company' };
 export const LEVEL_LABELS: Record<number, string> = { 1: 'Member', 2: 'Manager', 3: 'Admin' };
 
+/**
+ * What each level really does (checked in Tasks and Assets, 2026-10-12): Assets ignores the level; in Tasks, Manager
+ * only marks the role as a manager post (offered as "Reports to" in Tasks' own user screen), and Admin is an
+ * administrator in Tasks. Everything else comes from the ticked permissions.
+ */
+export const LEVEL_HINTS: Record<number, string> = {
+  1: 'Uses the apps with exactly the permissions ticked below.',
+  2: 'Same as Member: the ticked permissions decide what they can do. Tasks also lists them as a manager people can report to.',
+  3: 'Also an administrator in Tasks: sees everyone’s delegated work on Tasks Home and manages other admins’ Tasks accounts; work given to them is protected from deletion (only the Owner can delete it).',
+};
+
 export interface Grant {
-  app: AppKey;
+  app: GrantApp;
   permission: string;
   scope: string;
 }
@@ -170,22 +190,24 @@ export interface CataloguePermission {
   key: string;
   label: string;
   group: string;
+  /** One line shown under the permission in the role editor. */
+  description?: string;
   scopes: Scope[] | null;
   superAdminOnly?: boolean;
 }
 
 export interface AppCatalogue {
-  app: AppKey;
+  app: GrantApp;
   scopes: Scope[];
   permissions: CataloguePermission[];
 }
 
-/** Which apps a role reaches (it has at least one permission there). */
-export function roleApps(role: Pick<Role, 'grants'>): AppKey[] {
+/** Which apps a role reaches (it has at least one permission there); "platform" = the Admin workspace. */
+export function roleApps(role: Pick<Role, 'grants'>): GrantApp[] {
   return [...new Set(role.grants.map((g) => g.app))];
 }
 
-/** Only an owner gives or takes Super Admin. */
+/** Only an owner gives or takes Super Admin, the locked Owner role (every permission, always). */
 export const SUPER_ADMIN_ROLE = 'ff_super_admin';
 
 // ─── Settings Center (Phase 4) ────────────────────────────────────────────
@@ -223,7 +245,7 @@ export interface CompanyProfileInput {
 export const APP_SETTINGS_LINKS: Record<AppKey, Array<{ label: string; href: string; blurb: string }>> = {
   tasks: [
     { label: 'Task rules', href: '/tasks/settings', blurb: 'Completion evidence, departments, task categories, notifications' },
-    { label: 'HR settings', href: '/attendance/settings', blurb: 'Working hours, week-offs, punch-in locations and photo, face check, leave types' },
+    { label: 'HR settings', href: '/attendance/settings', blurb: 'Working hours, week-offs, punch-in locations and photo, leave types' },
   ],
   assets: [
     { label: 'Asset catalogue', href: '/assets/settings/catalog', blurb: 'Categories, asset types and custom fields' },

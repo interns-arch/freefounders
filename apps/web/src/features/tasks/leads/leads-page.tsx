@@ -1,6 +1,7 @@
 /** /tasks/leads — the pipeline board with filters, tiles, add-lead and the lead drawer (old pages/Leads.jsx). */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import {
   LEAD_OPEN_STAGES,
   LEAD_PRIORITIES,
@@ -17,7 +18,7 @@ import {
   useUpdateLead,
 } from '@freefounders/core/tasks';
 import { AlarmClock, Clock, IndianRupee, Plus, RefreshCw, Target, Trophy } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type Dispatch, type SetStateAction, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -167,41 +168,20 @@ export function LeadsPage() {
 
       {leads.data && rows.length > 0 && (
         <div className={cn('grid gap-3', stage ? 'grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6')} aria-label="Pipeline board">
-          {stages.map(([s, label]) => {
-            const cards = rows.filter((l) => l.status === s);
-            return (
-              <section
-                key={s}
-                aria-label={`${label} (${cards.length})`}
-                className={cn('flex min-w-0 flex-col rounded-xl border bg-muted/30 transition-colors', dropStage === s && 'border-primary bg-primary/5')}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDropStage(s);
-                }}
-                onDragLeave={() => setDropStage((d) => (d === s ? null : d))}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDropStage(null);
-                  const id = Number(e.dataTransfer.getData('text/lead-id'));
-                  if (id) moveLead(id, s);
-                }}
-              >
-                <header className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold">
-                    <span className={cn('size-2 rounded-full', { new: 'bg-info', contacted: 'bg-primary', quotation_sent: 'bg-warning', negotiation: 'bg-warning', won: 'bg-success', lost: 'bg-destructive' }[s])} aria-hidden />
-                    {label}
-                  </h2>
-                  <Chip>{cards.length}</Chip>
-                </header>
-                <div className={cn('flex flex-col gap-2 px-2 pb-2', stage ? 'sm:grid sm:grid-cols-2 lg:grid-cols-3' : '')}>
-                  {cards.length === 0 && <p className="px-1 py-3 text-center text-xs text-muted-foreground">No leads</p>}
-                  {cards.map((lead) => (
-                    <LeadCard key={lead.id} lead={lead} onOpen={() => setOpen(lead.id)} />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+          {stages.map(([s, label]) => (
+            <LeadColumn
+              key={s}
+              stage={s}
+              label={label}
+              cards={rows.filter((l) => l.status === s)}
+              wide={!!stage}
+              dropping={dropStage === s}
+              setDropStage={setDropStage}
+              onDrop={(id) => moveLead(id, s)}
+              onOpen={setOpen}
+              reset={[search.trim(), priority, source, assignee, overdue, stage]}
+            />
+          ))}
         </div>
       )}
 
@@ -210,6 +190,66 @@ export function LeadsPage() {
       </Dialog>
       <LeadDrawer lead={openLead} onClose={() => setOpen(null)} />
     </div>
+  );
+}
+
+/**
+ * One stage of the board. It draws its first 30 cards (weak phones) and has its own "Load more"; the count in the heading
+ * is every lead in the stage. Dropping on the column works wherever the card lands.
+ */
+function LeadColumn({
+  stage: s,
+  label,
+  cards,
+  wide,
+  dropping,
+  setDropStage,
+  onDrop,
+  onOpen,
+  reset,
+}: {
+  stage: LeadStatus;
+  label: string;
+  cards: Lead[];
+  wide: boolean;
+  dropping: boolean;
+  setDropStage: Dispatch<SetStateAction<LeadStatus | null>>;
+  onDrop: (id: number) => void;
+  onOpen: (id: number) => void;
+  reset: unknown;
+}) {
+  const more = useShowMore(cards, { step: 30, reset });
+  return (
+    <section
+      aria-label={`${label} (${cards.length})`}
+      className={cn('flex min-w-0 flex-col rounded-xl border bg-muted/30 transition-colors', dropping && 'border-primary bg-primary/5')}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropStage(s);
+      }}
+      onDragLeave={() => setDropStage((d) => (d === s ? null : d))}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropStage(null);
+        const id = Number(e.dataTransfer.getData('text/lead-id'));
+        if (id) onDrop(id);
+      }}
+    >
+      <header className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <span className={cn('size-2 rounded-full', { new: 'bg-info', contacted: 'bg-primary', quotation_sent: 'bg-warning', negotiation: 'bg-warning', won: 'bg-success', lost: 'bg-destructive' }[s])} aria-hidden />
+          {label}
+        </h2>
+        <Chip>{cards.length}</Chip>
+      </header>
+      <div className={cn('flex flex-col gap-2 px-2 pb-2', wide ? 'sm:grid sm:grid-cols-2 lg:grid-cols-3' : '')}>
+        {cards.length === 0 && <p className="px-1 py-3 text-center text-xs text-muted-foreground">No leads</p>}
+        {more.visible.map((lead) => (
+          <LeadCard key={lead.id} lead={lead} onOpen={() => onOpen(lead.id)} />
+        ))}
+      </div>
+      <ShowMore {...more.footer} noun="leads" className="px-2 pt-0" />
+    </section>
   );
 }
 

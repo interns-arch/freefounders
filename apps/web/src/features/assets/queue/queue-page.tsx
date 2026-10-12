@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, LifeBuoy, ListO
 import { Link, useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@/components/ui/primitives';
 import { useQueue } from '@freefounders/core/assets';
@@ -102,7 +103,7 @@ export default function QueuePage() {
           ) : !q.data?.items.length ? (
             <EmptyState icon={CheckCircle2} title={q.data?.total ? 'Nothing matches this filter' : 'All clear'} description={q.data?.total ? undefined : 'No open tickets or requests are waiting.'} />
           ) : (
-            <GroupedList items={q.data.items} />
+            <GroupedList items={q.data.items} reset={[f.priority ?? '', f.kind ?? '']} />
           )}
         </Card>
       )}
@@ -110,17 +111,23 @@ export default function QueuePage() {
   );
 }
 
-function GroupedList({ items }: { items: QueueItem[] }) {
+/**
+ * The queue comes most urgent first, so the first 50 drawn are the most urgent ones (weak phones); "Load more" adds the
+ * next. Each group's count is all of its items.
+ */
+function GroupedList({ items, reset }: { items: QueueItem[]; reset: unknown }) {
+  const more = useShowMore(items, { reset });
   return (
     <div>
       {ORDER.map((p) => {
-        const group = items.filter((i) => i.priority === p);
+        const group = more.visible.filter((i) => i.priority === p);
         if (!group.length) return null;
+        const all = items.filter((i) => i.priority === p).length;
         return (
           <section key={p}>
             <h2 className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-muted/60 px-4 py-1.5 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase backdrop-blur">
               <span className={cn('size-2 rounded-full', BAR[p])} />
-              {LABEL[p]} <span className="rounded bg-card px-1.5 py-px tabular">{group.length}</span>
+              {LABEL[p]} <span className="rounded bg-card px-1.5 py-px tabular">{all}</span>
             </h2>
             <ul className="divide-y">
               {group.map((i) => (
@@ -132,6 +139,7 @@ function GroupedList({ items }: { items: QueueItem[] }) {
           </section>
         );
       })}
+      <ShowMore {...more.footer} noun="items" className="border-t" />
     </div>
   );
 }

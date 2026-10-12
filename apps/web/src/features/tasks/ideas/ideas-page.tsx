@@ -1,6 +1,6 @@
 /**
  * /tasks/ideas — the Idea board (old pages/Ideas.jsx): shared, my and group ideas with votes and comments.
- * tasks.assign (managers/admins) reviews: changes the status and can remove any idea.
+ * ideas.review reviews: changes the status and can remove any idea.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
@@ -38,7 +38,7 @@ const STATUSES = Object.entries(IDEA_STATUS_LABELS) as Array<[IdeaStatus, string
 
 export function IdeasPage() {
   const access = useAccess();
-  const canReview = access.tasks.can('tasks.assign');
+  const canReview = access.tasks.can('ideas.review');
   const me = access.tasks.me?.id;
   const [scope, setScope] = useState<IdeaScope>('shared');
   const [status, setStatus] = useState<IdeaStatus | ''>('');

@@ -20,7 +20,7 @@ def visible_groups(user):
 
 
 def can_create_group(user) -> bool:
-    return has_capability(user, "tasks.assign")  # admin + managers
+    return has_capability(user, "groups.create")
 
 
 def can_manage_group(user, group: Group) -> bool:
@@ -72,7 +72,7 @@ def visible_links(user):
 
 
 def can_edit_link(user, link: Link) -> bool:
-    return (is_workspace_admin(user) or has_capability(user, "tasks.assign")
+    return (is_workspace_admin(user) or has_capability(user, "links.manage")
             or link.added_by_id == user.id)
 
 
@@ -85,4 +85,4 @@ def visible_ideas(user):
 
 
 def can_review_ideas(user) -> bool:
-    return has_capability(user, "tasks.assign")  # admin + managers
+    return has_capability(user, "ideas.review")

@@ -138,8 +138,9 @@ def roles(request):
 @permission_classes([IsPlatformService])
 def permissions(request):
     """The permissions Tasks offers to the Platform's role builder."""
-    from .access import SCOPES, catalogue
-    return Response({"app": "tasks", "scopes": list(SCOPES), "permissions": catalogue()})
+    from .access import CATALOGUE_VERSION, RETIRED, SCOPES, catalogue
+    return Response({"app": "tasks", "scopes": list(SCOPES), "version": CATALOGUE_VERSION,
+                     "retired": sorted(RETIRED), "permissions": catalogue()})
 
 
 @api_view(["GET", "PUT"])
@@ -304,7 +305,7 @@ def _import_access(data):
     so a push with dozens of roles stays fast."""
     from tenancy.models import CompanySetting
 
-    from .access import forget, valid_grant
+    from .access import CATALOGUE_VERSION, forget, upgrade_grants, valid_grant
     from .models import AccessGrant, AccessRole, UserAccessRole
 
     try:
@@ -312,6 +313,8 @@ def _import_access(data):
         roles = list(data.get("roles") or [])
         people = list(data.get("people") or [])
         ids = [uuid.UUID(str(r.get("id"))) for r in roles]
+        # Which catalogue the Platform's grants are written in (missing: version 1, before §19.19).
+        pushed_catalogue = int((data.get("catalogueVersions") or {}).get("tasks") or 1)
     except (TypeError, ValueError):
         return Response({"detail": "version, roles (with UUID ids) and people are required"}, status=status.HTTP_400_BAD_REQUEST)
     current = _access_version()
@@ -356,6 +359,9 @@ def _import_access(data):
                     wanted[permission] = scope
                 else:
                     problems.append(f"{role.name}: {permission}{'@' + scope if scope else ''} is not a Tasks permission")
+            if pushed_catalogue < CATALOGUE_VERSION:
+                # A Platform that has not upgraded its roles yet (PLAN.md §19.19): same powers in today's catalogue.
+                wanted = upgrade_grants(wanted, fields["level"], from_version=pushed_catalogue)
             have = have_grants.get(role.pk, {})
             for permission, scope in have.items():
                 if wanted.get(permission) != scope:

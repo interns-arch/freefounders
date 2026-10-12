@@ -1,38 +1,31 @@
 /**
- * Camera dialog for check-in/out and face enrolment (old FaceCapture.jsx).
- *   face:  read the face and pass its 128-number signature (never an image)
- *   photo: also take a picture (the company keeps a photo of every punch, PLAN.md §16.4)
- * Calls onCapture(descriptor | null, photo | null).
+ * Selfie dialog for check-in / check-out: the company keeps a photo of every punch (PLAN.md §16.4). No face matching
+ * (founder, 2026-10-12; PLAN.md §19.18). Calls onCapture(photo) with a JPEG data URL.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
-import { isInApp } from '@/lib/native-bridge';
 import { ErrorNote } from '../tasks/general/parts';
-import { cameraSupported, describeFace, grabPhoto, loadFace } from './face';
+import { compressImage } from '@/lib/compress-image';
+import { cameraSupported, grabPhoto } from './device';
 
-export function FaceCapture({
-  title = 'Face verification',
-  action = 'Capture',
+export function SelfieCapture({
+  title,
+  action,
   hint,
   onCapture,
   onClose,
-  face = true,
-  photo = false,
 }: {
-  title?: string;
-  action?: string;
+  title: string;
+  action: string;
   hint?: string;
-  onCapture: (descriptor: number[] | null, photo: string | null) => void;
+  onCapture: (photo: string) => void;
   onClose: () => void;
-  face?: boolean;
-  photo?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [status, setStatus] = useState('Starting camera…');
   const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
 
   const stop = useCallback(() => {
@@ -43,11 +36,6 @@ export function FaceCapture({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (face && isInApp()) {
-        // No face matching in the phone app (founder, 2026-10-12; PLAN.md §19.17).
-        setErr('Face check does not run in the FreeFounders phone app. Open FreeFounders in a browser to enrol or check a face.');
-        return;
-      }
       if (!cameraSupported()) {
         setErr('This device or browser has no camera access. Use a phone or a laptop with a webcam, over HTTPS.');
         return;
@@ -65,13 +53,9 @@ export function FaceCapture({
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => {});
         }
-        if (face) {
-          setStatus('Loading face models…');
-          await loadFace(setStatus);
-        }
         if (cancelled) return;
         setReady(true);
-        setStatus('Look straight at the camera');
+        setStatus('Look at the camera');
       } catch (ex) {
         const name = (ex as { name?: string })?.name ?? '';
         if (name === 'NotAllowedError') setErr('Camera permission was denied. Allow camera access in your browser settings and try again.');
@@ -83,35 +67,25 @@ export function FaceCapture({
       cancelled = true;
       stop();
     };
-  }, [stop, face]);
+  }, [stop]);
 
   const close = () => {
     stop();
     onClose();
   };
 
-  const capture = async () => {
+  const capture = () => {
     const video = videoRef.current;
     if (!video) return;
-    setErr('');
-    setBusy(true);
-    setStatus(face ? 'Reading your face…' : 'Taking the photo…');
-    try {
-      const picture = photo ? grabPhoto(video) : null;
-      const descriptor = face ? await describeFace(video) : null;
-      stop();
-      onCapture(descriptor, picture);
-    } catch (ex) {
-      setErr((ex as Error).message);
-      setStatus('Try again');
-    } finally {
-      setBusy(false);
-    }
+    const picture = grabPhoto(video);
+    stop();
+    // The selfie preset (≤ 720 px JPEG, PLAN.md §19.20); the original still if that is not smaller.
+    void compressImage(picture, 'selfie').then(onCapture);
   };
 
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="max-w-md" aria-describedby="face-note">
+      <DialogContent className="max-w-md" aria-describedby="selfie-note">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {hint && <DialogDescription>{hint}</DialogDescription>}
@@ -121,17 +95,15 @@ export function FaceCapture({
           <div aria-hidden className="pointer-events-none absolute inset-x-[22%] inset-y-[12%] rounded-[50%] border-2 border-dashed border-primary-foreground/80" />
         </div>
         {err ? <ErrorNote>{err}</ErrorNote> : <p className="text-sm text-muted-foreground" role="status">{status}</p>}
-        <p id="face-note" className="text-xs text-muted-foreground">
-          {photo
-            ? 'A photo is saved with your attendance. Only you and the people who manage attendance can see it.'
-            : 'Only a numeric face signature is sent — your photo never leaves this device.'}
+        <p id="selfie-note" className="text-xs text-muted-foreground">
+          A photo is saved with your attendance. Only you and the people who manage attendance can see it.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={close}>
             Cancel
           </Button>
-          <Button size="lg" disabled={!ready || busy} loading={busy} onClick={capture}>
-            {busy ? 'Checking…' : action}
+          <Button size="lg" disabled={!ready} onClick={capture}>
+            {action}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -108,7 +108,7 @@ def exit_tasks(request):
     if existing:
         return Response({"taskId": existing.pk, "code": existing.code, "created": False})
     manager = leaver.reporting_manager if leaver.reporting_manager_id and leaver.reporting_manager.is_active else None
-    owner = manager or users_with("hr.manage").exclude(pk=leaver.pk).order_by("pk").first()
+    owner = manager or users_with("hr.settings").exclude(pk=leaver.pk).order_by("pk").first()
     if owner is None:
         return Response({"detail": "Nobody to give the exit checklist to (no manager, no HR administrator)"},
                         status=status.HTTP_409_CONFLICT)

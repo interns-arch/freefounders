@@ -142,6 +142,57 @@
   }
 }
 
+/*
+ * Lite mode for weak phones (PLAN.md §19.18): <html data-lite>, set at start by src/lib/lite.ts (Auto: at most 2 GB of
+ * memory, a phone screen with at most 4 cores, or reduced motion; or the account menu's Lite mode On). Same colours,
+ * less paint work: no backdrop blur, no blurred glows, small shadows, flat colour instead of gradients on big
+ * surfaces, no transitions or animations (spinners keep turning: they are cheap and say "working").
+ */
+[data-lite] {
+  --sh-card-lg: var(--sh-card);
+  --sh-pop: var(--sh-card);
+}
+[data-lite] *,
+[data-lite] ::before,
+[data-lite] ::after {
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+  backdrop-filter: none !important;
+}
+[data-lite] *:not(.animate-spin),
+[data-lite] ::before,
+[data-lite] ::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+/* Decorative glows: absolutely positioned, blurred blobs. */
+[data-lite] .absolute[class*=' blur-'],
+[data-lite] .absolute[class^='blur-'] {
+  display: none !important;
+}
+/* Bars that were see-through with a blur behind them become solid. */
+[data-lite] [class*='backdrop-blur'][class*='bg-card/'] {
+  background-color: var(--card) !important;
+}
+[data-lite] :is(.shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl) {
+  --tw-shadow: var(--sh-card) !important;
+}
+/* Big soft gradient surfaces → the flat card; the solid hero gradient → the flat primary colour. */
+[data-lite] [class*='bg-gradient-to-']:is([class*='to-card'], [class*='via-card'], [class*='from-card'], [class*='from-accent'], [class*='to-transparent']) {
+  background-image: none !important;
+}
+[data-lite] [class*='bg-gradient-to-'][class*='via-primary'] {
+  background-image: none !important;
+  background-color: var(--primary) !important;
+}
+[data-lite] [class*='hover:translate']:hover,
+[data-lite] [class*='hover:-translate']:hover,
+[data-lite] .group:hover [class*='group-hover:translate'],
+[data-lite] .group:hover [class*='group-hover:-translate'] {
+  translate: none !important;
+}
+
 /* Printable QR label sheets */
 @media print {
   @page {

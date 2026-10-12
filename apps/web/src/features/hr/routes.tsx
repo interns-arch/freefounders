@@ -1,7 +1,7 @@
 import { lazy } from 'react';
 import { Navigate, type RouteObject, useParams, useSearchParams } from 'react-router';
 
-// Loaded when first opened (it brings the camera and face-check code with it).
+// Loaded when first opened (it brings the camera code with it).
 const HrPage = lazy(() => import('./hr-page').then((m) => ({ default: m.HrPage })));
 
 /** Old links (emails, notifications): /tasks/hr?tab=x → /attendance/x. */

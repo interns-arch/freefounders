@@ -17,10 +17,10 @@ export const WORKSPACE_LOOK: Record<Workspace, { icon: LucideIcon; dot: string; 
 };
 
 /** The workspaces this person can open, in portal order. Attendance comes with Tasks (PLAN.md §19.4, option A). */
-export function workspacesFor(apps: string[], isAdmin: boolean): Workspace[] {
+export function workspacesFor(apps: string[], hasAdmin: boolean): Workspace[] {
   const list: Workspace[] = [];
   if (apps.includes('tasks')) list.push('attendance', 'tasks');
   if (apps.includes('assets')) list.push('assets');
-  if (isAdmin) list.push('admin');
+  if (hasAdmin) list.push('admin'); // any Admin permission (PLAN.md §19.19)
   return list;
 }

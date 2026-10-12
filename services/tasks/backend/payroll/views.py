@@ -16,7 +16,17 @@ from .models import Advance, PayrollRun, Payslip, RunStatus, SalaryStructure
 
 
 def can_manage_payroll(user) -> bool:
-    return has_capability(user, "hr.manage")
+    """Payroll runs and everyone's payslips (PLAN.md §19.19: Run payroll)."""
+    return has_capability(user, "payroll.run")
+
+
+def can_manage_salaries(user) -> bool:
+    """Everyone's salary structures and advances (Salaries and advances)."""
+    return has_capability(user, "payroll.salaries")
+
+
+def sees_own_salary(user) -> bool:
+    return has_capability(user, "payroll.self")
 
 
 # ------------------------------------------------------------ serializers
@@ -99,15 +109,19 @@ class SalaryStructureViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = SalaryStructure.objects.select_related("user")
-        if not can_manage_payroll(self.request.user):
-            return qs.filter(user=self.request.user)
+        if not can_manage_salaries(self.request.user):
+            return qs.filter(user=self.request.user) if sees_own_salary(self.request.user) else qs.none()
         if self.request.query_params.get("user"):
             qs = qs.filter(user_id=self.request.query_params["user"])
         return qs
 
     def _guard(self):
-        if not can_manage_payroll(self.request.user):
-            raise PermissionDenied("Only HR/Admin can manage salary structures.")
+        if not can_manage_salaries(self.request.user):
+            raise PermissionDenied("Your role does not include Salaries and advances.")
+
+    def create(self, request, *args, **kwargs):
+        self._guard()
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         self._guard()
@@ -132,8 +146,8 @@ class AdvanceViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Advance.objects.select_related("user")
-        if not can_manage_payroll(self.request.user):
-            return qs.filter(user=self.request.user)
+        if not can_manage_salaries(self.request.user):
+            return qs.filter(user=self.request.user) if sees_own_salary(self.request.user) else qs.none()
         p = self.request.query_params
         if p.get("user"):
             qs = qs.filter(user_id=p["user"])
@@ -142,8 +156,12 @@ class AdvanceViewSet(viewsets.ModelViewSet):
         return qs
 
     def _guard(self):
-        if not can_manage_payroll(self.request.user):
-            raise PermissionDenied("Only HR/Admin can record advances.")
+        if not can_manage_salaries(self.request.user):
+            raise PermissionDenied("Your role does not include Salaries and advances.")
+
+    def create(self, request, *args, **kwargs):
+        self._guard()
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         self._guard()
@@ -163,7 +181,7 @@ class AdvanceViewSet(viewsets.ModelViewSet):
 
 
 class PayrollRunViewSet(viewsets.ModelViewSet):
-    permission_classes = [HasCapability.of("hr.manage")]
+    permission_classes = [HasCapability.of("payroll.run")]
     serializer_class = PayrollRunSerializer
     queryset = PayrollRun.objects.select_related("created_by").all()
     pagination_class = None
@@ -240,4 +258,6 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
             if p.get("user"):
                 qs = qs.filter(user_id=p["user"])
             return qs
+        if not sees_own_salary(self.request.user):
+            return qs.none()
         return qs.filter(user=self.request.user, run__status=RunStatus.FINALISED)

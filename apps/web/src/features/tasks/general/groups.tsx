@@ -20,7 +20,7 @@ export function GroupsPage() {
   const q = useGroups();
   const [params, setParams] = useSearchParams();
   const [adding, setAdding] = useState(false);
-  const canCreate = access.tasks.can('tasks.assign');
+  const canCreate = access.tasks.can('groups.create');
 
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   if (!q.data) return <PageLoader />;

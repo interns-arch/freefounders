@@ -6,6 +6,7 @@ import { badRequest, type Caller } from '../common/http';
 import { CompanyService } from '../company/company.service';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, type PlatformRole, refreshSessions } from '../db/schema';
+import { platformPermissionsOf } from '../roles/platform-permissions';
 import { ACCESS_TTL_SECONDS, TokensService } from '../keys/tokens.service';
 
 /** "Stay signed in": a refresh session lives until it goes unused this long (founder decision: 1 year). */
@@ -243,6 +244,8 @@ export class AuthService {
       },
       company: { ...row.company, logoUrl: CompanyService.logoUrl({ id: row.company.id, hasLogo: row.hasLogo, profileVersion: row.profileVersion }) },
       apps: (Object.keys(current.apps) as AppKey[]).map((app) => ({ app, ...APP_INFO[app] })),
+      /** Admin workspace permissions (PLAN.md §19.19): owners and admins have them all. */
+      permissions: [...(await platformPermissionsOf(this.dbs, caller.personId, row.person.platformRole))].sort(),
       mustChangePassword: row.mustChangePassword ?? false,
     };
   }

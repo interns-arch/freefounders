@@ -72,7 +72,7 @@ export function useReportDownload() {
 
 export function ReportsTab() {
   const access = useAccess();
-  const canImport = access.tasks.can('hr.manage');
+  const canImport = access.tasks.can('hr.import');
   const [params] = useSearchParams();
   const today = todayLocal();
   const asked = params.get('type') as AttendanceReportType | null;

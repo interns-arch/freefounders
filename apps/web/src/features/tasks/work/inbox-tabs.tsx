@@ -16,6 +16,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState } from '@/components/common/page';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Badge, Card, Checkbox, Skeleton } from '@/components/ui/primitives';
@@ -114,9 +115,12 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
   useEffect(() => {
     if (person && !people.some((p) => String(p.id) === person)) setPerson('');
   }, [person, people]);
-  const shown = rows.filter((r) => !inbox || !person || String(r.submitted_by?.id) === person);
+  const shown = useMemo(() => rows.filter((r) => !inbox || !person || String(r.submitted_by?.id) === person), [rows, inbox, person]);
   const pendingShown = shown.filter((r) => r.status === 'pending');
-  const allTicked = pendingShown.length > 0 && pendingShown.every((r) => picked.has(r.id));
+  // The first 50 are drawn, "Load more" adds the next. "Select all shown" ticks the rows drawn; "Accept all (N)" names its count.
+  const more = useShowMore(shown, { reset: [scope, person] });
+  const pendingDrawn = more.visible.filter((r) => r.status === 'pending');
+  const allTicked = pendingDrawn.length > 0 && pendingDrawn.every((r) => picked.has(r.id));
   const personName = people.find((p) => String(p.id) === person)?.name;
   const tickedRows = pendingShown.filter((r) => picked.has(r.id));
 
@@ -158,11 +162,11 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={allTicked}
-              disabled={busy || pendingShown.length === 0}
+              disabled={busy || pendingDrawn.length === 0}
               onCheckedChange={() =>
                 setPicked((prev) => {
                   const next = new Set(prev);
-                  pendingShown.forEach((r) => (allTicked ? next.delete(r.id) : next.add(r.id)));
+                  pendingDrawn.forEach((r) => (allTicked ? next.delete(r.id) : next.add(r.id)));
                   return next;
                 })
               }
@@ -194,7 +198,7 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
           <EmptyState icon={ClipboardCheck} title={inbox ? 'Nothing waiting for you to accept.' : 'Nothing here yet.'} description={inbox ? 'When someone marks a task you gave them as done, it lands here for you to accept or send back.' : undefined} />
         ) : (
           <ul className="divide-y" aria-label="Completions">
-            {shown.map((r) => {
+            {more.visible.map((r) => {
               const late = !!r.task_due_at && new Date(r.created_at) > new Date(r.task_due_at);
               const over = !!r.task_actual_minutes && !!r.task_effort_minutes && r.task_actual_minutes > r.task_effort_minutes;
               return (
@@ -295,6 +299,7 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
             })}
           </ul>
         )}
+        {!q.isLoading && !q.error && <ShowMore {...more.footer} noun="submissions" className="border-t" />}
       </Card>
     </div>
   );
@@ -308,7 +313,8 @@ export function RequestsTab({ href }: { href: (id: number) => string }) {
   const q = useChangeRequests(scope);
   const review = useReviewChangeRequest();
   const [remarks, setRemarks] = useState<Record<number, string>>({});
-  const rows = q.data ?? [];
+  const rows = useMemo(() => q.data ?? [], [q.data]);
+  const more = useShowMore(rows, { reset: scope });
   const act = (id: number, code: string, decision: 'approved' | 'rejected' | 'escalated') =>
     review.mutate({ id, decision, remarks: remarks[id] ?? '' }, { onSuccess: () => toast.success(`${code}: ${decision === 'approved' ? 'approved' : decision === 'rejected' ? 'rejected' : 'escalated to admin'}`), onError: fail });
 
@@ -329,7 +335,7 @@ export function RequestsTab({ href }: { href: (id: number) => string }) {
           <EmptyState icon={ClipboardCheck} title={scope === 'inbox' ? 'Nothing waiting for your approval.' : 'No requests here.'} description={scope === 'inbox' ? 'Change requests on tasks you gave (deadline, effort, priority…) land here.' : undefined} />
         ) : (
           <ul className="divide-y" aria-label="Change requests">
-            {rows.map((r) => (
+            {more.visible.map((r) => (
               <li key={r.id} className={cn('flex flex-col gap-3 border-l-[3px] py-3.5 pr-4 pl-3.5 transition-colors hover:bg-muted/40 lg:flex-row lg:items-start', r.status === 'pending' ? 'border-l-warning' : r.status === 'approved' ? 'border-l-success' : r.status === 'rejected' ? 'border-l-destructive' : 'border-l-border')}>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -391,6 +397,7 @@ export function RequestsTab({ href }: { href: (id: number) => string }) {
             ))}
           </ul>
         )}
+        {!q.isLoading && !q.error && <ShowMore {...more.footer} noun="requests" className="border-t" />}
       </Card>
     </div>
   );
@@ -401,7 +408,8 @@ export function RequestsTab({ href }: { href: (id: number) => string }) {
 export function DeletedTab() {
   const q = useWorkTaskList({ scope: 'deleted' });
   const restore = useRestoreTask();
-  const rows = q.data?.rows ?? [];
+  const rows = useMemo(() => q.data?.rows ?? [], [q.data]);
+  const more = useShowMore(rows);
   return (
     <div className="max-w-3xl space-y-3">
       <p className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -416,7 +424,7 @@ export function DeletedTab() {
           <EmptyState icon={Trash2} title="The bin is empty." description="Tasks that are deleted or cancelled show up here." />
         ) : (
           <ul className="divide-y" aria-label="Deleted tasks">
-            {rows.map((t) => (
+            {more.visible.map((t) => (
               <li key={t.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -434,6 +442,7 @@ export function DeletedTab() {
             ))}
           </ul>
         )}
+        {!q.isLoading && !q.error && <ShowMore {...more.footer} noun="deleted tasks" className="border-t" />}
       </Card>
     </div>
   );

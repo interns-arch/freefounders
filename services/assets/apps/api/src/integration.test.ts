@@ -331,6 +331,27 @@ describe('custody and lifecycle', () => {
     assert.ok(Buffer.from(await res.arrayBuffer()).equals(png));
   });
 
+  test('a big phone photo is stored upright, at most 1600 px, smaller and without metadata (PLAN.md §19.20)', async () => {
+    const sharp = (await import('sharp')).default;
+    // 3000×2000 with EXIF orientation 6 (the phone was held upright) and a GPS-like comment in the metadata.
+    const big = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: '#808080', noise: { type: 'gaussian', mean: 128, sigma: 40 } } })
+      .jpeg({ quality: 92 })
+      .withMetadata({ orientation: 6, exif: { IFD0: { ImageDescription: 'GPS 12.97,77.59' } } })
+      .toBuffer();
+    const id = (await newDrone({ name: 'Big photo drone' })).body.id;
+    const saved = await upload(`/assets/${id}/photos`, { kind: 'ASSET' }, [big]);
+    assert.equal(saved.status, 201, JSON.stringify(saved.body));
+    assert.equal(saved.body[0].mimeType, 'image/jpeg');
+    const res = await fetch(`${base}/assets/${id}/photos/${saved.body[0].id}`, { headers: { cookie: cookies.admin } });
+    assert.equal(res.headers.get('content-type'), 'image/jpeg');
+    const stored = Buffer.from(await res.arrayBuffer());
+    const meta = await sharp(stored).metadata();
+    assert.deepEqual([meta.width, meta.height], [1067, 1600], 'turned upright and shrunk to 1600 px');
+    assert.ok(stored.length < big.length / 3, `${big.length} → ${stored.length} bytes`);
+    assert.equal(meta.exif, undefined, 'metadata is dropped');
+    assert.equal(meta.orientation, undefined);
+  });
+
   test('one branch: "in store" needs no location', async () => {
     const drone = await newDrone({ name: 'Store drone' });
     const r = await call('POST', `/assets/${drone.body.id}/assign`, { holderType: 'INVENTORY' });

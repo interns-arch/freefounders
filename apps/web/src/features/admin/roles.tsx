@@ -111,7 +111,7 @@ export function RolesPage() {
     <div className="space-y-4">
       <PageHeader
         title="Roles"
-        description="What each role can do in every app. A person can have several roles; their permissions add up."
+        description="What each role can do in every app, the Admin workspace included. A person can have several roles; their permissions add up. Only the Owner role (Super Admin) is locked."
         actions={
           <Button onClick={() => setEditing('new')} disabled={!catalogue.data}>
             <Plus /> New role
@@ -131,7 +131,7 @@ export function RolesPage() {
           empty={<EmptyState icon={ShieldCheck} title="No roles yet" />}
         />
       </Card>
-      {editing && catalogue.data && <RoleEditor role={editing === 'new' ? null : editing} catalogue={catalogue.data} onClose={() => setEditing(null)} />}
+      {editing && catalogue.data && <RoleEditor role={editing === 'new' ? null : editing} catalogue={catalogue.data} roles={roles.data ?? []} onClose={() => setEditing(null)} />}
     </div>
   );
 }

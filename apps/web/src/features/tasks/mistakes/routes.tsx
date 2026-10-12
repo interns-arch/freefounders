@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 import type { RouteObject } from 'react-router';
 import { RequireTasks } from '../general/parts';
+import { TASKS_SCREENS } from '../nav';
 
 // Loaded when first opened (smaller first download; the shell shows a loader meanwhile).
 const MistakesPage = lazy(() => import('./page').then((m) => ({ default: m.MistakesPage })));
@@ -10,7 +11,7 @@ export const mistakesRoutes: RouteObject[] = [
   {
     path: 'mistakes',
     element: (
-      <RequireTasks allow={(a) => a.tasks.module('mistakes')} what="the mistake register (switched off for this company)">
+      <RequireTasks allow={(a) => a.tasks.module('mistakes') && TASKS_SCREENS.mistakes(a)} what="the mistake register">
         <MistakesPage />
       </RequireTasks>
     ),

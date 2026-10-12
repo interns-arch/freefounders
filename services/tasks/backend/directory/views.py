@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import HasCapability, has_capability
+from accounts.permissions import HasCapability, HasPermission, has_capability
 from crm.models import Task, TaskActivity, TaskTemplate
 from crm.scoping import can_assign_to
 from crm.serializers import TaskSerializer, TaskTemplateSerializer
@@ -42,8 +42,8 @@ class DirectoryTemplateSerializer(serializers.ModelSerializer):
 
 
 class IndustryViewSet(viewsets.ReadOnlyModelViewSet):
-    """Browse industries (read-only for everyone; content is seeded)."""
-    permission_classes = [IsAuthenticated]
+    """Browse industries (read-only, the Template directory permission; content is seeded)."""
+    permission_classes = [HasPermission.of("directory.view")]
     serializer_class = IndustrySerializer
     pagination_class = None
 
@@ -65,7 +65,7 @@ class DirectoryTemplateViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS") or self.action in self.USE_ACTIONS:
-            return [IsAuthenticated()]
+            return [HasPermission.of("directory.view")()]
         return [HasCapability.of("settings.manage")()]
 
     def get_queryset(self):
@@ -90,7 +90,7 @@ class DirectoryTemplateViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def add_to_my_templates(self, request, pk=None):
         """Copy every step into the company's own Task Templates."""
-        if not has_capability(request.user, "tasks.assign"):
+        if not has_capability(request.user, "templates.manage"):
             raise PermissionDenied("Your role cannot manage task templates.")
         tpl = self.get_object()
         created = []

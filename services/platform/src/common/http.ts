@@ -9,15 +9,19 @@ import {
 import type { Request } from 'express';
 import type { ZodType } from 'zod';
 import type { AppKey, PlatformRole } from '../db/schema';
+import type { PlatformPermission } from '../roles/platform-permissions';
 
 export const IS_PUBLIC = 'ff:public';
-export const ADMIN_ONLY = 'ff:admin';
+export const NEEDS = 'ff:needs';
 
 /** Route does not need an access token. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
 
-/** Route needs a company owner or admin (Phase 1 stand-in for platform.users.manage). */
-export const AdminOnly = () => SetMetadata(ADMIN_ONLY, true);
+/**
+ * Route needs one of these Admin permissions (PLAN.md §19.19). Owners and admins have them all; a member needs a role
+ * that grants one. Checked against the database on every call, so a change counts at once.
+ */
+export const Needs = (...permissions: PlatformPermission[]) => SetMetadata(NEEDS, permissions);
 
 /** Who is calling, taken from a verified access token. */
 export interface Caller {
@@ -27,6 +31,8 @@ export interface Caller {
   role: PlatformRole;
   apps: Partial<Record<AppKey, string>>;
   sessionFamily?: string;
+  /** Admin permissions, filled in by the guard on routes that need one. */
+  permissions?: Set<PlatformPermission>;
 }
 
 export interface AuthedRequest extends Request {

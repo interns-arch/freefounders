@@ -349,31 +349,49 @@ out." · "Cancel", "Save roles".
   "exit checklist {code} for their manager." (or the error) · neither app: "They have neither Tasks nor Assets: deactivate them
   on their last day." · "Done".
 
+> **Update 2026-10-12 (PLAN.md §19.19): every feature is a permission.** The role editor lists every feature of Tasks
+> (incl. Attendance, Leads, Notices, Mistakes & SOPs, Web forms, Links & ideas, HR administration), Assets and the **Admin**
+> workspace (a third "app": "Manage people", "Reset passwords", "Start exits", "Delete people permanently", "Manage roles",
+> "Company settings"), each with a one-line description. Only the **Super Admin** (Owner) role is locked; "Admin" and every
+> other role can be edited and archived. Menus and buttons follow the permissions: e.g. a role with only "Live attendance"
+> and "See notices" shows Attendance → Today + Live attendance and Tasks → Home, Tasks, Groups, Notices, My team. Admin →
+> People & access / Roles / Settings each need their own Admin permission (owners and admins have all); a page you may not
+> open sends you to the Admin page you may open, or `/`.
+
 ### Roles
 - **URL** `/roles`. **Purpose**: what each role can do in every app; a person can hold several roles.
-- **Header**: "Roles"; "What each role can do in every app. A person can have several roles; their permissions add up.";
-  action "New role".
-- **Columns**: "Role" (name, "Locked" badge, description or "{n} permission(s)") · "Level" ("Member" / "Manager" / "Admin") ·
+- **Header**: "Roles"; "What each role can do in every app, the Admin workspace included. A person can have several roles;
+  their permissions add up. Only the Owner role (Super Admin) is locked."; action "New role".
+- **Columns**: "Role" (name, "Locked" badge only on Super Admin, description or "{n} permission(s)") · "Level" ("Member" / "Manager" / "Admin") ·
   "Apps" (hidden on phones; chips or "None") · "People" (holders) · actions: "Edit" (or "View" for locked roles) ·
   "Duplicate" (no confirmation) · "Archive" (not locked; confirm `Archive "{name}"?`, "{n} people lose it (and any app only it
   gave them).").
 - **States**: skeleton, load error, "No roles yet".
 
 #### Role editor (wide side panel)
-- Title "New role" / "Edit {name}" / "{name}" (locked). Description: "Tick what this role may do; pick how far each permission
-  reaches." (locked: "{description} Duplicate it to make an editable copy." — everything read-only, footer only "Close").
-- **Fields**: "Name" (required, max 80) · "Level" ("Member", "Manager", "Admin"; hint "Admin level: an administrator in every app
-  (work given to them is protected from deletion).") · "Description (optional)" (max 300).
-- **Permission matrix**: a section per app ("Tasks", "Assets"), grouped by permission group. Each permission is a checkbox
-  ("{App}: {label}"); when ticked and the permission has scopes, a scope choice "Scope for {label}" with the scopes it supports
-  ("Own", "Team", "Department", "Company"); a newly ticked permission starts at the narrowest. Legend: "Own = only my records
-  · Team = mine and my direct reports · Department = everyone in my department · Company = everyone." The list of
-  permissions comes from the apps (see §0.4).
+- Title "New role" / "Edit {name}" / "{name}" (locked). Description: "Tick what this role may do, and how far each
+  permission reaches. Nothing is ticked until you choose." (locked: "{description} Duplicate it to make an editable copy." —
+  everything read-only, footer only "Close").
+- **Start from** (new roles only): "Blank: nothing ticked" or "Copy from {role}" (copies its permissions and level; hint
+  "Copies that role's permissions and level; change anything before saving.").
+- **Fields**: "Name" (required, max 80; saving without one shows "Give the role a name" under the field and in the footer,
+  and focuses it) · "Level" ("Member", "Manager", "Admin"; the hint describes the selected level — Member: "Uses the apps
+  with exactly the permissions ticked below."; Manager: "Same as Member: the ticked permissions decide what they can do.
+  Tasks also lists them as a manager people can report to."; Admin: "Also an administrator in Tasks: sees everyone's
+  delegated work on Tasks Home and manages other admins' Tasks accounts; work given to them is protected from deletion
+  (only the Owner can delete it).") · "Description (optional)" (max 300).
+- **Permission matrix**: "Permissions" with "{n} on" and a "Search permissions" box (matches label, description, group).
+  A collapsible section per app ("Tasks", "Assets", "Admin"; button "Show/Hide", "{n} / {m} on", "Select all" and "Clear"),
+  then a collapsible group (with "{n} / {m}", "All", "None"). Each permission is a checkbox ("{App}: {label}") with its
+  one-line description under it; when ticked and the permission has scopes, a scope choice "Scope for {label}" with the
+  scopes it supports ("Own", "Team", "Department", "Company"); a newly ticked permission starts at the narrowest. Phones:
+  44 px rows and scope buttons. Legend: "Own = only my records · Team = mine and my direct reports · Department = everyone
+  in my department · Company = everyone." The list comes from the apps and the Platform (see §0.4; PLAN.md §19.19).
 - **Duties** (editable roles only): "Duties" — "Each duty becomes a task in Tasks for everyone with this role, at the time you
   choose. Steps become its checklist." Per duty: "Duty" (required, max 150) · "When" ("Every working day", "Every week",
   "Every month", "Once, when someone gets this role") · "Day" (weekly; Monday–Sunday) · "Date" (monthly; 1–28) · "Steps (one
   per line, optional)" · "Remove duty". "Add duty".
-- Footer: "Cancel", "Save role" (disabled without a name).
+- Footer (stays at the bottom): "Cancel", "Save role" (always enabled; without a name it says why).
 
 ### Settings (Settings Center)
 - **URL** `/settings`. **Purpose**: the company's name and look, module switches, departments, links to each app's settings.

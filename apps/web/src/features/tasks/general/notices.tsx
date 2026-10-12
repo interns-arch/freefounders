@@ -1,4 +1,4 @@
-/** /tasks/notices — the notice board, and managing notices for settings.manage (old pages/Notices.jsx). */
+/** /tasks/notices — the notice board, and managing notices for notices.publish (old pages/Notices.jsx). */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
 import {
@@ -36,7 +36,7 @@ import { Chip, ErrorNote, OkNote, Segmented, fmtWhen } from './parts';
 
 export function NoticesPage() {
   const access = useAccess();
-  const isAdmin = access.tasks.can('settings.manage');
+  const isAdmin = access.tasks.can('notices.publish');
   const [mode, setMode] = useState<'feed' | 'manage'>('feed');
   return (
     <div className="space-y-4">

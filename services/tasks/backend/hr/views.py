@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import HasCapability, has_capability
+from accounts.permissions import HasCapability, HasPermission, has_capability
 
 from . import approvals, services
 from .models import (
@@ -21,18 +21,24 @@ from .serializers import (
 )
 
 
+def approve_scope(user):
+    """How far this user approves leave and corrections: 'team', 'department', 'company' or None (PLAN.md §19.19)."""
+    from accounts.access import scope_of
+    return scope_of(user, "hr.approve")
+
+
 def can_approve(user) -> bool:
-    return has_capability(user, "hr.approve")
+    return approve_scope(user) is not None
 
 
 def can_manage_hr(user) -> bool:
-    return has_capability(user, "hr.manage")
+    """HR settings: hours, week-offs, locations, leave types, approval rules."""
+    return has_capability(user, "hr.settings")
 
 
 def other_approvers(user):
     """Everyone except `user` who could approve their request."""
-    from accounts.access import users_with
-    return users_with("hr.approve").exclude(pk=user.pk)
+    return approvals.approver_users().exclude(pk=user.pk)
 
 
 def _self_review_message(user) -> str:
@@ -57,12 +63,14 @@ def _check_reviewer(reviewer, request_obj):
 
 
 def managed_users(user):
-    """Employees whose attendance/leave this user may see."""
-    if can_manage_hr(user):
-        return User.objects.filter(is_active=True)
-    if can_approve(user):
-        return User.objects.filter(is_active=True, department=user.department)
-    return User.objects.filter(pk=user.pk)
+    """Employees whose attendance/leave records this user may open: the widest of their approving and
+    attendance-screen scopes (only themself without any)."""
+    from accounts.access import widest
+    from . import team
+    scope = widest(approve_scope(user), team.screen_scope(user))
+    if scope is None:
+        return User.objects.filter(pk=user.pk)
+    return team.people_in_scope(user, scope)
 
 
 def _target_user(request, param="user"):
@@ -125,9 +133,7 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             "can_check_in": not (rec and rec.check_in),
             "can_check_out": bool(rec and rec.check_in and not rec.check_out),
             "geofence_enabled": conf["geofence_enabled"],
-            "face_enabled": conf["face_enabled"],
-            "face_self_enroll": conf["face_self_enroll"],
-            "face_enrolled": FaceProfile.objects.filter(user=request.user).exists(),
+            "face_enabled": False,  # no face check any more (PLAN.md §19.18); kept for older clients
             "work_start": conf["work_start"], "work_end": conf["work_end"],
             "photo": conf["photo"],
         })
@@ -151,16 +157,16 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
         try:
-            rec = fn(request.user, d.get("latitude"), d.get("longitude"), d.get("face_descriptor"), photo=d.get("photo"))
+            rec = fn(request.user, d.get("latitude"), d.get("longitude"), photo=d.get("photo"))
         except services.HRError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(AttendanceSerializer(rec).data, status=http.HTTP_201_CREATED)
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], permission_classes=[HasCapability.of("attendance.punch")])
     def check_in(self, request):
         return self._mark(request, services.check_in)
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], permission_classes=[HasCapability.of("attendance.punch")])
     def check_out(self, request):
         return self._mark(request, services.check_out)
 
@@ -175,35 +181,39 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError:
             raise ValidationError({"month": "Invalid year/month."})
         target = _target_user(request)
+        if target.pk == request.user.pk and not has_capability(request.user, "attendance.self"):
+            raise PermissionDenied("Your role does not include My attendance.")
         data = services.monthly_report(target, year, month)
         data["user"] = {"id": target.id, "name": target.get_full_name() or target.username}
         return Response(data)
 
-    @action(detail=False, methods=["get"], permission_classes=[HasCapability.of("hr.approve")])
+    @action(detail=False, methods=["get"], permission_classes=[HasPermission.of("hr.live", "hr.approve")])
     def team_today(self, request):
         return Response(services.today_summary(list(managed_users(request.user))))
 
     # ---- attendance for managers (PLAN.md §19.15): live / daily / dashboard / reports / import
 
-    def _team(self, request):
+    def _team(self, request, keys):
         from . import team
         p = request.query_params
         return team.team_users(request.user, inactive=p.get("inactive") in ("1", "true"),
-                               department=p.get("department", ""), q=p.get("q", ""))
+                               department=p.get("department", ""), q=p.get("q", ""), keys=keys)
 
     @action(detail=False, methods=["get"])
     def team_day(self, request):
         """Everyone's status for one day (default today)."""
         from . import team
         day = team.parse_day(request.query_params["date"]) if request.query_params.get("date") else timezone.localdate()
-        return Response(team.team_day(self._team(request), day))
+        # Today: Live attendance (or Daily, or Reports for its lists); any other day is Daily attendance.
+        keys = ("hr.live", "hr.daily", "hr.reports") if day == timezone.localdate() else ("hr.daily",)
+        return Response(team.team_day(self._team(request, keys), day))
 
     @action(detail=False, methods=["get"])
     def team_month(self, request):
         """Per-person totals for a month (the attendance dashboard)."""
         from . import team
         year, month, first, last = team.parse_month(request.query_params)
-        return Response(team.team_month(self._team(request), year, month, first, last))
+        return Response(team.team_month(self._team(request, ("hr.dashboard",)), year, month, first, last))
 
     @action(detail=False, methods=["get"], content_negotiation_class=_FileNegotiation)
     def report(self, request):
@@ -215,10 +225,10 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             raise ValidationError({"type": f"Use one of: {', '.join(team.REPORT_TYPES)}."})
         if fmt not in ("xlsx", "csv"):
             raise ValidationError({"format": "Use xlsx or csv."})
-        title, stem, header, rows = team.build_report(kind, self._team(request), request.query_params)
+        title, stem, header, rows = team.build_report(kind, self._team(request, ("hr.reports",)), request.query_params)
         return _file(team.to_xlsx(title, header, rows) if fmt == "xlsx" else team.to_csv(header, rows), f"{stem}.{fmt}")
 
-    @action(detail=False, methods=["get"], permission_classes=[HasCapability.of("hr.manage")],
+    @action(detail=False, methods=["get"], permission_classes=[HasCapability.of("hr.import")],
             content_negotiation_class=_FileNegotiation)
     def import_template(self, request):
         from . import team
@@ -227,7 +237,7 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         return _file(team.to_xlsx("Attendance", team.TEMPLATE_HEADER, [], extra_sheet=("How to fill", team.TEMPLATE_NOTES)),
                      "attendance-import-template.xlsx")
 
-    @action(detail=False, methods=["post"], url_path="import", permission_classes=[HasCapability.of("hr.manage")],
+    @action(detail=False, methods=["post"], url_path="import", permission_classes=[HasCapability.of("hr.import")],
             parser_classes=[MultiPartParser, FormParser])
     def import_rows(self, request):
         """Upload an XLSX/CSV of days: dry_run=true (default) previews, dry_run=false applies in one transaction."""
@@ -238,7 +248,7 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         dry_run = str(request.data.get("dry_run", "true")).lower() not in ("false", "0", "no")
         return Response(team.import_attendance(upload, request.user, dry_run=dry_run))
 
-    @action(detail=False, methods=["post"], permission_classes=[HasCapability.of("hr.manage")])
+    @action(detail=False, methods=["post"], permission_classes=[HasCapability.of("hr.mark")])
     def manual_mark(self, request):
         """HR override: mark an employee present/half-day/absent by hand —
         for the day the face lock (or their phone) refuses to cooperate.
@@ -275,6 +285,11 @@ class CorrectionViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get("scope") == "team" and approvals.is_approver(self.request.user):
             return qs.filter(user__in=approvals.reviewable_users(self.request.user))
         return qs.filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        if not has_capability(request.user, "attendance.self"):
+            raise PermissionDenied("Your role does not include My attendance.")
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         correction = serializer.save(user=self.request.user)
@@ -325,7 +340,7 @@ class LeaveTypeViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
             return [IsAuthenticated()]
-        return [HasCapability.of("hr.manage")()]
+        return [HasCapability.of("hr.settings")()]
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
@@ -338,11 +353,18 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         p = self.request.query_params
         if p.get("scope") == "team" and approvals.is_approver(self.request.user):
             qs = qs.filter(user__in=approvals.reviewable_users(self.request.user))
-        else:
+        elif has_capability(self.request.user, "leave.self"):
             qs = qs.filter(user=self.request.user)
+        else:
+            qs = qs.none()
         if p.get("status"):
             qs = qs.filter(status=p["status"])
         return qs
+
+    def create(self, request, *args, **kwargs):
+        if not has_capability(request.user, "leave.self"):
+            raise PermissionDenied("Your role does not include My leave.")
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         data = serializer.validated_data
@@ -411,10 +433,12 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def balances(self, request):
         target = _target_user(request)
+        if target.pk == request.user.pk and not has_capability(request.user, "leave.self"):
+            raise PermissionDenied("Your role does not include My leave.")
         return Response(services.leave_balances(target))
 
 
-# ------------------------------------------------------- admin/geo/face
+# ------------------------------------------------------- admin/geo
 
 class OfficeLocationViewSet(viewsets.ModelViewSet):
     serializer_class = OfficeLocationSerializer
@@ -424,29 +448,21 @@ class OfficeLocationViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
             return [IsAuthenticated()]
-        return [HasCapability.of("hr.manage")()]
+        return [HasCapability.of("hr.settings")()]
 
 
 @api_view(["POST", "DELETE"])
-@permission_classes([HasCapability.of("hr.manage")])
+@permission_classes([HasCapability.of("hr.settings")])
 def face_enrolment(request, user_id):
-    """Admin-only enrolment/removal. Stores only a numeric descriptor."""
+    """Face check was removed (PLAN.md §19.18): enrolling is refused (410). DELETE still removes a profile stored
+    before, so HR can clear old biometric data."""
     target = User.objects.filter(pk=user_id).first()
     if not target:
         return Response({"detail": "Unknown user."}, status=404)
     if request.method == "DELETE":
         FaceProfile.objects.filter(user=target).delete()
         return Response({"enrolled": False})
-    descriptor = request.data.get("descriptor")
-    if not isinstance(descriptor, list) or not 32 <= len(descriptor) <= 512:
-        return Response({"descriptor": "Send the face descriptor vector (32-512 floats)."}, status=400)
-    try:
-        descriptor = [float(x) for x in descriptor]
-    except (TypeError, ValueError):
-        return Response({"descriptor": "Descriptor must be numeric."}, status=400)
-    FaceProfile.objects.update_or_create(
-        user=target, defaults={"descriptor": descriptor, "enrolled_by": request.user})
-    return Response({"enrolled": True, "user": target.id})
+    return Response({"detail": services.FACE_REMOVED}, status=410)
 
 
 @api_view(["GET", "PUT"])
@@ -457,10 +473,14 @@ def hr_settings(request):
     from tenancy.company_settings import set_value
 
     if not can_manage_hr(request.user):
-        raise PermissionDenied("Only an HR administrator can change HR settings.")
+        raise PermissionDenied("Your role does not include HR settings.")
     if request.method == "PUT":
         errors, clean = {}, {}
         for key, value in (request.data or {}).items():
+            if key in services.RETIRED:
+                if key == "face_enabled" and str(value).lower() in ("true", "1", "on"):
+                    errors[key] = services.FACE_REMOVED
+                continue
             if key not in services.EDITABLE:
                 errors[key] = "Not an HR setting."
                 continue
@@ -488,12 +508,18 @@ def hr_settings(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def hr_config(request):
+    from . import team
     conf = services.cfg()
     return Response({
         "geofence_enabled": conf["geofence_enabled"],
-        "face_enabled": conf["face_enabled"],
+        "face_enabled": False,  # no face check any more (PLAN.md §19.18); kept for older clients
         "work_start": conf["work_start"], "work_end": conf["work_end"],
         "week_offs": conf["week_offs"],
         "can_approve": approvals.is_approver(request.user),
         "can_manage": can_manage_hr(request.user),
+        # The managers' attendance screens this person may open: their permissions, plus their own team under the
+        # "manager approves" rule (PLAN.md §19.19).
+        "screens": {name: team.may_view_team(request.user, (key,))
+                    for name, key in (("live", "hr.live"), ("daily", "hr.daily"),
+                                      ("dashboard", "hr.dashboard"), ("reports", "hr.reports"))},
     })

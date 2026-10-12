@@ -1,4 +1,4 @@
-import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
@@ -162,6 +162,7 @@ export class FlowsService implements OnModuleInit, OnModuleDestroy {
     if (!p) throw notFound('Person');
     if (p.status !== 'active') throw badRequest('This person is already inactive');
     if (personId === caller.personId) throw badRequest('You cannot start your own exit');
+    if (caller.role === 'member' && p.platformRole !== 'member') throw new ForbiddenException('Only an owner or admin can start an admin’s exit');
     await db.update(people).set({ lastWorkingDate: input.lastWorkingDate, updatedAt: new Date() }).where(eq(people.id, personId));
     const apps = (await db.select({ app: personApps.app }).from(personApps).where(eq(personApps.personId, personId))).map((r) => r.app);
     const body = { personId, lastWorkingDate: input.lastWorkingDate, reason: input.reason ?? null };

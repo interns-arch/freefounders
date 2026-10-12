@@ -1,7 +1,7 @@
 """Leave & Attendance.
 
 Attendance is one row per employee per day. Check-in/out capture GPS (and
-optionally a face descriptor); the server decides status, lateness and
+a punch photo when the company asks for one); the server decides status, lateness and
 working hours -- never the client. Approved leave writes LEAVE days into
 attendance so both modules agree on where someone was.
 """
@@ -198,11 +198,10 @@ class LeaveRequest(models.Model):
 
 
 class FaceProfile(models.Model):
-    """Optional biometric enrolment. We store ONLY a numeric descriptor
-    (never an image), and only when an admin enrols the employee. Matching
-    is euclidean distance against this descriptor, gated by
-    FACE_MATCH_THRESHOLD; the whole feature is off unless
-    FACE_RECOGNITION_ENABLED=true."""
+    """A face descriptor stored before face check was removed (PLAN.md §19.18).
+    Kept readable for old data; nothing creates or matches one any more. HR can
+    still delete a profile (DELETE /hr/face/<user>/), and deleting a person
+    removes theirs."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                 related_name="face_profile")
     descriptor = models.JSONField(default=list)

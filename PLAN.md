@@ -1410,3 +1410,309 @@ hotspot on first, or restart.
 **Next:** push notifications through the shell (expo-notifications in a development build; the web asks the bridge for a
 push token and the Platform stores it per person) → a staging server with HTTPS → EAS builds (APK for testers, then Play
 Store) → iPhone.
+
+### 19.18 Light on low-end phones (2026-10-12)
+Goal: the web app (and so the Android app, §19.17) fast on 1–2 GB phones on slow 4G. Five items approved by the founder.
+
+**1. Face matching removed completely** (founder: no face matching anywhere; punch = GPS geofence + selfie photo).
+- Web: `@vladmandic/face-api` uninstalled and `apps/web/public/models/*` deleted (6.8 MB); `features/hr/face.ts` →
+  `device.ts` (camera check, photo grab, location only), `face-capture.tsx` → `selfie-capture.tsx` (`SelfieCapture`: a plain
+  selfie dialog, same "Check in" / "Check out" names and photo note). Gone: the Face attendance panel and the two face
+  checkboxes in HR settings, the "Face verification is ON…" notes on Today, "Face not enrolled" on Home, the in-app
+  face-check refusal message, `useFaceProfile`, the face fields in the core types.
+- Tasks API (`hr`): face check is permanently off. `cfg()["face_enabled"]` is always false; `today` and `hr/config`
+  report `face_enabled: false` (kept for older clients; `face_enrolled` / `face_self_enroll` are gone); check-in/out never
+  need a descriptor and ignore `face_descriptor` from an older client (`face_verified` false, no confidence). HR settings
+  no longer list `face_enabled` / `face_threshold` / `face_self_enroll`; an older screen sending "off" still saves, switching
+  it on is refused (400 "Face check was removed…"). `POST /hr/face/<user>/` answers 410; `DELETE` still removes an old
+  profile. Kept readable: `FaceProfile`, `Attendance.face_verified` / `face_confidence`, the stored setting.
+- **Data step:** migration `hr 0006_face_check_off` sets `FACE_RECOGNITION_ENABLED` to `false` in the company settings
+  table; `migrate_companies` runs it in every company schema (applied to the dev database on 2026-10-12: 4 companies).
+  `.env.example` and the Tasks README say the FACE_* variables are no longer read.
+- Tests: `hr/tests.py` FaceTests → FaceCheckRemovedTests (6: a punch with the old setting on needs no face, a descriptor is
+  ignored and the old profile untouched, today/config report off, enrol 410 / delete works, settings refuse "on", the
+  migration's data step). e2e: `face_enabled` dropped from the settings the specs save and restore; `web-app-shell` now
+  proves face check cannot be switched on and the check-out goes through with the app camera. Punch-photo tests unchanged.
+
+**2. Lite mode for weak phones** (`src/lib/lite.ts`, CSS in `src/index.css`).
+- `<html data-lite>` is set before the first render when the account menu's **Lite mode** is On, or on Auto (default)
+  when `navigator.deviceMemory <= 2`, or a phone-size screen with `hardwareConcurrency <= 4`, or `prefers-reduced-motion`.
+  The choice (Auto / On / Off, radio items in the account menu; the label shows what Auto decided) is kept per device in
+  localStorage `ff-lite`.
+- Under `[data-lite]`: no backdrop blur (the header and bottom bar become solid `--card`), the decorative blurred glows
+  (`.absolute` with `blur-*`) are hidden, big shadows fall back to the small card shadow, soft gradient surfaces become the
+  flat card and the solid hero gradient the flat `--primary`, no transitions or animations (spinners keep turning).
+- Clocks: the punch clock (Today) and Home's clock tick **on the minute** (they show minutes only; Today used to re-render
+  every second) and stop while the page is hidden, catching up when shown (`useMinuteClock`). Query polling already
+  pauses while hidden (TanStack's default).
+
+**3. The app's files stay on the phone** (service worker; `vite-plugin-pwa` injectManifest, source `apps/web/sw/sw.js`).
+- Precaches `index.html`, `theme.js`, the favicon, every `/static/*.js|css` and the Latin font files (149 files, 2.7 MB
+  raw, about 0.8 MB gzip, fetched once per deploy in the background; a later deploy fetches only the files that changed).
+- Page loads are **network first** (4 s, then the cached `index.html`, also when offline), so a new deploy shows on the
+  next load; `/` is not served cache-first. `/api/*`, `/tasks/api/*`, `/assets/api/*`, `/media/*` are never answered by
+  the worker (no API data in any cache), nor `/tasks/sw.js`.
+- `skipWaiting` + `clientsClaim`; the open app then shows **"A new version is ready"** with **Reload**
+  (`src/lib/sw-register.ts`). Registered only in production builds (`import.meta.env.PROD`), 5 s after load when the
+  phone is idle, and only where service workers are allowed (https or localhost; Android's WebView on the https server).
+  On the LAN address `http://192.168.x.x` the app works as before, without the offline copy. The app also looks for a
+  new version when it comes back to the front.
+- The old Tasks kill-switch `public/tasks/sw.js` stays at its path (old phones still clean up); it now deletes only the
+  old app's caches and keeps the new worker's `workbox-*` cache. Caddy draft: `sw.js` is `no-cache`.
+- Build check `scripts/check-sw.mjs` (part of `npm run web:build`): `sw.js` emitted as a classic script, the shell and
+  everything `index.html` loads precached, no API / upload / kill-switch path precached, the four API prefixes in the
+  page route's denylist, the kill-switch present.
+
+**4. The last data shows instantly** (`src/app/query-persist.ts`, `@tanstack/query-persist-client-core` 5.104.1).
+- Kept in localStorage `ff-query-cache` (written at most once a second and when the page is hidden): who I am
+  (`platform` / `tasks` / `assets` me, Assets config), today's attendance, HR config, leave balances, pending leave and
+  corrections, my task tiles, the Tasks home summary, waiting counts, the Assets dashboard, notifications. Nothing else,
+  never mutations.
+- One copy for one `sub|cid`: restored only after that person's session is renewed (before the first screen draws),
+  dropped on sign-out and when someone else signs in (the in-memory cache is emptied too), after 24 h, and with every
+  build (buster = build id, `__FF_BUILD_ID__`). Fresh data is fetched in the background as usual.
+
+**5. Long lists in pages** (`components/common/show-more.tsx`: `useShowMore` + `<ShowMore>`, "Showing 50 of 312 ·
+Load 50 more", a polite live region; focus moves to the count when the last rows arrive; back to the first page on any
+filter, search or date change). Applied where the API returns the whole list: task lists My / All / Delegated /
+Subscribed (counts still use every row), Activities, To accept / Change requests / Deleted bin, People & access, Live
+team / Daily, Attendance dashboard (after sorting), My Team (Tasks), the Assets queue (most urgent first), the Leads board
+(30 cards per column, each with its own Load more; drag and drop unchanged). Already paged by the server, unchanged:
+Assets list, Assets employees, Requests, Tickets; Notifications fetches at most 50. e2e: the two "HR sees the thumbnail"
+checks search the new person first (Live team draws 50 staff at a time).
+
+**Numbers** (production build behind a gzip server like the Caddy draft, APIs through the dev gateway, Playwright at
+390 px; this PC was busy with other work, so throttled timings vary by about ±20 %)
+
+| | Before | After |
+|---|---|---|
+| Build output (`dist`) | 176 files, 11.0 MB (5.7 MB gzip) incl. 6.8 MB face models | 171 files, 2.9 MB (1.0 MB gzip) |
+| JavaScript in total | 3,753 KB (1,080 KB gzip); largest chunk face-api 1,314 KB | 2,510 KB (773 KB gzip) |
+| Main chunk `index-*.js` | 436.7 KB (132.3 KB gzip) | 442.2 KB (134.0 KB gzip): + persistence, lite mode, worker registration |
+| First visit of `/attendance`: bytes | 383 KB (337 static + 46 API), 52 requests | 383–387 KB, 53 requests (this page never loaded the face code) |
+| Second launch of `/attendance`: bytes from the network | 25 KB (HTTP cache) | 2.7 KB (42 files from the worker) |
+| Second launch: page heading visible | about 1,050 ms | about 550 ms |
+| First visit, slow 4G + 4× CPU: heading / TBT | 4.1–4.8 s / 0.8–1.1 s | 4.6–4.9 s / 1.0–1.2 s (within this PC's noise) |
+| Lighthouse mobile, `/login` (cold) | 78, 81 (LCP 3.5 s, TBT 220–310 ms) | 77, 78 (LCP 3.5 s, TBT 290–320 ms) |
+| Lighthouse mobile, `/attendance` signed in (second visit) | 76, 87 (LCP 2.3–2.5 s, 57 KiB) | 87, 86 (LCP 1.4–1.5 s, 3 KiB) |
+
+Disk: the face models (6.8 MB) leave the repo; `node_modules/@vladmandic` (24 MB) is gone; `vite-plugin-pwa` + Workbox
+(5.6 MB, build time only) were added.
+
+### 19.20 Smaller photos (2026-10-12)
+
+Photos now take a fraction of the space and go up quickly on slow phones. Every image is shrunk twice over: in the
+browser before it is uploaded (the web app, and so the Android app, which is the web app in a WebView), and again on the
+server as a safety net for any other client (an older app, the API, a big upload).
+
+**Presets** (longest side, quality):
+
+| Preset | Size | Used for |
+|---|---|---|
+| `selfie` | ≤ 720 px, 0.65, always JPEG | punch photos (stored and served as `image/jpeg`) |
+| `photo` | ≤ 1600 px, 0.72 | asset, handover and return photos |
+| `document` | ≤ 2000 px, 0.80 | images attached as documents: task files and completion proof, leave and lead documents, form file fields, notice attachments (text stays readable) |
+
+**In the browser** — `apps/web/src/lib/compress-image.ts`, `compressImage(file | blob | dataURL, preset)`: decodes with
+`createImageBitmap` (`imageOrientation: 'from-image'`, `<img>` fallback), scales on a canvas (OffscreenCanvas when there
+is one), encodes WebP where the browser can (else JPEG on white) and returns whichever is smaller, the original or the
+copy. Non-images, GIF, SVG and a HEIC the browser cannot read come back untouched. Re-encoding drops all metadata, the
+photo's GPS position included. Used by the Assets photo picker (`features/assets/components/photos.tsx`: photos are
+shrunk as soon as they are picked, the strip shows "8.4 MB → 620 KB"; `uploadPhotos` shrinks anything not yet shrunk),
+the Tasks file button (`FilePick`, so task attachments, completion proof and lead documents; the list shows
+"1.2 MB → 180 KB"), the leave document and form file inputs, and the punch selfie (`selfie-capture.tsx`). The phone
+app's native selfie already sends ≤ 720 px JPEG.
+
+**On the servers** (an image that is already smaller, or that does not shrink by at least 10% while it already fits, is
+kept as sent; non-images are never touched):
+- Tasks (Django, `Pillow==11.3.0`): `config/images.py` — `compress_image(raw, max_side, quality)` (EXIF transpose, RGB on
+  white, LANCZOS, progressive optimised JPEG, no EXIF) and `compress_upload(file, preset)`. Punch photos (`_attach_photo`,
+  selfie preset, a PNG/WebP is always converted to JPEG), task attachments and proof, lead documents, form uploads,
+  leave documents and notice attachments (document preset; the file name becomes `.jpg`). The punch photo limit stays
+  400 KB and the retention setting is unchanged.
+- Assets (NestJS, `sharp@0.34.5`): `modules/assets/photo-shrink.ts` — `.rotate()`, inside 1600×1600 without enlarging,
+  mozjpeg JPEG 72 on white (a WebP stays WebP, quality 72), metadata dropped. The row's `mime_type`, `file_name`
+  extension and `size_bytes` follow the stored format; photos keep being served with their own type, old rows unchanged.
+  Photos now list `mimeType` (the download gets the right extension). The per-photo upload limit went from 8 MB to
+  15 MB raw, since the server shrinks everything anyway.
+
+**Existing files** — one-off maintenance commands, dry run by default (print the space they would save):
+- Tasks: `manage.py compress_media [--apply]` (every company in multi-company mode; the smaller copy is saved first, the
+  row is pointed at it, then the old file is deleted).
+- Assets: `node scripts/compress-uploads.mjs [--apply]` (shared tables and every company schema; rows keep their id).
+Dry runs on the demo data (2026-10-12): Tasks 59 files, 0 to shrink (the demo punch photos are already ~6 KB);
+Assets 25 photos, 18 would shrink, 112 KB → 101 KB. Not applied.
+
+**Measured** on a 3840×2400 photo (1.53 MB JPEG): selfie 24 KB, photo 86 KB (Pillow) / 74 KB (sharp mozjpeg),
+document 142 KB. In the browser test a 3000×2000 photo (PNG or JPEG) comes out as a 1600×1067 WebP under a quarter of
+its size.
+
+Tests: `hr/tests_images.py` (Tasks: shrink per preset, EXIF orientation + GPS dropped, non-images and GIF untouched,
+never bigger, transparent PNG on white, a large punch photo stored as a 720 px JPEG, `compress_media` dry run/apply),
+Assets integration test (a 3000×2000 photo with EXIF orientation is stored upright at 1067×1600 without metadata),
+`e2e/web-compress-image.spec.ts` (compressImage in a real canvas) and the asset photo test in `e2e/web-assets.spec.ts`
+(the stored photo is 1600 px and a fraction of the 3000×2000 upload).
+
+### 19.19 Roles: every feature is a permission (2026-10-12)
+Founder (2026-10-12, with a screenshot of "New role"): the Level hint said "Admin level…" while "Member" was chosen, "Save
+role" was greyed out with no reason, and he wants "an option for each and every specific feature" so any role can be built,
+with no predefined restrictions.
+
+**What changed**
+- **Every feature is its own permission** (catalogue version 2). Tasks went from 15 to 52 permissions, grouped like the
+  menus; each has a label, a one-line description (shown under it in the editor) and scopes where they make sense. Assets
+  keeps its 24 permissions and now sends a description for each. The **Admin workspace** is a third "app" in the editor,
+  **Admin**, with 6 permissions (the Platform's own catalogue).
+- **Enforced in the API and in the web app**: every check that rode on a broad permission (`hr.manage` for payroll,
+  `hr.approve` for all manager attendance pages, `tasks.assign` for groups/templates/forms/links/ideas/SOPs,
+  `settings.manage` for notices/holidays, the Admin level for deleting leads…) now asks for its own permission; menus
+  (`features/*/nav.ts` `show`), page tabs and buttons follow the same rules. Viewing notices, links, ideas, forms,
+  mistakes, the template directory, notifications, punching in, my attendance/leave/salary and holidays are permissions too
+  (every existing role keeps them).
+- **Only the Owner role is locked.** "Super Admin" (`ff_super_admin`, the Owner role) always has every permission of every
+  app, new ones included (recomputed from the catalogues), and cannot be edited or archived. "Admin" (`ff_admin`) and every
+  other role are ordinary roles: edit, duplicate, archive. A company can never lock itself out: an owner has every Admin
+  permission whatever their roles.
+- **Role editor** (`features/admin/role-editor.tsx`): "Start from" (Blank / "Copy from {role}": its permissions and level);
+  "Search permissions"; per app a collapsible section with "{n} / {m} on", "Select all", "Clear"; per group "{n} / {m}",
+  "All", "None"; the description under each permission; scope picker next to scoped ones; footer stays at the bottom;
+  44 px rows and scope buttons on phones. "Save role" is always enabled: without a name it shows "Give the role a name"
+  under the field (and in the footer) and focuses it. The Level hint describes the selected level, as it really works:
+
+| Level | Hint (what the code does) |
+|---|---|
+| Member | "Uses the apps with exactly the permissions ticked below." |
+| Manager | "Same as Member: the ticked permissions decide what they can do. Tasks also lists them as a manager people can report to." (Tasks' own user screen offers manager-level roles as "Reports to"; nothing else uses level 2; Assets ignores levels.) |
+| Admin | "Also an administrator in Tasks: sees everyone's delegated work on Tasks Home and manages other admins' Tasks accounts; work given to them is protected from deletion (only the Owner can delete it)." (`accounts.access.is_admin`: delegation board, admin accounts in Tasks' user screen, protected work, no reporting manager needed, no WhatsApp ping for change requests.) Deleting leads and lead rules are now permissions of their own. |
+
+Tasks `/api/auth/me` now also returns `level`, so Tasks Home treats any Admin-level role (not only the built-in role names)
+as an administrator, as the API already did.
+
+**Catalogue: Tasks** (`services/tasks/backend/accounts/access.py`, `CATALOGUE`; scoped capability strings are
+`<key>_team / _department / _all`, except `tasks.view` and `leads.*` as before and `hr.approve` whose Department scope keeps
+the old string `hr.approve`)
+
+| Group | Key | Label | Scopes | Who gets it in the upgrade (= who had it before) |
+|---|---|---|---|---|
+| Tasks | `tasks.view` | See tasks | Own · Team · Department · Company | existing key, unchanged |
+| Tasks | `tasks.assign` | Give tasks to others | yes/no | existing key, unchanged |
+| Tasks | `groups.create` | Create groups | yes/no | `tasks.assign` |
+| Tasks | `templates.manage` | Task templates | yes/no | `tasks.assign` |
+| Tasks | `directory.view` | Template directory | yes/no | every role |
+| Tasks | `tasks.reports` | Reports | yes/no | `tasks.view` at Department/Company |
+| Tasks | `tasks.team_performance` | Team performance | yes/no | `tasks.view` at Company |
+| Tasks | `tasks.bin` | Deleted tasks | yes/no | `tasks.view` at Company |
+| Tasks | `tasks.delete_admin_work` | Delete work assigned to an admin (Owner only by default) | yes/no | existing key, unchanged |
+| Tasks | `dashboard.view` | Team dashboard | yes/no | existing key, unchanged |
+| Tasks | `notifications.view` | Notifications | yes/no | existing key; + every role |
+| Tasks | `tasks.settings` | Task settings | yes/no | `settings.manage` |
+| Leads | `leads.view` | See leads | Own · Team · Department · Company | existing key, unchanged |
+| Leads | `leads.view_won` | See won leads (accounts) | yes/no | existing key, unchanged |
+| Leads | `leads.edit` | Edit leads | Own · Team · Department · Company | existing key, unchanged |
+| Leads | `leads.assign` | Assign leads | yes/no | existing key, unchanged |
+| Leads | `quotations.manage` | Quotations | yes/no | existing key, unchanged |
+| Leads | `leads.delete` | Delete leads | yes/no | Admin-level roles |
+| Leads | `leads.rules` | Lead assignment rules | yes/no | Admin-level roles |
+| Leads | `intake.view` | AI inbox | yes/no | existing key, unchanged |
+| Notices | `notices.view` | See notices | yes/no | every role |
+| Notices | `notices.publish` | Publish notices | yes/no | `settings.manage` |
+| Mistakes & SOPs | `mistakes.view` | Mistakes and SOPs | yes/no | every role |
+| Mistakes & SOPs | `mistakes.log` | Log mistakes for others | yes/no | `tasks.assign` |
+| Mistakes & SOPs | `mistakes.review` | Review mistakes | Department · Company | `tasks.view` at Department → Department; `tasks.view` at Company → Company |
+| Mistakes & SOPs | `sops.manage` | Write SOPs | yes/no | `tasks.assign` |
+| Mistakes & SOPs | `mistakes.settings` | Mistake categories and rules | yes/no | `settings.manage` |
+| Web forms | `forms.view` | Fill in forms | yes/no | every role |
+| Web forms | `forms.build` | Build forms | yes/no | `tasks.assign` |
+| Web forms | `forms.all` | All forms and answers | yes/no | `tasks.view` at Company |
+| Links & ideas | `links.view` | Links | yes/no | every role |
+| Links & ideas | `links.manage` | Manage links | yes/no | `tasks.assign` |
+| Links & ideas | `ideas.view` | Idea board | yes/no | every role |
+| Links & ideas | `ideas.review` | Review ideas | yes/no | `tasks.assign` |
+| My attendance | `attendance.punch` | Punch in and out | yes/no | every role |
+| My attendance | `attendance.self` | My attendance | yes/no | every role |
+| My attendance | `leave.self` | My leave | yes/no | every role |
+| My attendance | `holidays.view` | Holidays | yes/no | every role |
+| My attendance | `payroll.self` | My salary | yes/no | every role |
+| Team attendance | `hr.approve` | Approve leave and corrections | Team · Department · Company | existing key; + `hr.manage` → Company |
+| Team attendance | `hr.live` | Live attendance | Team · Department · Company | `hr.manage` → Company; `tasks.view` at Company → Company; `hr.approve` → Department |
+| Team attendance | `hr.daily` | Daily attendance | Team · Department · Company | `hr.manage` → Company; `tasks.view` at Company → Company; `hr.approve` → Department |
+| Team attendance | `hr.dashboard` | Attendance dashboard | Team · Department · Company | `hr.manage` → Company; `tasks.view` at Company → Company; `hr.approve` → Department |
+| Team attendance | `hr.reports` | Attendance reports | Team · Department · Company | `hr.manage` → Company; `tasks.view` at Company → Company; `hr.approve` → Department |
+| Team attendance | `hr.import` | Import attendance | yes/no | `hr.manage` |
+| Team attendance | `hr.mark` | Mark attendance by hand | yes/no | `hr.manage` |
+| HR administration | `holidays.manage` | Manage holidays | yes/no | `settings.manage` |
+| HR administration | `hr.settings` | HR settings | yes/no | `hr.manage` |
+| HR administration | `payroll.run` | Run payroll | yes/no | `hr.manage` |
+| HR administration | `payroll.salaries` | Salaries and advances | yes/no | `hr.manage` |
+| Administration | `users.manage` | Manage users | yes/no | existing key, unchanged |
+| Administration | `settings.manage` | Company settings | yes/no | existing key, unchanged |
+
+Retired: `hr.manage` (HR administrator). It is no longer offered; an old grant of it still works (read as everything it
+covered: approve at Company, the four attendance screens at Company, import, manual marking, HR settings, payroll, salaries)
+and the upgrade replaces it by those permissions.
+
+**Catalogue: Assets** (unchanged keys and groups, `@eam/shared` `PERMISSION_GROUPS`; descriptions in
+`apps/api/src/modules/auth/permission-hints.ts`): Assets — `asset:view`, `asset:create`, `asset:edit`, `asset:assign`,
+`asset:lifecycle`, `catalog:manage`; People & organisation — `employee:view`, `employee:manage`, `employee:status`,
+`onboarding:manage`, `org:manage`; Employee exit — `exit:view`, `exit:manage`, `exit:override`; Service —
+`request:create`, `request:approve`, `request:fulfil`, `ticket:create`, `ticket:manage`, `maintenance:manage`;
+Administration — `dashboard:view`, `insights:leadership` (Owner only by default), `history:view`, `user:manage`. Checked:
+every Assets action already asks its permission in the service (`assertCan`), and the Assets menu follows them.
+
+**Catalogue: Admin** (`services/platform/src/roles/platform-permissions.ts`, app key `platform`)
+
+| Group | Key | Label | Opens | Who has it |
+|---|---|---|---|---|
+| People | `people.manage` | Manage people | People & access: add, edit, switch off/on, app access | owner, admin (access level) |
+| People | `people.passwords` | Reset passwords | reset / create / remove a login | owner, admin |
+| People | `people.exit` | Start exits | "Start exit" | owner, admin |
+| People | `people.delete` | Delete people permanently | "Delete permanently" | owner, admin |
+| Roles & company | `roles.manage` | Manage roles | Roles; "Change roles" on People | owner, admin |
+| Roles & company | `company.settings` | Company settings | Settings (name, colour, logo, modules, departments) | owner, admin |
+
+Platform guards: `@Needs(...)` on every Admin route (any of the listed permissions; re-read from the database on every call,
+so taking a role away counts at once). Owner and the `admin` access level have all six (so existing companies are
+unchanged); a member gets exactly what their roles grant. Any people permission or Manage roles opens People & access (the
+list and role names); each button follows its own permission. A member with Admin permissions acts on **members only**
+(cannot create, edit, reset, exit, delete or promote an owner/admin). `GET /auth/me` returns `permissions`; the web app's
+`useAccess().admin.can(...)` / `.any` drive the Admin menu, Home's Admin row and the per-screen guards (a page you may not
+open sends you to the first Admin page you may, else `/`). Note: Manage roles can give any permission, these included.
+
+**Upgrade of existing roles (nobody loses anything)** — the rules travel with the catalogue
+(`GET /internal/permissions` now returns `version: 2`, `retired`, and per permission `upgrade` rules: `everyone`, `from`
+(+ `fromScopes`), `minLevel`, with the scope to give; the widest wins):
+- Tasks: data migration `accounts/0021_fine_grained_permissions` runs `upgrade_grants` on every role in every company
+  schema (`migrate_companies`). A role with no Tasks permission (a role for another app) stays empty.
+- Platform: migration `0006_fine_grained_roles` (column `companies.access_upgrades`; "Admin" role unlocked; Owner role
+  description). `RolesService.ensureUpgraded` (on the roles list, every push and `company sync`) applies each app's rules
+  once per company when its catalogue version is newer than the one recorded (generic: the Platform knows no Tasks
+  permission), and keeps the Owner role equal to the full catalogue. Pushes carry `catalogueVersions`; Tasks upgrades a
+  push written in an older catalogue itself, so the order of deploying the two does not matter. Once only: a permission an
+  admin later takes away stays away.
+- Rules in words: everyone keeps punch in, my attendance, my leave, holidays, my salary, notifications, notices, links,
+  ideas, forms, the mistake register and the template directory; `tasks.assign` → groups, templates, log mistakes, SOPs,
+  build forms, manage links, review ideas; `settings.manage` → task settings, notices, holidays, mistake settings;
+  `tasks.view` Company → deleted tasks, team performance, reports, all forms, review mistakes (Company), the four attendance
+  screens (Company); `tasks.view` Department → reports, review mistakes (Department); `hr.approve` → Department scope and the
+  four attendance screens (Department); `hr.manage` → approve (Company), the four screens (Company), import, manual mark,
+  HR settings, payroll, salaries; Admin level → delete leads, lead rules.
+- Scopes on other people's attendance: Team = me + my direct reports; Department = my department + my team; Company =
+  everyone. Under the "manager approves" HR rule a reports-to manager still approves for, and sees on the four screens,
+  their own team (as before); `/hr/config/` returns `screens` so the page tabs follow it.
+- Found and fixed: `PATCH /roles/:id` with a partial body reset the level to Member and removed every permission (the zod
+  schema's defaults survived `.partial()`); PATCH now changes only what is sent (`roleUpdateSchema`).
+- Small widening, by design: a Department scope also covers one's direct reports outside the department (PLAN §15.2), and
+  someone who sees a screen at Company can open anyone's month from it.
+
+**Applied to the dev suite on 2026-10-12** (no restart needed): Platform `node dist/db/migrate.js`, Tasks
+`manage.py migrate_companies` (4 companies), then `company -- sync` (every company upgraded to Tasks v2 and pushed).
+
+**Checks**
+| Check | Result |
+|---|---|
+| Tasks tests (SQLite) | 813 pass, 16 skipped (whole suite incl. other work of the day; 18 new in `accounts/tests_permissions_v2.py`: catalogue, upgrade keeps every old power, data migration, an older Platform's push, 403 without / allowed with the permission across Tasks, Leads, Notices, Links, Ideas, Forms, Mistakes, Notifications, My attendance, attendance screens with scopes, HR administration, approving by scope) |
+| Tasks tenancy (Postgres) | 28 pass |
+| Platform tests | 63 pass (4 new: member with Manage people lists/adds people but not roles/settings/admins; each Admin permission opens exactly its action and is checked live; owner never locked out, Owner role not editable; a new catalogue version upgrades roles once, Owner role follows, pushes carry the version) |
+| Assets tests | 85 pass; typecheck clean |
+| Web | rules + typecheck clean |
+| e2e | `web-admin`, `single-login`, `settings`, `web-hr`, `web-tasks-general`: 29 / 29 (2 new: a role from blank with only Live attendance + See notices — level hints, "Give the role a name", Copy from, search, the person sees exactly those menus and the API refuses HR settings / leave / punch / People; a member with only Manage people gets People & access only); also `flows`, `web-attendance-team`, `web-leads`, `web-links-ideas-payroll`, `web-mistakes-forms`, `web-tasks`: 17 / 17 |

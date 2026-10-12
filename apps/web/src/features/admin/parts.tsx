@@ -1,24 +1,26 @@
-import { useAccess } from '@freefounders/core';
-import { APP_NAMES, type SyncResult } from '@freefounders/core/admin';
+import { type Access, useAccess } from '@freefounders/core';
+import { GRANT_APP_NAMES, type SyncResult } from '@freefounders/core/admin';
 import { AlertCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router';
 import { cn } from '@/lib/utils';
+import { adminHome } from './nav';
 
-/** Admin screens are for owners and admins only; anyone else goes back to the start page. */
-export function AdminOnly() {
+/** An Admin screen needs its own Admin permission; anyone else goes to the Admin screen they may open, or the start page. */
+export function AdminOnly({ allow }: { allow: (a: Access) => boolean }) {
   const access = useAccess();
-  if (access.ready && !access.isAdmin) return <Navigate to="/" replace />;
+  if (access.ready && !allow(access)) return <Navigate to={access.admin.any ? adminHome(access) : '/'} replace />;
   return <Outlet />;
 }
 
 const APP_TONE: Record<string, string> = {
   tasks: 'bg-app-tasks/12 text-app-tasks border-app-tasks/25',
   assets: 'bg-app-assets/12 text-app-assets border-app-assets/25',
+  platform: 'bg-app-admin/12 text-app-admin border-app-admin/25',
 };
-const APP_DOT: Record<string, string> = { tasks: 'bg-app-tasks', assets: 'bg-app-assets' };
+const APP_DOT: Record<string, string> = { tasks: 'bg-app-tasks', assets: 'bg-app-assets', platform: 'bg-app-admin' };
 
-/** "Tasks" / "Assets" chip in the app's colour. */
+/** "Tasks" / "Assets" / "Admin" chip in the app's colour. */
 export function AppChip({ app, className }: { app: string; className?: string }) {
   return (
     <span
@@ -29,7 +31,7 @@ export function AppChip({ app, className }: { app: string; className?: string })
       )}
     >
       <span className={cn('size-1.5 rounded-full', APP_DOT[app] ?? 'bg-current')} aria-hidden />
-      {APP_NAMES[app as keyof typeof APP_NAMES] ?? app}
+      {GRANT_APP_NAMES[app as keyof typeof GRANT_APP_NAMES] ?? app}
     </span>
   );
 }
@@ -62,7 +64,7 @@ export function SyncNote({ sync }: { sync?: SyncResult }) {
   if (!failed.length) return null;
   return (
     <ErrorNote>
-      Saved, but {failed.map(([a]) => APP_NAMES[a as keyof typeof APP_NAMES] ?? a).join(' and ')} could not be updated yet. It is sent again automatically
+      Saved, but {failed.map(([a]) => GRANT_APP_NAMES[a as keyof typeof GRANT_APP_NAMES] ?? a).join(' and ')} could not be updated yet. It is sent again automatically
       on the next change.
     </ErrorNote>
   );

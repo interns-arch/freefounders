@@ -155,7 +155,7 @@ test('Roles: new role with a scoped permission and a duty, saved, then archived'
     await editor.getByRole('button', { name: 'Add duty' }).click();
     await editor.getByLabel('Duty 1 title').fill('Check the stock register');
     await editor.getByLabel('Duty 1 frequency').selectOption('weekly');
-    await editor.getByLabel('Day').selectOption({ label: 'Friday' });
+    await editor.getByLabel('Day', { exact: true }).selectOption({ label: 'Friday' }); // not the Holidays permissions
     await editor.getByLabel('Steps (one per line, optional)').fill('Count\nSign');
     await editor.getByRole('button', { name: 'Save role' }).click();
     await expect(editor).toBeHidden();
@@ -446,4 +446,142 @@ test('People: the owner and yourself cannot be deleted', async ({ page, request 
   await page.keyboard.press('Escape');
   const res = await request.delete(`/api/platform/people/${me.person.id}`, { headers: auth(owner), data: { confirm: me.person.fullName } });
   expect(res.status()).toBe(400);
+});
+
+// ─── §19.19: every feature is a permission ─────────────────────────────────────────────────────────────────────────
+
+/** A person with a login (password already changed) holding exactly these roles. */
+async function personWithRoles(request: APIRequestContext, owner: string, s: string, roleIds: string[]) {
+  const login = `e2e-perm-${s}`;
+  const temp = 'E2e@123456';
+  const password = 'E2e@654321';
+  const created = await request.post('/api/platform/people', {
+    headers: auth(owner),
+    data: { fullName: `E2E Perm ${s}`, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  const personId = (await created.json()).person.id as string;
+  const given = await request.put(`/api/platform/people/${personId}/roles`, { headers: auth(owner), data: { roleIds } });
+  expect(given.ok(), await given.text()).toBeTruthy();
+  const first = await token(request, login, temp);
+  expect((await request.post('/api/platform/auth/change-password', { headers: auth(first), data: { currentPassword: temp, newPassword: password } })).ok()).toBeTruthy();
+  return { personId, login, password };
+}
+
+test('Roles: any role from blank — only Live attendance and Notices; they see exactly that; the API refuses the rest; Copy from; the level hint', async ({ page, request }) => {
+  const owner = await token(request);
+  const s = stamp();
+  const roleName = `E2E Live and notices ${s}`;
+  let roleId: string | undefined;
+  let personId: string | undefined;
+  try {
+    await openSignedIn(page, '/roles');
+    await page.getByRole('button', { name: 'New role' }).click();
+    const editor = page.getByRole('dialog', { name: 'New role' });
+
+    // The hint says what the chosen level does.
+    const level = editor.getByLabel('Level');
+    await expect(editor.getByText('Uses the apps with exactly the permissions ticked below.')).toBeVisible();
+    await level.selectOption({ label: 'Manager' });
+    await expect(editor.getByText(/Same as Member: the ticked permissions decide/)).toBeVisible();
+    await level.selectOption({ label: 'Admin' });
+    await expect(editor.getByText(/Also an administrator in Tasks/)).toBeVisible();
+    await level.selectOption({ label: 'Member' });
+
+    // Saving without a name says why.
+    await editor.getByRole('button', { name: 'Save role' }).click();
+    await expect(editor.getByRole('alert').filter({ hasText: 'Give the role a name' })).toBeVisible();
+
+    // Copy from another role ticks its permissions; Blank clears them.
+    const seeTasks = editor.getByRole('checkbox', { name: 'Tasks: See tasks', exact: true });
+    await editor.getByLabel('Start from').selectOption({ label: 'Copy from Rider' });
+    await expect(seeTasks).toBeChecked();
+    await expect(editor.getByRole('checkbox', { name: 'Tasks: Punch in and out', exact: true })).toBeChecked();
+    await editor.getByLabel('Start from').selectOption({ label: 'Blank: nothing ticked' });
+    await expect(seeTasks).not.toBeChecked();
+
+    // Search, then tick exactly two permissions; each shows its description.
+    const search = editor.getByLabel('Search permissions');
+    await search.fill('live attendance');
+    await expect(editor.getByText('Who is in, late or not in yet, right now.')).toBeVisible();
+    await expect(seeTasks).toHaveCount(0);
+    await editor.getByRole('checkbox', { name: 'Tasks: Live attendance', exact: true }).click();
+    await expect(editor.getByRole('radiogroup', { name: 'Scope for Live attendance' }).getByRole('radio', { name: 'Team' })).toHaveAttribute('aria-checked', 'true');
+    await search.fill('see notices');
+    await editor.getByRole('checkbox', { name: 'Tasks: See notices', exact: true }).click();
+    await search.fill('');
+    await editor.getByLabel('Name', { exact: true }).fill(roleName);
+    await editor.getByRole('button', { name: 'Save role' }).click();
+    await expect(editor).toBeHidden();
+
+    const saved = ((await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ id: string; name: string; grants: Array<{ app: string; permission: string; scope: string }> }>).find(
+      (r) => r.name === roleName,
+    )!;
+    roleId = saved.id;
+    expect(saved.grants.map((g) => `${g.app}:${g.permission}@${g.scope}`).sort()).toEqual(['tasks:hr.live@team', 'tasks:notices.view@']);
+
+    // They see exactly those (and Today); nothing else, and no Admin workspace.
+    const who = await personWithRoles(request, owner, s, [roleId]);
+    personId = who.personId;
+    await page.context().clearCookies();
+    await openSignedIn(page, '/attendance', who.login, who.password);
+    const attendance = page.getByRole('navigation', { name: 'Attendance menu' });
+    await expect(attendance.getByRole('link', { name: 'Live attendance' })).toBeVisible();
+    await expect(attendance.getByRole('link', { name: 'Today' })).toBeVisible();
+    for (const hidden of ['My attendance', 'My leave', 'Holidays', 'Daily attendance', 'Dashboard', 'Reports', 'Approvals', 'Payroll', 'HR settings']) {
+      await expect(attendance.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
+    }
+    await page.getByRole('button', { name: 'Show Tasks menu' }).click();
+    const tasks = page.getByRole('navigation', { name: 'Tasks menu' });
+    await expect(tasks.getByRole('link', { name: 'Notices' })).toBeVisible();
+    for (const hidden of ['Notifications', 'Team performance', 'Task settings', 'Mistakes', 'Forms', 'Links', 'Idea board']) {
+      await expect(tasks.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole('link', { name: 'People & access' })).toHaveCount(0);
+
+    // The API agrees.
+    const theirs = await token(request, who.login, who.password);
+    expect((await request.get('/tasks/api/attendance/team_day/', { headers: auth(theirs) })).status()).toBe(200);
+    expect((await request.get('/tasks/api/notices/', { headers: auth(theirs) })).status()).toBe(200);
+    expect((await request.get('/tasks/api/hr/settings/', { headers: auth(theirs) })).status()).toBe(403);
+    expect((await request.get('/tasks/api/leaves/balances/', { headers: auth(theirs) })).status()).toBe(403);
+    expect((await request.post('/tasks/api/attendance/check_in/', { headers: auth(theirs), data: {} })).status()).toBe(403);
+    expect((await request.get('/api/platform/people', { headers: auth(theirs) })).status()).toBe(403);
+  } finally {
+    if (personId) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
+    if (roleId) await request.delete(`/api/platform/roles/${roleId}`, { headers: auth(owner) });
+  }
+});
+
+test('Admin permissions: a member with only "Manage people" gets People & access and nothing else of Admin', async ({ page, request }) => {
+  const owner = await token(request);
+  const s = stamp();
+  const role = await request.post('/api/platform/roles', {
+    headers: auth(owner),
+    data: { name: `E2E People desk ${s}`, level: 1, grants: [{ app: 'platform', permission: 'people.manage' }] },
+  });
+  expect(role.status(), await role.text()).toBe(201);
+  const roleId = (await role.json()).id as string;
+  let personId: string | undefined;
+  try {
+    const who = await personWithRoles(request, owner, `${s}a`, [roleId]);
+    personId = who.personId;
+    await openSignedIn(page, '/roles', who.login, who.password);
+    // Roles is not theirs: they land on the Admin screen they may open.
+    await expect(page).toHaveURL((url) => url.pathname === '/people');
+    await expect(page.getByRole('heading', { name: 'People & access' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add person' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Change roles/ })).toHaveCount(0);
+    const admin = page.getByRole('navigation', { name: 'Admin menu' });
+    await expect(admin.getByRole('link', { name: 'People & access' })).toBeVisible();
+    await expect(admin.getByRole('link', { name: 'Roles' })).toHaveCount(0);
+    await expect(admin.getByRole('link', { name: 'Settings' })).toHaveCount(0);
+    await page.goto('/settings');
+    await expect(page).toHaveURL((url) => url.pathname === '/people');
+    const theirs = await token(request, who.login, who.password);
+    expect((await request.patch('/api/platform/company', { headers: auth(theirs), data: { shortName: 'Nope' } })).status()).toBe(403);
+  } finally {
+    if (personId) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
+    await request.delete(`/api/platform/roles/${roleId}`, { headers: auth(owner) });
+  }
 });

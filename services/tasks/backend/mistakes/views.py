@@ -15,7 +15,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import HasCapability, has_capability
+from accounts.permissions import HasCapability, HasPermission, has_capability
+
+# Anyone in the module: their own register (mistakes.view), or logging / reviewing others (PLAN.md §19.19).
+IN_MODULE = ("mistakes.view", "mistakes.log", "mistakes.review", "sops.manage")
 from notifications.service import notify
 
 from .models import (
@@ -39,7 +42,7 @@ def log(mistake, actor, text):
 
 def _admins():
     from accounts.access import users_with
-    return users_with("tasks.view_all")
+    return users_with("mistakes.review_all")
 
 
 def _escalation_target(mistake, level):
@@ -54,18 +57,18 @@ def _escalation_target(mistake, level):
 
 
 def can_review(user, mistake) -> bool:
-    if has_capability(user, "tasks.view_all"):
+    if has_capability(user, "mistakes.review_all"):
         return True
     if user.pk == mistake.employee_id:
         return False        # never your own review
     if mistake.manager_id == user.pk:
         return True
-    return (has_capability(user, "tasks.view_department")
+    return (has_capability(user, "mistakes.review_department")
             and mistake.department == user.department)
 
 
 class MistakeViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasPermission.of(*IN_MODULE)]
     serializer_class = MistakeSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
 
@@ -73,9 +76,9 @@ class MistakeViewSet(viewsets.ModelViewSet):
         user = self.request.user
         qs = Mistake.objects.select_related(
             "employee", "manager", "reported_by", "repeat_of", "task", "corrective_task")
-        if has_capability(user, "tasks.view_all"):
+        if has_capability(user, "mistakes.review_all"):
             pass
-        elif has_capability(user, "tasks.view_department"):
+        elif has_capability(user, "mistakes.review_department"):
             qs = qs.filter(Q(department=user.department)
                            | Q(employee__reporting_manager=user)
                            | Q(employee=user) | Q(reported_by=user)).distinct()
@@ -102,7 +105,7 @@ class MistakeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         employee = serializer.validated_data["employee"]
-        if employee.pk != user.pk and not has_capability(user, "tasks.assign"):
+        if employee.pk != user.pk and not has_capability(user, "mistakes.log"):
             raise PermissionDenied("Only managers/admin can log a mistake for someone else.")
         name = (serializer.validated_data.get("category") or "").strip()
         cat = MistakeCategory.objects.filter(active=True, name__iexact=name).first()
@@ -475,9 +478,9 @@ class MistakeViewSet(viewsets.ModelViewSet):
     def patterns(self, request):
         """Cross-employee repeat detection over the caller's scope."""
         from .analytics import patterns
-        if not (has_capability(request.user, "tasks.view_all")
-                or has_capability(request.user, "tasks.view_department")):
-            raise PermissionDenied("Managers and admin only.")
+        if not (has_capability(request.user, "mistakes.review_all")
+                or has_capability(request.user, "mistakes.review_department")):
+            raise PermissionDenied("Your role does not include reviewing mistakes.")
         try:
             days = max(7, min(int(request.query_params.get("days", 90)), 365))
         except (TypeError, ValueError):
@@ -489,8 +492,8 @@ class MistakeViewSet(viewsets.ModelViewSet):
         """Action Required only — critical, SLA misses, escalations, level-3,
         this month's loss, process smells, repeat offenders."""
         from .analytics import founder_summary
-        if not has_capability(request.user, "tasks.view_all"):
-            raise PermissionDenied("Founder/admin view only.")
+        if not has_capability(request.user, "mistakes.review_all"):
+            raise PermissionDenied("Needs Review mistakes for the whole company.")
         return Response(founder_summary())
 
     @action(detail=False, methods=["get"])
@@ -498,9 +501,9 @@ class MistakeViewSet(viewsets.ModelViewSet):
         """M4: accountability score per department, fully explained."""
         from crm.task_views import _range_bounds
         from .analytics import department_scores
-        if not (has_capability(request.user, "tasks.view_all")
-                or has_capability(request.user, "tasks.view_department")):
-            raise PermissionDenied("Managers and admin only.")
+        if not (has_capability(request.user, "mistakes.review_all")
+                or has_capability(request.user, "mistakes.review_department")):
+            raise PermissionDenied("Your role does not include reviewing mistakes.")
         start, end = _range_bounds(request.query_params.get("range", "this_month"), timezone.now())
         return Response(department_scores(start, end))
 
@@ -508,8 +511,8 @@ class MistakeViewSet(viewsets.ModelViewSet):
     def send_digests(self, request):
         """Admin: fire the daily/weekly digests now (testing / manual run)."""
         from .digests import send_daily_manager_summaries, send_weekly_founder_digest
-        if not has_capability(request.user, "tasks.view_all"):
-            raise PermissionDenied("Admin only.")
+        if not has_capability(request.user, "mistakes.review_all"):
+            raise PermissionDenied("Needs Review mistakes for the whole company.")
         return Response({"daily": send_daily_manager_summaries(force=True),
                          "weekly": send_weekly_founder_digest(force=True)})
 
@@ -522,8 +525,8 @@ class SOPViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated()]
-        return [HasCapability.of("tasks.assign")()]
+            return [HasPermission.of(*IN_MODULE)()]
+        return [HasCapability.of("sops.manage")()]
 
     def get_queryset(self):
         qs = SOP.objects.select_related("owner")
@@ -578,7 +581,7 @@ class MistakeCategoryViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
             return [IsAuthenticated()]
-        return [HasCapability.of("settings.manage")()]
+        return [HasCapability.of("mistakes.settings")()]
 
     def get_queryset(self):
         return MistakeCategory.objects.filter(active=True)
@@ -598,8 +601,8 @@ class MistakeSettingsView(viewsets.ViewSet):
         return Response(MistakeSettingsSerializer(MistakeSettings.get()).data)
 
     def create(self, request):
-        if not has_capability(request.user, "settings.manage"):
-            raise PermissionDenied("Only an admin can change SLA rules.")
+        if not has_capability(request.user, "mistakes.settings"):
+            raise PermissionDenied("Your role does not include mistake rules.")
         cfg = MistakeSettings.get()
         ser = MistakeSettingsSerializer(cfg, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)

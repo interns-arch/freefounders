@@ -13,9 +13,8 @@ adds only what a WebView cannot do by itself:
 | Back button, pull-to-refresh, splash, "Can't reach FreeFounders" screen with a server-address field | |
 | Links to other sites, `tel:`, `mailto:`, WhatsApp → the phone's apps | |
 
-**No face matching in the app** (founder, 2026-10-12): if the company has face check on, punching in the app shows
-"Face check is on for your company; the app punches with a selfie only — ask your admin to switch face check off in
-Attendance → HR settings" and nothing is sent. In a normal browser everything works exactly as before.
+**No face matching anywhere** (founder, 2026-10-12; PLAN.md §19.18): a punch is the office geofence + a selfie stored
+with it, in the app and in the browser. Face check was removed from the web app and the Tasks API.
 
 Sign-in is the web's own: the refresh cookie is kept in the WebView's cookie store, so the app opens signed in.
 
@@ -65,8 +64,7 @@ events from the injected script (no id, no answer)
 ```
 
 The injected script also answers `navigator.geolocation.getCurrentPosition` with the app's GPS (ids `g…`).
-Punch inside the app (`apps/web/src/features/hr/punch.tsx`): face check on → the message above, no punch; photo
-off/optional/required → none / native camera with "Punch without a photo" / native camera; location only when the
+Punch inside the app (`apps/web/src/features/hr/punch.tsx`): photo off/optional/required → none / native camera with "Punch without a photo" / native camera; location only when the
 company has a geofence, and the app's reason is shown when it fails (GPS off, blocked, no fix in 10 s).
 
 ## Checks

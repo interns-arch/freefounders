@@ -1,16 +1,14 @@
 // The phone app = this web app inside a native shell (PLAN.md §19.17). These tests play the shell: before the page loads
 // they set `window.FreeFoundersApp` and a fake `window.ReactNativeWebView.postMessage` that answers the bridge requests
 // the way apps/mobile does (replies dispatched on `document`, like Android's WebView). They prove that inside the app the
-// punch uses the app's camera (no browser camera dialog) and stores the photo, that face check on stops the punch with
-// the founder's message, and that downloads go to the app instead of the browser. Settings are restored afterwards.
+// punch uses the app's camera (no browser camera dialog) and stores the photo, that face check can no longer be switched
+// on (PLAN.md §19.18), and that downloads go to the app instead of the browser. Settings are restored afterwards.
 import { expect, type APIRequestContext, type Browser, type Page, test } from '@playwright/test';
 
 const OWNER = { login: process.env.FF_OWNER ?? 'owner', password: process.env.FF_OWNER_PASSWORD ?? 'Demo@1234' };
 const XRW = { 'x-requested-with': 'XMLHttpRequest' };
 const auth = (t: string) => ({ ...XRW, authorization: `Bearer ${t}` });
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
-const FACE_MESSAGE =
-  'Face check is on for your company; the app punches with a selfie only — ask your admin to switch face check off in Attendance → HR settings.';
 
 async function token(request: APIRequestContext, login = OWNER.login, password = OWNER.password): Promise<string> {
   const res = await request.post('/api/platform/auth/login', { data: { login, password, client: 'mobile' }, headers: XRW });
@@ -95,11 +93,11 @@ async function shellContext(browser: Browser, opts: { locationBlocked?: boolean 
 
 const shellLog = (page: Page) => page.evaluate(() => (window as unknown as { __shellLog: Logged[] }).__shellLog.map((m) => ({ ...m, base64: m.base64?.slice(0, 8) })));
 
-test('in the app: punch with the app camera (photo stored); face check on → the message, no punch', async ({ browser, request }) => {
+test('in the app: punch with the app camera (photo stored); face check cannot be switched on', async ({ browser, request }) => {
   const owner = await token(request);
   const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
-  const restore = Object.fromEntries(['photo', 'geofence_enabled', 'face_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
-  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false, face_enabled: false } })).ok()).toBeTruthy();
+  const restore = Object.fromEntries(['photo', 'geofence_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false} })).ok()).toBeTruthy();
   const person = await newPerson(request, owner);
   try {
     const ctx = await shellContext(browser);
@@ -116,15 +114,15 @@ test('in the app: punch with the app camera (photo stored); face check on → th
     expect(log.filter((m) => m.type === 'photo')).toEqual([expect.objectContaining({ type: 'photo', title: 'Check in', optional: false })]);
     expect(log.some((m) => m.type === 'location')).toBe(false); // no geofence → the app does not ask for the location
 
-    // Face check on: the app does not punch and says why.
-    expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { face_enabled: true } })).ok()).toBeTruthy();
+    // Face check was removed (PLAN.md §19.18): it cannot be switched on, and the check-out is a selfie again.
+    const on = await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { face_enabled: true } });
+    expect(on.status()).toBe(400);
+    expect((await on.json()).face_enabled).toMatch(/removed/);
     await page.reload();
     await page.getByRole('button', { name: 'Check out' }).click();
-    await expect(page.getByText(FACE_MESSAGE)).toBeVisible();
+    await expect(page.getByText('Checked out ✅')).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    expect((await shellLog(page)).filter((m) => m.type === 'photo')).toHaveLength(0);
-    await expect(page.getByText('Checked out ✅')).toHaveCount(0);
-    await page.screenshot({ path: 'screenshots/shell-face-check-message.png', fullPage: true });
+    expect((await shellLog(page)).filter((m) => m.type === 'photo')).toHaveLength(1);
     await ctx.close();
 
     // The selfie from the app is stored with the check-in (the photo HR sees in Team).
@@ -167,8 +165,8 @@ test('in the app: a report download goes to the app, not the browser', async ({ 
 test('location blocked → an Allow button: the app opens its Settings; the browser asks again', async ({ browser, request }) => {
   const owner = await token(request);
   const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
-  const restore = Object.fromEntries(['photo', 'geofence_enabled', 'face_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
-  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: true, face_enabled: false } })).ok()).toBeTruthy();
+  const restore = Object.fromEntries(['photo', 'geofence_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: true} })).ok()).toBeTruthy();
   const person = await newPerson(request, owner);
   try {
     // In the app: the phone blocked location for good → "Open settings to allow location" asks the app to open Settings.

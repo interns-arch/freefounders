@@ -1,5 +1,5 @@
 /**
- * Processes (SOP): the written processes a mistake gets judged against. Everyone reads them; tasks.assign writes.
+ * Processes (SOP): the written processes a mistake gets judged against. Everyone in the module reads them; sops.manage writes.
  * Old versions are kept (retired), so an old mistake is still judged against the process that existed then.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
@@ -25,7 +25,7 @@ const lines = (text: string | null | undefined) =>
 
 export function SopRegister() {
   const access = useAccess();
-  const canEdit = access.tasks.can('tasks.assign');
+  const canEdit = access.tasks.can('sops.manage');
   const [q, setQ] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);

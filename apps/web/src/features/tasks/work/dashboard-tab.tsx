@@ -44,7 +44,7 @@ function themeColour(name: string): string {
 /** Tiles (each opens the matching list) and a per-category table or bar chart. */
 export function DashboardTab({ onTile }: { onTile: (tab: 'my' | 'delegated', filters: Record<string, string>) => void }) {
   const access = useAccess();
-  const hasGroup = access.tasks.can('tasks.view_all') || access.tasks.can('tasks.view_department');
+  const hasGroup = access.tasks.can('tasks.reports');
   const [range, setRange] = useState('this_week');
   const [custom, setCustom] = useState({ start: '', end: '' });
   const [scope, setScope] = useState<'my' | 'delegated' | 'group'>('my');

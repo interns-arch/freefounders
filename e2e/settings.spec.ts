@@ -76,7 +76,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
 
   // HR rule: a photo at every punch.
   const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
-  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false, face_enabled: false } })).ok()).toBeTruthy();
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false} })).ok()).toBeTruthy();
 
   // A new person with a Tasks role; they set their own password.
   const created = await request.post('/api/platform/people', {
@@ -117,6 +117,8 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     await expect(hrPage.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     await hrPage.goto('/tasks/hr');
     await hrPage.getByRole('button', { name: 'Team' }).click();
+    // The list draws 50 staff at a time (PLAN.md §19.18): find the new person by the unique part of their name.
+    await hrPage.getByLabel('Search staff').fill(stamp);
     const thumb = hrPage.getByRole('button', { name: `E2E Photo ${stamp} check-in photo` });
     await expect(thumb).toBeVisible();
     await thumb.click();
@@ -124,7 +126,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     await shot(hrPage, '12-team-photo');
     await hr.close();
   } finally {
-    const restore = Object.fromEntries(['photo', 'geofence_enabled', 'face_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+    const restore = Object.fromEntries(['photo', 'geofence_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
     await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
     await request.put(`/api/platform/people/${personId}/roles`, { headers: auth(owner), data: { roleIds: [] } });
     await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });

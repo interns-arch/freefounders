@@ -1,4 +1,4 @@
-/** HR settings: attendance rules (PLAN.md §16.1), office locations, face enrolment (old pages/HR.jsx). */
+/** HR settings: attendance rules (PLAN.md §16.1), office locations (old pages/HR.jsx). No face check (PLAN.md §19.18). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
 
@@ -19,9 +19,6 @@ export interface HrSettingValues {
   full_day_hours: number;
   week_offs: number[];
   geofence_enabled: boolean;
-  face_enabled: boolean;
-  face_threshold: number;
-  face_self_enroll: boolean;
   photo: 'off' | 'optional' | 'required';
   photo_retention_days: number;
   leave_approval: 'department' | 'manager';
@@ -66,14 +63,4 @@ export function useAddOffice() {
 export function useDeleteOffice() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (id: number) => tasksApi.del(`/office-locations/${id}/`), onSuccess: () => qc.invalidateQueries({ queryKey: ['hr'] }) });
-}
-
-/** POST /hr/face/:user/ {descriptor} (enrol) or DELETE (remove the face profile). */
-export function useFaceProfile() {
-  const qc = useQueryClient();
-  const done = () => qc.invalidateQueries({ queryKey: ['hr'] });
-  return {
-    enrol: useMutation({ mutationFn: ({ user, descriptor }: { user: number; descriptor: number[] }) => tasksApi.post(`/hr/face/${user}/`, { descriptor }), onSuccess: done }),
-    remove: useMutation({ mutationFn: (user: number) => tasksApi.del(`/hr/face/${user}/`), onSuccess: done }),
-  };
 }

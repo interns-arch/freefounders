@@ -17,6 +17,7 @@ import { ensureRegistry, listCompanies, migrateCompanySchema, registerCompany, s
 import { createSystemRoles, setUpCompany } from '../../seed/company-setup';
 import { CatalogService } from '../catalog/catalog.service';
 import { OrgService } from '../org/org.service';
+import { PERMISSION_HINTS } from './permission-hints';
 import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-token';
 
 const blank = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
@@ -156,7 +157,14 @@ export class InternalController {
       app: 'assets',
       scopes: [],
       // The CEO-only leadership page is the one thing the Admin role does not get (ADMIN_PERMISSIONS).
-      permissions: ALL_PERMISSIONS.map((key) => ({ key, label: PERMISSIONS[key], group: group.get(key) ?? 'Other', scopes: null, superAdminOnly: !(ADMIN_PERMISSIONS as readonly string[]).includes(key) })),
+      permissions: ALL_PERMISSIONS.map((key) => ({
+        key,
+        label: PERMISSIONS[key],
+        group: group.get(key) ?? 'Other',
+        description: PERMISSION_HINTS[key],
+        scopes: null,
+        superAdminOnly: !(ADMIN_PERMISSIONS as readonly string[]).includes(key),
+      })),
     };
   }
 

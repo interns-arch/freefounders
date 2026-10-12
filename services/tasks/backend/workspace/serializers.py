@@ -48,6 +48,10 @@ class NoticeSerializer(serializers.ModelSerializer):
     def get_attachment_url(self, obj):
         return obj.attachment.url if obj.attachment else None
 
+    def validate_attachment(self, value):
+        from config.images import compress_upload
+        return compress_upload(value)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
+
     def get_read(self, obj):
         read_ids = self.context.get("read_ids")
         if read_ids is None:

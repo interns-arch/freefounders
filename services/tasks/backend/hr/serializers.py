@@ -45,8 +45,9 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
 
 class MarkSerializer(serializers.Serializer):
-    """Payload for check-in/out. The client sends raw GPS + optional face
-    descriptor; every decision is made server-side."""
+    """Payload for check-in/out. The client sends raw GPS + an optional punch
+    photo; every decision is made server-side. `face_descriptor` is still
+    accepted from older clients and ignored (no face check, PLAN.md §19.18)."""
     latitude = serializers.FloatField(required=False, allow_null=True)
     longitude = serializers.FloatField(required=False, allow_null=True)
     face_descriptor = serializers.ListField(
@@ -98,6 +99,10 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
 
     def get_document_url(self, obj):
         return obj.document.url if obj.document else None
+
+    def validate_document(self, value):
+        from config.images import compress_upload
+        return compress_upload(value)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
 
     def validate(self, attrs):
         start = attrs.get("start_date")

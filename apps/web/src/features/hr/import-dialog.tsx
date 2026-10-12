@@ -1,5 +1,5 @@
 /**
- * Import attendance (hr.manage, PLAN.md §19.15): download the template, upload an XLSX/CSV, check every row (dry run), then
+ * Import attendance (hr.import, PLAN.md §19.15, §19.19): download the template, upload an XLSX/CSV, check every row (dry run), then
  * "Import N rows". This is how a company brings its old attendance across (e.g. from SalaryBox).
  */
 import { errorMessage } from '@freefounders/core';

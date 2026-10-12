@@ -1,7 +1,8 @@
 import { type PersonOption, useTaskActivities, useTaskPeople } from '@freefounders/core/tasks';
 import { SearchField } from '@/components/common/search-field';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Activity } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,8 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
   const [search, setSearch] = useState('');
   const q = useDebounced(search.trim(), 300);
   const { list, counts } = useTaskActivities({ days: days || undefined, assigned_to: who || undefined, actor: actor || undefined, search: q || undefined });
-  const rows = list.data ?? [];
+  const rows = useMemo(() => list.data ?? [], [list.data]);
+  const more = useShowMore(rows, { reset: [days, who, actor, q] });
 
   return (
     <div className="max-w-4xl space-y-4">
@@ -99,7 +101,7 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
           <EmptyState icon={Activity} title="No task activity in this window." description="Try a wider window or clear the people filters." />
         ) : (
           <ul className="divide-y" aria-label="Activity">
-            {rows.map((a) => (
+            {more.visible.map((a) => (
               <li key={a.id}>
                 <button
                   type="button"
@@ -125,6 +127,7 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
             ))}
           </ul>
         )}
+        {!list.isLoading && !list.error && <ShowMore {...more.footer} noun="activities" className="border-t" />}
       </Card>
     </div>
   );

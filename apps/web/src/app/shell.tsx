@@ -136,7 +136,7 @@ export function AppShell() {
     document.title = short ? `${short} · ${title}` : `FreeFounders · ${title}`;
   }, [access.brand?.shortName, title]);
 
-  const workspaces = useMemo(() => workspacesFor(access.apps, access.isAdmin), [access.apps, access.isAdmin]);
+  const workspaces = useMemo(() => workspacesFor(access.apps, access.admin.any), [access.apps, access.admin.any]);
 
   // A group this person cannot open: back to Home.
   useEffect(() => {

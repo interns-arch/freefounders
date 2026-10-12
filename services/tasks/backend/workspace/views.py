@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import HasCapability
+from accounts.permissions import HasCapability, HasPermission
 from crm.models import Task, TaskActivity, TaskStatus
 from crm.serializers import UserBriefSerializer
 
@@ -119,14 +119,14 @@ class GroupViewSet(viewsets.ModelViewSet):
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasPermission.of("notices.view", "notices.publish")]
     serializer_class = NoticeSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     pagination_class = None
 
     def _is_manager(self):
         from accounts.permissions import has_capability
-        return has_capability(self.request.user, "settings.manage")
+        return has_capability(self.request.user, "notices.publish")
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -139,7 +139,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         # manage=true -> the admin management listing (all statuses)
         if self.request.query_params.get("manage") == "true":
             if not self._is_manager():
-                raise PermissionDenied("Notice management is admin-only.")
+                raise PermissionDenied("Your role does not include publishing notices.")
             return Notice.objects.select_related("author").all()
         # Edit (PATCH) and Delete look the notice up through here. Returning
         # nothing made every one of them answer "No Notice matches the given
@@ -175,19 +175,19 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if not self._is_manager():
-            raise PermissionDenied("Only an admin can create notices.")
+            raise PermissionDenied("Your role does not include publishing notices.")
         serializer.save(author=self.request.user)
 
     def perform_update(self, serializer):
         if not self._is_manager():
-            raise PermissionDenied("Only an admin can edit notices.")
+            raise PermissionDenied("Your role does not include publishing notices.")
         serializer.save()
 
     def perform_destroy(self, instance):
         """Gone for good, whatever its status -- with its read receipts and
         attachment file."""
         if not self._is_manager():
-            raise PermissionDenied("Only an admin can delete notices.")
+            raise PermissionDenied("Your role does not include publishing notices.")
         if instance.attachment:
             instance.attachment.delete(save=False)
         instance.delete()
@@ -195,7 +195,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def publish(self, request, pk=None):
         if not self._is_manager():
-            raise PermissionDenied("Only an admin can publish notices.")
+            raise PermissionDenied("Your role does not include publishing notices.")
         notice = Notice.objects.filter(pk=pk).first()
         if not notice:
             return Response(status=404)
@@ -208,7 +208,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
         if not self._is_manager():
-            raise PermissionDenied("Only an admin can archive notices.")
+            raise PermissionDenied("Your role does not include publishing notices.")
         notice = Notice.objects.filter(pk=pk).first()
         if not notice:
             return Response(status=404)
@@ -235,7 +235,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         import os
         from crm.task_views import _in_background
         if not self._is_manager():
-            raise PermissionDenied("Only an admin can send notices on WhatsApp.")
+            raise PermissionDenied("Your role does not include publishing notices.")
         notice = Notice.objects.filter(pk=pk).first()
         if not notice:
             return Response(status=404)
@@ -294,15 +294,15 @@ class LinkCollectionViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated()]
-        return [HasCapability.of("tasks.assign")()]
+            return [HasPermission.of("links.view", "links.manage")()]
+        return [HasCapability.of("links.manage")()]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
 
 class LinkViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasPermission.of("links.view", "links.manage")]
     serializer_class = LinkSerializer
     pagination_class = None
 
@@ -356,7 +356,7 @@ class LinkViewSet(viewsets.ModelViewSet):
 
 
 class IdeaViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasPermission.of("ideas.view", "ideas.review")]
     serializer_class = IdeaSerializer
 
     def get_queryset(self):

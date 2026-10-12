@@ -1,12 +1,17 @@
-"""HR rules: geo-fence validation, face matching, attendance computation,
-leave-day expansion and the monthly report.
+"""HR rules: geo-fence validation, attendance computation, leave-day
+expansion and the monthly report.
 
 Everything that decides a status runs SERVER-SIDE. The client sends raw
-GPS coordinates (and optionally a face descriptor); it never sends a
-distance, a status or a "verified" flag.
+GPS coordinates (and a punch photo when the company asks for one); it never
+sends a distance, a status or a "verified" flag.
+
+Face matching was removed (founder, 2026-10-12; PLAN.md §19.18): a punch is the
+office geofence + a selfie stored with it. The data stays readable (FaceProfile,
+Attendance.face_verified/face_confidence, the FACE_RECOGNITION_ENABLED setting,
+switched off for every company by migration hr 0006), but no punch ever needs or
+checks a face descriptor.
 """
 import math
-import os
 from datetime import date, datetime, time, timedelta
 
 from django.utils import timezone
@@ -14,7 +19,7 @@ from django.utils import timezone
 from crm.models import Holiday
 
 from .models import (
-    Attendance, AttendanceStatus, FaceProfile, LeaveRequest, LeaveStatus, OfficeLocation,
+    Attendance, AttendanceStatus, LeaveRequest, LeaveStatus, OfficeLocation,
 )
 from tenancy.company_settings import company_env
 
@@ -34,11 +39,8 @@ def cfg():
         "full_day_hours": float(_env("HR_FULL_DAY_HOURS", "8")),
         "week_offs": [int(d) for d in _env("HR_WEEK_OFF_DAYS", "6").split(",") if d.strip().isdigit()],
         "geofence_enabled": _env("GEOFENCE_ENABLED", "false").lower() == "true",
-        "face_enabled": _env("FACE_RECOGNITION_ENABLED", "false").lower() == "true",
-        "face_threshold": float(_env("FACE_MATCH_THRESHOLD", "0.6")),
-        # Phone-style enrolment: an unenrolled employee's FIRST face capture
-        # becomes their profile (HR is notified and can reset it any time).
-        "face_self_enroll": _env("FACE_SELF_ENROLL", "true").lower() == "true",
+        # Face check is permanently off (PLAN.md §19.18); reported for older clients.
+        "face_enabled": False,
         # Punch-in photo (PLAN.md §16.4): off | optional | required. FreeFounders companies get
         # "required" when they are set up; a standalone install keeps it off.
         "photo": _env("ATTENDANCE_PHOTO", "off").lower() if _env("ATTENDANCE_PHOTO", "off").lower() in PHOTO_MODES else "off",
@@ -63,14 +65,16 @@ EDITABLE = {
     "full_day_hours": ("HR_FULL_DAY_HOURS", "float", (1, 24)),
     "week_offs": ("HR_WEEK_OFF_DAYS", "days", None),
     "geofence_enabled": ("GEOFENCE_ENABLED", "bool", None),
-    "face_enabled": ("FACE_RECOGNITION_ENABLED", "bool", None),
-    "face_threshold": ("FACE_MATCH_THRESHOLD", "float", (0.3, 0.8)),
-    "face_self_enroll": ("FACE_SELF_ENROLL", "bool", None),
     "photo": ("ATTENDANCE_PHOTO", "choice", PHOTO_MODES),
     "photo_retention_days": ("ATTENDANCE_PHOTO_RETENTION_DAYS", "int", (1, 3650)),
     "leave_approval": ("APPROVAL_LEAVE", "choice", ("department", "manager")),
     "approval_remind_hours": ("APPROVAL_REMIND_HOURS", "int", (0, 720)),
 }
+
+# Face check settings that no longer exist (PLAN.md §19.18). An older screen may still send them: "off" (or blank) is
+# accepted and ignored, switching face check on is refused.
+RETIRED = {"face_enabled", "face_threshold", "face_self_enroll"}
+FACE_REMOVED = "Face check was removed: a punch is the office location and a selfie."
 
 
 def clean_setting(key, value) -> str:
@@ -145,6 +149,10 @@ def _attach_photo(record, field: str, photo):
     if mode == "required" and not raw:
         raise HRError("Take a photo to mark your attendance.")
     if raw:
+        # Stored as a JPEG of at most 720 px without metadata (PLAN.md §19.20); a PNG/WebP is always converted, since the
+        # photo is served as image/jpeg.
+        from config.images import SELFIE, compress_image
+        raw, _ = compress_image(raw, *SELFIE, always=raw[:3] != b"\xff\xd8\xff")
         getattr(record, field).save("punch.jpg", ContentFile(raw), save=False)
 
 
@@ -211,62 +219,6 @@ def validate_location(lat, lng):
     return best, best_d
 
 
-# ----------------------------------------------------------------- face
-
-def face_distance(a, b) -> float:
-    if not a or not b or len(a) != len(b):
-        return 1.0
-    return math.sqrt(sum((float(x) - float(y)) ** 2 for x, y in zip(a, b)))
-
-
-def _notify_self_enrolment(user):
-    """Tell HR/Admin that a face was self-enrolled, so a wrong first capture
-    (or someone enrolling on a colleague's phone) is visible immediately."""
-    from accounts.access import users_with
-    from notifications.service import notify
-    for manager in users_with("hr.manage").exclude(pk=user.pk):
-        notify(
-            manager, "face_enrolled",
-            f"Face self-enrolled: {user.get_full_name() or user.username}",
-            "Their first face capture is now their attendance profile. "
-            "If this looks wrong, reset it in HR Settings -> Face attendance.",
-            link="/hr",
-        )
-
-
-def verify_face(user, descriptor):
-    """Returns (verified, confidence). Raises HRError when face attendance
-    is required but cannot be established -- we NEVER mark attendance on a
-    below-threshold match."""
-    conf = cfg()
-    if not conf["face_enabled"]:
-        return False, None
-    profile = FaceProfile.objects.filter(user=user).first()
-    if not profile or not profile.descriptor:
-        # Phone-style first-time setup: the first good capture becomes the profile.
-        if conf["face_self_enroll"] and descriptor and 32 <= len(descriptor) <= 512:
-            FaceProfile.objects.create(user=user,
-                                       descriptor=[float(x) for x in descriptor],
-                                       enrolled_by=None)   # None = self-enrolled
-            _notify_self_enrolment(user)
-            return True, 1.0
-        raise HRError("Face attendance is on but your face is not enrolled yet. Ask an admin to enrol you.")
-    if not descriptor:
-        raise HRError("Face scan required. Allow camera access and try again.")
-    if len(descriptor) != len(profile.descriptor):
-        raise HRError("Face scan could not be read. Please try again.")
-    dist = face_distance(descriptor, profile.descriptor)
-    confidence = max(0.0, 1.0 - dist)
-    if dist > conf["face_threshold"]:
-        raise HRError(
-            f"Face did not match your enrolled profile "
-            f"(score {dist:.2f}, allowed up to {conf['face_threshold']:.2f}). "
-            "Attendance not marked. Try better light, or ask HR to reset your "
-            "face profile / mark you present."
-        )
-    return True, round(confidence, 3)
-
-
 # ----------------------------------------------------- attendance rules
 
 def is_week_off(day: date) -> bool:
@@ -278,6 +230,7 @@ def is_holiday(day: date) -> bool:
 
 
 def check_in(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendance:
+    """`descriptor` (a face signature from an older client) is ignored: there is no face check."""
     conf = cfg()
     today = timezone.localdate()
     existing = Attendance.objects.filter(user=user, date=today).first()
@@ -287,7 +240,6 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendanc
         raise HRError("You are on approved leave today.")
 
     office, _ = validate_location(lat, lng)
-    verified, confidence = verify_face(user, descriptor)
 
     now = timezone.localtime()
     start = _parse_hhmm(conf["work_start"], time(9, 30))
@@ -300,8 +252,8 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendanc
     record.location = office
     record.is_late = late
     record.status = AttendanceStatus.LATE if late else AttendanceStatus.PRESENT
-    record.face_verified = verified
-    record.face_confidence = confidence
+    record.face_verified = False
+    record.face_confidence = None
     _attach_photo(record, "check_in_photo", photo)
     record.save()
     return record
@@ -317,7 +269,6 @@ def check_out(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendan
         raise HRError("You have already checked out today.")
 
     validate_location(lat, lng)
-    verify_face(user, descriptor)
 
     record.check_out = timezone.now()
     record.check_out_lat, record.check_out_lng = lat, lng

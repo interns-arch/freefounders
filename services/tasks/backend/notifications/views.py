@@ -24,6 +24,14 @@ class NotificationViewSet(mixins.DestroyModelMixin,
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
 
+    def get_permissions(self):
+        # Reading the list is the Notifications permission (PLAN.md §19.19); marking read or clearing your own
+        # rows stays open, so a "mark all read" never fails for someone without it.
+        if getattr(self, "action", None) in ("list", "retrieve", "unread_count"):
+            from accounts.permissions import HasPermission
+            return [HasPermission.of("notifications.view")()]
+        return super().get_permissions()
+
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
 
@@ -67,8 +75,8 @@ def notification_rules(request):
 
     from . import rules
 
-    if not has_capability(request.user, "settings.manage"):
-        raise PermissionDenied("Only an admin can change notification rules.")
+    if not has_capability(request.user, "tasks.settings"):
+        raise PermissionDenied("Your role does not include Task settings.")
     if request.method == "PUT":
         try:
             return Response(rules.update(request.data))

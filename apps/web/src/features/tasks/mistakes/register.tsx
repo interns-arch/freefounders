@@ -41,8 +41,8 @@ const STATUS_TONE: Record<MistakeStatus, Tone> = { open: 'warning', explained: '
 
 export function MistakeRegister() {
   const access = useAccess();
-  const isAdmin = access.tasks.can('tasks.view_all');
-  const isManager = isAdmin || access.tasks.can('tasks.view_department');
+  const isAdmin = access.tasks.can('mistakes.review_all');
+  const isManager = isAdmin || access.tasks.can('mistakes.review_department');
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useState<MistakeFilters>({ status: '', severity: '', important: false });
   const [openId, setOpenId] = useState<number | null>(() => (params.get('open') ? Number(params.get('open')) : null));
@@ -190,7 +190,7 @@ function MistakeDetail({ m }: { m: Mistake }) {
   const [repeatDecided, setRepeatDecided] = useState(false);
   const [editResponse, setEditResponse] = useState(false);
   const isEmployee = m.employee_detail?.id === me?.id;
-  const isReviewer = !isEmployee && (access.tasks.can('tasks.view_all') || m.manager_detail?.id === me?.id || access.tasks.can('tasks.view_department'));
+  const isReviewer = !isEmployee && (access.tasks.can('mistakes.review_all') || m.manager_detail?.id === me?.id || access.tasks.can('mistakes.review_department'));
   const candidates = detail.data?.possible_repeats ?? [];
   const note = (e: unknown) => {
     setOk('');

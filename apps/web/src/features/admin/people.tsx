@@ -1,4 +1,4 @@
-import { errorMessage, usePlatformMe } from '@freefounders/core';
+import { errorMessage, useAccess, usePlatformMe } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
 import {
   PLATFORM_ROLE_LABELS,
@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/overlays';
 import { Avatar, Card } from '@/components/ui/primitives';
@@ -28,6 +29,8 @@ type Open =
   | { kind: 'reset'; person: Person }
   | { kind: 'delete'; person: Person }
   | { kind: 'password'; person: Person; username: string | null; password: string };
+
+const EMPTY: Person[] = [];
 
 /** Everyone at the company: their login, level, roles and the apps the roles open (PLAN.md §13, §15, §17). */
 export function PeoplePage() {
@@ -48,10 +51,16 @@ export function PeoplePage() {
   const [error, setError] = useState('');
   const roleById = useMemo(() => new Map((roles.data ?? []).map((r) => [r.id, r])), [roles.data]);
   const loadError = people.error ?? roles.error ?? apps.error;
+  // The counts use everyone; the table draws the first 50 (weak phones), "Load more" adds the next.
+  const more = useShowMore(people.data ?? EMPTY, { reset: query });
 
   const myRole = me?.person.role ?? 'member';
+  // Each action is its own Admin permission (PLAN.md §19.19); a member with one acts on members only.
+  const can = useAccess().admin.can;
+  const reach = (p: Person) => myRole !== 'member' || p.platformRole === 'member';
   /** Never yourself, never the owner; only the owner deletes admins (PLAN.md §19.12). */
-  const canDelete = (p: Person) => p.id !== me?.person.id && p.platformRole !== 'owner' && (p.platformRole !== 'admin' || myRole === 'owner');
+  const canDelete = (p: Person) =>
+    can('people.delete') && reach(p) && p.id !== me?.person.id && p.platformRole !== 'owner' && (p.platformRole !== 'admin' || myRole === 'owner');
 
   const setStatus = async (p: Person, status: Person['status']) => {
     setError('');
@@ -124,9 +133,11 @@ export function PeoplePage() {
               ))}
               {p.roleIds.length === 0 && <span className="text-xs text-muted-foreground">No role</span>}
             </div>
-            <Button variant="outline" size="xs" onClick={() => setOpen({ kind: 'roles', person: p })} disabled={p.status === 'inactive' || !roles.data}>
-              Change roles
-            </Button>
+            {can('roles.manage') && (
+              <Button variant="outline" size="xs" onClick={() => setOpen({ kind: 'roles', person: p })} disabled={p.status === 'inactive' || !roles.data}>
+                Change roles
+              </Button>
+            )}
           </div>
         );
       },
@@ -150,11 +161,17 @@ export function PeoplePage() {
       className: 'text-right',
       cell: (p) => {
         const self = p.id === me?.person.id;
+        const edits = can('people.manage') && reach(p);
+        const resets = can('people.passwords') && (self || reach(p));
+        const exits = can('people.exit') && reach(p) && !self && p.status === 'active';
+        if (!edits && !resets && !exits && !canDelete(p)) return null;
         return (
           <div className="flex items-center justify-end gap-1">
-            <Button variant="outline" size="xs" onClick={() => setOpen({ kind: 'edit', person: p })}>
-              Edit
-            </Button>
+            {edits && (
+              <Button variant="outline" size="xs" onClick={() => setOpen({ kind: 'edit', person: p })}>
+                Edit
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon-xs" aria-label={`More actions for ${p.fullName}`}>
@@ -162,11 +179,11 @@ export function PeoplePage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setOpen({ kind: 'reset', person: p })}>{p.login ? 'Reset password' : 'Create login'}</DropdownMenuItem>
-                {!self && p.status === 'active' && (
+                {resets && <DropdownMenuItem onSelect={() => setOpen({ kind: 'reset', person: p })}>{p.login ? 'Reset password' : 'Create login'}</DropdownMenuItem>}
+                {exits && (
                   <DropdownMenuItem onSelect={() => setOpen({ kind: 'exit', person: p })}>{p.lastWorkingDate ? 'Exit started' : 'Start exit'}</DropdownMenuItem>
                 )}
-                {!self && (
+                {!self && edits && (
                   <>
                     <DropdownMenuSeparator />
                     {p.status === 'active' ? (
@@ -200,9 +217,11 @@ export function PeoplePage() {
         title="People & access"
         description={`Everyone at ${me?.company.name ?? 'your company'}: their login and their roles. Roles decide which apps they can open.`}
         actions={
-          <Button onClick={() => setOpen({ kind: 'add' })}>
-            <Plus /> Add person
-          </Button>
+          can('people.manage') && (
+            <Button onClick={() => setOpen({ kind: 'add' })}>
+              <Plus /> Add person
+            </Button>
+          )
         }
       />
       <div className="flex flex-wrap items-center gap-3">
@@ -217,7 +236,7 @@ export function PeoplePage() {
       <Card className="overflow-hidden">
         <DataTable
           columns={columns}
-          rows={people.data}
+          rows={people.data ? more.visible : undefined}
           rowKey={(p) => p.id}
           loading={people.isLoading}
           fetching={people.isFetching}
@@ -225,6 +244,7 @@ export function PeoplePage() {
           onRetry={() => void people.refetch()}
           empty={<EmptyState icon={Users} title="No one found." description={query ? 'Try another name, email or ID.' : undefined} />}
         />
+        {people.data && <ShowMore {...more.footer} noun="people" className="border-t" />}
       </Card>
 
       <PersonSheet

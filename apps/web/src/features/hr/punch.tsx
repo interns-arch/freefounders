@@ -1,20 +1,17 @@
 /**
- * Check in / check out, shared by Attendance → Today and the Workspace Portal card (PLAN.md §19.3). The steps run only
- * when the company switched them on: location, then the camera (face check and/or punch photo). The server decides.
- * Inside the phone app (PLAN.md §19.17) the app's GPS and front camera are used instead of the browser's, and the face
- * check is never run: with face check on, the app says so and does not punch (founder, 2026-10-12).
+ * Check in / check out, shared by Attendance → Today and the Home card (PLAN.md §19.3). The steps run only when the
+ * company switched them on: location (office geofence), then the camera (punch photo). The server decides. There is no
+ * face matching (founder, 2026-10-12; PLAN.md §19.18). Inside the phone app (PLAN.md §19.17) the app's GPS and front
+ * camera are used instead of the browser's.
  */
 import { errorMessage } from '@freefounders/core';
 import { type AttendanceToday, useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
 import { useState } from 'react';
 import { AppRequestError, appRequest, isInApp, openAppSettings } from '@/lib/native-bridge';
-import { LocationBlockedError, currentPosition } from './face';
-import { FaceCapture } from './face-capture';
+import { LocationBlockedError, currentPosition } from './device';
+import { SelfieCapture } from './selfie-capture';
 
 type Which = 'check_in' | 'check_out';
-
-export const APP_FACE_CHECK_MESSAGE =
-  'Face check is on for your company; the app punches with a selfie only — ask your admin to switch face check off in Attendance → HR settings.';
 
 export function usePunch(onDone?: (which: Which) => void) {
   const q = useAttendanceToday();
@@ -29,7 +26,7 @@ export function usePunch(onDone?: (which: Which) => void) {
   /** Location was blocked on the last try: the punch to retry and whether only the phone's Settings can allow it. */
   const [blocked, setBlocked] = useState<{ which: Which; settings: boolean } | null>(null);
 
-  const send = async (which: Which, faceDescriptor?: number[] | null, photo?: string | null) => {
+  const send = async (which: Which, photo?: string | null) => {
     setErr('');
     setMsg('');
     setBlocked(null);
@@ -49,7 +46,7 @@ export function usePunch(onDone?: (which: Which) => void) {
     setLocating(false);
     if (pos.latitude != null && pos.longitude != null) setPosition({ latitude: pos.latitude, longitude: pos.longitude });
     mark.mutate(
-      { which, ...pos, ...(faceDescriptor ? { face_descriptor: faceDescriptor } : {}), ...(photo ? { photo } : {}) },
+      { which, ...pos, ...(photo ? { photo } : {}) },
       {
         onSuccess: () => {
           setMsg(which === 'check_in' ? 'Checked in ✅' : 'Checked out ✅');
@@ -60,17 +57,16 @@ export function usePunch(onDone?: (which: Which) => void) {
     );
   };
 
-  /** Phone app: the native front camera takes the selfie (no face check), then the punch is sent. */
+  /** Phone app: the native front camera takes the selfie, then the punch is sent. */
   const appPunch = async (which: Which, d: AttendanceToday) => {
     setErr('');
     setMsg('');
-    if (d.face_enabled) return setErr(APP_FACE_CHECK_MESSAGE);
     if (!d.photo || d.photo === 'off') return send(which);
     setAppCamera(true);
     try {
       const photo = await appRequest<string | null>('photo', { title: which === 'check_in' ? 'Check in' : 'Check out', optional: d.photo === 'optional' });
       setAppCamera(false);
-      await send(which, null, photo);
+      await send(which, photo);
     } catch (e) {
       setAppCamera(false);
       if (!(e instanceof AppRequestError && e.code === 'cancelled')) setErr(e instanceof Error ? e.message : 'The camera could not be opened.');
@@ -78,8 +74,8 @@ export function usePunch(onDone?: (which: Which) => void) {
   };
 
   const data: AttendanceToday | undefined = q.data;
-  // With face attendance or punch photos switched on, the camera step comes first.
-  const usesCamera = !!data && (data.face_enabled || (!!data.photo && data.photo !== 'off'));
+  // With punch photos switched on, the camera step comes first.
+  const usesCamera = !!data && !!data.photo && data.photo !== 'off';
   const markIt = (which: Which) => {
     if (inApp && data) return void appPunch(which, data);
     return usesCamera ? setCamFor(which) : void send(which);
@@ -88,23 +84,14 @@ export function usePunch(onDone?: (which: Which) => void) {
 
   const camera =
     camFor && data ? (
-      <FaceCapture
-        face={!!data.face_enabled}
-        photo={!!data.photo && data.photo !== 'off'}
-        title={data.face_enabled ? (camFor === 'check_in' ? 'Check in with your face' : 'Check out with your face') : camFor === 'check_in' ? 'Check in' : 'Check out'}
+      <SelfieCapture
+        title={camFor === 'check_in' ? 'Check in' : 'Check out'}
         action={camFor === 'check_in' ? 'Check in' : 'Check out'}
-        hint={
-          data.face_enabled && !data.face_enrolled
-            ? data.face_self_enroll
-              ? 'First time: this capture becomes your face profile. Look straight at the camera in good light, without a mask.'
-              : 'Your face is not enrolled yet — ask an admin to enrol you first.'
-            : undefined
-        }
         onClose={() => setCamFor(null)}
-        onCapture={(descriptor, photo) => {
+        onCapture={(photo) => {
           const w = camFor;
           setCamFor(null);
-          void send(w, descriptor, photo);
+          void send(w, photo);
         }}
       />
     ) : null;

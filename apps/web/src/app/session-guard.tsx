@@ -2,6 +2,7 @@ import { session, useClaims, usePlatformMe } from '@freefounders/core';
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { PageLoader } from '@/components/common/page';
+import { persistedCacheReady } from './query-persist';
 
 /**
  * Every page behind sign-in. A fresh page has no token in memory yet: renew it from the refresh cookie first.
@@ -13,7 +14,11 @@ export function RequireSession() {
   const [checked, setChecked] = useState(() => session.signedIn());
   useEffect(() => {
     if (session.signedIn()) return;
-    void session.refresh().finally(() => setChecked(true));
+    // Signed in again: put this person's saved data in the cache first, so the first screen draws from it (§19.18).
+    void session
+      .refresh()
+      .then((ok) => (ok ? persistedCacheReady() : undefined))
+      .finally(() => setChecked(true));
   }, []);
   const me = usePlatformMe();
 

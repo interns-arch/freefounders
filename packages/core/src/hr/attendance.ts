@@ -18,13 +18,15 @@ export type PhotoMode = 'off' | 'optional' | 'required';
 
 export interface HrConfig {
   geofence_enabled: boolean;
-  face_enabled: boolean;
   work_start: string;
   work_end: string;
   week_offs: number[];
   /** May approve leave/corrections (hr.approve, or a manager under the "manager first" rule). */
   can_approve: boolean;
+  /** HR settings (hr.settings). */
   can_manage: boolean;
+  /** The managers' attendance screens this person may open: their permissions, plus their own team under the "manager approves" rule (PLAN.md §19.19). */
+  screens?: Partial<Record<'live' | 'daily' | 'dashboard' | 'reports', boolean>>;
 }
 
 /** GET /hr/config/ */
@@ -52,9 +54,6 @@ export interface AttendanceToday {
   can_check_in: boolean;
   can_check_out: boolean;
   geofence_enabled: boolean;
-  face_enabled: boolean;
-  face_self_enroll: boolean;
-  face_enrolled: boolean;
   work_start: string;
   work_end: string;
   photo: PhotoMode;
@@ -68,13 +67,11 @@ export function useAttendanceToday() {
 export interface MarkInput {
   latitude?: number;
   longitude?: number;
-  /** 128 numbers from the face check (never an image). */
-  face_descriptor?: number[];
   /** JPEG data URL, when the company keeps a photo of every punch. */
   photo?: string;
 }
 
-/** POST /attendance/check_in/ or /attendance/check_out/ — every rule (geofence, face, photo) is decided by the server. */
+/** POST /attendance/check_in/ or /attendance/check_out/ — every rule (geofence, photo) is decided by the server. No face check (§19.18). */
 export function useMarkAttendance() {
   const qc = useQueryClient();
   return useMutation({

@@ -34,16 +34,18 @@ import { Chip, ErrorNote, Panel } from './parts';
 
 export function TaskSettingsPage() {
   const access = useAccess();
-  const leads = access.tasks.module('leads');
+  const can = access.tasks.can;
+  const leads = access.tasks.module('leads') && can('leads.rules');
   const [err, setErr] = useState('');
   return (
     <div className="max-w-4xl space-y-4">
       <PageHeader className="mb-0" title="Task settings" description="How tasks are completed, categorised and announced." />
       <ErrorNote>{err}</ErrorNote>
-      <CompletionEvidence onError={setErr} />
-      <Departments />
-      <Categories onError={setErr} />
-      <NotificationRules onError={setErr} />
+      {/* Each section follows its own permission (PLAN.md §19.19). */}
+      {can('tasks.settings') && <CompletionEvidence onError={setErr} />}
+      {can('settings.manage') && <Departments />}
+      {can('tasks.assign') && <Categories onError={setErr} />}
+      {can('tasks.settings') && <NotificationRules onError={setErr} />}
       {leads && <AssignmentRules onError={setErr} />}
     </div>
   );

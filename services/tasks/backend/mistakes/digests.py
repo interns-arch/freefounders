@@ -16,7 +16,7 @@ SEND_AFTER_HOUR = 9
 
 def _admins():
     from accounts.access import users_with
-    return users_with("tasks.view_all")
+    return users_with("mistakes.review_all")
 
 
 def send_daily_manager_summaries(force=False) -> int:

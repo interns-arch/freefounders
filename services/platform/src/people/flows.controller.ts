@@ -1,9 +1,9 @@
 import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
 import type { z } from 'zod';
-import { AdminOnly, type Caller, CurrentCaller, uuidParam, ZodPipe } from '../common/http';
+import { type Caller, CurrentCaller, Needs, uuidParam, ZodPipe } from '../common/http';
 import { exitSchema, FlowsService } from './flows.service';
 
-@AdminOnly()
+@Needs('people.exit')
 @Controller('people')
 export class FlowsController {
   constructor(private readonly flows: FlowsService) {}

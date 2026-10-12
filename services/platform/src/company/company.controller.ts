@@ -1,40 +1,40 @@
 import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Put, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { AdminOnly, type Caller, CurrentCaller, Public, uuidParam, ZodPipe } from '../common/http';
+import { type Caller, CurrentCaller, Needs, Public, uuidParam, ZodPipe } from '../common/http';
 import type { ModuleSwitches } from '../db/schema';
 import { CompanyService, logoSchema, modulesSchema, profileSchema, type ProfileInput } from './company.service';
 
-/** Settings Center: the company's profile, logo and module switches (owners and admins). */
+/** Settings Center: the company's profile, logo and module switches (the Company settings permission). */
 @Controller()
 export class CompanyController {
   constructor(private readonly company: CompanyService) {}
 
-  @AdminOnly()
+  @Needs('company.settings')
   @Get('company')
   get(@CurrentCaller() caller: Caller) {
     return this.company.get(caller);
   }
 
-  @AdminOnly()
+  @Needs('company.settings')
   @Patch('company')
   update(@CurrentCaller() caller: Caller, @Body(new ZodPipe(profileSchema.partial())) body: Partial<ProfileInput>) {
     return this.company.update(caller, body);
   }
 
-  @AdminOnly()
+  @Needs('company.settings')
   @Put('company/logo')
   setLogo(@CurrentCaller() caller: Caller, @Body(new ZodPipe(logoSchema)) body: { image: string }) {
     return this.company.setLogo(caller, body.image);
   }
 
-  @AdminOnly()
+  @Needs('company.settings')
   @Delete('company/logo')
   @HttpCode(200)
   removeLogo(@CurrentCaller() caller: Caller) {
     return this.company.setLogo(caller, null);
   }
 
-  @AdminOnly()
+  @Needs('company.settings')
   @Put('company/modules')
   setModules(@CurrentCaller() caller: Caller, @Body(new ZodPipe(modulesSchema)) body: ModuleSwitches) {
     return this.company.setModules(caller, body);

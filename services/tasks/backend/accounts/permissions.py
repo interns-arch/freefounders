@@ -16,7 +16,7 @@ ADMIN_CAPABILITIES = {
     "hr.manage", "hr.approve",
 }
 
-ROLE_CAPABILITIES = {
+LEGACY_ROLE_CAPABILITIES = {
     # Super Admin is an admin with exactly one extra power: deleting work that
     # is assigned to an admin. Written as "admin's set plus one" so the two
     # can never drift -- a capability given to admins reaches super admins.
@@ -106,6 +106,22 @@ ROLE_CAPABILITIES = {
 }
 
 
+# The dict above is each built-in role as it was before every feature became its own permission (PLAN.md
+# §19.19). ROLE_CAPABILITIES is the same roles in today's catalogue: the upgrade adds the fine-grained permissions
+# each one already had through a broader one (e.g. hr.manage -> payroll, HR settings, holidays...), so nobody's
+# access changes. Level matters for two of them (Admin-level roles delete leads and set lead rules).
+_STARTER_LEVEL = {Role.SUPER_ADMIN: 3, Role.ADMIN: 3}
+
+
+def _upgraded(role, caps):
+    from .access import capabilities_from_grants, grants_from_capabilities, upgrade_grants
+    grants = dict(grants_from_capabilities(caps))
+    return capabilities_from_grants(upgrade_grants(grants, _STARTER_LEVEL.get(role, 1)).items())
+
+
+ROLE_CAPABILITIES = {role: _upgraded(role, caps) for role, caps in LEGACY_ROLE_CAPABILITIES.items()}
+
+
 # ROLE_CAPABILITIES above is the STARTER TEMPLATE: the 20 built-in roles are
 # seeded from it into the database (accounts.AccessRole), and from then on the
 # database is what counts, so a company can edit roles. See accounts/access.py.
@@ -143,3 +159,25 @@ class HasCapability(BasePermission):
             request.user and request.user.is_authenticated
             and has_capability(request.user, self.capability)
         )
+
+
+def granted(user, *permissions: str) -> bool:
+    """Has any of these catalogue permissions (PLAN.md §19.19), at any scope."""
+    from .access import scope_of
+    if not (user and getattr(user, "is_authenticated", False)):
+        return False
+    return any(scope_of(user, p) is not None for p in permissions)
+
+
+class HasPermission(BasePermission):
+    """Usage: permission_classes = [HasPermission.of("hr.live", "hr.daily")] -- any of them, at any scope."""
+
+    permissions: tuple = ()
+    message = "Your role does not include this. Ask your admin to add it to your role."
+
+    @classmethod
+    def of(cls, *permissions: str):
+        return type(f"HasPermission_{'_'.join(p.replace('.', '_') for p in permissions)}", (cls,), {"permissions": permissions})
+
+    def has_permission(self, request, view):
+        return granted(request.user, *self.permissions)

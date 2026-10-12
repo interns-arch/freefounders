@@ -13,6 +13,8 @@ export interface PlatformMe {
   person: { id: string; fullName: string; email: string | null; employeeCode: string | null; role: 'owner' | 'admin' | 'member' };
   company: { id: string; name: string; shortName: string | null; colour: string | null; logoUrl: string | null };
   apps: Array<{ app: AppKey; name: string; path: string }>;
+  /** Admin workspace permissions (PLAN.md §19.19): owners and admins have them all. */
+  permissions?: string[];
   mustChangePassword: boolean;
 }
 
@@ -31,6 +33,8 @@ export interface TasksMe {
   reporting_manager_name: string | null;
   is_active: boolean;
   capabilities: string[];
+  /** Highest role level: 1 member, 2 manager, 3 admin (an administrator in Tasks). */
+  level?: number;
   /** Module switches (Settings Center); missing = on. */
   modules?: Record<string, boolean>;
   brand?: { name: string; short_name: string; colour: string | null; logo_url: string | null } | null;
@@ -84,13 +88,27 @@ const TASKS_CAP_MODULE: Array<[string, string]> = [
   ['leads.', 'leads'],
   ['quotations.', 'leads'],
   ['intake.', 'intake'],
+  ['mistakes.', 'mistakes'],
+  ['sops.', 'mistakes'],
+  ['forms.', 'forms'],
+  ['links.', 'links'],
+  ['ideas.', 'ideas'],
+  ['payroll.', 'payroll'],
 ];
 
 export interface Access {
   ready: boolean;
   claims: Claims | null;
   apps: AppKey[];
+  /** Owner or admin access level (everything in the Admin workspace). For what a person may do there, use `admin`. */
   isAdmin: boolean;
+  /** The Admin workspace (People & access, Roles, Settings): each action is its own permission (PLAN.md §19.19). */
+  admin: {
+    /** Has at least one Admin permission (the Admin menu shows). */
+    any: boolean;
+    /** Has ANY of these Admin permissions (e.g. "people.manage"). */
+    can: (...permissions: string[]) => boolean;
+  };
   platform: PlatformMe | undefined;
   tasks: {
     on: boolean;
@@ -125,6 +143,7 @@ export function useAccess(): Access {
   const tasksModule = (key: string) => t?.modules?.[key] !== false;
   const caps = new Set(t?.capabilities ?? []);
   const perms = new Set(a?.permissions ?? []);
+  const adminPerms = new Set(platform.data?.permissions ?? (claims?.role === 'owner' || claims?.role === 'admin' ? ['*'] : []));
   const company = platform.data?.company;
   const ready =
     !!claims &&
@@ -136,6 +155,10 @@ export function useAccess(): Access {
     claims,
     apps,
     isAdmin: claims?.role === 'owner' || claims?.role === 'admin',
+    admin: {
+      any: adminPerms.size > 0,
+      can: (...p) => adminPerms.has('*') || p.some((x) => adminPerms.has(x)),
+    },
     platform: platform.data,
     tasks: {
       on: apps.includes('tasks'),

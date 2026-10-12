@@ -96,103 +96,81 @@ class GeoFenceTests(Base):
         self.assertEqual(bad.status_code, 400)
 
 
-class FaceTests(Base):
-    def enable(self, value="true", self_enroll="false"):
+class FaceCheckRemovedTests(Base):
+    """Face check was removed (PLAN.md §19.18): a punch never needs or checks a descriptor, even with the old
+    setting still on, and old face data stays readable."""
+
+    def setUp(self):
+        super().setUp()
         import os
-        os.environ["FACE_RECOGNITION_ENABLED"] = value
-        os.environ["FACE_SELF_ENROLL"] = self_enroll
+        # An install that had face check on (and self-enrolment off) before the removal.
+        os.environ["FACE_RECOGNITION_ENABLED"] = "true"
+        os.environ["FACE_SELF_ENROLL"] = "false"
 
     def tearDown(self):
         import os
         os.environ["FACE_RECOGNITION_ENABLED"] = "false"
         os.environ.pop("FACE_SELF_ENROLL", None)
 
-    def test_enrolment_is_admin_only_and_validated(self):
-        self.as_(self.manager)
-        self.assertEqual(self.client.post(f"/api/hr/face/{self.rahul.id}/",
-                                          {"descriptor": [0.1] * 64}, format="json").status_code, 403)
-        self.as_(self.admin)
-        self.assertEqual(self.client.post(f"/api/hr/face/{self.rahul.id}/",
-                                          {"descriptor": [0.1] * 4}, format="json").status_code, 400)
-        res = self.client.post(f"/api/hr/face/{self.rahul.id}/",
-                               {"descriptor": [0.1] * 64}, format="json")
-        self.assertEqual(res.status_code, 201 if res.status_code == 201 else 200)
-        self.assertTrue(FaceProfile.objects.filter(user=self.rahul).exists())
-        self.client.delete(f"/api/hr/face/{self.rahul.id}/")
-        self.assertFalse(FaceProfile.objects.filter(user=self.rahul).exists())
-
-    def test_unenrolled_user_cannot_mark_when_face_required(self):
-        self.enable()
+    def test_punch_needs_no_face_even_with_the_old_setting_on(self):
         self.as_(self.rahul)
         res = self.client.post("/api/attendance/check_in/", {}, format="json")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("not enrolled", res.data["detail"])
-
-    def test_mismatch_never_marks_attendance(self):
-        self.enable()
-        FaceProfile.objects.create(user=self.rahul, descriptor=[0.0] * 64)
-        self.as_(self.rahul)
-        res = self.client.post("/api/attendance/check_in/",
-                               {"face_descriptor": [1.0] * 64}, format="json")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("did not match", res.data["detail"])
-        self.assertEqual(Attendance.objects.count(), 0)
-
-    def test_matching_face_marks_and_records_confidence(self):
-        self.enable()
-        FaceProfile.objects.create(user=self.rahul, descriptor=[0.0] * 64)
-        self.as_(self.rahul)
-        res = self.client.post("/api/attendance/check_in/",
-                               {"face_descriptor": [0.01] * 64}, format="json")
-        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.status_code, 201, res.data)
         rec = Attendance.objects.get()
-        self.assertTrue(rec.face_verified)
-        self.assertGreater(rec.face_confidence, 0.9)
-
-    def test_self_enrolment_first_capture_becomes_profile(self):
-        from notifications.models import Notification
-        self.enable(self_enroll="true")
-        self.as_(self.rahul)
-        # First check-in with no profile: enrols AND marks attendance
-        res = self.client.post("/api/attendance/check_in/",
-                               {"face_descriptor": [0.2] * 64}, format="json")
-        self.assertEqual(res.status_code, 201)
-        profile = FaceProfile.objects.get(user=self.rahul)
-        self.assertIsNone(profile.enrolled_by)          # None = self-enrolled
-        self.assertTrue(Attendance.objects.get().face_verified)
-        # HR/Admin got told about it
-        self.assertTrue(Notification.objects.filter(type="face_enrolled",
-                                                    user=self.admin).exists())
-        # Check-out with a DIFFERENT face must now fail — profile is locked in
-        res = self.client.post("/api/attendance/check_out/",
-                               {"face_descriptor": [0.9] * 64}, format="json")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("did not match", res.data["detail"])
-        # ...and with the same face it succeeds
-        res = self.client.post("/api/attendance/check_out/",
-                               {"face_descriptor": [0.21] * 64}, format="json")
-        self.assertIn(res.status_code, (200, 201))
-
-    def test_self_enrolment_off_keeps_old_behaviour(self):
-        self.enable(self_enroll="false")
-        self.as_(self.rahul)
-        res = self.client.post("/api/attendance/check_in/",
-                               {"face_descriptor": [0.2] * 64}, format="json")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("not enrolled", res.data["detail"])
+        self.assertFalse(rec.face_verified)
+        self.assertIsNone(rec.face_confidence)
         self.assertFalse(FaceProfile.objects.filter(user=self.rahul).exists())
 
-    def test_reset_then_fresh_self_enrolment(self):
-        """HR resets a broken profile; the employee's next capture re-enrols."""
-        self.enable(self_enroll="true")
-        FaceProfile.objects.create(user=self.rahul, descriptor=[0.9] * 64)
-        self.as_(self.admin)
-        self.client.delete(f"/api/hr/face/{self.rahul.id}/")
+    def test_descriptor_from_an_old_client_is_ignored(self):
+        FaceProfile.objects.create(user=self.rahul, descriptor=[0.0] * 64)
         self.as_(self.rahul)
-        res = self.client.post("/api/attendance/check_in/",
-                               {"face_descriptor": [0.1] * 64}, format="json")
-        self.assertEqual(res.status_code, 201)
-        self.assertEqual(FaceProfile.objects.get(user=self.rahul).descriptor[0], 0.1)
+        # A "mismatching" face used to refuse the punch; now it is ignored.
+        res = self.client.post("/api/attendance/check_in/", {"face_descriptor": [1.0] * 64}, format="json")
+        self.assertEqual(res.status_code, 201, res.data)
+        res = self.client.post("/api/attendance/check_out/", {"face_descriptor": [0.5] * 64}, format="json")
+        self.assertIn(res.status_code, (200, 201), res.data)
+        self.assertFalse(Attendance.objects.get().face_verified)
+        # The old profile is untouched (readable old data).
+        self.assertEqual(FaceProfile.objects.get(user=self.rahul).descriptor[0], 0.0)
+
+    def test_today_and_config_report_face_off(self):
+        self.as_(self.rahul)
+        today = self.client.get("/api/attendance/today/").data
+        self.assertIs(today["face_enabled"], False)
+        self.assertNotIn("face_enrolled", today)
+        self.assertIs(self.client.get("/api/hr/config/").data["face_enabled"], False)
+
+    def test_enrolment_is_refused_but_old_profiles_can_be_removed(self):
+        FaceProfile.objects.create(user=self.rahul, descriptor=[0.1] * 64)
+        self.as_(self.manager)
+        self.assertEqual(self.client.post(f"/api/hr/face/{self.rahul.id}/", {"descriptor": [0.1] * 64}, format="json").status_code, 403)
+        self.as_(self.admin)
+        res = self.client.post(f"/api/hr/face/{self.rahul.id}/", {"descriptor": [0.1] * 64}, format="json")
+        self.assertEqual(res.status_code, 410)
+        self.assertEqual(self.client.delete(f"/api/hr/face/{self.rahul.id}/").status_code, 200)
+        self.assertFalse(FaceProfile.objects.filter(user=self.rahul).exists())
+
+    def test_settings_no_longer_offer_face_check(self):
+        self.as_(self.admin)
+        data = self.client.get("/api/hr/settings/").data
+        for key in ("face_enabled", "face_threshold", "face_self_enroll"):
+            self.assertNotIn(key, data)
+        # An older screen sending "off" still saves; switching it on is refused.
+        self.assertEqual(self.client.put("/api/hr/settings/", {"face_enabled": False, "grace_minutes": 10}, format="json").status_code, 200)
+        res = self.client.put("/api/hr/settings/", {"face_enabled": True}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("removed", res.data["face_enabled"])
+
+    def test_migration_switches_the_stored_setting_off(self):
+        import importlib
+
+        from django.apps import apps
+        from tenancy.models import CompanySetting
+        CompanySetting.objects.create(key="FACE_RECOGNITION_ENABLED", value="true")
+        CompanySetting.objects.create(key="FACE_MATCH_THRESHOLD", value="0.5")
+        importlib.import_module("hr.migrations.0006_face_check_off").switch_off(apps, None)
+        self.assertEqual(CompanySetting.objects.get(key="FACE_RECOGNITION_ENABLED").value, "false")
+        self.assertEqual(CompanySetting.objects.get(key="FACE_MATCH_THRESHOLD").value, "0.5")
 
 
 class ManualMarkTests(Base):

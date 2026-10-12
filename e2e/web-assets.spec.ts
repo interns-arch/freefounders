@@ -8,8 +8,28 @@ const XRW = { 'x-requested-with': 'XMLHttpRequest' };
 const auth = (t: string) => ({ ...XRW, authorization: `Bearer ${t}` });
 const stamp = () => Date.now().toString(36);
 
-// A 1×1 PNG, for the asset photo.
-const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+/** A 3000×2000 phone-sized JPEG for the asset photo, drawn in the browser: it must be stored ≤ 1600 px (PLAN.md §19.20). */
+async function bigPhoto(page: Page): Promise<Buffer> {
+  const b64 = await page.evaluate(async () => {
+    const canvas = new OffscreenCanvas(3000, 2000);
+    const ctx = canvas.getContext('2d')!;
+    const img = ctx.createImageData(3000, 2000);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const p = i / 4;
+      const grain = (Math.random() - 0.5) * 30;
+      img.data[i] = ((p % 3000) / 3000) * 255 + grain;
+      img.data[i + 1] = (Math.floor(p / 3000) / 2000) * 255 + grain;
+      img.data[i + 2] = 128 + grain;
+      img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.95 })).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  });
+  return Buffer.from(b64, 'base64');
+}
 
 async function token(request: APIRequestContext, login = OWNER.login, password = OWNER.password): Promise<string> {
   const res = await request.post('/api/platform/auth/login', { data: { login, password, client: 'mobile' }, headers: XRW });
@@ -95,7 +115,8 @@ test('add an asset with a photo from the Add menu, then open it: details, photo 
     // The Laptop type's own required fields (the form adapts to the type).
     await sheet.getByLabel(/^Processor/).fill('Intel Core i5');
     await sheet.getByLabel(/^RAM/).fill('16');
-    await sheet.getByLabel('Photo').setInputFiles({ name: 'front.png', mimeType: 'image/png', buffer: PNG });
+    const original = await bigPhoto(page);
+    await sheet.getByLabel('Photo').setInputFiles({ name: 'front.jpg', mimeType: 'image/jpeg', buffer: original });
     await sheet.getByRole('button', { name: 'Add asset', exact: true }).click();
     await expect(page.getByText(/added$/).first()).toBeVisible();
 
@@ -114,6 +135,14 @@ test('add an asset with a photo from the Add menu, then open it: details, photo 
     const photo = await page.request.get(`/assets/api/assets/${assetId}/photos/${detail.photos[0].id}`);
     expect(photo.status()).toBe(200);
     expect(photo.headers()['content-type']).toMatch(/^image\//);
+    // Stored small: at most 1600 px and a fraction of the 3000×2000 original.
+    const stored = await page.evaluate(async (url) => {
+      const blob = await (await fetch(url)).blob();
+      const bmp = await createImageBitmap(blob);
+      return { width: bmp.width, height: bmp.height, size: blob.size };
+    }, `/assets/api/assets/${assetId}/photos/${detail.photos[0].id}`);
+    expect(Math.max(stored.width, stored.height)).toBe(1600);
+    expect(stored.size, `${original.length} → ${stored.size} bytes`).toBeLessThan(Math.min(original.length / 4, 600 * 1024));
 
     // Scanning its code opens it: /assets/scan/<code>.
     await page.goto(`/assets/scan/${encodeURIComponent(detail.assetTag)}`);
@@ -191,6 +220,8 @@ test('a ticket is raised and resolved', async ({ page }) => {
   await form.getByRole('button', { name: 'Raise ticket' }).click();
   await expect(form).toBeHidden();
 
+  // Earlier runs leave other tickets that sort above this one: find it with the search box.
+  await page.getByPlaceholder('Search tickets…').fill(title);
   await page.getByText(title).first().click();
   await expect(page).toHaveURL(/[?&]open=/);
   const sheet = page.getByRole('dialog', { name: title });

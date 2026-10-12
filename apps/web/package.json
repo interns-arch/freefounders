@@ -6,7 +6,7 @@
   "description": "FreeFounders web app: sign-in, Tasks, HR and Assets in one place (PLAN.md §18)",
   "scripts": {
     "dev": "vite",
-    "build": "node ../../scripts/check-web-rules.mjs && tsc --noEmit -p tsconfig.json && vite build",
+    "build": "node ../../scripts/check-web-rules.mjs && tsc --noEmit -p tsconfig.json && vite build && node ../../scripts/check-sw.mjs",
     "typecheck": "node ../../scripts/check-web-rules.mjs && tsc --noEmit -p tsconfig.json",
     "preview": "vite preview"
   },
@@ -19,8 +19,8 @@
     "@freefounders/core": "*",
     "@freefounders/theme": "*",
     "@hookform/resolvers": "^5.2.0",
+    "@tanstack/query-persist-client-core": "^5.104.1",
     "@tanstack/react-query": "^5.90.0",
-    "@vladmandic/face-api": "^1.7.15",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "chart.js": "^4.5.1",
@@ -50,6 +50,10 @@
     "@vitejs/plugin-react": "^6.0.0",
     "tailwindcss": "^4.1.0",
     "typescript": "~5.9.3",
-    "vite": "^8.0.0"
+    "vite": "^8.0.0",
+    "vite-plugin-pwa": "^2.0.0",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1"
   }
 }

@@ -8,6 +8,7 @@ import { useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/primitives';
+import { compressImage } from '@/lib/compress-image';
 import { ErrorNote } from '../general/parts';
 
 export function FormRenderer({
@@ -102,7 +103,18 @@ export function FormRenderer({
                     ))}
                   </NativeSelect>
                 )}
-                {field.type === 'file' && <Input {...common} type="file" onChange={(e) => setFiles((p) => ({ ...p, [field.id]: e.target.files?.[0] ?? null }))} />}
+                {field.type === 'file' && (
+                  <Input
+                    {...common}
+                    type="file"
+                    onChange={(e) => {
+                      const picked = e.target.files?.[0] ?? null;
+                      setFiles((p) => ({ ...p, [field.id]: picked }));
+                      // A photo goes up smaller (PLAN.md §19.20); swapped in when ready.
+                      if (picked) void compressImage(picked, 'document').then((small) => setFiles((p) => (p[field.id] === picked ? { ...p, [field.id]: small } : p)));
+                    }}
+                  />
+                )}
                 {field.type === 'short_text' && <Input {...common} value={text} onChange={(e) => setVal(field.id, e.target.value)} />}
               </>
             )}

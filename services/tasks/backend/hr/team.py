@@ -1,9 +1,11 @@
 """Attendance for managers (PLAN.md §19.15): everyone's day, everyone's month, report files and the
 attendance import. Inspired by SalaryBox's Live / Daily attendance, Attendance Dashboard and Reports.
 
-Scope: hr.manage or tasks.view_all -> the whole company; an approver (hr.approve, or a reports-to manager under
-the "manager approves" rule) -> the people they approve for; anyone else -> 403. Everything runs inside the
-request's company schema (TENANCY=schemas) like the rest of HR.
+Scope (PLAN.md §19.19): each screen is its own permission with a scope -- Live attendance (hr.live), Daily
+attendance (hr.daily), Attendance dashboard (hr.dashboard), Attendance reports (hr.reports): Team = me + my direct
+reports, Department = my department + my team, Company = everyone. Under the "manager approves" rule a reports-to
+manager also sees their own team on these screens. Anyone else -> 403. Everything runs inside the request's company
+schema (TENANCY=schemas) like the rest of HR.
 
 The day classification is the one `services.monthly_report` uses: a stored row wins; otherwise holiday,
 week-off, "not checked in" for today, absent for a past working day, nothing for a future day.
@@ -33,28 +35,48 @@ IMPORT_MAX_ROWS = 5000
 
 # ------------------------------------------------------------------ scope
 
-def sees_company(user) -> bool:
-    return has_capability(user, "hr.manage") or has_capability(user, "tasks.view_all")
+# The managers' attendance screens; each is its own permission with a scope.
+VIEW_KEYS = ("hr.live", "hr.daily", "hr.dashboard", "hr.reports")
 
 
-def may_view_team(user) -> bool:
-    return sees_company(user) or approvals.is_approver(user)
+def screen_scope(user, keys=VIEW_KEYS) -> str | None:
+    """How far this user sees on these screens: the widest scope of the given permissions; under the "manager
+    approves" rule a reports-to manager sees at least their team. None: not at all."""
+    from accounts.access import scope_of, widest
+    scope = widest(*(scope_of(user, k) for k in keys))
+    if approvals.mode() == "manager" and user.reports.filter(is_active=True).exists():
+        scope = widest(scope, "team")
+    return scope
 
 
-def team_users(user, *, inactive=False, department="", q=""):
-    """The people this manager may see, filtered. Raises PermissionDenied for a plain member."""
+def people_in_scope(user, scope, base=None):
+    """Team = me + my direct reports; Department = my department + my team; Company = everyone; None = only me."""
+    base = User.objects.filter(is_active=True) if base is None else base
+    if scope == "company":
+        return base
+    cond = Q(pk=user.pk)
+    if scope in ("team", "department"):
+        cond |= Q(reporting_manager=user)
+    if scope == "department":
+        cond |= Q(department=user.department)
+    return base.filter(cond).distinct()
+
+
+def sees_company(user, keys=VIEW_KEYS) -> bool:
+    return screen_scope(user, keys) == "company"
+
+
+def may_view_team(user, keys=VIEW_KEYS) -> bool:
+    return screen_scope(user, keys) is not None
+
+
+def team_users(user, *, inactive=False, department="", q="", keys=VIEW_KEYS):
+    """The people this manager may see on these screens, filtered. Raises PermissionDenied without the permission."""
     base = User.objects.all() if inactive else User.objects.filter(is_active=True)
-    if sees_company(user):
-        qs = base
-    elif approvals.is_approver(user):
-        cond = Q(pk=user.pk)
-        if has_capability(user, "hr.approve"):
-            cond |= Q(department=user.department)
-        if approvals.mode() == "manager":
-            cond |= Q(reporting_manager=user)
-        qs = base.filter(cond)
-    else:
-        raise PermissionDenied("Only managers and HR can see the team's attendance.")
+    scope = screen_scope(user, keys)
+    if scope is None:
+        raise PermissionDenied("Your role does not include this attendance screen.")
+    qs = people_in_scope(user, scope, base)
     if department:
         qs = qs.filter(department=department)
     q = (q or "").strip()

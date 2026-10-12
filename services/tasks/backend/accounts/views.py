@@ -18,8 +18,11 @@ from .serializers import ChangePasswordSerializer, UserSerializer, UserWriteSeri
 @permission_classes([IsAuthenticated])
 def me(request):
     from tenancy.profile import brand, modules
-    # Which modules are on, and the company's names/colour/logo (None in a standalone install).
-    return Response({**UserSerializer(request.user).data, "modules": modules(), "brand": brand()})
+
+    from .access import level
+    # Which modules are on, and the company's names/colour/logo (None in a standalone install); the role level
+    # (1 member, 2 manager, 3 admin: an administrator in Tasks, PLAN.md §19.19).
+    return Response({**UserSerializer(request.user).data, "modules": modules(), "brand": brand(), "level": level(request.user)})
 
 
 @api_view(["GET", "POST"])

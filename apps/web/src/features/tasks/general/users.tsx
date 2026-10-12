@@ -21,6 +21,7 @@ import { BarChart3, ExternalLink, UserPlus, UsersRound } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
@@ -123,6 +124,7 @@ function Directory() {
       }),
     [rows, search, role],
   );
+  const more = useShowMore(shown, { reset: [search.trim(), role] });
 
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   if (!rows) return <PageLoader />;
@@ -159,7 +161,7 @@ function Directory() {
             </TR>
           </THead>
           <TBody>
-            {shown.map((u) => (
+            {more.visible.map((u) => (
               <Fragment key={u.id}>
                 <TR>
                   <TD>
@@ -188,6 +190,7 @@ function Directory() {
             ))}
           </TBody>
         </Table>
+        <ShowMore {...more.footer} noun="members" className="border-t" />
       </Card>
     </div>
   );
@@ -231,6 +234,7 @@ function ManageTeam() {
       }),
     [rows, search, role, manager],
   );
+  const more = useShowMore(shown, { reset: [search.trim(), role, manager] });
 
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   if (!q.data) return <PageLoader />;
@@ -291,7 +295,7 @@ function ManageTeam() {
               </TR>
             </THead>
             <TBody>
-              {shown.map((u) => (
+              {more.visible.map((u) => (
                 <Fragment key={u.id}>
                   <TR className={cn(!u.is_active && 'opacity-60')}>
                     <TD>
@@ -338,6 +342,7 @@ function ManageTeam() {
               ))}
             </TBody>
           </Table>
+          <ShowMore {...more.footer} noun="members" className="border-t" />
         </Card>
       )}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>

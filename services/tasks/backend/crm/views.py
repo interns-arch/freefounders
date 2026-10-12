@@ -8,7 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import Role, User
-from accounts.permissions import IsAdmin, has_capability
+from accounts.permissions import HasCapability, has_capability
+from config.images import compress_upload
 
 from notifications.service import notify_lead_assigned, notify_status_change
 
@@ -100,9 +101,8 @@ class LeadViewSet(viewsets.ModelViewSet):
             log(updated, EventType.FOLLOW_UP, user, body)
 
     def destroy(self, request, *args, **kwargs):
-        from accounts.access import is_admin
-        if not is_admin(request.user):
-            raise PermissionDenied("Only an admin can delete a lead.")
+        if not has_capability(request.user, "leads.delete"):
+            raise PermissionDenied("Your role does not include deleting leads.")
         return super().destroy(request, *args, **kwargs)
 
     # ---- sub-resources --------------------------------------------------
@@ -133,6 +133,7 @@ class LeadViewSet(viewsets.ModelViewSet):
             raise ValidationError({"file": "No file uploaded."})
         if file.size > MAX_DOC_MB * 1024 * 1024:
             raise ValidationError({"file": f"File exceeds {MAX_DOC_MB} MB."})
+        file = compress_upload(file)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
         doc = lead.documents.create(file=file, filename=file.name, uploaded_by=request.user)
         log(lead, EventType.DOCUMENT, request.user, f"Uploaded {file.name}", {"document_id": doc.id})
         return Response(LeadDocumentSerializer(doc).data, status=status.HTTP_201_CREATED)
@@ -169,8 +170,8 @@ class LeadViewSet(viewsets.ModelViewSet):
 
 
 class AssignmentRuleViewSet(viewsets.ModelViewSet):
-    """Admin-only auto-assignment rules (one per department)."""
-    permission_classes = [IsAdmin]
+    """Auto-assignment rules (one per department): the Lead assignment rules permission."""
+    permission_classes = [HasCapability.of("leads.rules")]
     serializer_class = AssignmentRuleSerializer
     queryset = AssignmentRule.objects.all().order_by("department")
     pagination_class = None

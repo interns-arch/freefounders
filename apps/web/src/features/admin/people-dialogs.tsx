@@ -233,7 +233,8 @@ export function PersonRolesDialog({
   const [error, setError] = useState('');
   const save = useSetPersonRoles();
   const inPlan = new Set(apps.map((a) => a.app));
-  const reach = [...new Set(roles.filter((r) => chosen.has(r.id)).flatMap((r) => roleApps(r)))].filter((a) => inPlan.has(a));
+  // The apps the roles open (the Admin workspace is not an app to open).
+  const reach = [...new Set(roles.filter((r) => chosen.has(r.id)).flatMap((r) => roleApps(r)))].filter((a): a is (typeof apps)[number]['app'] => (inPlan as Set<string>).has(a));
   const first = person.fullName.split(' ')[0];
 
   const toggle = (id: string) =>

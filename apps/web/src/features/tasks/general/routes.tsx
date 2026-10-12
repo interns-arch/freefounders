@@ -1,5 +1,6 @@
 import { lazy } from 'react';
 import type { RouteObject } from 'react-router';
+import { TASKS_SCREENS } from '../nav';
 import { RequireTasks } from './parts';
 
 // Loaded when first opened (smaller first download; the shell shows a loader meanwhile).
@@ -17,19 +18,33 @@ export const generalRoutes: RouteObject[] = [
   {
     path: 'team',
     element: (
-      <RequireTasks allow={(a) => a.tasks.can('tasks.view_all')} what="Team Performance">
+      <RequireTasks allow={TASKS_SCREENS.team} what="Team Performance">
         <TeamReportPage />
       </RequireTasks>
     ),
   },
   { path: 'groups', element: <GroupsPage /> },
-  { path: 'notices', element: <NoticesPage /> },
-  { path: 'notifications', element: <NotificationsPage /> },
+  {
+    path: 'notices',
+    element: (
+      <RequireTasks allow={TASKS_SCREENS.notices} what="Notices">
+        <NoticesPage />
+      </RequireTasks>
+    ),
+  },
+  {
+    path: 'notifications',
+    element: (
+      <RequireTasks allow={TASKS_SCREENS.notifications} what="Notifications">
+        <NotificationsPage />
+      </RequireTasks>
+    ),
+  },
   { path: 'users', element: <UsersPage /> },
   {
     path: 'settings',
     element: (
-      <RequireTasks allow={(a) => a.tasks.can('settings.manage')} what="Task settings">
+      <RequireTasks allow={TASKS_SCREENS.settings} what="Task settings">
         <TaskSettingsPage />
       </RequireTasks>
     ),

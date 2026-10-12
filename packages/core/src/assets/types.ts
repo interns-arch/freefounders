@@ -160,6 +160,8 @@ export interface AllocationPhoto {
   assetId: string;
   allocationId: string | null;
   kind: 'ASSET' | 'HANDOVER' | 'RETURN';
+  /** image/jpeg, image/webp or image/png (older rows; optional for an older API). */
+  mimeType?: string;
   uploadedByName: string | null;
   createdAt: string;
 }

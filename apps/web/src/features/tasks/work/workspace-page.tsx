@@ -55,16 +55,17 @@ export function TaskWorkspacePage() {
     ['reviews', 'To accept', counts.reviews],
     ['requests', 'Requests', counts.requests],
     ['templates', 'Templates'],
-    ['directory', 'Template Directory'],
+    ...(can('directory.view') ? [['directory', 'Template Directory'] as Tab] : []),
     ['activities', 'Activities'],
-    ...(isManager
+    // Each one is its own permission (PLAN.md §19.19): Reports, Deleted tasks, Template directory.
+    ...(can('tasks.reports')
       ? ([
           ['employees', 'Reports'],
           ['time', 'Time Report'],
           ['disputes', 'Disputes'],
         ] as Tab[])
       : ([['time', 'Time Report']] as Tab[])),
-    ...(isAdmin ? [['deleted', 'Deleted'] as Tab] : []),
+    ...(can('tasks.bin') ? [['deleted', 'Deleted'] as Tab] : []),
   ];
 
   // Detail links keep the list's filters, so closing the task lands back on the same view.
@@ -110,12 +111,12 @@ export function TaskWorkspacePage() {
             }}
           />
         )}
-        {area === 'directory' && <DirectoryTab />}
+        {area === 'directory' && can('directory.view') && <DirectoryTab />}
         {area === 'activities' && <ActivitiesTab href={href} />}
-        {area === 'employees' && isManager && <ReportsTab onProfile={openProfile} />}
+        {area === 'employees' && can('tasks.reports') && <ReportsTab onProfile={openProfile} />}
         {area === 'time' && <TimeTab />}
-        {area === 'disputes' && isManager && <DisputesTab />}
-        {area === 'deleted' && isAdmin && <DeletedTab />}
+        {area === 'disputes' && can('tasks.reports') && <DisputesTab />}
+        {area === 'deleted' && can('tasks.bin') && <DeletedTab />}
       </div>
       {form && <TaskFormSheet template={form.template} onClose={() => setForm(null)} />}
       {profileId && <PersonProfileSheet userId={profileId} href={href} onClose={closeProfile} />}

@@ -58,7 +58,8 @@ export function HomePage() {
   const leads = useLeadsDashboard(showLeads);
 
   if (!me) return <PageLoader />;
-  const isAdmin = ['admin', 'super_admin'].includes(me.role);
+  // An Admin-level role (any name) is an administrator in Tasks: it sees everyone's delegated work.
+  const isAdmin = (me.level ?? 0) >= 3 || ['admin', 'super_admin'].includes(me.role);
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const head = (
@@ -94,7 +95,7 @@ export function HomePage() {
   const mine = (
     <>
       <div className="grid gap-4 lg:grid-cols-12">
-        <NoticesCard className="lg:col-span-12" />
+        {access.tasks.can('notices.view') && <NoticesCard className="lg:col-span-12" />}
         <Deadlines className="lg:col-span-7" />
         <ScoreCard home={home.data} className="lg:col-span-5" />
         {!isAdmin && <MyDelegationCard className="lg:col-span-12" />}

@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { EmptyState } from '@/components/common/page';
 import { SearchField } from '@/components/common/search-field';
+import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Label, NativeSelect } from '@/components/ui/input';
 import { Avatar, Card, Switch } from '@/components/ui/primitives';
@@ -47,7 +48,7 @@ const num = (n: number, tone?: 'danger' | 'warning') =>
 
 export function DashboardTab() {
   const access = useAccess();
-  const canImport = access.tasks.can('hr.manage');
+  const canImport = access.tasks.can('hr.import');
   const now = new Date();
   const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [q, setQ] = useState('');
@@ -79,6 +80,8 @@ export function DashboardTab() {
     });
     return list;
   }, [query.data, sort]);
+  // Sorted first, then the first 50 drawn (weak phones); a new month, filter or sort starts at the top again.
+  const more = useShowMore(rows, { reset: [ym, q, department, inactive, sort] });
 
   const columns: Column<TeamMonthRow>[] = [
     {
@@ -186,7 +189,7 @@ export function DashboardTab() {
       <Card className="overflow-hidden">
         <DataTable
           columns={columns}
-          rows={query.data ? rows : undefined}
+          rows={query.data ? more.visible : undefined}
           rowKey={(r) => String(r.user_id)}
           loading={!query.data && !query.error}
           fetching={query.isFetching}
@@ -197,6 +200,7 @@ export function DashboardTab() {
           onRowClick={openHistory}
           empty={<EmptyState title="Nobody to show" description="Try another department, or clear the search." className="py-8" />}
         />
+        {query.data && <ShowMore {...more.footer} noun="staff" className="border-t" />}
       </Card>
       <p className="text-xs text-muted-foreground">Present counts late days too; Late is the number of late check-ins. Click a person to open their month.</p>
       {importing && <ImportAttendanceDialog onClose={() => setImporting(false)} />}
