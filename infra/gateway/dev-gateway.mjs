@@ -34,13 +34,34 @@ function forwardedHeaders(req) {
   };
 }
 
+// Dev only: the phone app's browser preview (`expo start`, port 8081) runs on another origin than this gateway,
+// so the browser needs CORS to call the APIs. The phone itself does not (no CORS in native apps).
+const EXPO_WEB = /^http:\/\/(localhost|127\.0\.0\.1|\d{1,3}(\.\d{1,3}){3}):8081$/;
+function corsHeaders(req) {
+  const origin = req.headers.origin;
+  if (!origin || !EXPO_WEB.test(origin)) return null;
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'access-control-allow-headers': req.headers['access-control-request-headers'] ?? 'authorization, content-type, x-requested-with',
+    vary: 'Origin',
+  };
+}
+
 export function startGateway(port = Number(process.env.GATEWAY_PORT ?? 8080)) {
   const server = http.createServer((req, res) => {
+    const cors = corsHeaders(req);
+    if (cors && req.method === 'OPTIONS') {
+      res.writeHead(204, { ...cors, 'access-control-max-age': '600' });
+      res.end();
+      return;
+    }
     const target = route(req.url ?? '/');
     const upstream = http.request(
       { host: '127.0.0.1', port: target.port, path: target.path, method: req.method, headers: forwardedHeaders(req) },
       (up) => {
-        res.writeHead(up.statusCode ?? 502, up.headers);
+        res.writeHead(up.statusCode ?? 502, cors ? { ...up.headers, ...cors } : up.headers);
         up.pipe(res);
       },
     );
