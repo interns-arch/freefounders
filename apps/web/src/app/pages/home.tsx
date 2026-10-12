@@ -383,9 +383,16 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
             </p>
           )}
           <div className="mt-auto">
-            <Button variant="ghost" size="sm" className="min-h-11 w-full justify-between lg:min-h-9" onClick={() => onOpen()}>
-              Open Attendance &amp; Leave
-              {approves && pending > 0 ? <Pill tone="warn">{pending === 1 ? '1 approval' : `${pending} approvals`} pending</Pill> : <ArrowRight />}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto min-h-11 w-full flex-wrap justify-between gap-x-2 gap-y-1 py-2 whitespace-normal lg:min-h-9"
+              onClick={() => onOpen()}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                Open Attendance &amp; Leave <ArrowRight className="size-4" />
+              </span>
+              {approves && pending > 0 && <Pill tone="warn">{pending} to approve</Pill>}
             </Button>
           </div>
         </div>

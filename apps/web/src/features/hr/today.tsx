@@ -124,7 +124,7 @@ export function TodayTab() {
         </Button>
       )}
       <OkNote className="text-base">{p.msg}</OkNote>
-      <div className="grid max-w-2xl grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid max-w-2xl grid-cols-2 gap-3">
         <Tile icon={LogIn} tone="success" label="Check in" value={time(a?.check_in)} />
         <Tile icon={LogOut} tone="info" label="Check out" value={time(a?.check_out)} />
         <Tile icon={Timer} tone="warning" label="Worked" value={hrs(a?.working_minutes)} />
