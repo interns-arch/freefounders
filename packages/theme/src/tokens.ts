@@ -1,6 +1,7 @@
 /**
- * The same design tokens as ../tokens.css, for places that cannot read CSS variables (the React Native app in
- * Phase 7, charts). Keep the two in step: scripts/check-web-rules.mjs fails the build when they differ.
+ * The same design tokens as ../tokens.css, for places that cannot read CSS variables (charts; the React Native app
+ * reads the hex copy tokens.native.ts, generated from this file by scripts/build-native.mjs). Keep them in step:
+ * scripts/check-web-rules.mjs fails the build when tokens.css, this file and tokens.native.ts differ.
  */
 export const radius = 14; // px, = 0.875rem
 

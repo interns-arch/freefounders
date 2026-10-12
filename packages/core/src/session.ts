@@ -28,7 +28,9 @@ function decode(token: string): Claims | null {
   try {
     const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const json = typeof atob === 'function' ? atob(part) : '';
-    return JSON.parse(decodeURIComponent(escape(json))) as Claims;
+    // Bytes → UTF-8 text without the legacy escape() (not every JS engine has it, e.g. React Native's Hermes).
+    const utf8 = json.replace(/[\s\S]/g, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+    return JSON.parse(decodeURIComponent(utf8)) as Claims;
   } catch {
     return null;
   }
@@ -95,7 +97,9 @@ export const session = {
   },
 
   async logout() {
-    await post('/logout').catch(() => null);
+    // Mobile keeps the refresh token itself, so it names the session to end; the web's is in the cookie.
+    const stored = config.refreshStore ? await config.refreshStore.get().catch(() => null) : null;
+    await post('/logout', stored ? { refreshToken: stored } : {}).catch(() => null);
     if (config.refreshStore) await config.refreshStore.set(null);
     set(null);
   },

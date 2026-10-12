@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "FreeFounders",
+    "slug": "freefounders",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "freefounders",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#f2f6f4",
+    "ios": {
+      "bundleIdentifier": "com.freefounders.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FreeFounders takes a selfie when you punch in or out, because your company keeps a photo of every punch.",
+        "NSLocationWhenInUseUsageDescription": "FreeFounders checks that you are at your office when you punch in or out."
+      }
+    },
+    "android": {
+      "package": "com.freefounders.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#007856",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.CAMERA", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO", "android.permission.ACCESS_BACKGROUND_LOCATION"],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "FreeFounders takes a selfie when you punch in or out, because your company keeps a photo of every punch.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FreeFounders checks that you are at your office when you punch in or out."
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#f2f6f4",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76,
+          "dark": { "backgroundColor": "#060d0a" }
+        }
+      ]
+    ],
+    "experiments": {
+      "tsconfigPaths": false
+    },
+    "extra": {
+      "apiUrl": "http://192.168.2.72:8080"
+    }
+  }
+}

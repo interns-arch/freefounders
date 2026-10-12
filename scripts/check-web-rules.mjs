@@ -5,6 +5,7 @@
 // A redesign then only touches screens and the theme, never the logic.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { renderNative } from '../packages/theme/scripts/build-native.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DIRS = ['apps/web/src/app', 'apps/web/src/features'];
@@ -58,6 +59,17 @@ for (const dir of DIRS) {
     for (const [, name, value] of block(css, cssStart).matchAll(/--([a-z-]+):\s*(oklch\([^)]*\))/g)) {
       if (!tsBlock.includes(`${camel(name)}: '${value}'`)) problems.push(`packages/theme: --${name} in tokens.css (${cssStart}) is not the same in src/tokens.ts`);
     }
+  }
+}
+
+// 4. The hex copy for the phone app (packages/theme/src/tokens.native.ts) is generated from tokens.ts and up to date.
+{
+  let have = '';
+  try {
+    have = readFileSync(path.join(ROOT, 'packages/theme/src/tokens.native.ts'), 'utf8').replace(/\r\n/g, '\n');
+  } catch {}
+  if (have !== renderNative(readFileSync(path.join(ROOT, 'packages/theme/src/tokens.ts'), 'utf8'))) {
+    problems.push('packages/theme/src/tokens.native.ts is out of date with src/tokens.ts. Run: node packages/theme/scripts/build-native.mjs');
   }
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "freefounders",
   "private": true,
-  "description": "FreeFounders: one login for Tasks and Assets",
+  "description": "FreeFounders: one login for Tasks and Assets (web app + Android app)",
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",
@@ -10,7 +10,9 @@
     "import-company": "node scripts/import-company.mjs",
     "rehearse-import": "node scripts/rehearse-import.mjs",
     "web:build": "npm --workspace @freefounders/web run build",
-    "web:typecheck": "npm --workspace @freefounders/web run typecheck"
+    "web:typecheck": "npm --workspace @freefounders/web run typecheck",
+    "mobile": "npm --prefix apps/mobile start",
+    "mobile:check": "npm --prefix apps/mobile run typecheck && npm --prefix apps/mobile test"
   },
   "engines": {
     "node": ">=22"

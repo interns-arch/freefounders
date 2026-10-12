@@ -8,6 +8,7 @@
 // First time: `npm run setup` (installs every part's dependencies).
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { startGateway } from '../infra/gateway/dev-gateway.mjs';
@@ -61,13 +62,20 @@ await pg.ensureDatabase('ff_tasks');
 
 start('platform', 'npm', ['run', 'dev'], { cwd: 'services/platform', env: INTERNAL });
 
+// The phone app (apps/mobile) reaches the suite over the Wi-Fi at http://<this PC's LAN address>:8080, so Django
+// must accept those addresses as hosts too (dev only; the gateway already listens on every interface).
+const LAN_HOSTS = Object.values(os.networkInterfaces())
+  .flat()
+  .filter((a) => a && a.family === 'IPv4' && !a.internal)
+  .map((a) => a.address);
+
 const djangoEnv = {
   ...shared,
   DATABASE_URL: pg.localUrl('ff_tasks'),
   DB_SSLMODE: 'disable',
   DB_CONN_MAX_AGE: '0', // runserver leaks a persistent connection per request thread (see settings.py)
   DEBUG: 'true',
-  ALLOWED_HOSTS: 'localhost,127.0.0.1',
+  ALLOWED_HOSTS: ['localhost', '127.0.0.1', ...LAN_HOSTS].join(','),
   NOTIF_SCHEDULER: 'false',
   PYTHONUNBUFFERED: '1',
 };
@@ -113,6 +121,7 @@ if (ready.every(Boolean)) {
 console.log(`
   ✔ FreeFounders is starting on  http://localhost:8080
     Sign in as  owner  /  Demo@1234  (first run: give yourself Tasks and Assets in People & access)
+    Phone app on the same Wi-Fi: ${LAN_HOSTS.map((h) => `http://${h}:8080`).join('  ') || '(no LAN address found)'}  (npm run mobile)
     Multi-company mode: each company's Tasks and Assets data lives in its own schema.
     Ctrl+C stops everything.
 `);

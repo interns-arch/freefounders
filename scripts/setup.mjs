@@ -11,7 +11,8 @@ const run = (cmd, args, cwd) => {
 };
 
 // '.' = the root workspace: the web app (apps/web) and the shared packages (packages/*).
-for (const dir of ['.', 'services/platform', 'services/assets']) run('npm', ['ci', '--no-audit', '--no-fund'], dir);
+// 'apps/mobile' (the phone app) has its own install: Expo pins its own React (see apps/mobile/README.md).
+for (const dir of ['.', 'services/platform', 'services/assets', 'apps/mobile']) run('npm', ['ci', '--no-audit', '--no-fund'], dir);
 
 const backend = 'services/tasks/backend';
 const venvPy = path.join(ROOT, backend, WIN ? '.venv/Scripts/python.exe' : '.venv/bin/python');

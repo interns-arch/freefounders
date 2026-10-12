@@ -21,13 +21,15 @@ services/platform/  NestJS: companies, people, single login (EdDSA tokens + JWKS
 services/tasks/     Django 6 API (backend/)
 services/assets/    NestJS API (apps/api) + shared Zod (packages/shared, also used by apps/web)
 apps/web/           THE web app (Phase 6, PLAN.md §18): sign-in, Home, Admin, Tasks, HR, Assets screens
+apps/mobile/        Android app (Expo SDK 57, Expo Router; Phase 7, PLAN.md §19.16): sign-in, Attendance, Leave, Holidays, More
 packages/core/      shared logic for web + mobile: HTTP client, session, typed APIs + hooks per area (no DOM)
-packages/theme/     design tokens (tokens.css for web, src/tokens.ts for mobile; kept identical by a check)
+packages/theme/     design tokens (tokens.css for web, src/tokens.ts; src/tokens.native.ts = generated hex copy for mobile; all checked)
 infra/gateway/      dev-gateway.mjs (one address, routed by path) + Caddyfile (prod draft)
 scripts/            setup / dev / smoke / check-web-rules      e2e/  Playwright browser tests
 ```
 The repo root is an npm workspace for `apps/web` + `packages/*` (one `npm ci` at the root); the services keep their own installs.
-Phase 7 adds `apps/mobile`.
+`apps/mobile` is NOT in the workspace (own `node_modules`: Expo pins another React); Metro + tsconfig read `packages/*` from
+source and force one React (apps/mobile/README.md). After changing theme tokens run `node packages/theme/scripts/build-native.mjs`.
 
 **Web app rules** (checked before every typecheck/build by `scripts/check-web-rules.mjs`): screens under `apps/web/src/app` and
 `src/features` get data only from `@freefounders/core` hooks (no fetch, no HTTP client) and use theme colours only (no
@@ -47,6 +49,8 @@ npm run dev          # everything on http://localhost:8080 — sign in: owner / 
 npm run smoke        # end-to-end API check against the running suite (10 steps, incl. the cross-company check)
 npm run e2e          # browser tests against the running suite (first time: npx --prefix e2e playwright install chromium)
 npm run rehearse-import   # CarTrends import rehearsal on demo data, against the running suite
+npm run mobile       # phone app: QR for Expo Go (same Wi-Fi; API = EXPO_PUBLIC_API_URL, default http://192.168.2.72:8080)
+npm run mobile:check # phone app typecheck + unit tests (also: cd apps/mobile && npx expo export --platform android)
 ```
 Routes on :8080: `/api/platform/*` Platform (:4000) · `/tasks/api/*` Django (:8000) · `/assets/api/*` NestJS (:3000) ·
 `/media/*` Django · everything else the new web app (:5176). `/f/<token>?c=<company>` is the public web-form page. Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
