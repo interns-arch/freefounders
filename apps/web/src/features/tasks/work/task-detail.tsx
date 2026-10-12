@@ -27,6 +27,7 @@ import { FilePick, Linkify, ProofreadText, fmtDT, fmtEffort, relDue } from '@/fe
 import { cn } from '@/lib/utils';
 import { useTaskDialogs } from './dialogs';
 import { PriorityPill, SectionHead, StatusPill, TaskCode } from './task-bits';
+import { safeHref } from '@/lib/safe-url';
 
 /**
  * Everything about one task in a slide-over: steps, review waiting for me, daily log, files, comments and updates.
@@ -231,7 +232,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
               </p>
             )}
             {t.external_url && (
-              <a href={t.external_url} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+              <a href={safeHref(t.external_url)} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
                 Open what this task is about <ArrowUpRight className="size-3.5" aria-hidden />
               </a>
             )}
@@ -475,7 +476,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
                 <li key={f.id} className="inline-flex max-w-full items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5">
                   <Paperclip className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   {f.url ? (
-                    <a href={f.url} target="_blank" rel="noreferrer" className="truncate font-medium text-primary hover:underline">
+                    <a href={safeHref(f.url)} target="_blank" rel="noreferrer" className="truncate font-medium text-primary hover:underline">
                       {f.filename}
                     </a>
                   ) : (

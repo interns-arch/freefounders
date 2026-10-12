@@ -6,11 +6,15 @@ from django.views.static import serve as _serve
 
 
 def media(request, path):
-    """Uploaded files. Anything under private/ (punch photos) is only served by its own
-    permission-checked endpoint, never here."""
-    if "private/" in path.replace("\\", "/"):
+    """Uploaded files, only by the signed, expiring link the API handed out (config/media.py). Anything under
+    private/ (punch photos) is only served by its own permission-checked endpoint, never here."""
+    from config import media as media_links
+
+    clean = path.replace("\\", "/")
+    if "private/" in clean or not media_links.valid(clean, request.GET.get("s")):
         raise Http404("Not found")
-    return _serve(request, path, document_root=settings.MEDIA_ROOT)
+    res = _serve(request, path, document_root=settings.MEDIA_ROOT)
+    return media_links.harden(res, res.get("Content-Type"))
 
 
 def health(_request):

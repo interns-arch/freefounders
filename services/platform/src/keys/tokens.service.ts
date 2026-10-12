@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { createLocalJWKSet, jwtVerify, SignJWT } from 'jose';
+import { errors, jwtVerify, SignJWT } from 'jose';
 import type { Caller } from '../common/http';
 import type { AppKey, PlatformRole } from '../db/schema';
 import { KeysService } from './keys.service';
@@ -9,10 +9,14 @@ export const ISSUER = 'freefounders-platform';
 export const AUDIENCE = 'freefounders';
 export const ACCESS_TTL_SECONDS = 15 * 60;
 const SERVICE_TTL_SECONDS = 60;
+/** An unknown `kid` makes us re-read the keys at most this often (a key made by another Platform process). */
+const REFETCH_MS = 10_000;
 
 /** Signs and verifies Platform JWTs (EdDSA / Ed25519). */
 @Injectable()
 export class TokensService {
+  private refetchedAt = 0;
+
   constructor(private readonly keys: KeysService) {}
 
   /**
@@ -33,12 +37,18 @@ export class TokensService {
   }
 
   async verifyAccess(token: string): Promise<Caller | null> {
+    // Only our own signature scheme and our own user tokens: service tokens (audience `<app>-internal`) are refused.
+    const options = { issuer: ISSUER, audience: AUDIENCE, algorithms: ['EdDSA'], typ: 'JWT', maxTokenAge: `${ACCESS_TTL_SECONDS + 60}s` };
     try {
-      const { payload } = await jwtVerify(token, createLocalJWKSet(await this.keys.jwks()), {
-        issuer: ISSUER,
-        audience: AUDIENCE,
-        algorithms: ['EdDSA'],
-      });
+      let verified;
+      try {
+        verified = await jwtVerify(token, await this.keys.verifier(), options);
+      } catch (err) {
+        if (!(err instanceof errors.JWKSNoMatchingKey) || Date.now() - this.refetchedAt < REFETCH_MS) throw err;
+        this.refetchedAt = Date.now();
+        verified = await jwtVerify(token, await this.keys.verifier(true), options);
+      }
+      const { payload } = verified;
       if (typeof payload.sub !== 'string' || typeof payload.cid !== 'string') return null;
       return {
         personId: payload.sub,

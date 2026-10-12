@@ -17,6 +17,8 @@ export const DEMO = {
 };
 
 export async function seed(bootstrap = false) {
+  // The demo owner's password is public (it is in this file): never on a real install.
+  if (!bootstrap && process.env.NODE_ENV === 'production') throw new Error('The demo company is for development only; use --bootstrap on a real install');
   const pool = new pg.Pool({ connectionString: databaseUrl(), ssl: databaseSsl(), max: 1 });
   const db = drizzle(pool, { schema });
   try {

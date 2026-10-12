@@ -99,3 +99,9 @@ The first version (separate React Native screens, §19.16) is in git history (co
 Not yet: push notifications through the shell, EAS builds (an APK needs `usesCleartextTraffic` for local `http://`,
 or an https staging server), the Assets QR scanner and Tasks voice notes in the app (both use the browser camera /
 microphone, which a WebView allows only on https).
+
+**Security** (docs/security/assets-web-mobile-infra.md): the app's powers (location, camera, files, print) are given only
+to pages of the server address; other sites open outside, `data:` pages and foreign frames never load; plain `http://`
+is accepted only for office-network addresses. For store/tester builds: an `https://` address with
+`EXPO_PUBLIC_LOCK_SERVER=1` (no address field on the phone), and https-only traffic — `expo-build-properties` with
+`"android": { "usesCleartextTraffic": false }` (Expo Go and local LAN testing need cleartext, so only release builds).

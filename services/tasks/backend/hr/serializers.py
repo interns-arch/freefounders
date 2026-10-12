@@ -2,6 +2,8 @@ from datetime import timedelta
 
 from rest_framework import serializers
 
+from config.media import file_url
+
 from crm.serializers import UserBriefSerializer
 
 from .models import (
@@ -71,6 +73,9 @@ class CorrectionSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if not attrs.get("requested_check_in") and not attrs.get("requested_check_out"):
             raise serializers.ValidationError("Provide a corrected check-in or check-out time.")
+        from django.utils import timezone
+        if attrs.get("date") and attrs["date"] > timezone.localdate():
+            raise serializers.ValidationError({"date": "A correction is for a day that has already started."})
         return attrs
 
 
@@ -98,10 +103,14 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         extra_kwargs = {"document": {"write_only": True, "required": False}}
 
     def get_document_url(self, obj):
-        return obj.document.url if obj.document else None
+        return file_url(obj.document)
 
     def validate_document(self, value):
-        from config.images import compress_upload
+        from config.images import check_size, compress_upload
+        try:
+            check_size(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
         return compress_upload(value)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
 
     def validate(self, attrs):

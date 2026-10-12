@@ -228,7 +228,7 @@ export function DataTable<T>({
               const sortable = c.sortKey && onSortChange;
               const isSorted = sort && c.sortKey === sort.key;
               return (
-                <TH key={c.key} className={cn(c.headerClassName, c.hideOnMobile && 'hidden md:table-cell')}>
+                <TH key={c.key} className={cn(c.headerClassName, c.hideOnMobile && 'hidden md:table-cell')} aria-sort={isSorted ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : sortable ? 'none' : undefined}>
                   {sortable ? (
                     <button
                       type="button"
@@ -236,7 +236,7 @@ export function DataTable<T>({
                       onClick={() => onSortChange!({ key: c.sortKey!, dir: isSorted && sort!.dir === 'asc' ? 'desc' : 'asc' })}
                     >
                       {c.header}
-                      {isSorted ? sort!.dir === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
+                      {isSorted ? sort!.dir === 'asc' ? <ArrowUp className="size-3" aria-hidden /> : <ArrowDown className="size-3" aria-hidden /> : <ChevronsUpDown className="size-3 opacity-60" aria-hidden />}
                     </button>
                   ) : (
                     c.header

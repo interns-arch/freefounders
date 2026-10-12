@@ -21,6 +21,7 @@ import { PRIORITY_TONE, TICKET_TONE } from '@/lib/status';
 import type { Ticket } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDateTime, relativeTime } from '@/lib/utils';
+import { safeHref } from '@/lib/safe-url';
 
 const TYPE_ICON: Record<string, { icon: typeof LifeBuoy; tone: string }> = {
   ISSUE: { icon: LifeBuoy, tone: 'bg-info/10 text-info dark:bg-info/16' },
@@ -94,7 +95,7 @@ export default function TicketsPage() {
             type="button"
             onClick={() => set({ status: t.value || 'ALL' })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
+              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
               (f.status === 'ALL' ? '' : f.status) === t.value ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
@@ -182,7 +183,7 @@ function TicketSheet({ id, onClose }: { id: string | null; onClose: () => void }
                   { label: 'Asset', value: t.assetId ? <Link className="text-primary hover:underline" to={`/assets/assets/${t.assetId}`}>{t.assetTag} · {t.assetName}</Link> : null },
                   { label: 'Assignee', value: t.assigneeName },
                   // FreeFounders: the Tasks task working on this ticket (a full page link: it is another app).
-                  ...(t.linkedTask ? [{ label: 'Task', value: <a className="text-primary hover:underline" href={t.linkedTask.url}>{t.linkedTask.ref} in Tasks</a> }] : []),
+                  ...(t.linkedTask ? [{ label: 'Task', value: <a className="text-primary hover:underline" href={safeHref(t.linkedTask.url)}>{t.linkedTask.ref} in Tasks</a> }] : []),
                   ...(t.resolvedAt ? [{ label: 'Resolved', value: formatDateTime(t.resolvedAt) }] : []),
                 ]}
               />

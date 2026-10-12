@@ -5,7 +5,17 @@ import type { Actor } from '../../common/actor';
 import { sessionCookieValue } from '../../common/company.middleware';
 import { type AuthedRequest, CurrentActor, Public, ZodPipe } from '../../common/http';
 import { AuthService, SESSION_COOKIE, SESSION_TTL_MS } from './auth.service';
+import { tenancyEnabled } from '../../db/tenancy';
 import { bearerToken, platformEnabled } from './platform-token';
+
+/**
+ * Multi-company mode: people sign in through the FreeFounders Platform only. The app's own password login and password
+ * change stay off even when a request names a company (e.g. a hand-made `<companyId>~…` session cookie), so an old
+ * Assets password can never open a company after the Platform changed or reset it.
+ */
+function assertOwnLoginAllowed() {
+  if (tenancyEnabled()) throw new UnauthorizedException({ statusCode: 401, code: 'no_company', message: 'Sign in through FreeFounders' });
+}
 
 @Controller('auth')
 export class AuthController {
@@ -19,6 +29,7 @@ export class AuthController {
     @Req() req: AuthedRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
+    assertOwnLoginAllowed();
     const { token } = await this.auth.login(body.login, body.password, { ip: req.ip, userAgent: req.headers['user-agent'] });
     res.cookie(SESSION_COOKIE, token, {
       httpOnly: true,
@@ -69,6 +80,7 @@ export class AuthController {
     @Req() req: AuthedRequest,
     @Body(new ZodPipe(changePasswordSchema)) body: { currentPassword: string; newPassword: string },
   ) {
+    assertOwnLoginAllowed();
     await this.auth.changePassword(actor, body.currentPassword, body.newPassword, req.sessionId);
     return { ok: true };
   }

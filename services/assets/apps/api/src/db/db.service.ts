@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { readFileSync } from 'node:fs';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { asc, desc } from 'drizzle-orm';
 import pg from 'pg';
@@ -18,12 +19,22 @@ export function databaseUrl(): string {
   return process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5433/eam';
 }
 
-/** Remote Postgres (Render, Supabase, RDS, ...) needs TLS; the bundled local one does not. */
-export function databaseSsl(): { rejectUnauthorized: boolean } | undefined {
-  if (process.env.PGSSLMODE === 'disable') return undefined;
+/**
+ * Remote Postgres (Render, Supabase, RDS, ...) needs TLS; the bundled local one does not.
+ * PGSSLMODE=verify-full (recommended in production) also checks the server's certificate, against the CA file in
+ * PGSSLROOTCERT when set (e.g. the RDS bundle), else the system's trusted CAs. Without it the connection is encrypted
+ * but the certificate is not checked (the earlier behaviour).
+ */
+export function databaseSsl(): { rejectUnauthorized: boolean; ca?: string } | undefined {
+  const mode = process.env.PGSSLMODE;
+  if (mode === 'disable') return undefined;
+  if (mode === 'verify-full' || mode === 'verify-ca') {
+    const caFile = process.env.PGSSLROOTCERT;
+    return { rejectUnauthorized: true, ...(caFile ? { ca: readFileSync(caFile, 'utf8') } : {}) };
+  }
   const url = databaseUrl();
   const isLocal = /^postgres:\/\/[^@]+@(localhost|127\.0\.0\.1|\[::1\])/.test(url);
-  if (isLocal && process.env.PGSSLMODE !== 'require') return undefined;
+  if (isLocal && mode !== 'require') return undefined;
   return { rejectUnauthorized: false };
 }
 

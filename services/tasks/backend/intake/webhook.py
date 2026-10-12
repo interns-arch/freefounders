@@ -28,12 +28,17 @@ log = logging.getLogger(__name__)
 def _verify_signature(raw: bytes, header: str | None) -> bool:
     secret = company_env("WHATSAPP_APP_SECRET", "").strip()
     if not secret:
-        log.warning("WHATSAPP_APP_SECRET unset -- webhook signature NOT verified (dev only)")
-        return True
+        from django.conf import settings
+        if settings.DEBUG or getattr(settings, "TESTING", False):
+            log.warning("WHATSAPP_APP_SECRET unset -- webhook signature NOT verified (dev only)")
+            return True
+        # A production server never takes unsigned posts: anyone could forge messages, leads and delivery reports.
+        log.error("WHATSAPP_APP_SECRET unset -- webhook refused")
+        return False
     if not header or not header.startswith("sha256="):
         return False
     expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header.split("=", 1)[1])
+    return hmac.compare_digest(expected.encode(), header.split("=", 1)[1].encode())
 
 
 @csrf_exempt
@@ -44,7 +49,7 @@ def whatsapp_webhook(request):
         if (
             request.GET.get("hub.mode") == "subscribe"
             and token
-            and request.GET.get("hub.verify_token") == token
+            and hmac.compare_digest(str(request.GET.get("hub.verify_token", "")).encode(), token.encode())
         ):
             return HttpResponse(request.GET.get("hub.challenge", ""))
         return HttpResponseForbidden("verify token mismatch")

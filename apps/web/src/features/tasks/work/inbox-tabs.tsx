@@ -24,6 +24,7 @@ import { ProofreadText, fmtDT, fmtEffort } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
 import { describeChanges } from './dialogs';
 import { CountPill, Segmented, TaskCode } from './task-bits';
+import { safeHref } from '@/lib/safe-url';
 
 const fail = (e: unknown) => toast.error(errorMessage(e));
 const IMAGE = /\.(jpe?g|png|gif|webp|heic|bmp)$/i;
@@ -53,7 +54,7 @@ function ProofFiles({ files }: { files: TaskFile[] }) {
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {images.map((f) => (
-            <a key={f.id} href={f.url!} target="_blank" rel="noreferrer" title={f.filename} className="block size-20 overflow-hidden rounded-lg border shadow-xs transition hover:border-primary/50">
+            <a key={f.id} href={safeHref(f.url)} target="_blank" rel="noreferrer" title={f.filename} className="block size-20 overflow-hidden rounded-lg border shadow-xs transition hover:border-primary/50">
               <img src={f.url!} alt={f.filename} loading="lazy" className="size-full object-cover" />
             </a>
           ))}
@@ -62,7 +63,7 @@ function ProofFiles({ files }: { files: TaskFile[] }) {
       {others.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {others.map((f) => (
-            <a key={f.id} href={f.url ?? undefined} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-card px-2 py-1 text-xs font-medium hover:border-primary/50 hover:text-primary">
+            <a key={f.id} href={safeHref(f.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-card px-2 py-1 text-xs font-medium hover:border-primary/50 hover:text-primary">
               <Paperclip className="size-3" aria-hidden /> {f.filename}
             </a>
           ))}

@@ -52,6 +52,10 @@ def run_jobs() -> None:
 
 def run_pass() -> dict:
     """Runs one pass for every company. Returns {schema-or-'default': 'ok'|'failed'|'skipped'}."""
+    # A long-running process gets no request cycle to drop a broken or expired connection: do it here, or one lost
+    # connection would fail every later pass.
+    if not connection.in_atomic_block:
+        connection.close_if_unusable_or_obsolete()
     if not _try_lock():
         return {"*": "skipped"}
     results = {}

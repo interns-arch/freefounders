@@ -59,6 +59,9 @@ class LeadViewSet(viewsets.ModelViewSet):
     # ---- create / update ------------------------------------------------
     def perform_create(self, serializer):
         user = self.request.user
+        from accounts.permissions import granted
+        if not granted(user, "leads.view", "leads.edit"):
+            raise PermissionDenied("Your role does not include leads.")
         assigned = serializer.validated_data.get("assigned_to")
         if assigned and assigned.pk != user.pk and not can_assign(user):
             raise PermissionDenied("Your role cannot assign leads to other people.")

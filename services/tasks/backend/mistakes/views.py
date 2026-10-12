@@ -16,6 +16,7 @@ from rest_framework.response import Response
 
 from accounts.models import User
 from accounts.permissions import HasCapability, HasPermission, has_capability
+from config.throttles import AIThrottle
 
 # Anyone in the module: their own register (mistakes.view), or logging / reviewing others (PLAN.md §19.19).
 IN_MODULE = ("mistakes.view", "mistakes.log", "mistakes.review", "sops.manage")
@@ -57,10 +58,10 @@ def _escalation_target(mistake, level):
 
 
 def can_review(user, mistake) -> bool:
+    if user.pk == mistake.employee_id:
+        return False        # never your own review, whatever the reach
     if has_capability(user, "mistakes.review_all"):
         return True
-    if user.pk == mistake.employee_id:
-        return False        # never your own review
     if mistake.manager_id == user.pk:
         return True
     return (has_capability(user, "mistakes.review_department")
@@ -102,9 +103,39 @@ class MistakeViewSet(viewsets.ModelViewSet):
                 | Q(sla_due_at__lt=timezone.now()) & ~Q(status=MistakeStatus.RESOLVED))
         return qs
 
+    def _check_links(self, serializer):
+        """A task or lead linked to a mistake must be one the person can see (else its code leaks)."""
+        from crm.scoping import visible_leads, visible_tasks
+        user = self.request.user
+        task = serializer.validated_data.get("task")
+        if task and not visible_tasks(user).filter(pk=task.pk).exists():
+            raise ValidationError({"task": "Unknown task."})
+        lead = serializer.validated_data.get("lead")
+        if lead and not visible_leads(user).filter(pk=lead.pk).exists():
+            raise ValidationError({"lead": "Unknown lead."})
+
+    def perform_update(self, serializer):
+        """Editing a logged mistake is a reviewer's job: the employee (or whoever logged it) cannot change the
+        severity, loss or wording afterwards, and nobody can move it onto another person."""
+        mistake = self.get_object()
+        if not can_review(self.request.user, mistake):
+            raise PermissionDenied("Only a reviewer can edit a logged mistake.")
+        employee = serializer.validated_data.get("employee")
+        if employee is not None and employee.pk != mistake.employee_id:
+            raise ValidationError({"employee": "A mistake cannot be moved to another person; log a new one."})
+        self._check_links(serializer)
+        if "category" in serializer.validated_data:
+            name = (serializer.validated_data.get("category") or "").strip()
+            cat = MistakeCategory.objects.filter(active=True, name__iexact=name).first()
+            if not cat:
+                raise ValidationError({"category": "Pick a category from the list."})
+            serializer.validated_data["category"] = cat.name
+        serializer.save()
+
     def perform_create(self, serializer):
         user = self.request.user
         employee = serializer.validated_data["employee"]
+        self._check_links(serializer)
         if employee.pk != user.pk and not has_capability(user, "mistakes.log"):
             raise PermissionDenied("Only managers/admin can log a mistake for someone else.")
         name = (serializer.validated_data.get("category") or "").strip()
@@ -239,7 +270,7 @@ class MistakeViewSet(viewsets.ModelViewSet):
                    link="/mistakes")
 
     # ---- AI: suggestions a human accepts or overrides ---------------------
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get"], throttle_classes=[AIThrottle])
     def suggestions(self, request, pk=None):
         """Everything the AI has to offer on one mistake, in one call.
 
@@ -249,6 +280,9 @@ class MistakeViewSet(viewsets.ModelViewSet):
         """
         from . import intelligence as intel
         mistake = self.get_object()
+        # Similar past mistakes name other employees, and each block is a paid AI call: reviewers only.
+        if not can_review(request.user, mistake):
+            raise PermissionDenied("Only a reviewer can see suggestions for this mistake.")
         allowed = list(MistakeCategory.objects.filter(active=True)
                        .values_list("name", flat=True))
         count = intel.occurrence_count(mistake)

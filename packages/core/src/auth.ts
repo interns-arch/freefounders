@@ -1,5 +1,6 @@
 /** Signing in and out, and changing one's own password. */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { endAssetsCookie } from './assets/session';
 import { platformApi } from './http';
 import { session } from './session';
 
@@ -10,7 +11,11 @@ export function useSignIn() {
 export function useSignOut() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => session.logout(),
+    mutationFn: async () => {
+      // The Assets cookie session (photos, downloads) ends with the sign-in, not 15 minutes later.
+      if (session.apps().includes('assets')) await endAssetsCookie();
+      await session.logout();
+    },
     onSuccess: () => qc.clear(),
   });
 }

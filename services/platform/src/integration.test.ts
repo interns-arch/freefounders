@@ -4,17 +4,22 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import type { INestApplication } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
-import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { createRemoteJWKSet, decodeJwt, decodeProtectedHeader as decodeJwtHeader, jwtVerify, SignJWT } from 'jose';
 import { pbkdf2Sync } from 'node:crypto';
-import { hashPassword } from './auth/auth.service';
+import { AuthService, hashPassword } from './auth/auth.service';
+import { redact } from './common/exception.filter';
+import { Throttle } from './auth/throttle';
+import { KeysService } from './keys/keys.service';
+import { TokensService } from './keys/tokens.service';
+import { seed } from './seed';
 import { ProvisionClient } from './provision/provision.client';
 import { RolesService } from './roles/roles.service';
 import { CompanyService } from './company/company.service';
 import { DbService } from './db/db.service';
-import { companies, departments, logins, people, personApps, refreshSessions } from './db/schema';
+import { companies, departments, eventCursors, logins, people, personApps, refreshSessions, roles } from './db/schema';
 import { DirectoryService } from './people/directory.service';
-import { FlowsService } from './people/flows.service';
+import { EVENTS_LOCK, FlowsService, pathId } from './people/flows.service';
 import { createApp } from './main';
 
 const PASSWORD = 'Test@12345';
@@ -402,9 +407,10 @@ describe('people administration', () => {
     assert.equal((await call('PATCH', `/people/${ids.nina}`, { token: admin.token, body: { status: 'inactive' } })).status, 200);
     assert.equal((await call('POST', '/auth/refresh', { cookie: session.cookie })).status, 401);
     assert.equal((await call('POST', '/auth/login', { body: { login: 'nina', password: PASSWORD } })).status, 401);
-    // An admin call with the deactivated person's still-valid access token is refused too.
+    // Any Platform call with the deactivated person's still-valid access token is refused too (401: the web app signs out).
     await dbs.db.update(people).set({ platformRole: 'admin' }).where(eq(people.id, ids.nina));
-    assert.equal((await call('GET', '/people', { token: session.token })).status, 403);
+    assert.equal((await call('GET', '/people', { token: session.token })).status, 401);
+    assert.equal((await call('GET', '/auth/me', { token: session.token })).status, 401);
   });
 });
 
@@ -696,8 +702,10 @@ describe('every feature is a permission (§19.19)', () => {
     assert.equal((await call('DELETE', `/roles/${superRole.id}`, { token: owner.token })).status, 403);
     const before = await call('PUT', `/people/${ids.owner}/roles`, { token: owner.token, body: { roleIds: [] } });
     assert.equal(before.status, 200);
-    assert.equal((await call('GET', '/people', { token: owner.token })).status, 200, 'owners keep the Admin workspace without roles');
-    assert.equal((await call('PUT', `/people/${ids.owner}/roles`, { token: owner.token, body: { roleIds: [superRole.id] } })).status, 200);
+    // Losing an app ends the person's sessions (their own included), so sign in again.
+    const again = await login('olivia');
+    assert.equal((await call('GET', '/people', { token: again.token })).status, 200, 'owners keep the Admin workspace without roles');
+    assert.equal((await call('PUT', `/people/${ids.owner}/roles`, { token: again.token, body: { roleIds: [superRole.id] } })).status, 200);
   });
 
   test("a new catalogue version upgrades every role once; the Owner role follows the catalogue; pushes say which version", async () => {
@@ -1269,5 +1277,261 @@ describe('delete a person permanently (§19.12)', () => {
     assert.deepEqual(deleteCalls.slice(before).map((c) => c.app), ['tasks']);
     fakeTasksDelete = { status: 200, body: { deleted: true, counts: { tasks: 3, comments: 1 } } };
     await dbs.db.update(companies).set({ enabledApps: ['tasks', 'assets'] }).where(eq(companies.id, ids.acme));
+  });
+});
+
+describe('security hardening (docs/security/platform.md)', () => {
+  const LOCKED = 'Too many failed attempts. Try again in a few minutes.';
+  const WRONG = 'Wrong email / username / employee ID or password';
+  const throttle = () => app.get(Throttle);
+  const addPerson = async (companyId: string, fullName: string, username: string, platformRole = 'member') => {
+    const [p] = await dbs.db.insert(people).values({ companyId, fullName, platformRole }).returning();
+    await dbs.db.insert(logins).values({ personId: p.id, username, passwordHash: await hashPassword(PASSWORD) });
+    return p.id;
+  };
+
+  after(() => throttle().reset());
+
+  test('parallel wrong passwords cannot get past the 5-try lockout; a lock that ran out starts over', async () => {
+    throttle().reset();
+    const id = await addPerson(ids.acme, 'Rex Racer', 'sec_rex');
+    const answers = await Promise.all(Array.from({ length: 20 }, () => call('POST', '/auth/login', { body: { login: 'sec_rex', password: 'wrong-pass' } })));
+    const checked = answers.filter((a) => a.body.message === WRONG).length;
+    assert.ok(checked <= 5, `at most 5 passwords were checked, not ${checked}`);
+    assert.ok(answers.every((a) => a.status === 401 && (a.body.message === WRONG || a.body.message === LOCKED)));
+    const right = await call('POST', '/auth/login', { body: { login: 'sec_rex', password: PASSWORD } });
+    assert.equal(right.status, 401);
+    assert.equal(right.body.message, LOCKED, 'locked, even with the right password');
+    const [row] = await dbs.db.select().from(logins).where(eq(logins.personId, id));
+    assert.equal(row.failedLogins, 5);
+    assert.ok(row.lockedUntil && row.lockedUntil > new Date());
+    await dbs.db.update(logins).set({ lockedUntil: new Date(Date.now() - 1000) }).where(eq(logins.personId, id));
+    await login('sec_rex');
+    const [later] = await dbs.db.select().from(logins).where(eq(logins.personId, id));
+    assert.equal(later.failedLogins, 0);
+    throttle().reset();
+  });
+
+  test('a name that matches nobody answers exactly like a real account, "too many" included', async () => {
+    throttle().reset();
+    const answers: Res[] = [];
+    for (let i = 0; i < 6; i++) answers.push(await call('POST', '/auth/login', { body: { login: 'nobody-at-all', password: 'wrong-pass' } }));
+    assert.deepEqual(
+      answers.slice(0, 5).map((a) => a.body.message),
+      Array(5).fill(WRONG),
+    );
+    assert.equal(answers[5].status, 401);
+    assert.equal(answers[5].body.message, LOCKED);
+    throttle().reset();
+  });
+
+  test('too many failed sign-ins from one address are refused for a while (password spraying)', async () => {
+    throttle().reset();
+    process.env.LOGIN_IP_LIMIT = '3';
+    try {
+      for (const name of ['spray-a', 'spray-b', 'spray-c']) {
+        assert.equal((await call('POST', '/auth/login', { body: { login: name, password: 'Summer2026' } })).status, 401);
+      }
+      const next = await call('POST', '/auth/login', { body: { login: 'mia', password: PASSWORD } });
+      assert.equal(next.status, 429);
+      assert.match(next.body.message, /Too many sign-in attempts/);
+    } finally {
+      delete process.env.LOGIN_IP_LIMIT;
+      throttle().reset();
+    }
+    await login('mia');
+  });
+
+  test('change password: a stolen access token cannot be used to guess the current password', async () => {
+    throttle().reset();
+    const mia = await login('mia');
+    for (let i = 0; i < 5; i++) {
+      assert.equal((await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: `guess-${i}`, newPassword: 'Another@123' } })).status, 400);
+    }
+    const blocked = await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: PASSWORD, newPassword: 'Another@123' } });
+    assert.equal(blocked.status, 429, 'refused even with the right password');
+    throttle().reset();
+  });
+
+  test('sign out, "sign out everywhere" and a password reset end Platform access at once, not after 15 minutes', async () => {
+    const a = await login('mia');
+    const b = await login('mia');
+    assert.equal((await call('POST', '/auth/logout', { cookie: a.cookie })).status, 200);
+    assert.equal((await call('GET', '/auth/me', { token: a.token })).status, 401, 'signed-out session');
+    assert.equal((await call('GET', '/auth/me', { token: b.token })).status, 200, 'the other session goes on');
+    const all = await call('POST', '/auth/logout-all', { token: b.token });
+    assert.equal(all.status, 200);
+    assert.equal((await call('GET', '/auth/me', { token: b.token })).status, 401);
+    assert.equal((await call('POST', '/auth/refresh', { cookie: b.cookie })).status, 401);
+    const c = await login('mia');
+    const admin = await login('admin@acme.test');
+    assert.equal((await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: PASSWORD, mustChangePassword: false } })).status, 200);
+    assert.equal((await call('GET', '/auth/me', { token: c.token })).status, 401, 'after a password reset');
+  });
+
+  test('answers are never cached', async () => {
+    const res = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
+      body: JSON.stringify({ login: 'mia', password: PASSWORD }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    assert.equal((await fetch(`${base}/health`)).headers.get('cache-control'), 'no-store');
+  });
+
+  test('tokens: EdDSA only, user audience only; a key made by another Platform process is accepted', async () => {
+    const mia = await login('mia');
+    const claims = decodeJwt(mia.token);
+    const unsigned = `${Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')}.${mia.token.split('.')[1]}.`;
+    assert.equal((await call('GET', '/auth/me', { token: unsigned })).status, 401, 'alg none');
+    const hs = await new SignJWT({ ...claims }).setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).sign(new TextEncoder().encode('x'.repeat(32)));
+    assert.equal((await call('GET', '/auth/me', { token: hs })).status, 401, 'HS256');
+    const service = await app.get(TokensService).signService('tasks', ids.acme);
+    assert.equal((await call('GET', '/auth/me', { token: service })).status, 401, 'service token');
+    // Another process rotates the key; this one has never seen the new kid.
+    const otherKeys = new KeysService(dbs);
+    const otherTokens = new TokensService(otherKeys);
+    await otherKeys.rotate();
+    const fresh = await otherTokens.signAccess({ personId: ids.member, companyId: ids.acme, name: 'Mia Member', role: 'member', apps: {}, sessionFamily: claims.fam as string });
+    assert.notEqual(decodeJwtHeader(fresh).kid, decodeJwtHeader(mia.token).kid);
+    assert.equal((await call('GET', '/auth/me', { token: fresh })).status, 200, 'new key picked up');
+    assert.equal((await call('GET', '/auth/me', { token: mia.token })).status, 200, 'old key still valid until its tokens expire');
+  });
+
+  test('a member with Manage people cannot choose an app role; a member with Manage roles cannot change an admin', async () => {
+    const owner = await login('olivia');
+    const mkRole = async (name: string, permission: string) => {
+      const r = await call('POST', '/roles', { token: owner.token, body: { name, grants: [{ app: 'platform', permission }] } });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      return r.body.id as string;
+    };
+    const gina = await addPerson(ids.acme, 'Gina Grant', 'sec_gina');
+    const rita = await addPerson(ids.acme, 'Rita Roles', 'sec_rita');
+    const plain = await addPerson(ids.acme, 'Pete Plain', 'sec_pete');
+    assert.equal((await call('PUT', `/people/${gina}/roles`, { token: owner.token, body: { roleIds: [await mkRole('Grant desk', 'people.manage')] } })).status, 200);
+    assert.equal((await call('PUT', `/people/${rita}/roles`, { token: owner.token, body: { roleIds: [await mkRole('Role desk', 'roles.manage')] } })).status, 200);
+    const g = await login('sec_gina');
+    assert.equal((await call('PUT', `/people/${plain}/apps/tasks`, { token: g.token, body: { appRole: 'super_admin' } })).status, 403, 'app role = permissions');
+    assert.equal((await call('PUT', `/people/${gina}/apps/tasks`, { token: g.token, body: { appRole: 'super_admin' } })).status, 403, 'not for themselves either');
+    assert.equal((await call('PUT', `/people/${plain}/apps/tasks`, { token: g.token, body: {} })).status, 200, 'the app default is fine');
+    assert.equal((await call('PUT', `/people/${plain}/apps/tasks`, { token: owner.token, body: { appRole: 'super_admin' } })).status, 200, 'owners may');
+    const r = await login('sec_rita');
+    assert.equal((await call('PUT', `/people/${ids.admin}/roles`, { token: r.token, body: { roleIds: [] } })).status, 403, 'not an admin');
+    assert.equal((await call('PUT', `/people/${ids.owner}/roles`, { token: r.token, body: { roleIds: [] } })).status, 403, 'not the owner');
+    assert.equal((await call('PUT', `/people/${plain}/roles`, { token: r.token, body: { roleIds: [] } })).status, 200, 'members: yes');
+  });
+
+  test("another company's people, roles and departments: invisible and untouchable (404/400), no company smuggling", async () => {
+    const [{ companyId: otherId }] = await dbs.db.select({ companyId: people.companyId }).from(people).where(eq(people.id, ids.otherShared));
+    await addPerson(otherId, 'Oscar Other', 'sec_oscar', 'owner');
+    const o = await login('sec_oscar');
+    const acmeRole = (await dbs.db.select({ id: roles.id }).from(roles).where(eq(roles.companyId, ids.acme)).limit(1))[0].id;
+    let [acmeDept] = await dbs.db.select({ id: departments.id }).from(departments).where(eq(departments.companyId, ids.acme)).limit(1);
+    if (!acmeDept) [acmeDept] = await dbs.db.insert(departments).values({ companyId: ids.acme, code: 'secret', name: 'Secret' }).returning({ id: departments.id });
+    const m = ids.member;
+    const expect404: Array<[string, string, unknown?]> = [
+      ['PATCH', `/people/${m}`, { designation: 'Spy' }],
+      ['DELETE', `/people/${m}`, { confirm: 'Mia Member' }],
+      ['PUT', `/people/${m}/login`, { password: 'Taken@123' }],
+      ['DELETE', `/people/${m}/login`],
+      ['PUT', `/people/${m}/apps/tasks`, {}],
+      ['DELETE', `/people/${m}/apps/tasks`],
+      ['POST', `/people/${m}/exit`, { lastWorkingDate: '2026-12-31' }],
+      ['PUT', `/people/${m}/roles`, { roleIds: [] }],
+      ['PATCH', `/roles/${acmeRole}`, { name: 'Mine now' }],
+      ['POST', `/roles/${acmeRole}/duplicate`],
+      ['DELETE', `/roles/${acmeRole}`],
+      ['PATCH', `/departments/${acmeDept.id}`, { name: 'Mine now' }],
+    ];
+    for (const [method, path, body] of expect404) {
+      const res = await call(method, path, { token: o.token, body });
+      assert.equal(res.status, 404, `${method} ${path}: ${res.status} ${JSON.stringify(res.body)}`);
+    }
+    const [mia] = await dbs.db.select().from(people).where(eq(people.id, m));
+    assert.equal(mia.status, 'active');
+    assert.notEqual(mia.designation, 'Spy');
+    // Lists hold only their own company.
+    const list = await call('GET', '/people', { token: o.token });
+    assert.ok(list.body.every((p: { id: string }) => p.id !== m));
+    assert.ok((await call('GET', '/roles', { token: o.token })).body.every((r: { id: string }) => r.id !== acmeRole));
+    assert.ok((await call('GET', '/departments', { token: o.token })).body.every((d: { id: string }) => d.id !== acmeDept.id));
+    // Another company's ids inside a body are refused.
+    assert.equal((await call('PUT', `/people/${ids.otherShared}/roles`, { token: o.token, body: { roleIds: [acmeRole] } })).status, 400);
+    assert.equal((await call('POST', '/people', { token: o.token, body: { fullName: 'X', departmentId: acmeDept.id } })).status, 400);
+    assert.equal((await call('POST', '/people', { token: o.token, body: { fullName: 'X', reportsTo: m } })).status, 400);
+    const handOver = await call('DELETE', `/people/${ids.otherShared}`, { token: o.token, body: { confirm: 'Sam Shared', options: { tasks: { mode: 'hand_over', to: m } } } });
+    assert.equal(handOver.status, 400, JSON.stringify(handOver.body));
+    // A company id (or status, or id) in the body is ignored: the person lands in the caller's company.
+    const made = await call('POST', '/people', { token: o.token, body: { fullName: 'Smuggled', companyId: ids.acme, status: 'inactive', id: m } });
+    assert.equal(made.status, 201);
+    const [row] = await dbs.db.select().from(people).where(eq(people.id, made.body.person.id));
+    assert.equal(row.companyId, otherId);
+    assert.equal(row.status, 'active');
+    assert.notEqual(row.id, m);
+  });
+
+  test('the events poller works in one Platform process at a time', async () => {
+    const holder = await dbs.pool.connect();
+    const [cur] = await dbs.db.select({ lastId: eventCursors.lastId }).from(eventCursors).where(and(eq(eventCursors.companyId, ids.acme), eq(eventCursors.app, 'tasks')));
+    const nextId = Math.max(cur?.lastId ?? 0, ...fakeTaskEvents.map((e) => e.id)) + 1;
+    fakeTaskEvents.push({ id: nextId, type: 'nothing.to.do', payload: {} });
+    try {
+      await holder.query('select pg_advisory_lock($1)', [EVENTS_LOCK]);
+      assert.equal(await app.get(FlowsService).pollAll(), 0, 'another process is polling');
+    } finally {
+      await holder.query('select pg_advisory_unlock($1)', [EVENTS_LOCK]);
+      holder.release();
+    }
+    assert.ok((await app.get(FlowsService).pollAll()) >= 1);
+  });
+
+  test('ids from another app never reach a URL unchecked', () => {
+    assert.equal(pathId('tk-1'), 'tk-1');
+    assert.equal(pathId(42), '42');
+    for (const bad of ['../people/x', 'a/b', 'a?b=1', '', 'x'.repeat(65), null, undefined, {}]) assert.equal(pathId(bad), null);
+  });
+
+  test('old refresh rows are cleaned up; live sessions stay', async () => {
+    const live = await login('mia');
+    const [{ familyId }] = await dbs.db
+      .select({ familyId: refreshSessions.familyId })
+      .from(refreshSessions)
+      .where(eq(refreshSessions.personId, ids.member))
+      .orderBy(desc(refreshSessions.createdAt))
+      .limit(1);
+    const old = (id: string, extra: Partial<typeof refreshSessions.$inferInsert>) => ({ id, familyId, personId: ids.member, expiresAt: new Date(Date.now() + 86_400_000), ...extra });
+    const longAgo = new Date(Date.now() - 40 * 86_400_000);
+    await dbs.db.insert(refreshSessions).values([
+      old('prune-expired', { expiresAt: new Date(Date.now() - 1000) }),
+      old('prune-revoked', { revokedAt: longAgo }),
+      old('prune-rotated', { rotatedAt: longAgo }),
+      old('keep-recent-rotated', { rotatedAt: new Date() }),
+    ]);
+    assert.ok((await app.get(AuthService).pruneSessions()) >= 3);
+    const left = (await dbs.db.select({ id: refreshSessions.id }).from(refreshSessions)).map((r) => r.id);
+    assert.ok(!left.includes('prune-expired') && !left.includes('prune-revoked') && !left.includes('prune-rotated'));
+    assert.ok(left.includes('keep-recent-rotated'));
+    assert.equal((await call('POST', '/auth/refresh', { cookie: live.cookie })).status, 200);
+  });
+
+  test('logs never carry query values (password hashes, token hashes)', async () => {
+    const err = (await dbs.db
+      .insert(logins)
+      .values({ personId: ids.member, username: null, passwordHash: '$argon2id$not-for-logs' })
+      .catch((e: unknown) => e)) as Error;
+    assert.match(String(err.message), /not-for-logs/, 'the driver puts the values in the message');
+    assert.doesNotMatch(redact(err.stack ?? err.message), /not-for-logs/);
+    assert.match(redact(err.stack ?? err.message), /insert into "platform"."logins"/, 'the SQL stays');
+  });
+
+  test('the demo company (public password) is never seeded in production', async () => {
+    const was = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      await assert.rejects(seed(), /development only/);
+    } finally {
+      process.env.NODE_ENV = was;
+    }
   });
 });

@@ -35,7 +35,7 @@ import { Avatar, Progress, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { cn, formatMoney } from '@/lib/utils';
 import { relDue } from '../shared/format';
-import { axisOptions, themeColour } from './charts';
+import { axisOptions, barValueLabels, themeColour } from './charts';
 import { DelegationCard, MyDelegationCard } from './delegation';
 import { Deadlines, HomeFilterBar, MistakesCard, NoticesCard, ScoreCard, TeamInsights, WaitingOnMe } from './home-insights';
 import { Chip, Empty, ErrorNote, Panel, PriorityChip, SectionHead, TaskStatusChip, Tile, fmtWhen } from './parts';
@@ -73,7 +73,7 @@ export function HomePage() {
         <div className="relative flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight sm:text-[26px]">
-              {greeting()}, <span className="bg-gradient-to-r from-primary to-brand-2 bg-clip-text text-transparent">{me.first_name || me.username}</span>
+              {greeting()}, <span className="text-primary">{me.first_name || me.username}</span>
             </h1>
             <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
               <CalendarDays className="size-3.5" /> {today}
@@ -339,13 +339,14 @@ function LeadsDashboard({
       <div className="grid gap-4 lg:grid-cols-12">
         {hasLeads && (
           <Panel className="lg:col-span-8" icon={BarChart3} title="Leads created — last 14 days">
-            <div className="h-60">
+            <div className="h-60" role="img" aria-label={`Leads created per day, last 14 days: ${per_day.map((d) => `${d.date} ${d.count}`).join(', ')}`}>
               <Bar
+                plugins={[barValueLabels]}
                 data={{
                   labels: per_day.map((d) => new Date(`${d.date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })),
                   datasets: [{ data: per_day.map((d) => d.count), backgroundColor: primary, borderRadius: 6, maxBarThickness: 26 }],
                 }}
-                options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { displayColors: false } }, scales: axisOptions() }}
+                options={{ responsive: true, maintainAspectRatio: false, layout: { padding: { top: 18 } }, plugins: { legend: { display: false }, tooltip: { displayColors: false } }, scales: axisOptions() }}
               />
             </div>
           </Panel>

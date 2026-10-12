@@ -38,6 +38,12 @@ def env(name, default=""):
 
 SECRET_KEY = env("SECRET_KEY", "dev-only-insecure-key-change-me")
 DEBUG = env("DEBUG", "true").lower() == "true"
+# SECRET_KEY signs the app's own sign-in tokens and the file links (config/media.py): a known key lets anyone forge
+# both. A production server (DEBUG off) refuses to start with the placeholder.
+if not DEBUG and not TESTING and SECRET_KEY == "dev-only-insecure-key-change-me":
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured("Set SECRET_KEY: the built-in development key must never run with DEBUG=false.")
 ALLOWED_HOSTS = [h for h in env("ALLOWED_HOSTS", "automatetask.onrender.com").split(",") if h]
 
 INSTALLED_APPS = [
@@ -133,11 +139,21 @@ REST_FRAMEWORK = {
         # FreeFounders Platform tokens (EdDSA) first; anything else falls
         # through to the app's own SimpleJWT login exactly as before.
         "accounts.platform_auth.PlatformJWTAuthentication",
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # SimpleJWT, switched off in multi-company mode (accounts/platform_auth.py).
+        "accounts.platform_auth.LegacyJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "config.pagination.DefaultPagination",
     "PAGE_SIZE": 25,
+    # Throttled: the anonymous endpoints (public web forms, per client address) and the paid AI calls (per person).
+    # LocMem cache = per process;
+    # behind the gateway set NUM_PROXIES=1 so the address is the visitor's, not the gateway's.
+    "DEFAULT_THROTTLE_RATES": {
+        "public_form": env("THROTTLE_PUBLIC_FORM", "120/min"),
+        "public_submit": env("THROTTLE_PUBLIC_SUBMIT", "20/min"),
+        "ai": env("THROTTLE_AI", "30/min"),  # per person: AI drafting, proofreading, voice notes, summaries
+    },
+    "NUM_PROXIES": int(env("NUM_PROXIES", "0")) or None,
 }
 
 SIMPLE_JWT = {
@@ -180,6 +196,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"          # collectstatic target (admin css)
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# Uploaded files are only served by signed links that expire (config/media.py); same default as S3's presigned links.
+MEDIA_LINK_SECONDS = int(env("MEDIA_LINK_SECONDS", env("AWS_LINK_EXPIRY_SECONDS", "3600")))
 
 # The daily progress log (crm.TaskDayLog) cannot report on days that existed
 # before the feature did. On a system that already has history, every task

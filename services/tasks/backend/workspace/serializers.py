@@ -2,6 +2,8 @@ from urllib.parse import urlparse
 
 from rest_framework import serializers
 
+from config.media import file_url
+
 from accounts.models import User
 from crm.serializers import UserBriefSerializer
 
@@ -46,10 +48,14 @@ class NoticeSerializer(serializers.ModelSerializer):
         extra_kwargs = {"attachment": {"write_only": True, "required": False}}
 
     def get_attachment_url(self, obj):
-        return obj.attachment.url if obj.attachment else None
+        return file_url(obj.attachment)
 
     def validate_attachment(self, value):
-        from config.images import compress_upload
+        from config.images import check_size, compress_upload
+        try:
+            check_size(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
         return compress_upload(value)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
 
     def get_read(self, obj):

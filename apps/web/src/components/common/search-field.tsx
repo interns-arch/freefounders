@@ -14,6 +14,7 @@ export function SearchField({
   placeholder,
   className,
   inputClassName,
+  onKeyDown,
   ...rest
 }: Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'type'> & {
   value: string;
@@ -39,15 +40,15 @@ export function SearchField({
             e.stopPropagation();
             onChange('');
           }
-          rest.onKeyDown?.(e);
+          onKeyDown?.(e);
         }}
-        className={cn('pr-9 pl-8 [&::-webkit-search-cancel-button]:appearance-none', inputClassName)}
         {...rest}
+        className={cn('pr-9 pl-8 [&::-webkit-search-cancel-button]:appearance-none max-sm:pr-11', inputClassName)}
       />
       {value && (
         <button
           type="button"
-          className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-9"
+          className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-10"
           aria-label="Clear search"
           onClick={() => {
             onChange('');

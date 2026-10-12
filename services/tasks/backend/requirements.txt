@@ -19,4 +19,4 @@ django-storages[s3]>=1.14
 openpyxl==3.1.5
 
 # Uploaded photos are stored shrunk (EXIF-upright, resized, re-encoded, no metadata), PLAN.md §19.20.
-Pillow==11.3.0
+Pillow==12.3.0

@@ -79,6 +79,16 @@ test('fields: empty optional values are dropped', () => {
   if (r.ok) assert.deepEqual(r.value, { ram_gb: 8, processor: 'M3' });
 });
 
+test('fields: a web address field takes http(s) only (no javascript: or data: links)', () => {
+  const fields: FieldDef[] = [{ key: 'manual', label: 'Manual', type: 'url', required: false }];
+  assert.ok(validateAttributes(fields, { manual: 'https://example.com/manual.pdf' }).ok);
+  assert.ok(validateAttributes(fields, { manual: 'http://intranet.local/x' }).ok);
+  for (const bad of ['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'vbscript:x', 'file:///etc/passwd']) {
+    const r = validateAttributes(fields, { manual: bad });
+    assert.equal(r.ok, false, bad);
+  }
+});
+
 test('fields: keys are slugified from labels', () => {
   assert.equal(slugifyKey('Engine No.'), 'engine_no');
   assert.equal(slugifyKey('RAM (GB)'), 'ram_gb');

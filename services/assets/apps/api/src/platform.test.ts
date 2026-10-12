@@ -164,6 +164,17 @@ describe('platform session exchange', () => {
     assert.equal(await meWithCookie(cookie!), 401);
   });
 
+  test("a new exchange clears that person's expired sessions (the table does not keep growing)", async () => {
+    await dbs.root.update(sessions).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(sessions.userId, ids.mia));
+    const expired = (await dbs.root.select().from(sessions).where(eq(sessions.userId, ids.mia))).length;
+    assert.ok(expired >= 2, `expired sessions before: ${expired}`);
+    const { status } = await exchange(await access(ids.person, ids.mia));
+    assert.equal(status, 200);
+    const left = await dbs.root.select().from(sessions).where(eq(sessions.userId, ids.mia));
+    assert.equal(left.length, 1, 'only the new session is left');
+    assert.ok(left[0].expiresAt.getTime() > Date.now());
+  });
+
   test('bad or missing tokens get no session', async () => {
     assert.equal((await exchange()).status, 401);
     assert.equal((await exchange(await access(ids.person, ids.mia, { signer: forger }))).status, 401);

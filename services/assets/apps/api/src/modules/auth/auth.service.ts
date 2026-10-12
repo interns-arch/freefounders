@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, eq, gt, lt, sql } from 'drizzle-orm';
 import type { Permission } from '@eam/shared';
 import type { Actor } from '../../common/actor';
 import { badRequest } from '../../common/http';
@@ -204,6 +204,8 @@ export class AuthService {
       userAgent: meta.userAgent?.slice(0, 300) ?? null,
     });
     await this.dbs.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, found.actor.userId!));
+    // A new short session every ~15 minutes: drop this person's expired ones so the table does not keep growing.
+    await this.dbs.db.delete(sessions).where(and(eq(sessions.userId, found.actor.userId!), lt(sessions.expiresAt, new Date())));
     return { token: sessionToken, expiresAt };
   }
 

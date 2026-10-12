@@ -25,6 +25,8 @@ export async function createApp() {
   // CSRF defence (same rule as Assets): a custom header cannot be sent cross-site without a CORS preflight,
   // and the refresh cookie is SameSite=Lax.
   app.use(`/${API_PREFIX}`, (req: Request, res: Response, next: NextFunction) => {
+    // Answers carry tokens and people's details: never kept by browsers or proxies (the public logo sets its own).
+    res.setHeader('Cache-Control', 'no-store');
     if (MUTATING.has(req.method) && req.headers['x-requested-with'] !== 'XMLHttpRequest') {
       res.status(403).json({ statusCode: 403, message: 'Missing request header' });
       return;

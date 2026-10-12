@@ -90,22 +90,53 @@ export function originOf(url: string): string | null {
 }
 
 /**
- * Where a link should open. Pages of the FreeFounders server stay in the app; other sites, phone numbers, e-mail and
- * WhatsApp open in the phone's own apps. Blank/blob/data loads (inside the page) stay.
+ * Where a page load should go. Pages of the FreeFounders server stay in the app; other sites, phone numbers, e-mail and
+ * WhatsApp open in the phone's own apps. `about:blank`, `javascript:` (runs in the same page) and the server's own
+ * `blob:` addresses stay. Everything else is blocked: a `data:` page (it would get the app's powers) and, inside a frame,
+ * any other site (a frame must never start another app on its own).
  */
-export function linkTarget(url: string, server: string): 'inside' | 'outside' {
-  if (/^(about:|blob:|data:|javascript:)/i.test(url)) return 'inside';
-  const o = originOf(url);
-  return o && o === originOf(server) ? 'inside' : 'outside';
+export function linkTarget(url: string, server: string, topFrame = true): 'inside' | 'outside' | 'block' {
+  const u = url.trim();
+  if (/^about:(blank|srcdoc)$/i.test(u) || /^javascript:/i.test(u)) return 'inside';
+  if (/^blob:/i.test(u)) return originOf(u.slice(5)) === originOf(server) ? 'inside' : 'block';
+  if (/^data:/i.test(u)) return 'block';
+  const o = originOf(u);
+  if (o && o === originOf(server)) return 'inside';
+  return topFrame ? 'outside' : 'block';
+}
+
+/** True when a bridge message comes from a page of the FreeFounders server (any other page is ignored). */
+export function fromServer(pageUrl: string | undefined, server: string): boolean {
+  return typeof pageUrl === 'string' && originOf(pageUrl) !== null && originOf(pageUrl) === originOf(server);
+}
+
+/** Office network or this phone/PC: the only places plain http:// is accepted (everything else needs https://). */
+export function isLocalHost(origin: string): boolean {
+  const host = origin.replace(/^https?:\/\//i, '').replace(/:\d+$/, '').toLowerCase();
+  if (host === 'localhost' || host === '[::1]' || host.endsWith('.local') || !host.includes('.')) return true;
+  const ip = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!ip) return false;
+  const [a, b] = [Number(ip[1]), Number(ip[2])];
+  return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254);
 }
 
 /**
- * A server address typed by a person → "http://host[:port]" (no path, no trailing slash), or null when it is not one.
- * "192.168.137.1:8080" → "http://192.168.137.1:8080"; "https://app.example.com/" → "https://app.example.com".
+ * A server address typed by a person → "scheme://host[:port]" (no path, no trailing slash), or null when it is not one.
+ * Without a scheme an office-network address gets http:// and anything else https://. Plain http:// is accepted only for
+ * the office network (a password sent over http on the internet can be read on the way).
+ * "192.168.137.1:8080" → "http://192.168.137.1:8080"; "app.example.com" → "https://app.example.com";
+ * "http://app.example.com" → null.
  */
 export function normalizeServerUrl(input: string): string | null {
   const t = input.trim();
   if (!t) return null;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) && !/^https?:\/\//i.test(t)) return null;
-  return originOf(/^https?:\/\//i.test(t) ? t : `http://${t}`);
+  let origin: string | null;
+  if (/^https?:\/\//i.test(t)) origin = originOf(t);
+  else {
+    const local = originOf(`http://${t}`);
+    origin = local && isLocalHost(local) ? local : originOf(`https://${t}`);
+  }
+  if (!origin) return null;
+  return origin.startsWith('https://') || isLocalHost(origin) ? origin : null;
 }

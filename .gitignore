@@ -4,6 +4,16 @@
 !.env.example
 *.pem
 *.key
+# App signing and cloud credentials (EAS / Play / Firebase / AWS)
+*.keystore
+*.jks
+*.p12
+*.p8
+*.mobileprovision
+credentials.json
+google-services.json
+GoogleService-Info.plist
+service-account*.json
 
 # Local git-bundle backups of the original repos (kept outside git)
 backups/
@@ -14,6 +24,7 @@ dist/
 coverage/
 *.tsbuildinfo
 .data/
+uploads/
 __pycache__/
 *.pyc
 .venv/

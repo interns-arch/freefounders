@@ -46,10 +46,14 @@ test('one sign-in opens Tasks and Assets, switch between them, sign out', async 
   await menu.getByRole('link', { name: 'Tasks', exact: true }).first().click();
   await expect(page.getByRole('navigation', { name: 'Tasks menu' })).toBeVisible({ timeout: 20_000 });
 
+  // The Assets cookie session (photos) was made at sign-in; sign-out ends it at once (security review 2026-10-12).
+  const xrw = { 'x-requested-with': 'XMLHttpRequest' };
+  expect((await page.request.get('/assets/api/auth/me', { headers: xrw })).status()).toBe(200);
   await page.getByRole('button', { name: 'Your account' }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
+  expect((await page.request.get('/assets/api/auth/me', { headers: xrw })).status()).toBe(401);
 });
 
 test('opening an app while signed out goes to sign-in, then back to that app', async ({ page }) => {

@@ -152,7 +152,7 @@ export default function EmployeesPage() {
               type="button"
               onClick={() => set({ status: t.value || null, includeExited: null })}
               className={cn(
-                'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
+                'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
                 active ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >
@@ -170,7 +170,7 @@ export default function EmployeesPage() {
               type="button"
               onClick={() => set({ view: v.value }, { keepPage: true })}
               className={cn(
-                'cursor-pointer rounded-md px-2.5 py-1 text-[13px] font-medium transition',
+                'cursor-pointer rounded-md px-2.5 py-1 text-[13px] font-medium transition max-sm:min-h-9 max-sm:px-3',
                 (f.view ?? null) === v.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
             >
@@ -190,8 +190,8 @@ export default function EmployeesPage() {
               </option>
             ))}
           </NativeSelect>
-          <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <input type="checkbox" className="accent-[var(--primary)]" checked={f.hasAssets === '1'} onChange={(e) => set({ hasAssets: e.target.checked ? '1' : null })} />
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/85 max-sm:min-h-10">
+            <input type="checkbox" className="size-4 cursor-pointer accent-[var(--primary)]" checked={f.hasAssets === '1'} onChange={(e) => set({ hasAssets: e.target.checked ? '1' : null })} />
             Holding assets
           </label>
         </div>

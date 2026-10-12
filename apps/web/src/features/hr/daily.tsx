@@ -200,7 +200,10 @@ export function TeamDayView({ live }: { live: boolean }) {
             Live · {longDay(today)}
           </span>
           <span>
-            · updated {query.dataUpdatedAt ? new Date(query.dataUpdatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '…'}, refreshes every minute
+            <span className="max-sm:hidden" aria-hidden>
+              ·{' '}
+            </span>
+            updated {query.dataUpdatedAt ? new Date(query.dataUpdatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '…'}, refreshes every minute
           </span>
           <Button size="xs" variant="ghost" onClick={() => query.refetch()} loading={query.isFetching} aria-label="Refresh now">
             <RefreshCw /> Refresh

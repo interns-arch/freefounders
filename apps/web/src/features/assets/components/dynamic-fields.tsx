@@ -5,6 +5,7 @@ import { Switch } from '@/components/ui/primitives';
 import type { FieldDefinition } from '@freefounders/core/assets';
 import { cn, formatDate } from '@/lib/utils';
 import { errorOf, Field } from '@/components/common/form';
+import { safeHref } from '@/lib/safe-url';
 
 /** Renders any asset type's custom fields from its definitions — no hard-coded forms. */
 export function DynamicFields({ fields, form, prefix = 'attributes' }: { fields: FieldDefinition[]; form: UseFormReturn<any>; prefix?: string }) {
@@ -136,7 +137,7 @@ export function AttributeList({ fields, attributes, emptyText = 'No specificatio
             <dt className="text-xs text-muted-foreground">{f.label}</dt>
             <dd className={cn('mt-0.5 break-words text-sm', text === '—' && 'text-muted-foreground')}>
               {f.type === 'url' && typeof v === 'string' ? (
-                <a href={v} target="_blank" rel="noreferrer noopener" className="text-primary hover:underline">
+                <a href={safeHref(v)} target="_blank" rel="noreferrer noopener" className="text-primary hover:underline">
                   {v}
                 </a>
               ) : (

@@ -15,9 +15,19 @@ export interface AppInfo {
   camera: CameraState;
 }
 
-export function injectedScript(info: AppInfo): string {
+/**
+ * `serverOrigin` ("https://host[:port]"): the app's powers (location, camera, files, print) are given to pages of that
+ * server only; any other page that ends up in the WebView gets nothing.
+ */
+export function injectedScript(info: AppInfo, serverOrigin?: string | null): string {
   return `(function () {
   if (window.FreeFoundersApp) return;
+  var only = ${JSON.stringify(serverOrigin ?? null)};
+  if (only) {
+    var here = '';
+    try { here = (location.protocol + '//' + location.host).toLowerCase(); } catch (e) {}
+    if (here !== only) return;
+  }
   var info = ${JSON.stringify(info)};
   window.FreeFoundersApp = info;
   function post(m) { try { window.ReactNativeWebView.postMessage(JSON.stringify(m)); } catch (e) {} }

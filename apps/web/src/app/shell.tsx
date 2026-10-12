@@ -7,6 +7,7 @@ import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Sheet, SheetContent, SheetTitle } from '@/components/ui/overlays';
+import { brandCss } from '@/lib/brand-colour';
 import { useHotkeys } from '@/lib/hotkeys';
 import { cn } from '@/lib/utils';
 import { ADMIN_NAV } from '@/features/admin/nav';
@@ -49,14 +50,28 @@ const JUMPS: Array<{ n: number; label: string; to: string; w: Workspace | null }
   { n: 4, label: 'Assets', to: '/assets', w: 'assets' },
 ];
 
-/** The brand colour (Settings Center) replaces the primary colour everywhere. */
+/**
+ * The brand colour (Settings Center) replaces the primary colour everywhere, in both themes. Its lightness is moved
+ * just enough for text and button labels to stay readable (4.5:1) in light and in dark mode (lib/brand-colour.ts).
+ */
 export function useBrandColour(colour: string | null | undefined) {
   useEffect(() => {
-    const root = document.documentElement.style;
-    for (const v of ['--primary', '--ring', '--brand-2']) {
-      if (colour) root.setProperty(v, colour);
-      else root.removeProperty(v);
+    const id = 'ff-brand-colour';
+    let el = document.getElementById(id) as HTMLStyleElement | null;
+    const text = brandCss(colour);
+    // Charts that read theme colours at run time watch this attribute (as they watch class for dark mode).
+    if (colour) document.documentElement.dataset.brand = colour;
+    else delete document.documentElement.dataset.brand;
+    if (!text) {
+      el?.remove();
+      return;
     }
+    if (!el) {
+      el = document.createElement('style');
+      el.id = id;
+      document.head.appendChild(el);
+    }
+    el.textContent = text;
   }, [colour]);
 }
 
@@ -226,7 +241,7 @@ export function AppShell() {
                     return (
                       <div key={item.to}>
                         {heading && (
-                          <p className="flex items-center gap-2 px-3 pt-2.5 pb-1 font-mono text-[10px] font-semibold tracking-widest text-sidebar-foreground/45 uppercase">
+                          <p className="flex items-center gap-2 px-3 pt-2.5 pb-1 font-mono text-[11px] font-semibold tracking-widest text-sidebar-foreground/65 uppercase">
                             {item.group}
                             <span aria-hidden className="h-px flex-1 bg-sidebar-border/60" />
                           </p>
@@ -244,7 +259,7 @@ export function AppShell() {
           );
         })}
       </nav>
-      <p className="hidden px-3 font-mono text-[10.5px] text-sidebar-foreground/40 lg:block">
+      <p className="hidden px-3 font-mono text-xs text-sidebar-foreground/65 lg:block">
         <button type="button" className="cursor-pointer rounded hover:text-white focus-visible:ring-2 focus-visible:ring-brand-2/60 focus-visible:outline-none" onClick={() => setHelp(true)}>
           Press ? for shortcuts
         </button>
@@ -259,7 +274,8 @@ export function AppShell() {
     ...(workspaces.includes('tasks') ? [{ to: '/tasks', label: 'Tasks', icon: WORKSPACE_LOOK.tasks.icon, active: here === 'tasks' }] : []),
     ...(workspaces.includes('assets') ? [{ to: '/assets', label: 'Assets', icon: WORKSPACE_LOOK.assets.icon, active: here === 'assets' }] : []),
   ];
-  const tabClass = 'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-2 text-[11px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
+  // Labels stay 11 px here (the one exception, like iOS/Material tab bars): "Attendance" must fit a fifth of a 360 px phone.
+  const tabClass = 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 pt-1.5 pb-2 text-[11px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
 
   return (
     <div className="flex min-h-dvh">
@@ -278,7 +294,7 @@ export function AppShell() {
       </Sheet>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-1.5 border-b bg-card/85 px-2 backdrop-blur sm:gap-2 sm:px-3 lg:px-6">
-          <Button variant="ghost" size="icon" className="size-11 lg:hidden" onClick={() => setDrawer(true)} aria-label="Menu">
+          <Button variant="ghost" size="icon" className="size-11 lg:hidden" onClick={() => setDrawer(true)} aria-label="Menu" aria-haspopup="dialog" aria-expanded={drawer}>
             <Menu className="size-5" />
           </Button>
           <span className="flex min-w-0 items-center gap-2 rounded-full border bg-background/60 py-1 pr-3 pl-1 text-[13px] font-semibold">
@@ -292,7 +308,7 @@ export function AppShell() {
           <NotificationsBell />
           <UserMenu access={access} onShortcuts={() => setHelp(true)} />
         </header>
-        <main id="content" ref={mainRef} tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-24 outline-none lg:p-6 lg:pb-8 [&_h1:focus]:outline-none">
+        <main id="content" ref={mainRef} tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none lg:p-6 lg:pb-8 [&_h1:focus]:outline-none">
           {access.ready ? (
             <Suspense fallback={<PageLoader />}>
               <Outlet />
@@ -313,7 +329,7 @@ export function AppShell() {
               <span className="max-w-full truncate">{t.label}</span>
             </Link>
           ))}
-          <button type="button" onClick={() => setDrawer(true)} className={cn(tabClass, 'cursor-pointer')}>
+          <button type="button" onClick={() => setDrawer(true)} aria-haspopup="dialog" aria-expanded={drawer} className={cn(tabClass, 'cursor-pointer')}>
             <span className="rounded-full px-3 py-0.5">
               <LayoutGrid className="size-5" aria-hidden />
             </span>

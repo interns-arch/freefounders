@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, Panel } from '../general/parts';
+import { safeHref } from '@/lib/safe-url';
 
 export function LinksPage() {
   const access = useAccess();
@@ -153,7 +154,7 @@ export function LinksPage() {
                       </button>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <a href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                          <a href={safeHref(l.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
                             {l.title} <ExternalLink className="size-3.5 opacity-70" aria-hidden />
                           </a>
                           {l.group_name && <Chip tone="info">{l.group_name}</Chip>}

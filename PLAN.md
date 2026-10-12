@@ -1433,6 +1433,8 @@ Goal: the web app (and so the Android app, §19.17) fast on 1–2 GB phones on s
   ignored and the old profile untouched, today/config report off, enrol 410 / delete works, settings refuse "on", the
   migration's data step). e2e: `face_enabled` dropped from the settings the specs save and restore; `web-app-shell` now
   proves face check cannot be switched on and the check-out goes through with the app camera. Punch-photo tests unchanged.
+- Attendance → Today shows the mark-attendance card only with the punch-in permission (`attendance.punch`, §19.19, the
+  same check as the Home card); without it: "Your role doesn't include punching in."
 
 **2. Lite mode for weak phones** (`src/lib/lite.ts`, CSS in `src/index.css`).
 - `<html data-lite>` is set before the first render when the account menu's **Lite mode** is On, or on Auto (default)
@@ -1716,3 +1718,23 @@ open sends you to the first Admin page you may, else `/`). Note: Manage roles ca
 | Assets tests | 85 pass; typecheck clean |
 | Web | rules + typecheck clean |
 | e2e | `web-admin`, `single-login`, `settings`, `web-hr`, `web-tasks-general`: 29 / 29 (2 new: a role from blank with only Live attendance + See notices — level hints, "Give the role a name", Copy from, search, the person sees exactly those menus and the API refuses HR settings / leave / punch / People; a member with only Manage people gets People & access only); also `flows`, `web-attendance-team`, `web-leads`, `web-links-ideas-payroll`, `web-mistakes-forms`, `web-tasks`: 17 / 17 |
+
+### 19.21 Security pass + UI/UX pass (2026-10-12)
+Founder: "make this very secure for data-leak risks, authentication and authorization, very scalable"; then "use the
+ui-ux-pro-max skill to improve UI/UX as much as possible without changing the structure much".
+- **Security** (three reviews; details, fixes with test names and remaining risks in `docs/security/{platform,tasks-api,assets-web-mobile-infra}.md`):
+  High fixed: uploaded files were readable by anyone with the URL (now signed, expiring `/media` links, only alongside a
+  record the caller may see); HTML/SVG uploads could run as the app (now forced downloads, sandboxed); login lockout
+  bypassable with parallel requests (atomic claim); "Manage people" could grant an app's Super Admin role (now needs
+  Manage roles; members act on members only); Assets' own password login reachable in multi-company mode (refused).
+  Plus ~35 medium/low fixes (per-IP sign-in limit, immediate session end on sign-out/reset/deactivate, sign-out-everywhere
+  API, refresh/session clean-up, multi-process safe poller and JWKS refresh, CSV formula injection, public-form rate
+  limits, unsigned webhook refused, `javascript:` links blocked, Android shell only answers its own server, https-only
+  server address outside the office network, CSP/HSTS/headers in the Caddyfile (CSP report-only), CI audit + secret scan).
+  Libraries: sharp 0.35.5, Pillow 12.3.0. No secrets found in the tree or history.
+- **UI/UX** (`docs/ui-ux-review.md`): brand colour auto-adjusted to 4.5:1 for text/buttons, status colours darkened for
+  contrast, visible focus outlines, 40–44 px phone targets, select chevrons restored, safe-area/toast fixes, text never
+  under 12 px (bottom-bar labels 11 px), chart value labels + text summaries, Sign in always pressable with field errors
+  and a Caps Lock note. Structure, URLs and names unchanged.
+- Checks: web build, e2e 60/60, smoke 10/10, Platform 77, Tasks 855 + tenancy 34, Assets 90, mobile 21.
+- Founder decisions pending: see the "For the founder" lists at the end of each security doc.

@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from config.media import file_url
+
 from accounts.models import User
 from accounts.serializers import DepartmentField
 
@@ -83,7 +85,7 @@ class LeadDocumentSerializer(serializers.ModelSerializer):
         fields = ["id", "filename", "url", "uploaded_by", "created_at"]
 
     def get_url(self, obj):
-        return obj.file.url if obj.file else None
+        return file_url(obj.file)
 
 
 class QuotationSerializer(serializers.ModelSerializer):
@@ -179,6 +181,8 @@ class TaskSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request:
             return False
+        if "subscribers" in getattr(obj, "_prefetched_objects_cache", {}):
+            return any(u.pk == request.user.pk for u in obj.subscribers.all())
         return obj.subscribers.filter(pk=request.user.pk).exists()
 
 
@@ -248,7 +252,7 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
         fields = ["id", "filename", "url", "uploaded_by", "created_at"]
 
     def get_url(self, obj):
-        return obj.file.url if obj.file else None
+        return file_url(obj.file)
 
 
 # Which task fields a Modification Request may propose to change
@@ -305,15 +309,21 @@ class TaskChangeRequestSerializer(serializers.ModelSerializer):
 
         from django.utils import timezone
         from django.utils.dateparse import parse_datetime
-        due = value if hasattr(value, "year") else parse_datetime(str(value))
-        if due and timezone.is_naive(due):
+        try:
+            due = value if hasattr(value, "year") else parse_datetime(str(value))
+        except ValueError:
+            due = None
+        if due is None:
+            raise serializers.ValidationError("Give the new deadline as a date and time.")
+        if timezone.is_naive(due):
             due = timezone.make_aware(due)
-        if due and due <= timezone.now():
+        if due <= timezone.now():
             local = timezone.localtime(due)
             raise serializers.ValidationError(
                 f"That deadline is already past ({local:%d %b %Y, %I:%M %p}). "
                 f"Check AM/PM — did you mean "
                 f"{(local + timedelta(hours=12)):%I:%M %p}?")
+        return due
 
     def validate_changes(self, value):
         if not isinstance(value, dict) or not value:
@@ -323,7 +333,26 @@ class TaskChangeRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f"These fields cannot be changed via a request: {sorted(unknown)}")
         if value.get("due_at"):
-            self._check_due(value["due_at"])
+            # stored with its time zone, so every later reading (inbox, notifications) parses it the same way
+            value["due_at"] = self._check_due(value["due_at"]).isoformat()
+        if value.get("assigned_to") is not None:
+            try:
+                value["assigned_to"] = int(value["assigned_to"])
+            except (TypeError, ValueError):
+                raise serializers.ValidationError("assigned_to must be a person's id.")
+            if not User.objects.filter(pk=value["assigned_to"], is_active=True).exists():
+                raise serializers.ValidationError("That person is not an active user.")
+        for field, model_field in (("priority", "priority"), ("frequency", "frequency")):
+            if value.get(field) is not None:
+                allowed = {c for c, _ in Task._meta.get_field(model_field).choices or []}
+                if allowed and value[field] not in allowed:
+                    raise serializers.ValidationError(f"{field} must be one of {sorted(allowed)}.")
+        if value.get("repeat_until"):
+            from datetime import date
+            try:
+                date.fromisoformat(str(value["repeat_until"])[:10])
+            except ValueError:
+                raise serializers.ValidationError("repeat_until must be a date (YYYY-MM-DD).")
         if "effort_minutes" in value and value["effort_minutes"] is not None:
             try:
                 if int(value["effort_minutes"]) < 0:

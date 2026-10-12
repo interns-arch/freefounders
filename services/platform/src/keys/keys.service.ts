@@ -1,11 +1,13 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, generateKeyPairSync, type KeyObject, randomBytes } from 'node:crypto';
 import { desc, eq } from 'drizzle-orm';
-import { exportJWK, type JWK } from 'jose';
+import { createLocalJWKSet, exportJWK, type JWK } from 'jose';
 import { DbService } from '../db/db.service';
 import { signingKeys } from '../db/schema';
 
 const DEV_SECRET = 'dev-only-platform-secret-change-me';
+/** Each process re-reads the published keys this often, so a key added by another process is picked up. */
+const JWKS_TTL_MS = 5 * 60 * 1000;
 
 /** PLATFORM_SECRET encrypts the private signing keys at rest. Required in production. */
 export function platformSecret(): string {
@@ -46,12 +48,15 @@ export interface SigningKey {
 @Injectable()
 export class KeysService implements OnModuleInit {
   private active?: SigningKey;
-  private published?: { keys: JWK[] };
+  private published?: { keys: JWK[]; at: number; verifier: ReturnType<typeof createLocalJWKSet> };
 
   constructor(private readonly dbs: DbService) {}
 
   async onModuleInit() {
     platformSecret(); // fail fast on a bad/missing secret
+    if (!process.env.PLATFORM_SECRET?.trim() && process.env.NODE_ENV !== 'test') {
+      new Logger('Keys').warn('PLATFORM_SECRET is not set: signing keys are encrypted with the public development secret. Never run like this outside a developer machine.');
+    }
   }
 
   async signingKey(): Promise<SigningKey> {
@@ -79,12 +84,22 @@ export class KeysService implements OnModuleInit {
     return this.active;
   }
 
-  /** Public keys for /.well-known/jwks.json (newest first, at most 3). */
-  async jwks(): Promise<{ keys: JWK[] }> {
-    if (this.published) return this.published;
+  /** Public keys for /.well-known/jwks.json (newest first, at most 3). `fresh` re-reads them now (an unknown `kid`). */
+  async jwks(fresh = false): Promise<{ keys: JWK[] }> {
+    return { keys: (await this.load(fresh)).keys };
+  }
+
+  /** Verifier over the published keys, cached with them. */
+  async verifier(fresh = false) {
+    return (await this.load(fresh)).verifier;
+  }
+
+  private async load(fresh: boolean) {
+    if (this.published && !fresh && Date.now() - this.published.at < JWKS_TTL_MS) return this.published;
     await this.signingKey();
     const rows = await this.dbs.db.select({ jwk: signingKeys.publicJwk }).from(signingKeys).orderBy(desc(signingKeys.createdAt)).limit(3);
-    this.published = { keys: rows.map((r) => r.jwk as JWK) };
+    const keys = rows.map((r) => r.jwk as JWK);
+    this.published = { keys, at: Date.now(), verifier: createLocalJWKSet({ keys }) };
     return this.published;
   }
 }

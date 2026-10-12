@@ -20,6 +20,17 @@ _FORMATS = {"JPEG", "MPO", "PNG", "WEBP", "BMP", "TIFF"}
 # Magic numbers of those formats: everything else is never even opened.
 _MAGIC = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"BM", b"II*\x00", b"MM\x00*")
 _MAX_PIXELS = 120_000_000  # a bigger "photo" is left alone instead of filling the server's memory
+# PNG/WEBP/BMP/TIFF decode at full size (JPEG decodes at a fraction via draft()): a tiny file can claim a huge canvas
+# ("decompression bomb"), so those are only opened up to a much smaller size, under Pillow's own warning limit.
+_MAX_PIXELS_FULL_DECODE = 40_000_000
+MAX_UPLOAD_MB = 10  # documents and photos attached to leave, notices, tasks, leads and forms
+
+
+def check_size(f, max_mb: int = MAX_UPLOAD_MB):
+    """ValueError when an uploaded file is bigger than max_mb."""
+    if f is not None and getattr(f, "size", 0) and f.size > max_mb * 1024 * 1024:
+        raise ValueError(f"The file is bigger than {max_mb} MB.")
+    return f
 # A photo that already fits is only re-encoded when that saves at least this share: re-encoding an already small JPEG
 # costs a little quality for a few bytes.
 _MIN_SAVING = 0.10
@@ -42,6 +53,8 @@ def compress_image(raw: bytes, max_side: int = DOCUMENT[0], quality: int = DOCUM
 
         with Image.open(io.BytesIO(raw)) as img:
             if img.format not in _FORMATS or img.width * img.height > _MAX_PIXELS:
+                return raw, None
+            if img.format not in ("JPEG", "MPO") and img.width * img.height > _MAX_PIXELS_FULL_DECODE:
                 return raw, None
             if img.format in ("JPEG", "MPO"):
                 img.draft("RGB", (max_side, max_side))  # decode a big JPEG at a fraction of its size: faster, less memory

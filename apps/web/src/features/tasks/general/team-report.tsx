@@ -19,7 +19,7 @@ import { downloadCSV } from '../shared/csv';
 import { fmtEffort } from '../shared/format';
 import { type CustomRange, RangePicker } from '../shared/range-picker';
 import { ScoreRing } from '../shared/score-ring';
-import { axisOptions, themeColour } from './charts';
+import { axisOptions, barValueLabels, themeColour } from './charts';
 import { DelegationCard } from './delegation';
 import { Chip, Delta, ErrorNote, Panel, Tile } from './parts';
 
@@ -179,8 +179,9 @@ export function TeamReportPage() {
 
           {ranked.length > 1 && (
             <Panel title="Score by person">
-              <div className="h-64">
+              <div className="h-64" role="img" aria-label={`Score by person: ${ranked.map((r) => `${r.name} ${r.score ?? 'no score'}`).join(', ')}`}>
                 <Bar
+                  plugins={[barValueLabels]}
                   data={{
                     labels: ranked.map((r) => r.name),
                     datasets: [
@@ -206,10 +207,23 @@ export function TeamReportPage() {
                         },
                       },
                     },
+                    layout: { padding: { top: 18 } },
                     scales: { ...axisOptions(), y: { ...axisOptions().y, max: 100 } },
                   }}
                 />
               </div>
+              {/* The bar colour is also said in words: never colour alone. */}
+              <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="size-2.5 rounded-sm bg-success" /> 75 and up: on track
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="size-2.5 rounded-sm bg-warning" /> 45–74: watch
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="size-2.5 rounded-sm bg-destructive" /> Under 45: needs a look
+                </span>
+              </p>
             </Panel>
           )}
 
@@ -228,14 +242,14 @@ export function TeamReportPage() {
                   <TH>Employee</TH>
                   <TH>Score</TH>
                   <TH>vs prev</TH>
-                  <TH>On time</TH>
-                  <TH>Attendance</TH>
-                  <TH>Leave days</TH>
-                  <TH>Done</TH>
-                  <TH>Pending</TH>
-                  <TH>Overdue</TH>
-                  <TH>Time spent</TH>
-                  <TH>Open now</TH>
+                  <TH className="text-right">On time</TH>
+                  <TH className="text-right">Attendance</TH>
+                  <TH className="text-right">Leave days</TH>
+                  <TH className="text-right">Done</TH>
+                  <TH className="text-right">Pending</TH>
+                  <TH className="text-right">Overdue</TH>
+                  <TH className="text-right">Time spent</TH>
+                  <TH className="text-right">Open now</TH>
                 </TR>
               </THead>
               <TBody>
@@ -244,8 +258,8 @@ export function TeamReportPage() {
                     <TR className="cursor-pointer hover:bg-muted/40" onClick={() => setOpen(open === r.user ? null : r.user)}>
                       <TD className="text-muted-foreground">{r.score === null ? '—' : i + 1}</TD>
                       <TD>
-                        <button type="button" aria-expanded={open === r.user} className="flex cursor-pointer items-center gap-1 text-left font-medium" title="Show this person's full breakdown">
-                          {open === r.user ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                        <button type="button" aria-expanded={open === r.user} className="flex min-h-8 cursor-pointer items-center gap-1 rounded text-left font-medium" title="Show this person's full breakdown">
+                          {open === r.user ? <ChevronDown className="size-4 shrink-0" /> : <ChevronRight className="size-4 shrink-0" />}
                           {r.name}
                         </button>
                         <div className="flex items-center gap-1 pl-5 text-xs text-muted-foreground">
@@ -264,14 +278,14 @@ export function TeamReportPage() {
                       <TD>
                         <Delta value={r.score_delta} />
                       </TD>
-                      <TD>{pctText(r.on_time_rate)}</TD>
-                      <TD>{pctText(r.attendance_rate)}</TD>
-                      <TD>{r.leave_days ?? '—'}</TD>
-                      <TD>{r.completed}</TD>
-                      <TD>{r.pending + r.in_progress}</TD>
-                      <TD className={cn(r.overdue > 0 && 'text-destructive')}>{r.overdue}</TD>
-                      <TD>{fmtEffort(r.time_spent_minutes) || '—'}</TD>
-                      <TD>
+                      <TD className="text-right tabular">{pctText(r.on_time_rate)}</TD>
+                      <TD className="text-right tabular">{pctText(r.attendance_rate)}</TD>
+                      <TD className="text-right tabular">{r.leave_days ?? '—'}</TD>
+                      <TD className="text-right tabular">{r.completed}</TD>
+                      <TD className="text-right tabular">{r.pending + r.in_progress}</TD>
+                      <TD className={cn('text-right tabular', r.overdue > 0 && 'font-semibold text-destructive')}>{r.overdue}</TD>
+                      <TD className="text-right tabular">{fmtEffort(r.time_spent_minutes) || '—'}</TD>
+                      <TD className="text-right tabular">
                         {r.open_tasks}
                         {r.open_overdue ? ` (${r.open_overdue} late)` : ''}
                       </TD>

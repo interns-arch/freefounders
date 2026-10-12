@@ -80,6 +80,15 @@ export class AuthController {
     return { ok: true };
   }
 
+  /** "Sign out everywhere": ends every session of the caller, this one included (e.g. after losing a phone). */
+  @Post('auth/logout-all')
+  @HttpCode(200)
+  async logoutAll(@CurrentCaller() caller: Caller, @Res({ passthrough: true }) res: Response) {
+    await this.auth.revokeAll(caller.personId);
+    res.clearCookie(REFRESH_COOKIE, cookieOptions());
+    return { ok: true };
+  }
+
   @Get('auth/me')
   me(@CurrentCaller() caller: Caller) {
     return this.auth.me(caller);

@@ -2,8 +2,58 @@
 # Production gateway (Caddy): the same path routing as dev-gateway.mjs, with automatic HTTPS (PLAN.md §18.4).
 #   /                 the FreeFounders web app (static build of apps/web), incl. /tasks/… and /assets/… screens
 # Upstream host names are the docker-compose service names; adjust for your deployment.
+#
+# Security (docs/security/assets-web-mobile-infra.md):
+#   - HTTPS only (Caddy redirects http → https and renews certificates); HSTS below.
+#   - No CORS anywhere: the web app and the APIs share this one origin. Do not add Access-Control-* headers.
+#   - The Content-Security-Policy starts as Report-Only. Watch the browser console on staging (every screen, the QR
+#     scanner, voice notes, printing, the phone app); when it stays quiet, rename the header to
+#     Content-Security-Policy (the `?` keeps a stricter policy an API sets itself, e.g. Assets photos, Tasks /media).
+#   - /media/* goes to Django, which serves uploads only by signed, expiring links (services/tasks/backend/config/
+#     media.py); Caddy never serves that folder from disk and never lists it.
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Camera (punch selfie, QR scanner, photos), location (punch geofence) and microphone (Tasks voice notes): this site only.
+		Permissions-Policy "camera=(self), geolocation=(self), microphone=(self), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+		-X-Powered-By
+		?Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+	}
+}
+
 {$FF_DOMAIN:app.freefounders.local} {
 	encode gzip
+	import security_headers
+
+	# Edge limit for any request body; each app enforces its own smaller limits (Assets: 6 photos of 15 MB, JSON 4 MB;
+	# Tasks: 10 MB per file).
+	request_body {
+		max_size 100MB
+	}
+
+	# Rate limits at the edge need the caddy-ratelimit plugin (xcaddy build --with github.com/mholt/caddy-ratelimit).
+	# Suggested once it is in the build (per client address):
+	#   rate_limit {
+	#   	zone sign_in {
+	#   		match {
+	#   			path /api/platform/auth/login /api/platform/auth/refresh /assets/api/auth/*
+	#   		}
+	#   		key {remote_host}
+	#   		events 20
+	#   		window 1m
+	#   	}
+	#   	zone api {
+	#   		key {remote_host}
+	#   		events 600
+	#   		window 1m
+	#   	}
+	#   }
 
 	# Platform API (path kept: it is mounted at /api/platform).
 	handle /api/platform/* {
@@ -16,6 +66,8 @@
 		reverse_proxy tasks:8000
 	}
 	handle /media/* {
+		# Signed, expiring links only (Django checks them); never cached by shared caches.
+		header ?Cache-Control "private, no-store"
 		reverse_proxy tasks:8000
 	}
 
@@ -35,6 +87,7 @@
 		header /index.html Cache-Control "no-cache"
 		# The service worker (PLAN.md §19.18) must be re-checked on every load, like index.html.
 		header /sw.js Cache-Control "no-cache"
+		# No folder listings (file_server lists only with `browse`, which stays off).
 		file_server
 	}
 }

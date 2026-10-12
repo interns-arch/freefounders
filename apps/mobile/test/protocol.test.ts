@@ -1,7 +1,7 @@
 // The bridge between the web app and the shell (src/lib/protocol.ts, PLAN.md §19.17).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { linkTarget, MAX_BASE64, normalizeServerUrl, originOf, parseMessage, replyError, replyOk } from '../src/lib/protocol.ts';
+import { fromServer, isLocalHost, linkTarget, MAX_BASE64, normalizeServerUrl, originOf, parseMessage, replyError, replyOk } from '../src/lib/protocol.ts';
 
 test('requests: location, photo, download, print', () => {
   assert.deepEqual(parseMessage('{"id":"r1","type":"location"}'), { kind: 'request', request: { id: 'r1', type: 'location' } });
@@ -75,4 +75,41 @@ test('origins and typed server addresses', () => {
   assert.equal(normalizeServerUrl(''), null);
   assert.equal(normalizeServerUrl('ftp://host'), null);
   assert.equal(normalizeServerUrl('not a host'), null);
+});
+
+test('security: data: pages, foreign blobs and foreign frames never load; frames never start other apps', () => {
+  const s = 'https://app.example.com';
+  assert.equal(linkTarget('data:text/html,<script>x</script>', s), 'block');
+  assert.equal(linkTarget('DATA:text/html;base64,PHA+', s), 'block');
+  assert.equal(linkTarget('blob:https://evil.test/abc', s), 'block');
+  assert.equal(linkTarget('blob:https://app.example.com/abc', s), 'inside');
+  assert.equal(linkTarget('about:srcdoc', s, false), 'inside');
+  assert.equal(linkTarget('https://app.example.com/x', s, false), 'inside');
+  assert.equal(linkTarget('https://ads.evil.test/frame', s, false), 'block');
+  assert.equal(linkTarget('intent://scan/#Intent;end', s, false), 'block');
+  assert.equal(linkTarget('https://ads.evil.test/page', s, true), 'outside');
+});
+
+test('security: bridge messages count only from pages of the server', () => {
+  const s = 'http://192.168.137.1:8080';
+  assert.equal(fromServer('http://192.168.137.1:8080/attendance?x=1', s), true);
+  assert.equal(fromServer('http://192.168.137.1:8080', s), true);
+  assert.equal(fromServer('http://192.168.137.1:8081/', s), false);
+  assert.equal(fromServer('https://evil.test/', s), false);
+  assert.equal(fromServer('http://192.168.137.1:8080@evil.test/', s), false);
+  assert.equal(fromServer('data:text/html,x', s), false);
+  assert.equal(fromServer('about:blank', s), false);
+  assert.equal(fromServer(undefined, s), false);
+});
+
+test('security: plain http only for the office network; anything else needs https', () => {
+  for (const local of ['http://192.168.1.5:8080', 'http://10.0.0.2', 'http://172.20.1.1:8080', 'http://127.0.0.1:8080', 'http://localhost:8080', 'http://mypc:8080', 'http://office.local'])
+    assert.equal(isLocalHost(local), true, local);
+  for (const remote of ['http://8.8.8.8', 'http://172.32.0.1', 'http://app.example.com', 'http://192.169.1.1']) assert.equal(isLocalHost(remote), false, remote);
+  assert.equal(normalizeServerUrl('app.freefounders.example'), 'https://app.freefounders.example');
+  assert.equal(normalizeServerUrl('http://app.freefounders.example'), null);
+  assert.equal(normalizeServerUrl('http://203.0.113.9:8080'), null);
+  assert.equal(normalizeServerUrl('https://203.0.113.9:8443/'), 'https://203.0.113.9:8443');
+  assert.equal(normalizeServerUrl('10.1.2.3:8080'), 'http://10.1.2.3:8080');
+  assert.equal(normalizeServerUrl('javascript:alert(1)'), null);
 });

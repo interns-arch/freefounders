@@ -26,7 +26,7 @@ export function HomeFilterBar({ filters, setFilters, home }: { filters: HomeFilt
   const r = home?.range;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <NativeSelect aria-label="Date range" className="w-auto" value={filters.range} onChange={(e) => setFilters({ ...filters, range: e.target.value as HomeFilters['range'] })}>
+      <NativeSelect aria-label="Date range" className="w-auto max-sm:shrink-0 max-sm:grow" value={filters.range} onChange={(e) => setFilters({ ...filters, range: e.target.value as HomeFilters['range'] })}>
         {HOME_RANGES.map(([v, l]) => (
           <option key={v} value={v}>
             {l}
@@ -41,7 +41,7 @@ export function HomeFilterBar({ filters, setFilters, home }: { filters: HomeFilt
         </span>
       )}
       {teamDepts.length > 1 && (
-        <NativeSelect aria-label="Department" className="w-auto" value={filters.department} onChange={(e) => setFilters({ ...filters, department: e.target.value })}>
+        <NativeSelect aria-label="Department" className="w-auto max-sm:shrink-0 max-sm:grow" value={filters.department} onChange={(e) => setFilters({ ...filters, department: e.target.value })}>
           <option value="">All departments</option>
           {teamDepts.map((d) => (
             <option key={d} value={d}>
@@ -51,7 +51,7 @@ export function HomeFilterBar({ filters, setFilters, home }: { filters: HomeFilt
         </NativeSelect>
       )}
       {r?.start && (
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground max-sm:basis-full">
           Scores for {fmtDay(r.start)} – {fmtDay(r.end)}
         </span>
       )}

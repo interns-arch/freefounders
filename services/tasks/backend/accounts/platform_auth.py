@@ -12,6 +12,7 @@ import json
 import jwt
 from django.conf import settings
 from rest_framework import authentication, exceptions
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import User
 
@@ -106,3 +107,16 @@ class PlatformJWTAuthentication(authentication.BaseAuthentication):
 
     def authenticate_header(self, request):
         return 'Bearer realm="api"'
+
+
+class LegacyJWTAuthentication(JWTAuthentication):
+    """The app's own SimpleJWT login, exactly as before in a standalone install. In multi-company mode people sign in
+    through the Platform only (no company is named by a legacy token), so a legacy token is never accepted there,
+    not even on the anonymous /api/public/ paths."""
+
+    def authenticate(self, request):
+        from tenancy import schemas
+
+        if schemas.enabled():
+            return None
+        return super().authenticate(request)

@@ -6,7 +6,7 @@ import { injectedScript } from '../src/lib/injected.ts';
 
 type Listener = (e: Record<string, unknown>) => void;
 
-function fakePage(camera: 'ask' | 'granted' | 'denied' = 'granted') {
+function fakePage(camera: 'ask' | 'granted' | 'denied' = 'granted', opts: { origin?: string; location?: { protocol: string; host: string } } = {}) {
   const posted: Array<Record<string, unknown>> = [];
   const docListeners: Record<string, Listener[]> = {};
   const winListeners: Record<string, Listener[]> = {};
@@ -22,8 +22,8 @@ function fakePage(camera: 'ask' | 'granted' | 'denied' = 'granted') {
     querySelector: () => null,
     addEventListener: (t: string, f: Listener) => (docListeners[t] ??= []).push(f),
   };
-  const ctx = vm.createContext({ window, document, navigator: { geolocation }, JSON, Date });
-  vm.runInContext(injectedScript({ platform: 'android', version: '0.1.0', camera }), ctx);
+  const ctx = vm.createContext({ window, document, navigator: { geolocation }, JSON, Date, ...(opts.location ? { location: opts.location } : {}) });
+  vm.runInContext(injectedScript({ platform: 'android', version: '0.1.0', camera }, opts.origin), ctx);
   const fire = (t: string, e: Record<string, unknown>) => (docListeners[t] ?? []).forEach((f) => f(e));
   return { window, posted, fire, geolocation, root };
 }
@@ -86,4 +86,14 @@ test('file picker: asks for the camera first, then opens', () => {
   // A picker for documents only does not need the camera.
   const other = fakePage('ask');
   other.fire('click', { target: { tagName: 'INPUT', type: 'file', getAttribute: () => '.pdf,.xlsx' }, preventDefault: () => assert.fail('not for documents') });
+});
+
+test('security: the app powers go to pages of the server only', () => {
+  const ours = fakePage('granted', { origin: 'http://192.168.137.1:8080', location: { protocol: 'http:', host: '192.168.137.1:8080' } });
+  assert.ok(ours.window.FreeFoundersApp, 'the server page is told it runs in the app');
+  const other = fakePage('granted', { origin: 'http://192.168.137.1:8080', location: { protocol: 'https:', host: 'evil.test' } });
+  assert.equal(other.window.FreeFoundersApp, undefined, 'another site learns nothing');
+  assert.throws(() => other.geolocation.getCurrentPosition(), /must not be used/, 'and its geolocation is not answered by the app');
+  other.fire('touchstart', { target: other.root });
+  assert.deepEqual(other.posted, [], 'and it sends nothing to the app');
 });

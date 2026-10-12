@@ -19,6 +19,14 @@ function pgError(err: unknown): PgError | null {
   return null;
 }
 
+/**
+ * A failed query's message lists its values ("params: …"): password hashes, token hashes, emails. Logs keep the SQL
+ * (useful) but never the values.
+ */
+export function redact(text: string): string {
+  return text.replace(/\bparams: [^\n]*/g, 'params: [hidden]');
+}
+
 /** Consistent JSON errors: `{ statusCode, message, errors? }`. Database errors become friendly 4xx. */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -49,7 +57,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    this.logger.error(exception instanceof Error ? (exception.stack ?? exception.message) : String(exception));
+    this.logger.error(redact(exception instanceof Error ? (exception.stack ?? exception.message) : String(exception)));
     res.status(500).json({ statusCode: 500, message: 'Something went wrong. Please try again.' });
   }
 }

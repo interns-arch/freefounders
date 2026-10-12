@@ -21,6 +21,26 @@ export interface UploadedPhoto {
 
 type PhotoKind = (typeof PHOTO_KINDS)[number];
 
+/**
+ * At most this many photos are decoded at once on this server (each can take a few hundred MB while it is decoded),
+ * so many uploads at the same moment wait their turn instead of running the server out of memory.
+ */
+const SHRINK_SLOTS = Math.max(1, Number(process.env.PHOTO_CONCURRENCY ?? 2));
+let shrinking = 0;
+const shrinkQueue: Array<() => void> = [];
+async function inShrinkSlot<T>(fn: () => Promise<T>): Promise<T> {
+  // A finished photo hands its slot straight to the next one waiting, so the limit holds exactly.
+  if (shrinking >= SHRINK_SLOTS) await new Promise<void>((resolve) => shrinkQueue.push(resolve));
+  else shrinking++;
+  try {
+    return await fn();
+  } finally {
+    const next = shrinkQueue.shift();
+    if (next) next();
+    else shrinking--;
+  }
+}
+
 export const uploadDir = () => process.env.UPLOAD_DIR ?? path.resolve(__dirname, '../../../../../.data/uploads');
 
 @Injectable()
@@ -58,7 +78,7 @@ export class PhotosService {
     const saved: (typeof allocationPhotos.$inferInsert)[] = [];
     // One at a time: a big phone photo needs a lot of memory while it is decoded.
     for (const [i, f] of files.entries()) {
-      const photo = (await shrinkPhoto(f.buffer, detected[i]))!;
+      const photo = (await inShrinkSlot(() => shrinkPhoto(f.buffer, detected[i])))!;
       saved.push({
         assetId,
         allocationId: alloc?.id ?? null,
@@ -114,7 +134,9 @@ export class PhotosService {
       .from(allocationPhotos)
       .where(and(eq(allocationPhotos.id, photoId), eq(allocationPhotos.assetId, assetId)));
     if (!photo) throw notFound('Photo');
-    return { data: photo.data ?? (await readFile(path.join(uploadDir(), photo.fileName)).catch(() => null)), mimeType: photo.mimeType };
+    // Older rows keep the file on disk: only a plain file name inside UPLOAD_DIR is ever read (never a path).
+    const onDisk = () => (/^[\w.-]+$/.test(photo.fileName) && !photo.fileName.startsWith('.') ? readFile(path.join(uploadDir(), photo.fileName)).catch(() => null) : null);
+    return { data: photo.data ?? (await onDisk()), mimeType: photo.mimeType };
   }
 }
 

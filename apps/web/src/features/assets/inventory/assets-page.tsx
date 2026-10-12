@@ -211,7 +211,7 @@ export default function AssetsPage() {
               role="tab"
               aria-selected={active}
               className={cn(
-                'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
+                'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition max-sm:min-h-10',
                 active ? 'border-primary/30 bg-primary/10 text-primary shadow-xs' : 'border-transparent text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-xs',
               )}
             >

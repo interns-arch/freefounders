@@ -10,7 +10,7 @@ import Constants from 'expo-constants';
 import { Camera } from 'expo-camera';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
@@ -18,7 +18,7 @@ import { type CameraState, injectedScript } from '@/lib/injected';
 import { currentPosition } from '@/lib/location';
 import { printHtml, saveAndShare } from '@/lib/native-actions';
 import { usePalette } from '@/lib/palette';
-import { type AppRequest, linkTarget, parseMessage, replyError, replyOk } from '@/lib/protocol';
+import { type AppRequest, fromServer, linkTarget, originOf, parseMessage, replyError, replyOk } from '@/lib/protocol';
 import { loadServerUrl, saveServerUrl } from '@/lib/server-url';
 import { OfflineScreen } from './offline-screen';
 import { SelfieCamera } from './selfie-camera';
@@ -36,7 +36,7 @@ export function Shell() {
   const web = useRef<WebView>(null);
   const canGoBack = useRef(false);
   const [server, setServer] = useState<string | null>(null);
-  const [script, setScript] = useState('');
+  const [camera, setCamera] = useState<CameraState | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export function Shell() {
   useEffect(() => {
     void (async () => {
       const [url, perm] = await Promise.all([loadServerUrl(), Camera.getCameraPermissionsAsync().catch(() => null)]);
-      setScript(injectedScript({ platform: Platform.OS === 'ios' ? 'ios' : 'android', version: VERSION, camera: cameraState(perm) }));
+      setCamera(cameraState(perm));
       setServer(url);
     })();
   }, []);
@@ -71,6 +71,12 @@ export function Shell() {
     });
     return () => sub.remove();
   }, [failure]);
+
+  // The injected script gives the app's powers to pages of this server only (it is rebuilt when the address changes).
+  const script = useMemo(
+    () => (server && camera ? injectedScript({ platform: Platform.OS === 'ios' ? 'ios' : 'android', version: VERSION, camera }, originOf(server)) : ''),
+    [server, camera],
+  );
 
   const send = useCallback((message: string) => web.current?.postMessage(message), []);
 
@@ -121,6 +127,8 @@ export function Shell() {
 
   const onMessage = useCallback(
     (e: WebViewMessageEvent) => {
+      // Only pages of the FreeFounders server may ask for location, camera, files or printing.
+      if (!server || !fromServer(e.nativeEvent.url, server)) return;
       const m = parseMessage(e.nativeEvent.data);
       if (m.kind === 'invalid') {
         if (m.id) send(replyError(m.id, m.error));
@@ -137,7 +145,7 @@ export function Shell() {
       }
       void handle(m.request);
     },
-    [handle, send],
+    [handle, send, server],
   );
 
   const openOutside = (url: string) => {
@@ -188,7 +196,7 @@ export function Shell() {
               injectedJavaScriptBeforeContentLoaded={script}
               onMessage={onMessage}
               sharedCookiesEnabled
-              thirdPartyCookiesEnabled
+              thirdPartyCookiesEnabled={false}
               domStorageEnabled
               javaScriptEnabled
               cacheEnabled
@@ -203,9 +211,13 @@ export function Shell() {
               onNavigationStateChange={(nav) => {
                 canGoBack.current = nav.canGoBack;
               }}
+              mixedContentMode="never"
+              allowFileAccessFromFileURLs={false}
+              allowUniversalAccessFromFileURLs={false}
               onShouldStartLoadWithRequest={(req) => {
-                if (linkTarget(req.url, server) === 'inside' || req.isTopFrame === false) return true;
-                openOutside(req.url);
+                const where = linkTarget(req.url, server, req.isTopFrame !== false);
+                if (where === 'inside') return true;
+                if (where === 'outside') openOutside(req.url);
                 return false;
               }}
               onOpenWindow={(e) => openOutside(e.nativeEvent.targetUrl)}

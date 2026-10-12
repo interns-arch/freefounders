@@ -22,8 +22,8 @@ export const light = {
   accent: 'oklch(0.945 0.035 166)',
   accentForeground: 'oklch(0.35 0.1 168)',
   destructive: 'oklch(0.55 0.18 28)',
-  success: 'oklch(0.55 0.13 160)',
-  warning: 'oklch(0.6 0.15 55)',
+  success: 'oklch(0.5 0.13 160)',
+  warning: 'oklch(0.53 0.15 55)',
   info: 'oklch(0.52 0.19 272)',
   border: 'oklch(0.92 0.01 170)',
   input: 'oklch(0.88 0.014 170)',
@@ -33,9 +33,9 @@ export const light = {
   sidebarAccent: 'oklch(0.3 0.045 168)',
   sidebarBorder: 'oklch(0.3 0.025 170)',
   appAttendance: 'oklch(0.55 0.2 295)',
-  appTasks: 'oklch(0.6 0.14 166)',
+  appTasks: 'oklch(0.5 0.14 166)',
   appAssets: 'oklch(0.52 0.19 272)',
-  appAdmin: 'oklch(0.6 0.13 55)',
+  appAdmin: 'oklch(0.53 0.13 55)',
 } as const;
 
 export const dark: Record<keyof typeof light, string> = {

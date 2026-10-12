@@ -110,7 +110,8 @@ function valueSchema(f: FieldDef): z.ZodTypeAny {
     case 'email':
       return z.string().trim().email({ message: `${label} must be a valid email` });
     case 'url':
-      return z.string().trim().url({ message: `${label} must be a valid URL` });
+      // Web addresses only: a `javascript:` or `data:` value would become a clickable link on the asset page.
+      return z.string().trim().url({ protocol: /^https?$/, message: `${label} must be a valid web address (http:// or https://)` });
     case 'phone':
       return z.string().trim().regex(PHONE_RE, { message: `${label} must be a valid phone number` });
     case 'textarea':

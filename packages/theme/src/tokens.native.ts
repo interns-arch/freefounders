@@ -20,8 +20,8 @@ export const light = {
   accent: '#d8f5e7',
   accentForeground: '#004a30',
   destructive: '#c5372f',
-  success: '#008856',
-  warning: '#c26300',
+  success: '#007948',
+  warning: '#aa4d00',
   info: '#4758d4',
   border: '#dee7e3',
   input: '#cfdbd6',
@@ -31,9 +31,9 @@ export const light = {
   sidebarAccent: '#133529',
   sidebarBorder: '#21322c',
   appAttendance: '#7e4ed7',
-  appTasks: '#009a6d',
+  appTasks: '#007b50',
   appAssets: '#4758d4',
-  appAdmin: '#ba6826',
+  appAdmin: '#a35303',
 } as const;
 
 export const dark: Record<keyof typeof light, string> = {

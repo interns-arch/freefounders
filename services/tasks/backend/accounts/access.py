@@ -325,7 +325,10 @@ def role_codes(user) -> list[str]:
         return cached[1]
     from .models import UserAccessRole
 
-    synced = list(UserAccessRole.objects.filter(user_id=user.pk).values_list("role__code", flat=True))
+    if "access_roles" in getattr(user, "_prefetched_objects_cache", {}):  # a list page prefetched them
+        synced = [ar.role.code for ar in user.access_roles.all()]
+    else:
+        synced = list(UserAccessRole.objects.filter(user_id=user.pk).values_list("role__code", flat=True))
     codes = synced or [str(user.role)]
     user._ff_role_codes = (user.role, codes)
     return codes

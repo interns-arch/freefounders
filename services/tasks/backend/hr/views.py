@@ -295,6 +295,14 @@ class CorrectionViewSet(viewsets.ModelViewSet):
         correction = serializer.save(user=self.request.user)
         approvals.notify_submitted("correction", correction)
 
+    def perform_update(self, serializer):
+        """Only the person's own request, only while pending: a reviewed correction stays as it was decided, and an
+        approver cannot rewrite the times they are about to approve."""
+        correction = self.get_object()
+        if correction.user_id != self.request.user.id or correction.status != CorrectionStatus.PENDING:
+            raise PermissionDenied("Only your own pending requests can be changed.")
+        serializer.save()
+
     def perform_destroy(self, instance):
         if instance.user_id != self.request.user.id or instance.status != CorrectionStatus.PENDING:
             raise PermissionDenied("Only your own pending requests can be withdrawn.")
@@ -382,9 +390,27 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         approvals.notify_submitted("leave", leave)
 
     def perform_update(self, serializer):
-        if self.get_object().status != LeaveStatus.PENDING:
+        """Only the person, only while pending; the working days and the overlap check are worked out again, so
+        stretching the dates afterwards cannot take more leave than the balance shows."""
+        leave = self.get_object()
+        if leave.user_id != self.request.user.id:
+            raise PermissionDenied("Only the person who asked for the leave can change it.")
+        if leave.status != LeaveStatus.PENDING:
             raise ValidationError({"detail": "Only pending requests can be edited."})
-        serializer.save()
+        data = serializer.validated_data
+        start, end = data.get("start_date", leave.start_date), data.get("end_date", leave.end_date)
+        if end < start:
+            raise ValidationError({"end_date": "The end date is before the start date."})
+        days = len(services.leave_working_days(start, end))
+        if days == 0:
+            raise ValidationError({"start_date": "That range has no working days (holidays/week-offs only)."})
+        overlap = LeaveRequest.objects.filter(
+            user=leave.user, status__in=[LeaveStatus.PENDING, LeaveStatus.APPROVED],
+            start_date__lte=end, end_date__gte=start,
+        ).exclude(pk=leave.pk).exists()
+        if overlap:
+            raise ValidationError({"detail": "You already have a leave request covering these dates."})
+        serializer.save(days=days)
 
     def perform_destroy(self, instance):
         raise PermissionDenied("Cancel the request instead of deleting it.")

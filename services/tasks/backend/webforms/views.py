@@ -2,13 +2,15 @@ import csv
 
 from django.http import HttpResponse
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, parser_classes, permission_classes
+from rest_framework.decorators import action, api_view, parser_classes, permission_classes, throttle_classes
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import SimpleRateThrottle
 
 from accounts.permissions import has_capability
+from config.exports import safe_row
 
 from .models import Form, FormField, FormStatus
 from .serializers import (
@@ -27,6 +29,13 @@ def can_manage_form(user, form: Form) -> bool:
 
 def can_fill_forms(user) -> bool:
     return any(has_capability(user, p) for p in ("forms.view", "forms.build", "forms.all"))
+
+
+def _form_or_404(pk) -> Form:
+    form = Form.objects.filter(pk=pk).first() if str(pk).isdigit() else None
+    if not form:
+        raise NotFound("Form not found.")
+    return form
 
 
 def _extract_payload(request):
@@ -98,7 +107,7 @@ class FormViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     def _set_status(self, request, pk, new_status):
-        form = Form.objects.get(pk=pk)
+        form = _form_or_404(pk)
         if not can_manage_form(request.user, form):
             raise PermissionDenied("You can only manage your own forms.")
         if new_status == FormStatus.PUBLISHED and not form.fields.exists():
@@ -162,7 +171,7 @@ class FormViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def submissions(self, request, pk=None):
-        form = Form.objects.get(pk=pk)
+        form = _form_or_404(pk)
         if not can_manage_form(request.user, form):
             raise PermissionDenied("Only the form owner or an admin can view submissions.")
         subs = form.submissions.select_related("submitted_by", "lead", "task").prefetch_related("files")
@@ -170,22 +179,22 @@ class FormViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def export(self, request, pk=None):
-        form = Form.objects.get(pk=pk)
+        form = _form_or_404(pk)
         if not can_manage_form(request.user, form):
             raise PermissionDenied("Only the form owner or an admin can export submissions.")
         fields = list(form.fields.all())
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{form.name[:40]}-submissions.csv"'
         writer = csv.writer(response)
-        writer.writerow(["Submission ID", "Date", "Person", "Lead", "Task"]
-                        + [f.label for f in fields])
+        writer.writerow(safe_row(["Submission ID", "Date", "Person", "Lead", "Task"]
+                                 + [f.label for f in fields]))
         for sub in form.submissions.select_related("submitted_by", "lead", "task"):
             row = [sub.pk, sub.created_at.strftime("%Y-%m-%d %H:%M"), sub.person(),
                    sub.lead.customer_name if sub.lead else "", sub.task.title if sub.task else ""]
             for f in fields:
                 v = sub.answers.get(str(f.id), "")
                 row.append(", ".join(v) if isinstance(v, list) else v)
-            writer.writerow(row)
+            writer.writerow(safe_row(row))
         return response
 
 
@@ -212,9 +221,23 @@ class FormFieldViewSet(viewsets.GenericViewSet):
 
 
 # ---- public (share-link) endpoints ---------------------------------------
+# Anyone with the link: rate-limited per client address (REST_FRAMEWORK DEFAULT_THROTTLE_RATES), so a script cannot
+# flood a company with leads, tasks and uploads, or walk the token space.
+
+class PublicFormThrottle(SimpleRateThrottle):
+    scope = "public_form"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
+class PublicSubmitThrottle(PublicFormThrottle):
+    scope = "public_submit"
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([PublicFormThrottle])
 def public_form(request, token):
     form = Form.objects.filter(public_token=token, status=FormStatus.PUBLISHED).first()
     if not form:
@@ -224,6 +247,7 @@ def public_form(request, token):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([PublicSubmitThrottle])
 @parser_classes([JSONParser, MultiPartParser, FormParser])
 def public_submit(request, token):
     form = Form.objects.filter(public_token=token, status=FormStatus.PUBLISHED).first()

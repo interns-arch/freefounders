@@ -33,6 +33,7 @@ export function RequireSession() {
 
 /** Only go back to a path on this site (never to another site through ?next=). */
 export function safeNext(next: string | null): string | null {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/login')) return null;
+  // Browsers read "/\evil.com" like "//evil.com"; a backslash or control character never belongs in our own paths.
+  if (!next || !next.startsWith('/') || next.startsWith('//') || /[\\\u0000-\u001f]/.test(next) || next.startsWith('/login')) return null;
   return next;
 }

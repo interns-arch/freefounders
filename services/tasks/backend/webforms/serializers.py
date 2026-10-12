@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from config.media import file_url
+
 from crm.serializers import UserBriefSerializer
 
 from .models import FieldType, Form, FormField, FormSubmission
@@ -59,5 +61,5 @@ class SubmissionSerializer(serializers.ModelSerializer):
                   "task", "task_title", "created_at"]
 
     def get_files(self, obj):
-        return [{"field_id": f.field_id, "filename": f.filename, "url": f.file.url}
+        return [{"field_id": f.field_id, "filename": f.filename, "url": file_url(f.file)}
                 for f in obj.files.all()]

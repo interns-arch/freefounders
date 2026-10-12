@@ -331,6 +331,34 @@ describe('custody and lifecycle', () => {
     assert.ok(Buffer.from(await res.arrayBuffer()).equals(png));
   });
 
+  test('photos are served as images only, never as a page; an old file name cannot leave the upload folder', async () => {
+    const id = (await newDrone({ name: 'Header drone' })).body.id;
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16, 1)]);
+    const saved = await upload(`/assets/${id}/photos`, { kind: 'ASSET' }, [png]);
+    const ok = await fetch(`${base}/assets/${id}/photos/${saved.body[0].id}`, { headers: { cookie: cookies.admin } });
+    assert.equal(ok.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(ok.headers.get('content-security-policy') ?? '', /sandbox/);
+    assert.match(ok.headers.get('content-disposition') ?? '', /^inline; filename="photo-[0-9a-f-]+\.png"$/);
+
+    // A row from an older install with a page-like type: downloaded as bytes, never shown as HTML.
+    const html = Buffer.from('<script>alert(1)</script>');
+    const { rows } = await dbs.pool.query(
+      `insert into allocation_photos (asset_id, kind, data, file_name, mime_type, size_bytes) values ($1, 'ASSET', $2, 'x.html', 'text/html', $3) returning id`,
+      [id, html, html.length],
+    );
+    const odd = await fetch(`${base}/assets/${id}/photos/${rows[0].id}`, { headers: { cookie: cookies.admin } });
+    assert.equal(odd.status, 200);
+    assert.equal(odd.headers.get('content-type'), 'application/octet-stream');
+    assert.match(odd.headers.get('content-disposition') ?? '', /^attachment;/);
+
+    // An older row without data and a path for a file name: not read from outside the upload folder.
+    const { rows: [trav] } = await dbs.pool.query(
+      `insert into allocation_photos (asset_id, kind, file_name, mime_type, size_bytes) values ($1, 'ASSET', '../../package.json', 'image/png', 1) returning id`,
+      [id],
+    );
+    assert.equal((await fetch(`${base}/assets/${id}/photos/${trav.id}`, { headers: { cookie: cookies.admin } })).status, 404);
+  });
+
   test('a big phone photo is stored upright, at most 1600 px, smaller and without metadata (PLAN.md §19.20)', async () => {
     const sharp = (await import('sharp')).default;
     // 3000×2000 with EXIF orientation 6 (the phone was held upright) and a GPS-like comment in the metadata.

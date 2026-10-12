@@ -103,7 +103,7 @@ export function NotificationsBell() {
         >
           <Bell className="size-5" />
           {unread > 0 && (
-            <span className="absolute top-0.5 right-0.5 grid min-w-[18px] place-items-center rounded-full border-2 border-card bg-destructive px-1 font-mono text-[10px] leading-[14px] font-bold text-white">
+            <span className="absolute top-0.5 right-0.5 grid min-w-[18px] place-items-center rounded-full border-2 border-card bg-destructive px-1 font-mono text-[10px] leading-[14px] font-bold text-white dark:text-background">
               {unread > 99 ? '99+' : unread}
             </span>
           )}
@@ -134,13 +134,26 @@ export function NotificationsBell() {
                 <span className="min-w-0 flex-1">
                   <span className={cn('block truncate text-sm', n.read ? 'font-medium' : 'font-semibold')}>{n.title}</span>
                   {n.body && <span className="line-clamp-2 block text-xs text-muted-foreground">{n.body}</span>}
-                  <span className="mt-0.5 block font-mono text-[10.5px] text-muted-foreground">
+                  <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
                     {n.app === 'tasks' ? 'Tasks' : 'Assets'} · {timeAgo(n.createdAt)}
                   </span>
                 </span>
               </button>
             </li>
           ))}
+          {q.isLoading && (
+            <li role="status" className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Loading notifications…
+            </li>
+          )}
+          {q.isError && !q.data && (
+            <li role="alert" className="px-4 py-8 text-center text-sm text-muted-foreground">
+              Couldn’t load notifications.{' '}
+              <button type="button" className="cursor-pointer font-semibold text-primary underline-offset-2 hover:underline" onClick={() => void q.refetch()}>
+                Try again
+              </button>
+            </li>
+          )}
           {q.data && q.data.items.length === 0 && <li className="px-4 py-10 text-center text-sm text-muted-foreground">You’re all caught up.</li>}
         </ul>
         <div className="border-t bg-muted/30 px-4 py-2 text-right">
@@ -169,10 +182,10 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
           className="flex min-h-11 max-w-[220px] cursor-pointer items-center gap-2 rounded-full border border-transparent py-1 pr-1 pl-1 text-left transition outline-none hover:border-border hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40 data-[state=open]:border-border data-[state=open]:bg-accent lg:pr-2"
           aria-label="Your account"
         >
-          <Avatar name={name} className="size-8 bg-gradient-to-br from-brand-2 to-primary text-white [&_[data-slot=avatar-fallback]]:bg-transparent" />
+          <Avatar name={name} className="size-8 bg-primary [&_[data-slot=avatar-fallback]]:bg-transparent [&_[data-slot=avatar-fallback]]:text-primary-foreground" />
           <span className="hidden min-w-0 leading-tight lg:block">
             <span className="block max-w-[150px] truncate text-[13px] font-semibold">{name}</span>
-            <span className="block max-w-[150px] truncate text-[11px] text-muted-foreground">{role}</span>
+            <span className="block max-w-[150px] truncate text-xs text-muted-foreground">{role}</span>
           </span>
           <ChevronDown className="hidden size-4 shrink-0 text-muted-foreground lg:block" aria-hidden />
         </button>

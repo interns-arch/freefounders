@@ -438,6 +438,8 @@ export class PeopleService {
     if (!(APPS as readonly string[]).includes(app)) throw notFound('App');
     const p = await this.get(caller, id);
     this.assertMemberTarget(caller, p);
+    // An app role is a set of powers inside that app (e.g. Tasks' Super Admin): choosing one is giving permissions.
+    if (appRole && !caller.permissions?.has('roles.manage')) throw new ForbiddenException('Choosing a role inside an app needs the Manage roles permission');
     const [company] = await this.dbs.db.select({ enabledApps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
     if (!company?.enabledApps.includes(app)) throw badRequest(`Your plan does not include ${app}`);
     const [login] = await this.dbs.db.select({ username: logins.username }).from(logins).where(eq(logins.personId, id)).limit(1);

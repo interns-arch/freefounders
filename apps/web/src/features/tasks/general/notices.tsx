@@ -33,6 +33,7 @@ import { toLocalInput } from '../shared/format';
 import { Linkify } from '../shared/linkify';
 import { MultiSelect } from '../shared/multi-select';
 import { Chip, ErrorNote, OkNote, Segmented, fmtWhen } from './parts';
+import { safeHref } from '@/lib/safe-url';
 
 export function NoticesPage() {
   const access = useAccess();
@@ -135,7 +136,7 @@ function NoticeFeed() {
                     {n.content ? <Linkify text={n.content} /> : '—'}
                     {n.attachment_url && (
                       <div>
-                        <a href={n.attachment_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                        <a href={safeHref(n.attachment_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
                           <Paperclip className="size-3.5" /> Attachment
                         </a>
                       </div>

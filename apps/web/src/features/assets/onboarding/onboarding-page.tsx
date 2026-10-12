@@ -93,7 +93,7 @@ export function OnboardingTable({ tabs, defaultStatus, empty }: { tabs: { value:
             type="button"
             onClick={() => set({ status: t.value })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
+              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
               f.status === t.value ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >

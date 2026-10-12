@@ -26,6 +26,9 @@ import { HoldersService } from './holders.service';
 import { LifecycleService } from './lifecycle.service';
 import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_UPLOAD, PhotosService, type UploadedPhoto } from './photos.service';
 
+/** Photo types served inline, with their file extension. */
+const SERVABLE_PHOTO_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+
 @Controller('assets')
 export class AssetsController {
   constructor(
@@ -121,8 +124,14 @@ export class AssetsController {
     await this.assets.assertCanView(actor, id);
     const file = await this.photos.file(id, photoId);
     if (!file.data) throw notFound('Photo file');
+    // Only real image types are shown in the page; anything else (an old row with an odd type) is a plain download.
+    // The sandbox CSP keeps a stored file from ever running as a page, even when opened directly.
+    const image = SERVABLE_PHOTO_TYPES[file.mimeType];
     res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
-    res.type(file.mimeType).send(file.data);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `${image ? 'inline' : 'attachment'}; filename="photo-${photoId}.${image ?? 'bin'}"`);
+    res.type(image ? file.mimeType : 'application/octet-stream').send(file.data);
   }
 
   @Post(':id/lifecycle')

@@ -190,6 +190,11 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
         run = serializer.save(created_by=self.request.user)
         services.generate_run(run, User.objects.filter(is_active=True))
 
+    def perform_update(self, serializer):
+        if serializer.instance.status == RunStatus.FINALISED:
+            raise ValidationError({"detail": "A finalised payroll cannot be changed."})
+        serializer.save()
+
     def perform_destroy(self, instance):
         if instance.status == RunStatus.FINALISED:
             raise ValidationError({"detail": "A finalised payroll cannot be deleted."})
@@ -228,17 +233,18 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = (
             f'attachment; filename="payroll-{run.year}-{run.month:02d}.csv"')
+        from config.exports import safe_row
         writer = csv.writer(response)
         writer.writerow(["Employee", "Username", "Monthly gross", "Working days",
                          "Payable days", "LWP days", "Earned gross", "PF",
                          "Professional tax", "Advance", "Other deduction", "Net payable"])
         for s in run.payslips.select_related("user"):
-            writer.writerow([
+            writer.writerow(safe_row([
                 s.user.get_full_name() or s.user.username, s.user.username,
                 s.monthly_gross, s.working_days, s.payable_days, s.lwp_days,
                 s.earned_gross, s.pf, s.professional_tax, s.advance_deduction,
                 s.other_deduction, s.net_payable,
-            ])
+            ]))
         writer.writerow([])
         writer.writerow(["", "", "", "", "", "", "", "", "", "", "TOTAL", run.total_net])
         return response

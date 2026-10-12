@@ -5,6 +5,7 @@ import { ShieldAlert } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, PageLoader } from '@/components/common/page';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
@@ -41,7 +42,7 @@ const ICON_TONE: Record<Tone, string> = {
 /** A small round count (e.g. "3" next to a tab or a title). */
 export function CountPill({ tone = 'neutral', className, children, ...rest }: { tone?: Tone; className?: string; children: ReactNode } & React.ComponentProps<'span'>) {
   return (
-    <span className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-semibold tabular-nums', PILL[tone], className)} {...rest}>
+    <span className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-xs font-semibold tabular-nums', PILL[tone], className)} {...rest}>
       {children}
     </span>
   );
@@ -242,7 +243,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === v}
           onClick={() => onChange(v)}
           className={cn(
-            'inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground',
+            'inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-10 max-sm:px-3.5',
             value === v && 'bg-card font-semibold text-primary shadow-[0_1px_2px_rgb(0_0_0/0.08)] ring-1 ring-border',
           )}
         >
@@ -268,7 +269,18 @@ export function Delta({ value, suffix = '' }: { value: number | null | undefined
 
 /** Shown in place of a screen the person may not open. */
 function NotAllowed({ what = 'this page' }: { what?: string }) {
-  return <EmptyState icon={ShieldAlert} title={`You cannot open ${what}`} description="Ask an admin if you need access." />;
+  return (
+    <EmptyState
+      icon={ShieldAlert}
+      title={`You cannot open ${what}`}
+      description="Ask an admin if you need access."
+      action={
+        <Button asChild variant="outline" size="sm">
+          <Link to="/?home=1">Go to Home</Link>
+        </Button>
+      }
+    />
+  );
 }
 
 /** Renders children only when the Tasks capability check passes (waits for /me). */

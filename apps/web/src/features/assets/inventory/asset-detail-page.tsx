@@ -209,7 +209,7 @@ export default function AssetDetailPage() {
                   <span
                     className={cn(
                       'flex size-6 items-center justify-center rounded-full border-2 text-xs font-semibold',
-                      current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white ring-4 ring-destructive/15' : 'border-primary bg-gradient-to-b from-brand-2 to-primary text-primary-foreground ring-4 ring-primary/15') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
+                      current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white ring-4 ring-destructive/15 dark:text-background' : 'border-primary bg-gradient-to-b from-brand-2 to-primary text-primary-foreground ring-4 ring-primary/15') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
                     )}
                   >
                     {done ? <Check className="size-3" /> : i + 1}

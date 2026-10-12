@@ -182,13 +182,14 @@ class UserViewSet(viewsets.ModelViewSet):
             return
         if requested_role == Role.SUPER_ADMIN:
             raise PermissionDenied("Only a Super Admin can grant the Super Admin role.")
-        if target is not None and target.role == Role.SUPER_ADMIN:
+        # The roles that really count (Platform roles too), not only the legacy User.role field.
+        if target is not None and (target.role == Role.SUPER_ADMIN or is_super_admin(target)):
             raise PermissionDenied("Only a Super Admin can edit a Super Admin account.")
         if is_admin(me):
             return
         if requested_role == Role.ADMIN:
             raise PermissionDenied("Only an Admin can grant the Admin role.")
-        if target is not None and target.role == Role.ADMIN:
+        if target is not None and (target.role == Role.ADMIN or is_admin(target)):
             raise PermissionDenied("Only an Admin can edit an Admin account.")
         if target is not None and target.pk == self.request.user.pk and requested_role:
             raise PermissionDenied("You cannot change your own role.")
@@ -299,6 +300,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
         user = self.get_object()
+        self._guard_role(None, user)  # same authority as deactivating them
         user.is_active = True
         user.save()
         return Response(UserSerializer(user).data)

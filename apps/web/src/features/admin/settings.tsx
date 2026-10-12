@@ -23,6 +23,7 @@ import { ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Switch } from '@/components/ui/primitives';
+import { brandColours } from '@/lib/brand-colour';
 import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill, SyncNote } from './parts';
 
@@ -89,6 +90,7 @@ function ProfileCard({ company }: { company: CompanySettings }) {
   const [name, setName] = useState(company.name);
   const [shortName, setShortName] = useState(company.shortName ?? '');
   const [colour, setColour] = useState(company.colour ?? '');
+  const brand = brandColours(/^#[0-9a-fA-F]{6}$/.test(colour) ? colour : null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [sync, setSync] = useState<SyncResult>();
@@ -166,7 +168,7 @@ function ProfileCard({ company }: { company: CompanySettings }) {
                 )}
               </div>
               {/* How the colour will look: buttons and highlights take it over (PLAN.md §16). */}
-              <div className="mt-1 flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2" aria-hidden style={colour ? ({ '--primary': colour, '--brand-2': colour, '--ring': colour } as React.CSSProperties) : undefined}>
+              <div className="mt-1 flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2" aria-hidden style={brand ? ({ '--primary': document.documentElement.classList.contains('dark') ? brand.dark : brand.light, '--brand-2': brand.raw, '--ring': brand.raw } as React.CSSProperties) : undefined}>
                 <Palette className="size-4 shrink-0 text-muted-foreground" />
                 <span className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Preview</span>
                 <span className="ml-auto inline-flex items-center gap-2">
@@ -177,6 +179,9 @@ function ProfileCard({ company }: { company: CompanySettings }) {
                   <span className="rounded-sm bg-gradient-to-b from-brand-2 to-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-xs">Button</span>
                 </span>
               </div>
+              {brand?.adjusted && (
+                <p className="text-[13px] text-muted-foreground">Text and buttons use a slightly {brand.light !== brand.raw ? 'deeper' : 'lighter'} shade of this colour so they stay easy to read.</p>
+              )}
             </div>
             <div className="grid gap-1.5">
               <Label>Logo</Label>

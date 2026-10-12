@@ -9,6 +9,7 @@ import type { INestApplication } from '@nestjs/common';
 import { exportJWK, SignJWT } from 'jose';
 import { DbService } from './db/db.service';
 import { createApp } from './main';
+import { hashPassword } from './modules/auth/auth.service';
 
 process.env.TENANCY = 'schemas';
 const key = generateKeyPairSync('ed25519');
@@ -156,6 +157,20 @@ describe('multi-company mode', () => {
     assert.equal((await call('GET', '/config')).body.companyName, null);
     // A connection that is not pinned to a company sees no tables at all.
     await assert.rejects(dbs.pool.query('select count(*) from users'), /does not exist/);
+  });
+
+  test("the app's own password login stays off even when a cookie names the company", async () => {
+    // A login that still has an Assets password (e.g. imported): only the Platform may sign it in.
+    const asha = people['Asha@acme_t'];
+    await dbs.pool.query(`update "${ACME.schema}".users set username = 'asha.local', password_hash = $1 where id = $2`, [await hashPassword('Local@12345'), asha.userId]);
+    const cookie = `eam_session=${ACME.companyId}~${'x'.repeat(43)}`;
+    const login = await call('POST', '/auth/login', { cookie, body: { login: 'asha.local', password: 'Local@12345' } });
+    assert.equal(login.status, 401, JSON.stringify(login.body));
+    assert.equal(login.body.code, 'no_company');
+    assert.equal(login.setCookie, null);
+    // Changing the app's own password is off too (the Platform owns passwords).
+    const change = await call('POST', '/auth/change-password', { token: await access(asha), body: { currentPassword: 'Local@12345', newPassword: 'Other@12345' } });
+    assert.equal(change.status, 401);
   });
 
   test('company schemas get the same database rules (history cannot be edited)', async () => {

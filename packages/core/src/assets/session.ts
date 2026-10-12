@@ -12,3 +12,8 @@ export async function ensureAssetsCookie(): Promise<boolean> {
     return false;
   }
 }
+
+/** Ends that Assets session on sign-out, so the cookie cannot be used for the rest of its 15 minutes. */
+export async function endAssetsCookie(): Promise<void> {
+  await assetsApi.post('/auth/logout').catch(() => null);
+}

@@ -8,6 +8,7 @@
 //   everything else         → FreeFounders web app (Vite, apps/web): /, /tasks/…, /assets/…, /people …
 import http from 'node:http';
 import net from 'node:net';
+import os from 'node:os';
 
 const ROUTES = [
   { prefix: '/api/platform/', port: 4000 },
@@ -36,10 +37,22 @@ function forwardedHeaders(req) {
 
 // Dev only: the phone app's browser preview (`expo start`, port 8081) runs on another origin than this gateway,
 // so the browser needs CORS to call the APIs. The phone itself does not (no CORS in native apps).
+// Only the preview on THIS computer is allowed (localhost or one of its own network addresses): a page served on
+// port 8081 by another machine on the same Wi-Fi must not be able to read the APIs with a developer's cookies.
+// Production (Caddyfile) has no CORS at all.
 const EXPO_WEB = /^http:\/\/(localhost|127\.0\.0\.1|\d{1,3}(\.\d{1,3}){3}):8081$/;
+function ownAddresses() {
+  const out = new Set(['localhost', '127.0.0.1']);
+  for (const list of Object.values(os.networkInterfaces())) for (const a of list ?? []) if (a.family === 'IPv4') out.add(a.address);
+  return out;
+}
+export function corsAllowed(origin, own = ownAddresses()) {
+  if (!origin || !EXPO_WEB.test(origin)) return false;
+  return own.has(new URL(origin).hostname);
+}
 function corsHeaders(req) {
   const origin = req.headers.origin;
-  if (!origin || !EXPO_WEB.test(origin)) return null;
+  if (!corsAllowed(origin)) return null;
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-credentials': 'true',

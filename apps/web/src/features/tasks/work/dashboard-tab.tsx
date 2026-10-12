@@ -11,6 +11,7 @@ import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { RangePicker, rangeParams, rangeReady } from '@/features/tasks/shared';
 import { useDebounced } from '@/lib/url-state';
+import { barValueLabels } from '@/features/tasks/general/charts';
 import { cn } from '@/lib/utils';
 import { Segmented, StatTile } from './task-bits';
 
@@ -173,12 +174,13 @@ function CategoryBars({ data }: { data: TaskDashboard }) {
     const read = () => setColours({ bar: themeColour('--primary'), text: themeColour('--muted-foreground'), grid: themeColour('--border') });
     read();
     const obs = new MutationObserver(read);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-brand'] });
     return () => obs.disconnect();
   }, []);
   return (
-    <div className="h-80" role="img" aria-label="Tasks per category">
+    <div className="h-80" role="img" aria-label={`Tasks per category: ${data.categories.map((c) => `${c.category} ${c.total}`).join(', ')}`}>
       <Bar
+        plugins={[barValueLabels]}
         data={{
           labels: data.categories.map((c) => c.category),
           datasets: [{ data: data.categories.map((c) => c.total), backgroundColor: colours.bar, borderRadius: 4, maxBarThickness: 36 }],
@@ -186,7 +188,9 @@ function CategoryBars({ data }: { data: TaskDashboard }) {
         options={{
           responsive: true,
           maintainAspectRatio: false,
+          layout: { padding: { top: 18 } },
           plugins: {
+            legend: { display: false },
             tooltip: {
               displayColors: false,
               callbacks: {
@@ -198,8 +202,8 @@ function CategoryBars({ data }: { data: TaskDashboard }) {
             },
           },
           scales: {
-            x: { grid: { display: false }, ticks: { color: colours.text, font: { size: 11 } } },
-            y: { beginAtZero: true, ticks: { color: colours.text, precision: 0, font: { size: 11 } }, grid: { color: colours.grid }, border: { display: false } },
+            x: { grid: { display: false }, ticks: { color: colours.text, font: { size: 12 } } },
+            y: { beginAtZero: true, ticks: { color: colours.text, precision: 0, font: { size: 12 } }, grid: { color: colours.grid }, border: { display: false } },
           },
         }}
       />

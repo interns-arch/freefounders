@@ -74,8 +74,9 @@ export function Progress({ value, className, indicatorClassName }: { value: numb
   return (
     <ProgressPrimitive.Root className={cn('relative h-1.5 w-full overflow-hidden rounded-full bg-muted', className)} value={value}>
       <ProgressPrimitive.Indicator
-        className={cn('h-full rounded-full bg-gradient-to-r from-brand-2 to-primary transition-all duration-500', indicatorClassName)}
-        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+        // Moves with transform (no layout work per frame); reduced motion and lite mode switch the movement off.
+        className={cn('h-full w-full rounded-full bg-gradient-to-r from-brand-2 to-primary transition-transform duration-500 ease-out', indicatorClassName)}
+        style={{ transform: `translateX(-${100 - Math.max(0, Math.min(100, value))}%)` }}
       />
     </ProgressPrimitive.Root>
   );

@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.access import is_admin, users_at_level, users_with
+from config.throttles import AIThrottle
 from accounts.models import User, Role
 from accounts.permissions import HasCapability, has_capability
 from notifications.service import notify
@@ -498,6 +499,14 @@ class TaskViewSet(viewsets.ModelViewSet):
             if digits.isdigit():
                 clause |= _Q(pk=int(digits))
             qs = qs.filter(clause)
+        if getattr(self, "action", None) in ("list", "retrieve"):
+            # Everything TaskSerializer reads per row, fetched once per page instead of ~5 queries per task.
+            from django.db.models import Prefetch
+            qs = qs.select_related("group", "parent").prefetch_related(
+                "change_requests",
+                Prefetch("subscribers", queryset=User.objects.only("id")),
+                "assigned_to__access_roles__role",
+            )
         return qs
 
     def _resolve_category(self, user, department, name):
@@ -546,6 +555,9 @@ class TaskViewSet(viewsets.ModelViewSet):
                 f"{(local + timedelta(hours=12)):%I:%M %p}?")
         if missing:
             raise ValidationError(missing)
+        # A new task always starts open: "done" is reached through completion (evidence + the reviewer's accept),
+        # never by creating it finished, which would count as on-time work for the assignee.
+        serializer.validated_data.pop("status", None)
         serializer.validated_data["category"] = self._resolve_category(
             user,
             serializer.validated_data.get("department", ""),
@@ -735,7 +747,8 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], permission_classes=[HasCapability.of("tasks.bin")])
     def restore(self, request, pk=None):
-        task = Task.objects.filter(pk=pk, deleted_at__isnull=False).first()
+        # Only tasks the person could see before they were deleted (the bin list uses the same scope).
+        task = visible_tasks(request.user, include_deleted=True).filter(pk=pk, deleted_at__isnull=False).first()
         if not task:
             raise ValidationError({"detail": "This task is not in the Deleted bin."})
         task.deleted_at = None
@@ -971,7 +984,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Response(TaskChecklistItemSerializer(task.checklist.all(), many=True).data)
 
     # ---- E3: AI layer (Claude behind AI_ENABLED, rules otherwise) --------
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], throttle_classes=[AIThrottle])
     def ai_draft(self, request):
         """'Generate with AI Prompt': natural language -> title/description/
         checklist draft. Never blocks — falls back to rules."""
@@ -980,7 +993,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             raise ValidationError({"prompt": "Describe the task in your own words."})
         return Response(draft_task(prompt))
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], throttle_classes=[AIThrottle])
     def proofread(self, request):
         """Spelling and grammar pass over whatever a person typed. The browser
         underlines mistakes but only offers fixes on right-click, which nobody
@@ -995,7 +1008,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     # a voice note is short; anything longer is a meeting, not a task
     VOICE_MAX_BYTES = 10 * 1024 * 1024
 
-    @action(detail=False, methods=["post"], parser_classes=[MultiPartParser, FormParser])
+    @action(detail=False, methods=["post"], parser_classes=[MultiPartParser, FormParser], throttle_classes=[AIThrottle])
     def voice_draft(self, request):
         """T-00136: speak a task, get the form filled in. Creates nothing."""
         clip = request.FILES.get("audio")
@@ -1063,7 +1076,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             "provider": draft.get("provider"),
         })
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=["post"], throttle_classes=[AIThrottle])
     def summarize(self, request, pk=None):
         task = self.get_object()
         return Response(summarize_task(task, list(task.activities.all()[:15])))
@@ -2677,21 +2690,27 @@ class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
                    link=f"/tasks/{req.task.id}")
             return Response(TaskChangeRequestSerializer(req).data)
 
-        req.status = decision
-        req.reviewed_by = request.user
-        req.remarks = str(request.data.get("remarks", ""))[:300]
-        req.reviewed_at = timezone.now()
-        req.save()
+        from django.db import transaction
 
         task = req.task
-        if decision == "approved":
-            applied = self._apply(task, req.changes, request.user)
-            act(task, request.user,
-                f"Change request approved ({', '.join(applied)}) — requested by "
-                f"{req.requested_by.get_full_name() or req.requested_by.username}")
-        else:
-            act(task, request.user, "Change request rejected"
-                + (f": {req.remarks}" if req.remarks else ""))
+        # Decision and change land together: a change that cannot be applied leaves the request pending.
+        with transaction.atomic():
+            req.status = decision
+            req.reviewed_by = request.user
+            req.remarks = str(request.data.get("remarks", ""))[:300]
+            req.reviewed_at = timezone.now()
+            req.save()
+            if decision == "approved":
+                try:
+                    applied = self._apply(task, req.changes, request.user)
+                except (ValueError, TypeError):
+                    raise ValidationError({"detail": "This change cannot be applied (a value is not valid)."})
+                act(task, request.user,
+                    f"Change request approved ({', '.join(applied)}) — requested by "
+                    f"{req.requested_by.get_full_name() or req.requested_by.username}")
+            else:
+                act(task, request.user, "Change request rejected"
+                    + (f": {req.remarks}" if req.remarks else ""))
 
         verdict = "approved" if decision == "approved" else "rejected"
         notify(req.requested_by, "task_change_reviewed",

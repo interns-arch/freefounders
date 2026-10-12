@@ -8,8 +8,10 @@
 import { useAccess } from '@freefounders/core';
 import { useHrConfig } from '@freefounders/core/hr';
 import { ArrowLeft } from 'lucide-react';
+import { useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageHeader, PageLoader } from '@/components/common/page';
+import { useActiveInView } from '@/components/common/responsive';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MonthView } from './attendance';
@@ -34,6 +36,8 @@ export function HrPage() {
   const navigate = useNavigate();
   const { tab: asked } = useParams();
   const [params] = useSearchParams();
+  const tabsRow = useRef<HTMLElement>(null);
+  useActiveInView(tabsRow, `${asked}|${!!access.tasks.me}|${!!cfg.data}`);
   if (!access.tasks.me) return <PageLoader />;
 
   // Each section is its own permission (PLAN.md §19.19). Under the "manager approves" rule a reports-to manager
@@ -79,7 +83,7 @@ export function HrPage() {
   return (
     <div className="space-y-4">
       <PageHeader className="mb-0" title="Leave & Attendance" />
-      <nav aria-label="Attendance and leave sections" className="no-scrollbar -mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+      <nav ref={tabsRow} aria-label="Attendance and leave sections" className="no-scrollbar -mx-4 overflow-x-auto px-4 py-1 lg:mx-0 lg:px-0">
         <div className="flex w-max gap-0.5 rounded-full border bg-muted/60 p-0.5">
           {tabs.map(([v, label]) => (
             <button
@@ -88,7 +92,7 @@ export function HrPage() {
               aria-current={tab === v ? 'page' : undefined}
               onClick={() => choose(v)}
               className={cn(
-                'inline-flex h-8 cursor-pointer items-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground',
+                'inline-flex h-8 cursor-pointer items-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground max-sm:h-10 max-sm:px-4',
                 tab === v && 'bg-card font-semibold text-primary shadow-[0_1px_2px_rgb(0_0_0/0.08)] ring-1 ring-border',
               )}
             >

@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthController } from './auth/auth.controller';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthService } from './auth/auth.service';
+import { Throttle } from './auth/throttle';
 import { CompanyController } from './company/company.controller';
 import { CompanyService } from './company/company.service';
 import { DbService } from './db/db.service';
@@ -21,6 +22,6 @@ import { RolesService } from './roles/roles.service';
 
 @Module({
   controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController],
-  providers: [DbService, KeysService, TokensService, AuthService, PeopleService, ProvisionClient, RolesService, CompanyService, DirectoryService, FlowsService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [DbService, Throttle, KeysService, TokensService, AuthService, PeopleService, ProvisionClient, RolesService, CompanyService, DirectoryService, FlowsService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

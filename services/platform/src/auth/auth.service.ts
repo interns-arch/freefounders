@@ -1,13 +1,14 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpException, Injectable, Logger, type OnModuleDestroy, type OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
 import { createHash, pbkdf2, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { badRequest, type Caller } from '../common/http';
 import { CompanyService } from '../company/company.service';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, type PlatformRole, refreshSessions } from '../db/schema';
 import { platformPermissionsOf } from '../roles/platform-permissions';
 import { ACCESS_TTL_SECONDS, TokensService } from '../keys/tokens.service';
+import { ipLimit, NAME_LIMIT, Throttle } from './throttle';
 
 /** "Stay signed in": a refresh session lives until it goes unused this long (founder decision: 1 year). */
 export const REFRESH_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -16,6 +17,10 @@ const ROTATION_GRACE_MS = 60 * 1000;
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MS = 15 * 60 * 1000;
 const WRONG = 'Wrong email / username / employee ID or password';
+const LOCKED = 'Too many failed attempts. Try again in a few minutes.';
+/** Rotated or revoked refresh rows are kept this long (reuse of a copied token is detected while its row exists). */
+const SESSION_HISTORY_DAYS = 30;
+const PRUNE_EVERY_MS = 60 * 60 * 1000;
 
 export const APP_INFO: Record<AppKey, { name: string; path: string }> = {
   tasks: { name: 'Tasks', path: '/tasks/' },
@@ -60,14 +65,49 @@ export interface Issued {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit, OnModuleDestroy {
   // Verifying against a dummy hash keeps response time similar for unknown logins.
   private readonly dummyHash = hash(randomBytes(16).toString('hex'));
+  private pruneTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly dbs: DbService,
     private readonly tokens: TokensService,
+    private readonly throttle: Throttle,
   ) {}
+
+  onModuleInit() {
+    if (process.env.NODE_ENV === 'test' || process.env.FF_CLI === 'true') return;
+    this.pruneTimer = setInterval(
+      () => void this.pruneSessions().catch((err) => new Logger('Auth').warn(`Session clean-up: ${(err as Error).message}`)),
+      PRUNE_EVERY_MS,
+    );
+    this.pruneTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.pruneTimer) clearInterval(this.pruneTimer);
+  }
+
+  /**
+   * Removes refresh rows nobody can use any more: expired ones, and rotated or revoked ones older than 30 days (a copied
+   * token older than that is simply refused instead of also ending the session). Safe on several processes at once.
+   */
+  async pruneSessions(): Promise<number> {
+    let removed = 0;
+    for (;;) {
+      const res = await this.dbs.db.execute(sql`
+        delete from ${refreshSessions} where ${refreshSessions.id} in (
+          select ${refreshSessions.id} from ${refreshSessions}
+          where ${refreshSessions.expiresAt} < now()
+             or ${refreshSessions.revokedAt} < now() - make_interval(days => ${SESSION_HISTORY_DAYS})
+             or ${refreshSessions.rotatedAt} < now() - make_interval(days => ${SESSION_HISTORY_DAYS})
+          limit 5000)`);
+      const n = res.rowCount ?? 0;
+      removed += n;
+      if (n < 5000) return removed;
+    }
+  }
 
   /** Email, then username, then employee ID. An employee ID shared by two companies is ambiguous and not accepted. */
   private async findLogin(input: string) {
@@ -84,20 +124,47 @@ export class AuthService {
 
   async login(input: string, password: string, meta: Meta): Promise<Issued & { mustChangePassword: boolean }> {
     const db = this.dbs.db;
-    const found = await this.findLogin(input);
-    const ok = await verifyPassword(found?.login.passwordHash ?? (await this.dummyHash), password);
-
-    if (!found || found.person.status !== 'active' || found.companyStatus !== 'active') throw new UnauthorizedException(WRONG);
-    const { login, person } = found;
-    if (login.lockedUntil && login.lockedUntil > new Date()) {
-      throw new UnauthorizedException('Too many failed attempts. Try again in a few minutes.');
+    const ipKey = `ip:${meta.ip ?? 'unknown'}`;
+    if (this.throttle.blocked(ipKey, ipLimit())) {
+      throw new HttpException('Too many sign-in attempts from your network. Try again in a few minutes.', 429);
     }
-    if (!ok) {
-      const failed = login.failedLogins + 1;
-      await db
-        .update(logins)
-        .set({ failedLogins: failed, lockedUntil: failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MS) : null })
-        .where(eq(logins.personId, person.id));
+    const found = await this.findLogin(input);
+
+    if (!found || found.person.status !== 'active' || found.companyStatus !== 'active') {
+      // No usable account: same work and same answers (incl. "too many" after 5 tries) as a real one, so nobody can tell.
+      await verifyPassword(await this.dummyHash, password);
+      this.throttle.fail(ipKey);
+      const nameKey = `name:${input.trim().toLowerCase()}`;
+      if (this.throttle.blocked(nameKey, NAME_LIMIT)) throw new UnauthorizedException(LOCKED);
+      this.throttle.fail(nameKey);
+      throw new UnauthorizedException(WRONG);
+    }
+    const { login, person } = found;
+
+    // Claim one attempt atomically BEFORE checking the password, so parallel guesses cannot get past the limit: at most
+    // MAX_FAILED_LOGINS checks per lock period, however many requests arrive at once. A lock that has run out starts over.
+    const [claim] = await db
+      .update(logins)
+      .set({
+        failedLogins: sql`case when ${logins.lockedUntil} is not null and ${logins.lockedUntil} <= now() then 1 else ${logins.failedLogins} + 1 end`,
+        lockedUntil: sql`case when ${logins.lockedUntil} <= now() then null else ${logins.lockedUntil} end`,
+      })
+      .where(
+        and(
+          eq(logins.personId, person.id),
+          or(and(isNull(logins.lockedUntil), lt(logins.failedLogins, MAX_FAILED_LOGINS)), lte(logins.lockedUntil, sql`now()`)),
+        ),
+      )
+      .returning({ failed: logins.failedLogins });
+    if (!claim) {
+      this.throttle.fail(ipKey);
+      throw new UnauthorizedException(LOCKED);
+    }
+    if (!(await verifyPassword(login.passwordHash, password))) {
+      this.throttle.fail(ipKey);
+      if (claim.failed >= MAX_FAILED_LOGINS) {
+        await db.update(logins).set({ lockedUntil: new Date(Date.now() + LOCK_MS) }).where(eq(logins.personId, person.id));
+      }
       throw new UnauthorizedException(WRONG);
     }
 
@@ -252,10 +319,15 @@ export class AuthService {
 
   async changePassword(caller: Caller, currentPassword: string, newPassword: string) {
     const db = this.dbs.db;
+    // A stolen access token must not become a way to guess the current password (and then take the account over).
+    const key = `pw:${caller.personId}`;
+    if (this.throttle.blocked(key, MAX_FAILED_LOGINS)) throw new HttpException('Too many wrong passwords. Try again in a few minutes.', 429);
     const [login] = await db.select().from(logins).where(eq(logins.personId, caller.personId)).limit(1);
     if (!login || !(await verifyPassword(login.passwordHash, currentPassword))) {
+      this.throttle.fail(key);
       throw badRequest('Current password is incorrect', { currentPassword: 'Current password is incorrect' });
     }
+    this.throttle.clear(key);
     if (currentPassword === newPassword) throw badRequest('Choose a new password', { newPassword: 'Choose a new password' });
     await db
       .update(logins)

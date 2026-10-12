@@ -365,7 +365,7 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
             <Count label="Worked" value={hrs(a?.working_minutes)} small />
           </div>
           {(balances.data?.length ?? 0) > 0 && (
-            <p className="truncate text-[13px] text-muted-foreground">
+            <p className="line-clamp-2 text-[13px] text-muted-foreground" title={`Leave left: ${balances.data!.map((b) => `${b.balance} ${b.name}`).join(' · ')}`}>
               Leave left:{' '}
               {balances.data!.slice(0, 2).map((b, i) => (
                 <span key={b.leave_type}>

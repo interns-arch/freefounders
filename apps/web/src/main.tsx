@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { z } from 'zod';
 import { App } from '@/app/App';
 import '@/index.css';
 import { installLite } from '@/lib/lite';
@@ -12,6 +13,10 @@ try {
 } catch {
   /* private mode: light */
 }
+
+// Form rules check values without generating code (zod's fast path uses `new Function`), so the production
+// Content-Security-Policy can forbid eval (infra/gateway/Caddyfile, docs/security/assets-web-mobile-infra.md).
+z.config({ jitless: true });
 
 // Lite mode on weak phones (PLAN.md §19.18): set before the first render, so nothing costly is painted even once.
 installLite();

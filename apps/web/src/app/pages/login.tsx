@@ -1,6 +1,6 @@
 import { errorMessage, session, useSignIn } from '@freefounders/core';
-import { CheckCircle2, Eye, EyeOff, Loader2, Package, ShieldCheck } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from 'lucide-react';
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
@@ -21,6 +21,11 @@ export function LoginPage() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
+  // Said next to the field when Sign in is pressed with it empty (the button is never greyed out without a reason).
+  const [missing, setMissing] = useState<{ login?: boolean; password?: boolean }>({});
+  const [capsLock, setCapsLock] = useState(false);
+  const loginRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const next = safeNext(params.get('next'));
 
   // Already signed in (another tab, or the refresh cookie still works): go straight on.
@@ -30,8 +35,15 @@ export function LoginPage() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    const gaps = { login: !login.trim(), password: !password };
+    setMissing(gaps);
+    if (gaps.login || gaps.password) {
+      (gaps.login ? loginRef : passwordRef).current?.focus();
+      return;
+    }
     signIn.mutate({ login: login.trim(), password }, { onSuccess: () => navigate(next ?? '/', { replace: true }) });
   };
+  const watchCaps = (e: KeyboardEvent<HTMLInputElement>) => setCapsLock(e.getModifierState?.('CapsLock') ?? false);
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
@@ -67,30 +79,77 @@ export function LoginPage() {
           <div className="mb-5 flex justify-center lg:hidden">
             <Logo />
           </div>
-          <form onSubmit={submit} className="space-y-5 rounded-xl border bg-card p-5 shadow-card-lg sm:p-7" aria-labelledby="signin-title">
+          <form onSubmit={submit} noValidate className="space-y-5 rounded-xl border bg-card p-5 shadow-card-lg sm:p-7" aria-labelledby="signin-title">
             <h1 id="signin-title" className="text-2xl font-bold tracking-tight">
               Sign in
             </h1>
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="login">Email, username or employee ID</Label>
-                <Input id="login" className="h-11" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" autoCapitalize="none" autoFocus required />
+                <Input
+                  id="login"
+                  ref={loginRef}
+                  className="h-11"
+                  value={login}
+                  onChange={(e) => {
+                    setLogin(e.target.value);
+                    if (missing.login) setMissing((m) => ({ ...m, login: false }));
+                  }}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoFocus
+                  required
+                  aria-invalid={missing.login || undefined}
+                  aria-describedby={missing.login ? 'login-error' : undefined}
+                />
+                {missing.login && (
+                  <p id="login-error" role="alert" className="text-[13px] font-medium text-destructive">
+                    Enter your email, username or employee ID.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
-                  <Input id="password" className="h-11 pr-20" type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+                  <Input
+                    id="password"
+                    ref={passwordRef}
+                    className="h-11 pr-20"
+                    type={show ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (missing.password) setMissing((m) => ({ ...m, password: false }));
+                    }}
+                    onKeyDown={watchCaps}
+                    onKeyUp={watchCaps}
+                    onBlur={() => setCapsLock(false)}
+                    autoComplete="current-password"
+                    required
+                    aria-invalid={missing.password || undefined}
+                    aria-describedby={[missing.password ? 'password-error' : '', capsLock ? 'caps-note' : ''].filter(Boolean).join(' ') || undefined}
+                  />
                   {/* Named "Show" / "Hide" (not "Show password"): the label "Password" must point at the field alone. */}
                   <button
                     type="button"
                     onClick={() => setShow((v) => !v)}
                     aria-pressed={show}
-                    className="absolute top-1/2 right-1 flex h-9 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-md px-2 text-[12px] font-semibold text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
+                    className="absolute top-1/2 right-1 flex h-9 min-w-16 -translate-y-1/2 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-[13px] font-semibold text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
                   >
                     {show ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
                     {show ? 'Hide' : 'Show'}
                   </button>
                 </div>
+                {missing.password && (
+                  <p id="password-error" role="alert" className="text-[13px] font-medium text-destructive">
+                    Enter your password.
+                  </p>
+                )}
+                {capsLock && (
+                  <p id="caps-note" className="text-[13px] font-medium text-warning">
+                    Caps Lock is on.
+                  </p>
+                )}
               </div>
             </div>
             {signIn.isError && (
@@ -98,8 +157,7 @@ export function LoginPage() {
                 {errorMessage(signIn.error)}
               </p>
             )}
-            <Button type="submit" className="h-11 w-full" size="lg" disabled={signIn.isPending || !login || !password}>
-              {signIn.isPending && <Loader2 className="size-4 animate-spin" />}
+            <Button type="submit" className="h-11 w-full" size="lg" loading={signIn.isPending}>
               Sign in
             </Button>
           </form>

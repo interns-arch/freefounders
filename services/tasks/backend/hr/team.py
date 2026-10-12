@@ -13,6 +13,7 @@ week-off, "not checked in" for today, absent for a past working day, nothing for
 import csv
 import io
 import re
+from itertools import islice
 from datetime import date, datetime, time, timedelta
 
 from django.db import transaction
@@ -31,6 +32,7 @@ STATUSES = [s.value for s in AttendanceStatus]
 MAX_RANGE_DAYS = 366
 IMPORT_MAX_BYTES = 2 * 1024 * 1024
 IMPORT_MAX_ROWS = 5000
+IMPORT_MAX_COLUMNS = 64
 
 
 # ------------------------------------------------------------------ scope
@@ -348,8 +350,9 @@ def build_report(kind, users, params):
 def to_csv(header, rows) -> bytes:
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(header)
-    w.writerows(rows)
+    from config.exports import safe_row
+    w.writerow(safe_row(header))
+    w.writerows(safe_row(r) for r in rows)
     return ("﻿" + buf.getvalue()).encode("utf-8")   # BOM: Excel opens it as UTF-8
 
 
@@ -361,11 +364,12 @@ def to_xlsx(title, header, rows, extra_sheet=None) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = re.sub(r"[\[\]:*?/\\]", "", title)[:31] or "Report"
-    ws.append(header)
+    from config.exports import safe_row
+    ws.append(safe_row(header))
     for cell in ws[1]:
         cell.font = Font(bold=True)
     for r in rows:
-        ws.append(r)
+        ws.append(safe_row(r))
     ws.freeze_panes = "A2"
     for i, h in enumerate(header, start=1):
         width = max([len(str(h))] + [len(str(r[i - 1])) for r in rows[:500] if i - 1 < len(r) and r[i - 1] is not None])
@@ -422,12 +426,20 @@ def read_rows(upload):
             wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
         except Exception:
             raise ValidationError({"file": "This XLSX file could not be read."})
-        table = [list(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
+        rows_in = wb.worksheets[0].iter_rows(values_only=True, max_col=IMPORT_MAX_COLUMNS)
     elif name.endswith(".csv"):
         text = raw.decode("utf-8-sig", errors="replace")
-        table = list(csv.reader(io.StringIO(text)))
+        rows_in = (r[:IMPORT_MAX_COLUMNS] for r in csv.reader(io.StringIO(text)))
     else:
         raise ValidationError({"file": "Upload an .xlsx or .csv file."})
+    # Read at most a bounded number of lines: a 2 MB XLSX can unpack to millions of rows (a "zip bomb").
+    limit = IMPORT_MAX_ROWS * 2 + 2
+    try:
+        table = [list(r) for r in islice(rows_in, limit)]
+    except Exception:
+        raise ValidationError({"file": "This file could not be read."})
+    if len(table) >= limit:
+        raise ValidationError({"file": f"At most {IMPORT_MAX_ROWS} rows per file."})
     if not table:
         raise ValidationError({"file": "The file is empty."})
     keys = [_column(h) for h in table[0]]

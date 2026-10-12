@@ -37,6 +37,7 @@ import { FilePick } from '../shared/file-pick';
 import { toLocalInput } from '../shared/format';
 import { ProofreadText } from '../shared/proofread-text';
 import { LeadForm } from './lead-form';
+import { safeHref } from '@/lib/safe-url';
 
 export const STAGE_TONE: Record<LeadStatus, Tone> = { new: 'info', contacted: 'primary', quotation_sent: 'warning', negotiation: 'warning', won: 'success', lost: 'danger' };
 export const LEAD_PRIORITY_TONE: Record<LeadPriority, Tone> = { low: 'neutral', normal: 'neutral', high: 'warning', urgent: 'danger' };
@@ -317,7 +318,7 @@ function Documents({ leadId, readOnly, docs, loading }: { leadId: number; readOn
           <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md border px-3 py-2 text-sm">
             <Paperclip className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             {d.url ? (
-              <a href={d.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-primary hover:underline">
+              <a href={safeHref(d.url)} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-primary hover:underline">
                 {d.filename}
               </a>
             ) : (

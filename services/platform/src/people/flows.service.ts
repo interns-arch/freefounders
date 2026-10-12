@@ -19,6 +19,12 @@ interface AppEvent {
   payload: Record<string, any>;
 }
 
+/** Postgres advisory lock: only one Platform process reads the outboxes at a time (several may run behind a balancer). */
+export const EVENTS_LOCK = 4_646_001;
+/** An id another app gave us, used in a URL path: plain letters, digits, dash and underscore only. */
+const PATH_ID = /^[A-Za-z0-9_-]{1,64}$/;
+export const pathId = (v: unknown): string | null => (typeof v === 'string' || typeof v === 'number') && PATH_ID.test(String(v)) ? String(v) : null;
+
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 
 /**
@@ -55,24 +61,45 @@ export class FlowsService implements OnModuleInit, OnModuleDestroy {
 
   // ─── reading the apps' outboxes ──────────────────────────────────────────
 
-  /** One pass over every active company and app. Returns how many events were handled. */
+  /**
+   * One pass over every active company and app. Returns how many events were handled. Several Platform processes may
+   * call this at once: a Postgres advisory lock lets exactly one of them work (the others return 0), so no event is
+   * acted on twice.
+   */
   async pollAll(): Promise<number> {
     if (this.running) return 0;
     this.running = true;
+    const client = await this.dbs.pool.connect().catch((err) => {
+      this.running = false;
+      throw err;
+    });
     let handled = 0;
     try {
-      const rows = await this.dbs.db.select({ id: companies.id, apps: companies.enabledApps }).from(companies).where(eq(companies.status, 'active')).orderBy(asc(companies.createdAt));
-      for (const c of rows) {
-        for (const app of c.apps.filter((a): a is AppKey => (APPS as readonly string[]).includes(a) && !!internalUrl(a as AppKey))) {
-          try {
-            handled += await this.pollApp(c.id, app);
-          } catch (err) {
-            this.log.warn(`Events from ${app} for company ${c.id}: ${(err as Error).message}`); // app down: next pass
-          }
-        }
+      const { rows } = await client.query<{ ok: boolean }>('select pg_try_advisory_lock($1) as ok', [EVENTS_LOCK]);
+      if (!rows[0]?.ok) return 0;
+      try {
+        handled = await this.pollCompanies();
+      } finally {
+        await client.query('select pg_advisory_unlock($1)', [EVENTS_LOCK]).catch(() => undefined);
       }
     } finally {
+      client.release();
       this.running = false;
+    }
+    return handled;
+  }
+
+  private async pollCompanies(): Promise<number> {
+    let handled = 0;
+    const rows = await this.dbs.db.select({ id: companies.id, apps: companies.enabledApps }).from(companies).where(eq(companies.status, 'active')).orderBy(asc(companies.createdAt));
+    for (const c of rows) {
+      for (const app of c.apps.filter((a): a is AppKey => (APPS as readonly string[]).includes(a) && !!internalUrl(a as AppKey))) {
+        try {
+          handled += await this.pollApp(c.id, app);
+        } catch (err) {
+          this.log.warn(`Events from ${app} for company ${c.id}: ${(err as Error).message}`); // app down: next pass
+        }
+      }
     }
     return handled;
   }
@@ -128,15 +155,18 @@ export class FlowsService implements OnModuleInit, OnModuleDestroy {
       externalRef: `assets:ticket:${p.ticketId}`,
       externalUrl: `/assets/tickets?open=${p.ticketId}`,
     });
-    await this.provisioner.internal('assets', 'PUT', `/tickets/${p.ticketId}/link`, companyId, { assigneePersonId: owner, ref: task.code, url: task.url });
+    const ticketId = pathId(p.ticketId);
+    if (!ticketId) return;
+    await this.provisioner.internal('assets', 'PUT', `/tickets/${ticketId}/link`, companyId, { assigneePersonId: owner, ref: task.code, url: task.url });
   }
 
   private async resolveTicket(companyId: string, p: Record<string, any>) {
     const ref = String(p.externalRef ?? '');
-    if (!ref.startsWith('assets:ticket:')) return;
+    const ticketId = ref.startsWith('assets:ticket:') ? pathId(ref.slice('assets:ticket:'.length)) : null;
+    if (!ticketId) return;
     const [c] = await this.dbs.db.select({ apps: companies.enabledApps }).from(companies).where(eq(companies.id, companyId));
     if (!c?.apps.includes('assets') || !internalUrl('assets')) return;
-    await this.provisioner.internal('assets', 'POST', `/tickets/${ref.slice('assets:ticket:'.length)}/resolve`, companyId, {
+    await this.provisioner.internal('assets', 'POST', `/tickets/${ticketId}/resolve`, companyId, {
       resolution: p.remarks ? `${p.remarks} (${p.code} in Tasks)` : null,
     });
   }

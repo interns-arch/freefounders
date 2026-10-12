@@ -152,7 +152,9 @@ def _attach_photo(record, field: str, photo):
         # Stored as a JPEG of at most 720 px without metadata (PLAN.md §19.20); a PNG/WebP is always converted, since the
         # photo is served as image/jpeg.
         from config.images import SELFIE, compress_image
-        raw, _ = compress_image(raw, *SELFIE, always=raw[:3] != b"\xff\xd8\xff")
+        raw, ext = compress_image(raw, *SELFIE, always=raw[:3] != b"\xff\xd8\xff")
+        if not ext and raw[:3] != b"\xff\xd8\xff":  # an unreadable or oversized PNG/WebP is never stored as a "JPEG"
+            raise HRError("The photo could not be read. Please try again.")
         getattr(record, field).save("punch.jpg", ContentFile(raw), save=False)
 
 

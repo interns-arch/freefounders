@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { usePalette } from '@/lib/palette';
 import { normalizeServerUrl } from '@/lib/protocol';
-import { DEFAULT_SERVER_URL } from '@/lib/server-url';
+import { DEFAULT_SERVER_URL, SERVER_ADDRESS_HELP, SERVER_LOCKED } from '@/lib/server-url';
 import { Button, Note, T } from './ui';
 
 export function OfflineScreen({
@@ -30,7 +30,7 @@ export function OfflineScreen({
 
   const save = async (input: string | null) => {
     setError('');
-    if (input !== null && !normalizeServerUrl(input)) return setError('That is not a server address. Example: http://192.168.137.1:8080');
+    if (input !== null && !normalizeServerUrl(input)) return setError(SERVER_ADDRESS_HELP);
     setSaving(true);
     try {
       await onChangeServer(input);
@@ -66,8 +66,12 @@ export function OfflineScreen({
           ) : null}
         </View>
         <Button label="Try again" icon="refresh" onPress={onRetry} />
-        {editing ? (
+        {SERVER_LOCKED ? null : editing ? (
           <View style={{ gap: 10 }}>
+            <Note>
+              Only enter the address your company gave you. The server at this address sees your password and can ask the app for
+              your location and camera. Nobody from FreeFounders or your company will ever ask you to change it by phone or chat.
+            </Note>
             <T weight="600" nativeID="server-label">
               Server address
             </T>

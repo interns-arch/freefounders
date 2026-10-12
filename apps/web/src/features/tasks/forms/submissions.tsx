@@ -10,6 +10,7 @@ import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { ErrorNote, Panel, fmtWhen } from '../general/parts';
 import { downloadBlob } from '../shared/csv';
+import { safeHref } from '@/lib/safe-url';
 
 export function FormSubmissionsPage() {
   const { formId } = useParams();
@@ -114,7 +115,7 @@ function SubmissionDetail({ s, fieldLabel }: { s: FormSubmission; fieldLabel: (f
           ...s.files.map((f) => ({
             label: fieldLabel(f.field_id),
             value: (
-              <a href={f.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+              <a href={safeHref(f.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
                 <Paperclip className="size-3.5" /> {f.filename}
               </a>
             ),

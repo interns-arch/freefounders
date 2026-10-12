@@ -54,6 +54,14 @@
   --shadow-pop: var(--sh-pop);
 }
 
+/*
+ * Small print never goes under 12 px: desktop reads at a 15 px base (§19.14), which made text-xs 11.25 px.
+ * (Mono eyebrows with an explicit text-[11px] are the only smaller text.)
+ */
+@theme {
+  --text-xs: max(0.75rem, 12px);
+}
+
 :root {
   --sh-card: 0 1px 2px rgb(16 32 26 / 0.05), 0 2px 8px rgb(16 32 26 / 0.04);
   --sh-card-lg: 0 2px 4px rgb(16 32 26 / 0.05), 0 10px 28px rgb(16 32 26 / 0.08);
@@ -71,6 +79,25 @@
   }
   html {
     -webkit-tap-highlight-color: transparent;
+    /* A field or link reached with Tab or "jump to field" is never hidden under the sticky header or the phone's bottom bar. */
+    scroll-padding-top: 4.5rem;
+    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-bottom: 1rem;
+    }
+  }
+  /* Native drop-downs (NativeSelect) show a chevron in the theme's muted colour, light and dark. */
+  select[data-slot='select'] {
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%), linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+    background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  /* Buttons and links answer taps at once (no 300 ms double-tap wait on older phone browsers). */
+  a, button, [role='button'], [role='tab'], label, select, summary {
+    touch-action: manipulation;
   }
   /* Desktop reads comfortably at 15 px; phones keep the browser's 16 px (PLAN.md §19.14). */
   @media (min-width: 1024px) {
@@ -122,6 +149,24 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+}
+
+/*
+ * Keyboard focus: a solid 2 px outline in the primary colour (at least 3:1 against cards and the page, light and dark)
+ * around every button, link, tab and switch, on top of the soft ring the components draw. Unlayered, so it wins over
+ * the components' outline-none. Text fields keep their own focus look (primary border + ring); rows and menu items
+ * keep their highlight; headings focused after a route change (tabindex -1) stay plain.
+ */
+:root {
+  --focus-outline: var(--primary);
+}
+/* Inside the dark sidebar (desktop menu and the phone drawer) the outline uses the bright accent. */
+.bg-sidebar {
+  --focus-outline: var(--brand-2);
+}
+:is(a[href], button, summary, [role='button'], [role='tab'], [role='switch'], [role='checkbox'], [role='radio'], [tabindex='0']):not(tr, li, [role='menuitem'], [role='menuitemradio'], [role='option']):focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
 }
 
 /* People who asked their device for less motion: no transitions, no hover lifts (PLAN.md §19.14). */

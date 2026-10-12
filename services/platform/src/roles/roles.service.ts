@@ -404,6 +404,8 @@ export class RolesService {
     const db = this.dbs.db;
     const [person] = await db.select().from(people).where(and(eq(people.id, personId), eq(people.companyId, caller.companyId))).limit(1);
     if (!person) throw notFound('Person');
+    // Same rule as People & access (PLAN.md §19.19): a member with Admin permissions acts on members only.
+    if (caller.role === 'member' && person.platformRole !== 'member') throw new ForbiddenException('Only an owner or admin can change an admin’s roles');
     const wanted = [...new Set(roleIds)];
     const found = wanted.length
       ? await db.select().from(roles).where(and(inArray(roles.id, wanted), eq(roles.companyId, caller.companyId), eq(roles.archived, false)))
