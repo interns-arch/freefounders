@@ -17,6 +17,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { type CameraState, injectedScript } from '@/lib/injected';
 import { currentPosition } from '@/lib/location';
 import { printHtml, saveAndShare } from '@/lib/native-actions';
+import { askPermissionsAtStart } from '@/lib/permissions';
 import { usePalette } from '@/lib/palette';
 import { type AppRequest, fromServer, linkTarget, originOf, parseMessage, replyError, replyOk } from '@/lib/protocol';
 import { loadServerUrl, saveServerUrl } from '@/lib/server-url';
@@ -44,10 +45,11 @@ export function Shell() {
   const [refreshing, setRefreshing] = useState(false);
   const [selfie, setSelfie] = useState<PhotoRequest | null>(null);
 
-  // The address to open and the camera permission state (for file pickers), before the WebView is created.
+  // The address to open, and location + camera asked once at start (Android pop-ups over the splash), before the
+  // WebView is created; the camera answer also tells file pickers whether they may offer the camera.
   useEffect(() => {
     void (async () => {
-      const [url, perm] = await Promise.all([loadServerUrl(), Camera.getCameraPermissionsAsync().catch(() => null)]);
+      const [url, perm] = await Promise.all([loadServerUrl(), askPermissionsAtStart()]);
       setCamera(cameraState(perm));
       setServer(url);
     })();

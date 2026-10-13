@@ -3,6 +3,7 @@
  * permission on first use, high accuracy, 10 s at most, then a recent last-known fix. Errors are meant for the person.
  */
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 
 export type PositionResult =
   | { ok: true; latitude: number; longitude: number; accuracy: number | null }
@@ -38,7 +39,15 @@ export async function currentPosition(): Promise<PositionResult> {
         };
   }
   if (!(await Location.hasServicesEnabledAsync())) {
-    return { ok: false, message: 'Location (GPS) is off on this phone. Swipe down from the top of the screen, turn on Location, then try again.' };
+    // Android's own "Turn on location?" pop-up (OK / No thanks), as other apps show; nothing happens on iOS.
+    if (Platform.OS === 'android') await Location.enableNetworkProviderAsync().catch(() => {});
+    if (!(await Location.hasServicesEnabledAsync())) {
+      return {
+        ok: false,
+        message: 'Location (GPS) is off on this phone. Tap "Allow location" and choose OK, or swipe down from the top of the screen and turn on Location.',
+        permission: true,
+      };
+    }
   }
   try {
     const p = await timeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }), 10_000);
