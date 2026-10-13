@@ -63,14 +63,14 @@ function useTheme() {
   return { dark, toggle };
 }
 
-/** Light / dark switch for the header. */
+/** Light / dark switch for the desktop header (phones use the account menu's item: one switch per screen). */
 export function ThemeToggle() {
   const theme = useTheme();
   return (
     <Button
       variant="ghost"
       size="icon"
-      className="rounded-full text-muted-foreground hover:text-primary max-lg:size-11"
+      className="rounded-full text-muted-foreground hover:text-primary max-lg:hidden"
       onClick={theme.toggle}
       aria-label={theme.dark ? 'Light mode' : 'Dark mode'}
       title={theme.dark ? 'Light mode' : 'Dark mode'}
@@ -211,7 +211,7 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         </DropdownMenuLabel>
         <DropdownMenuRadioGroup aria-labelledby="lite-label" value={lite.choice} onValueChange={(v) => lite.setChoice(v as LiteChoice)}>
           <DropdownMenuRadioItem value="auto" onSelect={(e) => e.preventDefault()}>
-            Auto <span className="ml-auto text-xs text-muted-foreground">for weak phones</span>
+            Auto <span className="ml-auto text-xs text-muted-foreground">for weak devices</span>
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="on" onSelect={(e) => e.preventDefault()}>
             On
@@ -222,7 +222,7 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         {onShortcuts && (
-          <DropdownMenuItem onSelect={onShortcuts}>
+          <DropdownMenuItem onSelect={onShortcuts} className="max-lg:hidden">
             <Keyboard className="size-4" /> Keyboard shortcuts
           </DropdownMenuItem>
         )}

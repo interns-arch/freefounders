@@ -2,83 +2,83 @@
  * FreeFounders design tokens (PLAN.md §6 rule 2, §18, §19, §19.22). The ONLY place colours, radius and fonts are defined.
  * The web app maps these to Tailwind (apps/web/src/index.css); the mobile app reads the same values from
  * src/tokens.ts. Change the look of the whole product here. A company's brand colour (Settings Center) overrides
- * --primary (and --brand-2, --ring) at run time; the orange --cta stays.
- * Look (§19.22, "trust blue + orange"): flat, clean, data-dense SaaS. Slate page, white cards, trust-blue actions
- * (--primary, with --brand-2 as the calm secondary blue), one orange call to action per screen (--cta: Punch in,
- * Add task…), a white sidebar with a blue active item (deep navy in dark mode), one accent per workspace.
- * Every text colour reaches 4.5:1 on its surface and on its own 10 % tint (numbers in PLAN.md §19.22).
+ * --primary (and --brand-2, --ring) at run time, in both modes; the --cta colour stays.
+ * Look (§19.22 layout, colours §19.25): flat, clean, data-dense SaaS. Light = "indigo + emerald": lavender-grey page,
+ * white cards and sidebar, indigo actions (--primary), one emerald call to action per screen (--cta: Punch in, Add
+ * task…). Dark = "graphite + lime": near-black page, graphite cards and sidebar, lime actions, green call to action.
+ * One accent per workspace. Every text colour reaches 4.5:1 on its surface and on its own tint (PLAN.md §19.25).
  */
 :root {
   --radius: 0.75rem;
   --font-sans: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
-  --background: oklch(0.984 0.003 247.9);
-  --foreground: oklch(0.208 0.04 265.8);
+  --background: oklch(0.977 0.005 275);
+  --foreground: oklch(0.257 0.086 281.3);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.04 265.8);
+  --card-foreground: oklch(0.257 0.086 281.3);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.04 265.8);
-  --primary: oklch(0.54 0.215 262.9);
+  --popover-foreground: oklch(0.257 0.086 281.3);
+  --primary: oklch(0.511 0.23 277);
   --primary-foreground: oklch(1 0 0);
-  --brand-2: oklch(0.623 0.188 259.8);
-  --secondary: oklch(0.968 0.007 247.9);
-  --secondary-foreground: oklch(0.279 0.037 260);
-  --muted: oklch(0.968 0.007 247.9);
-  --muted-foreground: oklch(0.446 0.037 257.3);
-  --accent: oklch(0.97 0.014 254.6);
-  --accent-foreground: oklch(0.488 0.217 264.4);
-  --destructive: oklch(0.54 0.205 27.3);
+  --brand-2: oklch(0.585 0.204 277.1);
+  --secondary: oklch(0.959 0.009 279.7);
+  --secondary-foreground: oklch(0.359 0.135 278.7);
+  --muted: oklch(0.959 0.009 279.7);
+  --muted-foreground: oklch(0.436 0.04 275.5);
+  --accent: oklch(0.958 0.02 279.9);
+  --accent-foreground: oklch(0.457 0.215 277);
+  --destructive: oklch(0.541 0.205 27.3);
   --success: oklch(0.508 0.105 165.6);
-  --warning: oklch(0.53 0.12 70);
-  --info: oklch(0.5 0.119 242.7);
-  --cta: oklch(0.58 0.19 41.1);
+  --warning: oklch(0.531 0.116 68.3);
+  --info: oklch(0.5 0.119 242.8);
+  --cta: oklch(0.508 0.105 165.6);
   --cta-foreground: oklch(1 0 0);
-  --border: oklch(0.929 0.013 255.5);
-  --input: oklch(0.869 0.02 252.9);
-  --ring: oklch(0.54 0.215 262.9);
+  --border: oklch(0.926 0.014 277.1);
+  --input: oklch(0.857 0.024 275.3);
+  --ring: oklch(0.511 0.23 277);
   --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.372 0.039 257.3);
-  --sidebar-accent: oklch(0.968 0.007 247.9);
-  --sidebar-border: oklch(0.929 0.013 255.5);
+  --sidebar-foreground: oklch(0.377 0.05 277.7);
+  --sidebar-accent: oklch(0.959 0.009 279.7);
+  --sidebar-border: oklch(0.926 0.014 277.1);
   /* Workspace accents: how Attendance, Tasks, Assets and Admin are told apart. */
   --app-attendance: oklch(0.541 0.247 293);
   --app-tasks: oklch(0.54 0.215 262.9);
   --app-assets: oklch(0.511 0.086 186.4);
-  --app-admin: oklch(0.446 0.037 257.3);
+  --app-admin: oklch(0.436 0.04 275.5);
 }
 
 .dark {
-  --background: oklch(0.183 0.031 263.4);
-  --foreground: oklch(0.968 0.007 247.9);
-  --card: oklch(0.23 0.043 265.6);
-  --card-foreground: oklch(0.968 0.007 247.9);
-  --popover: oklch(0.247 0.044 266.3);
-  --popover-foreground: oklch(0.968 0.007 247.9);
-  --primary: oklch(0.714 0.143 254.6);
-  --primary-foreground: oklch(0.183 0.031 263.4);
-  --brand-2: oklch(0.623 0.188 259.8);
-  --secondary: oklch(0.279 0.037 260);
-  --secondary-foreground: oklch(0.929 0.013 255.5);
-  --muted: oklch(0.269 0.053 266.2);
-  --muted-foreground: oklch(0.711 0.035 256.8);
-  --accent: oklch(0.289 0.062 263.9);
-  --accent-foreground: oklch(0.932 0.032 255.6);
+  --background: oklch(0.141 0.004 285.8);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.9);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.228 0.008 285.8);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.849 0.207 128.8);
+  --primary-foreground: oklch(0.145 0.002 286.1);
+  --brand-2: oklch(0.768 0.204 130.8);
+  --secondary: oklch(0.274 0.005 286);
+  --secondary-foreground: oklch(0.92 0.004 286.3);
+  --muted: oklch(0.274 0.005 286);
+  --muted-foreground: oklch(0.712 0.013 286.1);
+  --accent: oklch(0.255 0.038 124.1);
+  --accent-foreground: oklch(0.938 0.122 124.3);
   --destructive: oklch(0.711 0.166 22.2);
   --success: oklch(0.773 0.153 163.2);
   --warning: oklch(0.837 0.164 84.4);
   --info: oklch(0.754 0.139 232.7);
-  --cta: oklch(0.705 0.187 47.6);
-  --cta-foreground: oklch(0.183 0.031 263.4);
-  --border: oklch(0.311 0.048 264.2);
-  --input: oklch(0.372 0.039 257.3);
-  --ring: oklch(0.714 0.143 254.6);
-  --sidebar: oklch(0.161 0.027 265.8);
-  --sidebar-foreground: oklch(0.869 0.02 252.9);
-  --sidebar-accent: oklch(0.251 0.05 265);
-  --sidebar-border: oklch(0.266 0.054 267.8);
+  --cta: oklch(0.723 0.192 149.6);
+  --cta-foreground: oklch(0.266 0.063 152.9);
+  --border: oklch(0.274 0.005 286);
+  --input: oklch(0.37 0.012 285.8);
+  --ring: oklch(0.849 0.207 128.8);
+  --sidebar: oklch(0.169 0.004 286);
+  --sidebar-foreground: oklch(0.871 0.005 286.3);
+  --sidebar-accent: oklch(0.241 0.008 285.8);
+  --sidebar-border: oklch(0.241 0.008 285.8);
   --app-attendance: oklch(0.709 0.159 293.5);
   --app-tasks: oklch(0.714 0.143 254.6);
   --app-assets: oklch(0.785 0.133 181.9);
-  --app-admin: oklch(0.711 0.035 256.8);
+  --app-admin: oklch(0.712 0.013 286.1);
 }

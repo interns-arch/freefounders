@@ -1,10 +1,9 @@
 import { useAccess } from '@freefounders/core';
 import { ensureAssetsCookie } from '@freefounders/core/assets';
-import { ChevronDown, Home, LayoutGrid, Menu } from 'lucide-react';
+import { ChevronDown, Home, LayoutGrid } from 'lucide-react';
 import { type RefObject, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { PageLoader } from '@/components/common/page';
-import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Sheet, SheetContent, SheetTitle } from '@/components/ui/overlays';
 import { brandCss } from '@/lib/brand-colour';
@@ -115,7 +114,7 @@ function useFocusHeading(pathname: string, main: RefObject<HTMLElement | null>) 
 /**
  * The frame around every screen (PLAN.md §19.14): one menu for the whole product. Desktop: a sidebar with Home and a
  * collapsible group per area (Attendance, Tasks, Assets, Admin). Phones: a bottom bar (Attendance · Home · Tasks · Assets ·
- * More) and the same menu in a drawer. The header carries the page area, light/dark, notifications and the account menu.
+ * More, which opens the same menu in a drawer; no second menu button in the header). The header carries the page area, light/dark, notifications and the account menu.
  */
 export function AppShell() {
   const access = useAccess();
@@ -294,10 +293,7 @@ export function AppShell() {
         </SheetContent>
       </Sheet>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-1.5 border-b bg-card px-2 sm:gap-2 sm:px-3 lg:px-6">
-          <Button variant="ghost" size="icon" className="size-11 lg:hidden" onClick={() => setDrawer(true)} aria-label="Menu" aria-haspopup="dialog" aria-expanded={drawer}>
-            <Menu className="size-5" />
-          </Button>
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-1.5 border-b bg-card px-3 sm:gap-2 lg:px-6">
           <span className="flex min-w-0 items-center gap-2 rounded-full border bg-background py-1 pr-3 pl-1 text-[13px] font-semibold">
             <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', look ? look.soft : 'bg-primary/8 text-primary')} aria-hidden>
               {look ? <look.icon className="size-3.5" /> : <Home className="size-3.5" />}

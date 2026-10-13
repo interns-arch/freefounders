@@ -106,7 +106,15 @@
   a, button, [role='button'], [role='tab'], label, select, summary {
     touch-action: manipulation;
   }
-  /* Desktop reads comfortably at 15 px; phones keep the browser's 16 px (PLAN.md §19.14). */
+  /* Desktop reads comfortably at 15 px; phones keep the browser's 16 px (PLAN.md §19.14). Small phones (under 640 px)
+     get tighter spacing instead of smaller text (founder, 2026-10-13: "more on screen, less scrolling"): every Tailwind
+     padding, gap, margin and height is a multiple of --spacing, so 0.25rem → 0.22rem is ~12 % denser; text stays 16 px
+     and buttons stay at least 38 px tall. */
+  @media (max-width: 639px) {
+    :root {
+      --spacing: 0.22rem;
+    }
+  }
   @media (min-width: 1024px) {
     html {
       font-size: 15px;

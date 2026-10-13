@@ -11,7 +11,7 @@ import { Camera } from 'expo-camera';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Linking, PixelRatio, Platform, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { type CameraState, injectedScript } from '@/lib/injected';
@@ -26,6 +26,12 @@ import { SelfieCamera } from './selfie-camera';
 import { T } from './ui';
 
 const VERSION = Constants.expoConfig?.version ?? '0.0.0';
+
+/**
+ * The phone's own font size setting (Settings → Display → Font size) still enlarges the app's text, but at most 130 %:
+ * beyond that the screens' layouts no longer fit a phone and buttons get cut off.
+ */
+const TEXT_ZOOM = Math.min(130, Math.max(85, Math.round(PixelRatio.getFontScale() * 100)));
 
 const cameraState = (p: { granted: boolean; canAskAgain: boolean } | null): CameraState => (p?.granted ? 'granted' : p && !p.canAskAgain ? 'denied' : 'ask');
 
@@ -208,6 +214,7 @@ export function Shell() {
               pullToRefreshEnabled
               allowsBackForwardNavigationGestures
               overScrollMode="never"
+              textZoom={TEXT_ZOOM}
               applicationNameForUserAgent={`FreeFoundersApp/${VERSION}`}
               webviewDebuggingEnabled={__DEV__}
               onNavigationStateChange={(nav) => {

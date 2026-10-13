@@ -1857,3 +1857,18 @@ Founder answers to the open items of §19.21 (details, rules and test names in `
 - Not chosen now: one-time setup link, authenticator OTP, "sign out everywhere" screen. Live-server checklist (S3,
   enforced CSP, fixed app server address) comes with the AWS phase.
 - Platform migration 0008 removes the old forms/ideas grants (§19.23).
+
+### 19.25 Colours: indigo + emerald (light), graphite + lime (dark); phone layout (2026-10-13)
+Founder: "use graphite and lime for dark mode and [indigo + emerald] for light mode"; "every company can set its colour of
+choice also in these themes" (the brand colour keeps replacing `--primary` in both modes, `lib/brand-colour.ts`).
+- Light: page `#f6f7fb`, cards/sidebar white, text `#1e1b4b`, muted `#4b5068` (7.9 card), primary indigo `#4f46e5` (white
+  label 6.3, 5.6 on its tint), CTA emerald `#047857` (white 5.5), border `#e4e6f0`.
+- Dark: page `#09090b`, cards `#18181b`, sidebar `#0f0f11`, text `#fafafa`, muted `#a1a1aa` (6.9 card), primary lime `#a3e635`
+  (11.8 on card, near-black label 13.1), CTA green `#22c55e` + `#052e16` label (6.5), border `#27272a`.
+- Workspace accents, status colours unchanged; every pair ≥ 4.5:1 (also on its own tint). `tokens.native.ts`, favicon,
+  `theme-color` metas and the Android splash/icon colours follow.
+- Phones (founder: "not smaller text, but more on screen with less scrolling"): text stays 16 px; under 640 px
+  Tailwind `--spacing` is 0.22rem instead of 0.25rem (~12 % denser padding/gaps/heights). Duplicates removed on phones:
+  the header ☰ (the bottom bar's More opens the same menu), the header light/dark button (in the account menu),
+  "Keyboard shortcuts". Phone app: Android font-size setting enlarges text up to 130 % (WebView `textZoom`), so layouts
+  never break. Checked 320/360/393 px light and dark on 9 screens: no sideways scrolling.
