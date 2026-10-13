@@ -1,5 +1,5 @@
 import { ASSIGNABLE_HOLDERS, HOLDER_TYPE_LABELS, type HolderType } from '@eam/shared';
-import { Check, ChevronsUpDown, Loader2, Plus, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Plus, X } from '@/components/icons';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlays';
 import { toast } from 'sonner';

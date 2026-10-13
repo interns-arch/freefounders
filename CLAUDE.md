@@ -41,6 +41,8 @@ actions/links/active menu, `--cta` (`<Button variant="cta">`) only for the one m
 task…), white sidebar (graphite in dark mode), 12 px cards / 8 px controls; text ≥ 4.5:1 on its surface and on its own
 tint; no gradients, glows or blur. A company's brand colour (Settings) still replaces `--primary` in both modes.
 Phones keep 16 px text; under 640 px `--spacing` is 0.22rem (denser, less scrolling).
+Icons: Hugeicons only, imported from `@/components/icons` (never `lucide-react`). No status dots and no capsule
+(rounded-full) labels, chips or tabs: `rounded-sm`/`rounded-md`; round only for avatars, switches, radios, counters, icon buttons.
 Attendance is its own area at `/attendance/<tab>` (HR screens; `/tasks/hr?tab=` redirects). `/` is **Home** inside the app
 frame (attendance card with punch-in first, then Tasks/Assets counts, admin shortcuts; PLAN.md §19.14); on phones `/` lands on
 `/attendance` and `/?home=1` opens Home. One menu for everything: sidebar groups Attendance / Tasks / Assets / Admin from

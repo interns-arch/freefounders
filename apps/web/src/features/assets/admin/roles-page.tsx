@@ -1,5 +1,5 @@
 import { type Permission, PERMISSION_GROUPS, PERMISSIONS } from '@eam/shared';
-import { Lock, Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { Lock, Plus, ShieldCheck, Trash2 } from '@/components/icons';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';

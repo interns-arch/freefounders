@@ -1,5 +1,5 @@
 import { EMPLOYEE_STATUS_LABELS, type EmployeeStatus } from '@eam/shared';
-import { AlertTriangle, LogOut } from 'lucide-react';
+import { AlertTriangle, LogOut } from '@/components/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';

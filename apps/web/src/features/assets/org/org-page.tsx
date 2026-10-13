@@ -1,6 +1,6 @@
 import { humanize } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { Pencil, Plus, Store, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Store, Trash2 } from '@/components/icons';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';

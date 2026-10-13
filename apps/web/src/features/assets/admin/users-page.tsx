@@ -1,6 +1,6 @@
 import { userCreateSchema, userUpdateSchema } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { Plus, UsersRound } from 'lucide-react';
+import { Plus, UsersRound } from '@/components/icons';
 import { useState } from 'react';
 import { Controller } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -41,7 +41,7 @@ export default function UsersPage() {
     },
     { key: 'role', header: 'Role', cell: (u) => <Badge tone="indigo">{u.roleName}</Badge> },
     { key: 'employee', header: 'Employee', hideOnMobile: true, cell: (u) => <span className="text-muted-foreground">{u.employeeName ? `${u.employeeName} (${u.employeeCode})` : '—'}</span> },
-    { key: 'status', header: 'Access', cell: (u) => (u.isActive ? <Badge tone="green" dot>Active</Badge> : <Badge tone="neutral" dot>Disabled</Badge>) },
+    { key: 'status', header: 'Access', cell: (u) => (u.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="neutral">Disabled</Badge>) },
     { key: 'last', header: 'Last sign-in', hideOnMobile: true, cell: (u) => <span className="text-muted-foreground">{u.lastLoginAt ? relativeTime(u.lastLoginAt) : 'Never'}</span> },
   ];
 

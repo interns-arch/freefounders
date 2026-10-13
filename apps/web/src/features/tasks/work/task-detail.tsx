@@ -14,7 +14,7 @@ import {
   useTaskStep,
   useUploadTaskFiles,
 } from '@freefounders/core/tasks';
-import { AlarmClock, ArrowUpRight, BookOpen, CheckCircle2, CornerLeftUp, FileText, MessageSquare, Paperclip, Pencil, Plus, Send, Sparkles, Trash2, X } from 'lucide-react';
+import { AlarmClock, ArrowUpRight, BookOpen, CheckCircle2, CornerLeftUp, FileText, MessageSquare, Paperclip, Pencil, Plus, Send, Sparkles, Trash2, X } from '@/components/icons';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
@@ -171,7 +171,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
           <StatusPill status={t.status} label={t.status_display} />
           {t.priority !== 'normal' && <PriorityPill priority={t.priority} label={t.priority_display} />}
           {late && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-bold text-destructive">
+            <span className="inline-flex items-center gap-1 rounded-sm bg-destructive/10 px-2 py-0.5 text-xs font-bold text-destructive">
               <AlarmClock className="size-3" aria-hidden /> Overdue
             </span>
           )}
@@ -515,10 +515,9 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
           {feed.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing yet — the first comment or update lands here.</p>
           ) : (
-            <ul className="relative space-y-3 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-px before:bg-border" aria-label="Updates">
+            <ul className="space-y-3" aria-label="Updates">
               {feed.map((a) => (
-                <li key={a.id} className="relative pl-5 text-sm">
-                  <span className={cn('absolute top-1.5 left-0 size-[11px] rounded-full border-2 border-card', a.kind === 'comment' ? 'bg-primary' : 'bg-muted-foreground/50')} aria-hidden />
+                <li key={a.id} className="text-sm">
                   <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
                     {a.kind === 'comment' ? <MessageSquare className="size-3 text-primary" aria-hidden /> : <FileText className="size-3" aria-hidden />}
                     <strong className="font-semibold text-foreground">{a.actor?.name || 'System'}</strong> · {fmtDT(a.created_at)}

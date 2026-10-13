@@ -1,5 +1,5 @@
 import type { Workload } from '@freefounders/core/tasks';
-import { TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from '@/components/icons';
 import { fmtEffort } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
 

@@ -7,14 +7,14 @@ import {
   type HolderType,
   humanize,
 } from '@eam/shared';
-import { Briefcase, Building, Building2, MapPin, Store, Truck, User } from 'lucide-react';
+import { Briefcase, Building, Building2, MapPin, Store, Truck, User } from '@/components/icons';
 import { Badge, type BadgeTone } from '@/components/ui/primitives';
 import { ASSET_STATUS_TONE, CONDITION_TONE, EMPLOYEE_STATUS_TONE } from '@/lib/status';
 import { cn } from '@/lib/utils';
 
 export function AssetStatusBadge({ status, className }: { status: AssetStatus; className?: string }) {
   return (
-    <Badge tone={ASSET_STATUS_TONE[status]} dot className={className}>
+    <Badge tone={ASSET_STATUS_TONE[status]} className={className}>
       {ASSET_STATUS_LABELS[status]}
     </Badge>
   );
@@ -26,16 +26,16 @@ export function ConditionBadge({ condition }: { condition: Condition }) {
 
 export function EmployeeStatusBadge({ status }: { status: EmployeeStatus }) {
   return (
-    <Badge tone={EMPLOYEE_STATUS_TONE[status]} dot>
+    <Badge tone={EMPLOYEE_STATUS_TONE[status]}>
       {EMPLOYEE_STATUS_LABELS[status]}
     </Badge>
   );
 }
 
 /** Any enum value with a tone map. */
-export function EnumBadge<T extends string>({ value, tones, dot = true, labels }: { value: T; tones: Record<T, BadgeTone>; dot?: boolean; labels?: Record<T, string> }) {
+export function EnumBadge<T extends string>({ value, tones, labels }: { value: T; tones: Record<T, BadgeTone>; labels?: Record<T, string> }) {
   return (
-    <Badge tone={tones[value]} dot={dot}>
+    <Badge tone={tones[value]}>
       {labels?.[value] ?? humanize(value)}
     </Badge>
   );

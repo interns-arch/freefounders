@@ -15,7 +15,7 @@ import {
   useUpdateDepartment,
   useUploadLogo,
 } from '@freefounders/core/admin';
-import { ChevronRight, ImageIcon, Palette } from 'lucide-react';
+import { ChevronRight, ImageIcon, Palette } from '@/components/icons';
 import { type ChangeEvent, type FormEvent, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Field } from '@/components/common/form';
@@ -175,7 +175,7 @@ function ProfileCard({ company }: { company: CompanySettings }) {
                   <span className="grid size-7 place-items-center rounded-md bg-primary text-xs font-extrabold text-primary-foreground">
                     {(shortName || name).slice(0, 1).toUpperCase() || 'A'}
                   </span>
-                  <span className="rounded-full border border-primary/25 bg-primary/8 px-2 py-0.5 text-xs font-semibold text-primary">Pill</span>
+                  <span className="rounded-sm border border-primary/25 bg-primary/8 px-2 py-0.5 text-xs font-semibold text-primary">Label</span>
                   <span className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-xs">Button</span>
                 </span>
               </div>
@@ -266,7 +266,6 @@ function ModulesCard({ company }: { company: CompanySettings }) {
                 return (
                   <li key={m.key} className={cn('flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-muted/30', !m.on && 'bg-muted/20')}>
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className={cn('size-2 shrink-0 rounded-full', m.on ? 'bg-success' : 'bg-border')} aria-hidden />
                       <div className="min-w-0">
                         <p className={cn('text-sm font-semibold', !m.on && 'text-muted-foreground')}>{m.label}</p>
                         <p className="text-xs text-muted-foreground">{m.description}</p>

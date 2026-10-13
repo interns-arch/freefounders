@@ -1,7 +1,7 @@
 /** HR → My attendance: the month as a calendar, a day's punches (with photos) and correction requests. */
 import { errorMessage } from '@freefounders/core';
 import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, useAttendanceMonth, useRequestCorrection } from '@freefounders/core/hr';
-import { CalendarCheck, CalendarX, Clock3, ChevronLeft, ChevronRight, Palmtree, Sun, Timer } from 'lucide-react';
+import { AlertCircle, CalendarCheck, CalendarX, Clock3, ChevronLeft, ChevronRight, Palmtree, Sun, Timer } from '@/components/icons';
 import { useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, OkNote, Panel, Tile, fmtDay, fmtTime } from '../tasks/general/parts';
-import { AttendanceChip, PunchPhoto, STATUS_CELL, STATUS_DOT, STATUS_TEXT, hrs } from './parts';
+import { AttendanceChip, PunchPhoto, STATUS_CELL, STATUS_TEXT, hrs } from './parts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -86,7 +86,7 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
         </Button>
         {userName && <span className="text-sm font-medium text-muted-foreground">· {userName}</span>}
         {data && (
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary/8 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-sm bg-primary/8 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
             <Timer className="size-3.5" /> Total {data.total_hours} h
           </span>
         )}
@@ -265,20 +265,22 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
                 {num}
               </span>
               {d.status && <span className={cn('text-xs leading-none font-bold', STATUS_TEXT[d.status])}>{TAG[d.status]}</span>}
-              {(d.is_late || d.missing_checkout) && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive ring-2 ring-card" aria-hidden />}
+              {(d.is_late || d.missing_checkout) && <AlertCircle className="absolute top-1 right-1 size-3 text-destructive" />}
             </button>
           );
         })}
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3 text-xs text-muted-foreground">
         {(['present', 'late', 'half_day', 'absent', 'leave', 'week_off'] as const).map((s) => (
-          <span key={s} className="inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-2 py-0.5">
-            <i className={cn('inline-block size-2 rounded-full', STATUS_DOT[s])} />
+          <span key={s} className="inline-flex items-center gap-1.5 rounded-sm border bg-muted/30 py-0.5 pr-2 pl-0.5">
+            <span className={cn('inline-grid h-4 min-w-5 place-items-center rounded-xs border px-0.5 text-[11px] leading-none font-bold', STATUS_CELL[s], STATUS_TEXT[s])} aria-hidden>
+              {TAG[s]}
+            </span>
             {s === 'week_off' ? 'Off/Holiday' : ATTENDANCE_STATUS_LABELS[s]}
           </span>
         ))}
-        <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-2 py-0.5">
-          <i className="inline-block size-2 rounded-full bg-destructive" /> Late / no checkout
+        <span className="inline-flex items-center gap-1.5 rounded-sm border bg-muted/30 px-2 py-0.5">
+          <AlertCircle className="size-3 text-destructive" /> Late / no checkout
         </span>
       </div>
     </div>

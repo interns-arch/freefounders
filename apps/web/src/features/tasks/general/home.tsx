@@ -25,7 +25,7 @@ import {
   Megaphone,
   ClipboardList,
   Activity,
-} from 'lucide-react';
+} from '@/components/icons';
 import { useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Link } from 'react-router';
@@ -451,7 +451,6 @@ function LeadsDashboard({
             <ul className="grid gap-3">
               {recent_events.map((e, i) => (
                 <li key={i} className="flex gap-2 text-sm">
-                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
                   <div className="min-w-0">
                     <strong>{e.lead_name}</strong> <span className="text-xs text-muted-foreground">{e.body}</span>
                     <div className="text-xs text-muted-foreground">

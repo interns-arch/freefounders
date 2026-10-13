@@ -1,5 +1,5 @@
 import { useProofread } from '@freefounders/core/tasks';
-import { SpellCheck } from 'lucide-react';
+import { SpellCheck } from '@/components/icons';
 import { useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label, Textarea } from '@/components/ui/input';

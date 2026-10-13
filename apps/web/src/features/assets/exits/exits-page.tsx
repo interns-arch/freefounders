@@ -1,4 +1,4 @@
-import { CalendarClock, LogOut, PackageSearch } from 'lucide-react';
+import { CalendarClock, LogOut, PackageSearch } from '@/components/icons';
 import { SearchField } from '@/components/common/search-field';
 import { useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';

@@ -1,5 +1,5 @@
 import type { Access } from '@freefounders/core';
-import { Activity, Boxes, Briefcase, CardSim, ClipboardList, GitCompareArrows, LayoutDashboard, LifeBuoy, LineChart, ListOrdered, LogOut, QrCode, ScanLine, Shapes, ShieldCheck, Truck, UserPlus, Users, UsersRound, Wrench } from 'lucide-react';
+import { Activity, Boxes, Briefcase, CardSim, ClipboardList, GitCompareArrows, LayoutDashboard, LifeBuoy, LineChart, ListOrdered, LogOut, QrCode, ScanLine, Shapes, ShieldCheck, Truck, UserPlus, Users, UsersRound, Wrench } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 
 // Same rules as the Assets app: IT hands out assets; staff (HR, managers, CEO) see people; plain employees see their own.

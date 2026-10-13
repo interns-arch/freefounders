@@ -1,4 +1,4 @@
-import { Camera, ChevronLeft, ChevronRight, Download, ImagePlus, X } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Download, ImagePlus, X } from '@/components/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/overlays';

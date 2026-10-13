@@ -17,7 +17,7 @@ import {
   useSaveRole,
   WEEKDAYS,
 } from '@freefounders/core/admin';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Trash2 } from '@/components/icons';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { Field } from '@/components/common/form';
 import { SearchField } from '@/components/common/search-field';
@@ -406,7 +406,7 @@ function PermissionRow({
         </label>
       </span>
       {p.scopes && grant && (
-        <div role="radiogroup" aria-label={`Scope for ${p.label}`} className="inline-flex rounded-full border bg-card p-0.5 shadow-xs">
+        <div role="radiogroup" aria-label={`Scope for ${p.label}`} className="inline-flex rounded-md border bg-card p-0.5 shadow-xs">
           {p.scopes.map((s) => (
             <button
               type="button"
@@ -417,7 +417,7 @@ function PermissionRow({
               title={!locked && grant.scope !== s && !limits.scopeAllowed(app, p, s) ? 'Wider than your own scope' : undefined}
               onClick={() => onScope(s)}
               className={cn(
-                'min-h-10 cursor-pointer rounded-full px-3 text-xs font-medium text-muted-foreground transition outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed sm:min-h-0 sm:px-2.5 sm:py-0.5',
+                'min-h-10 cursor-pointer rounded-sm px-3 text-xs font-medium text-muted-foreground transition outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed sm:min-h-0 sm:px-2.5 sm:py-0.5',
                 grant.scope === s && 'bg-primary font-semibold text-primary-foreground shadow-xs',
               )}
             >
@@ -447,7 +447,7 @@ function DutiesEditor({ duties, onChange }: { duties: Duty[]; onChange: (d: Duty
         return (
           <fieldset key={d.id ?? `new-${i}`} className="relative grid gap-3 rounded-lg border bg-muted/20 p-4 pt-5">
             <legend className="sr-only">Duty {n}</legend>
-            <span aria-hidden className="absolute -top-2.5 left-3 rounded-full border bg-card px-2 font-mono text-[11px] font-semibold tracking-wider text-primary uppercase">
+            <span aria-hidden className="absolute -top-2.5 left-3 rounded-sm border bg-card px-2 font-mono text-[11px] font-semibold tracking-wider text-primary uppercase">
               Duty {n}
             </span>
             <div className="grid gap-3 sm:grid-cols-2">

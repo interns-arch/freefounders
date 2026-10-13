@@ -1,6 +1,6 @@
 import { HISTORY_ENTITY_TYPES, humanize } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from '@/components/icons';
 import { Pagination } from '@/components/common/data-table';
 import { ErrorState, PageHeader } from '@/components/common/page';
 import { Timeline } from '@/features/assets/components/timeline';

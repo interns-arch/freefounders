@@ -1,5 +1,5 @@
 import { type Access, useMarkNotificationsRead, useNotifications, useSignOut } from '@freefounders/core';
-import { Bell, CheckCheck, ChevronDown, Feather, Keyboard, KeyRound, LogOut, Moon, Sun } from 'lucide-react';
+import { Bell, CheckCheck, ChevronDown, Feather, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -116,7 +116,7 @@ export function NotificationsBell() {
         <div className="flex items-center justify-between border-b px-4 py-2.5">
           <span className="text-sm font-bold">
             Notifications
-            {unread > 0 && <span className="ml-2 rounded-full bg-primary/8 px-1.5 font-mono text-[11px] font-semibold text-primary">{unread}</span>}
+            {unread > 0 && <span className="ml-2 rounded-sm bg-primary/8 px-1.5 font-mono text-[11px] font-semibold text-primary">{unread}</span>}
           </span>
           <Button variant="ghost" size="xs" onClick={() => markRead.mutate()} disabled={!unread || markRead.isPending}>
             <CheckCheck className="size-3.5" /> Mark all read
@@ -133,7 +133,6 @@ export function NotificationsBell() {
                   if (n.href) navigate(n.href);
                 }}
               >
-                <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', n.app === 'tasks' ? 'bg-app-tasks' : 'bg-app-assets', n.read && 'opacity-30')} aria-hidden />
                 <span className="min-w-0 flex-1">
                   <span className={cn('block truncate text-sm', n.read ? 'font-medium' : 'font-semibold')}>{n.title}</span>
                   {n.body && <span className="line-clamp-2 block text-xs text-muted-foreground">{n.body}</span>}
@@ -182,7 +181,7 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex min-h-11 max-w-[220px] cursor-pointer items-center gap-2 rounded-full border border-transparent py-1 pr-1 pl-1 text-left transition outline-none hover:border-border hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40 data-[state=open]:border-border data-[state=open]:bg-accent lg:pr-2"
+          className="flex min-h-11 max-w-[220px] cursor-pointer items-center gap-2 rounded-md border border-transparent py-1 pr-1 pl-1 text-left transition outline-none hover:border-border hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40 data-[state=open]:border-border data-[state=open]:bg-accent lg:pr-2"
           aria-label="Your account"
         >
           <Avatar name={name} className="size-8 bg-primary [&_[data-slot=avatar-fallback]]:bg-transparent [&_[data-slot=avatar-fallback]]:text-primary-foreground" />

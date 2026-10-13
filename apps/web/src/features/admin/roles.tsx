@@ -1,6 +1,6 @@
 import { errorMessage, usePlatformMe } from '@freefounders/core';
 import { LEVEL_LABELS, type Role, roleApps, roleLimits, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles } from '@freefounders/core/admin';
-import { Lock, Plus, ShieldCheck } from 'lucide-react';
+import { Lock, Plus, ShieldCheck } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';

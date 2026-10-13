@@ -23,7 +23,7 @@ import {
   useStartExit,
   useUpdatePerson,
 } from '@freefounders/core/admin';
-import { Check, Copy, Eye, EyeOff, Share2 } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, Share2 } from '@/components/icons';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { Field, FormSection } from '@/components/common/form';

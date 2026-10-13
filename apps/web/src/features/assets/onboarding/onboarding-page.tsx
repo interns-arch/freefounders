@@ -1,6 +1,6 @@
 import { ONBOARDING_STATUS_LABELS } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { Plus, UserPlus } from 'lucide-react';
+import { Plus, UserPlus } from '@/components/icons';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';

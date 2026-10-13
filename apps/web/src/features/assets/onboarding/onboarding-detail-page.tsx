@@ -1,6 +1,6 @@
 import { ONBOARDING_STATUS_LABELS } from '@eam/shared';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, CalendarDays, Check as CheckIcon, CheckCircle2, Circle, Clock, Gift, IdCard, KeyRound, MessageSquareWarning, MoreHorizontal, PackageCheck, Plus, Save, Send, Trash2, Undo2, UserCheck, X } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Check as CheckIcon, CheckCircle2, Circle, Clock, Gift, IdCard, KeyRound, MessageSquareWarning, MoreHorizontal, PackageCheck, Plus, Save, Send, Trash2, Undo2, UserCheck, X } from '@/components/icons';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -369,7 +369,7 @@ function ItemRow({
             {item.quantity > 1 ? `${item.quantity} × ` : ''}
             {item.itemName}
           </span>
-          <EnumBadge value={item.status} tones={ONBOARDING_ITEM_TONE} labels={ITEM_LABEL} dot={false} />
+          <EnumBadge value={item.status} tones={ONBOARDING_ITEM_TONE} labels={ITEM_LABEL} />
           {!item.assetTypeId && <span className="text-xs text-muted-foreground">not in catalog</span>}
           {item.consumable && (
             <Badge tone="green" className="text-xs">

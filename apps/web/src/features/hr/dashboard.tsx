@@ -4,7 +4,7 @@
  */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type TeamMonthRow, useTeamMonth } from '@freefounders/core/hr';
-import { ChevronLeft, ChevronRight, Download, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Upload } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { EmptyState } from '@/components/common/page';

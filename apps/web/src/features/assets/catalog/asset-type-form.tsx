@@ -1,5 +1,5 @@
 import { assetTypeSchema } from '@eam/shared';
-import { Hash, Package } from 'lucide-react';
+import { Hash, Package } from '@/components/icons';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { applyServerErrors, errorOf, Field, useZodForm } from '@/components/common/form';

@@ -5,7 +5,7 @@
  */
 import { useAccess } from '@freefounders/core';
 import { HOME_RANGES, type HomeFilters, type HomeSummary, type Task, useNotices, useTaskDepartments, useTaskList, useWaitingCounts } from '@freefounders/core/tasks';
-import { AlertTriangle, Bell, CalendarClock, CheckCheck, Coffee, Gauge, Hourglass, Inbox, Megaphone, PartyPopper, ThumbsUp, Trophy, UserRoundSearch, Users } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Bell, CalendarClock, CheckCheck, CircleDashed, Coffee, Gauge, Hourglass, Inbox, Megaphone, PartyPopper, ThumbsUp, Timer, Trophy, UserRoundSearch, Users } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -184,12 +184,13 @@ export function Deadlines({ className }: { className?: string }) {
         {list.slice(0, 8).map((t) => (
           <li key={t.id}>
             <Link to={`/tasks/tasks/${t.id}`} className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent/60">
-              <span
-                className={cn(
-                  'mt-1.5 size-2.5 shrink-0 rounded-full ring-4',
-                  t.is_overdue ? 'bg-destructive ring-destructive/15' : t.status === 'in_progress' ? 'bg-warning ring-warning/15' : 'bg-info ring-info/15',
-                )}
-              />
+              {t.is_overdue ? (
+                <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+              ) : t.status === 'in_progress' ? (
+                <Timer className="mt-0.5 size-4 shrink-0 text-warning" />
+              ) : (
+                <CircleDashed className="mt-0.5 size-4 shrink-0 text-info" />
+              )}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">
                   <span className="mr-1 font-mono text-xs text-muted-foreground">{t.code}</span>
@@ -312,7 +313,7 @@ export function MistakesCard({ home, className }: { home?: HomeSummary; classNam
         {me.mistakes.map((m) => (
           <li key={m.id}>
             <Link to={`${MISTAKES}?open=${m.id}`} className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent/60">
-              <span className={cn('mt-1.5 size-2.5 shrink-0 rounded-full ring-4', m.is_overdue ? 'bg-destructive ring-destructive/15' : 'bg-warning ring-warning/15')} />
+              <AlertTriangle className={cn('mt-0.5 size-4 shrink-0', m.is_overdue ? 'text-destructive' : 'text-warning')} />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">
                   <span className="mr-1 font-mono text-xs text-muted-foreground">{m.code}</span>
@@ -519,8 +520,8 @@ export function NoticesCard({ className }: { className?: string }) {
               )}
             >
               <div className="flex items-center gap-2">
-                {n.read === false && <span className="size-2 rounded-full bg-primary" />}
                 <strong className="text-sm">{n.title}</strong>
+                {n.read === false && <Chip tone="primary">New</Chip>}
                 {n.priority !== 'normal' && <Chip tone={n.priority === 'urgent' ? 'danger' : 'warning'}>{n.priority_display}</Chip>}
               </div>
               {n.content && (

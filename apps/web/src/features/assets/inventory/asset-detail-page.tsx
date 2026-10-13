@@ -13,7 +13,7 @@ import {
   Undo2,
   UserPlus,
   Wrench,
-} from 'lucide-react';
+} from '@/components/icons';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { AssetStatusBadge, ConditionBadge, EnumBadge, HolderLabel } from '@/components/common/badges';
@@ -442,7 +442,7 @@ function AllocationHistory({ assetId }: { assetId: string }) {
             <TD className="whitespace-nowrap text-muted-foreground">{al.endedAt ? formatDate(al.endedAt) : '—'}</TD>
             <TD>
               {al.status === 'ACTIVE' ? (
-                <Badge tone="blue" dot>
+                <Badge tone="blue">
                   Current
                 </Badge>
               ) : (

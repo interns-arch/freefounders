@@ -1,4 +1,4 @@
-import { Paperclip, X } from 'lucide-react';
+import { Paperclip, X } from '@/components/icons';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { type CompressPreset, compressImages, formatBytes, originalSize } from '@/lib/compress-image';

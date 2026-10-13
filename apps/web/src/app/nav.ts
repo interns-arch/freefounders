@@ -1,12 +1,12 @@
 import type { Access } from '@freefounders/core';
-import type { LucideIcon } from 'lucide-react';
+import type { IconComponent } from '@/components/icons';
 
 /** One menu entry. Each area exports its own list (features/<area>/nav.ts); the shell shows what `show` allows. */
 export interface NavItem {
   label: string;
   /** In-app path, e.g. "/tasks/tasks". */
   to: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   show?: (access: Access) => boolean;
   /** Exact match for the active highlight (for index pages). */
   end?: boolean;

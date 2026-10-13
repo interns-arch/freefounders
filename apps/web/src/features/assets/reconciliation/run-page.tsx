@@ -1,6 +1,6 @@
 import { RECON_SOURCE_LABELS, type ReconStatus } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { AlertTriangle, ArrowLeft, CardSim, CheckCircle2, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CardSim, CheckCircle2, Plus } from '@/components/icons';
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';

@@ -19,7 +19,7 @@ import {
   useTaskRoleOptions,
   useTeamDirectory,
 } from '@freefounders/core/tasks';
-import { Megaphone, Paperclip, Pin, Plus, Send, TriangleAlert } from 'lucide-react';
+import { Megaphone, Paperclip, Pin, Plus, Send, TriangleAlert } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
@@ -124,7 +124,7 @@ function NoticeFeed() {
                       <strong className={cn('text-sm', !n.read && 'font-bold')}>{n.title}</strong>
                       {n.category && <Chip tone="primary">{n.category}</Chip>}
                       {n.priority !== 'normal' && <Chip tone={n.priority === 'urgent' ? 'danger' : 'warning'}>{n.priority_display}</Chip>}
-                      {!n.read && <span className="size-2 rounded-full bg-primary ring-4 ring-primary/15" aria-label="Unread" />}
+                      {!n.read && <Chip tone="primary">New</Chip>}
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {n.author_detail?.name || '—'} · {fmtWhen(n.publish_at || n.created_at)}

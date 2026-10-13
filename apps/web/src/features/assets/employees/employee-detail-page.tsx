@@ -17,7 +17,7 @@ import {
   Undo2,
   UserCog,
   UserPlus,
-} from 'lucide-react';
+} from '@/components/icons';
 import { type ReactNode, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -509,7 +509,7 @@ function LoginPanel({ employee: e, busy, onGrant, onDisable }: { employee: Emplo
             )}
           </p>
         </div>
-        {e.login && <Badge tone={active ? 'green' : 'neutral'} dot>{active ? e.login.roleName : 'Off'}</Badge>}
+        {e.login && <Badge tone={active ? 'green' : 'neutral'}>{active ? e.login.roleName : 'Off'}</Badge>}
       </CardHeader>
       <CardContent className="space-y-3">
         {e.login && (

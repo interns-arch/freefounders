@@ -17,7 +17,7 @@ import {
   useTaskTemplates,
   useTeamPeople,
 } from '@freefounders/core/tasks';
-import { ArrowLeft, LayoutTemplate, ListChecks, Plus, Repeat, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, LayoutTemplate, ListChecks, Plus, Repeat, Search, Trash2 } from '@/components/icons';
 import { useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';

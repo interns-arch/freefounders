@@ -1,6 +1,6 @@
 import { humanize } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { CheckCircle2, Play, Plus, Wrench, X } from 'lucide-react';
+import { CheckCircle2, Play, Plus, Wrench, X } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';

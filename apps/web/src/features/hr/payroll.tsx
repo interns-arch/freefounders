@@ -21,7 +21,7 @@ import {
   useSalaryStructures,
 } from '@freefounders/core/hr';
 import { useTeamDirectory } from '@freefounders/core/tasks';
-import { Banknote, Download, FileText, Play, Trash2 } from 'lucide-react';
+import { Banknote, Download, FileText, Play, Trash2 } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState } from '@/components/common/page';

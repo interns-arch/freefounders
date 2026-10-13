@@ -10,7 +10,7 @@ import {
   useReviewCompletion,
   useWorkTaskList,
 } from '@freefounders/core/tasks';
-import { ArrowUp, CheckCircle2, ClipboardCheck, Clock, Paperclip, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowUp, CheckCircle2, ClipboardCheck, Clock, Paperclip, RotateCcw, Trash2 } from '@/components/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -228,19 +228,19 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
                           {r.task_title}
                         </Link>
                         {r.status !== 'pending' && (
-                          <Badge tone={r.status === 'rejected' ? 'orange' : 'green'} className="rounded-full" dot>
+                          <Badge tone={r.status === 'rejected' ? 'orange' : 'green'} >
                             {r.status_display}
                           </Badge>
                         )}
                         {late && (
-                          <Badge tone="red" className="rounded-full">
+                          <Badge tone="red">
                             finished late
                           </Badge>
                         )}
                       </div>
                       <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                         <strong className="font-semibold text-foreground">{r.submitted_by?.name}</strong> · submitted {fmtDT(r.created_at)}
-                        <span className={cn('inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 font-mono font-semibold tabular', over ? 'border-destructive/40 text-destructive' : 'text-foreground')} title={over ? 'Took longer than the assigned effort' : 'Effort spent against the assigned effort'}>
+                        <span className={cn('inline-flex items-center gap-1 rounded-sm border bg-card px-2 py-0.5 font-mono font-semibold tabular', over ? 'border-destructive/40 text-destructive' : 'text-foreground')} title={over ? 'Took longer than the assigned effort' : 'Effort spent against the assigned effort'}>
                           <Clock className="size-3" aria-hidden /> {fmtEffort(r.task_actual_minutes) ?? '—'} <span className="font-sans font-normal text-muted-foreground">of</span> {fmtEffort(r.task_effort_minutes) ?? '—'}
                         </span>
                         {over && <span className="font-semibold text-destructive">over estimate</span>}
@@ -344,11 +344,11 @@ export function RequestsTab({ href }: { href: (id: number) => string }) {
                     <Link to={href(r.task)} state={{ fromList: true }} className="text-[14.5px] font-semibold hover:text-primary hover:underline">
                       {r.task_title}
                     </Link>
-                    <Badge tone={r.status === 'pending' ? 'amber' : r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'neutral'} className="rounded-full" dot>
+                    <Badge tone={r.status === 'pending' ? 'amber' : r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'neutral'} >
                       {r.status_display}
                     </Badge>
                     {r.escalated && (
-                      <Badge tone="violet" className="rounded-full">
+                      <Badge tone="violet">
                         <ArrowUp /> escalated to admin
                       </Badge>
                     )}

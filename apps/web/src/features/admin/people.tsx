@@ -8,7 +8,7 @@ import {
   useRoles,
   useUpdatePerson,
 } from '@freefounders/core/admin';
-import { MoreHorizontal, Plus, Users } from 'lucide-react';
+import { MoreHorizontal, Plus, Users } from '@/components/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
@@ -226,7 +226,7 @@ export function PeoplePage() {
       <div className="flex flex-wrap items-center gap-3">
         <SearchField className="relative w-full max-w-md" label="Search people" placeholder="Search name, email, employee ID or username" value={search} onChange={setSearch} inputClassName="h-10" />
         {people.data && (
-          <span className="rounded-full border bg-card px-3 py-1 font-mono text-xs text-muted-foreground shadow-card" aria-live="polite">
+          <span className="rounded-md border bg-card px-3 py-1 font-mono text-xs text-muted-foreground shadow-card" aria-live="polite">
             <span className="font-semibold text-foreground">{people.data.filter((p) => p.status === 'active').length}</span> active · {people.data.length} total
           </span>
         )}

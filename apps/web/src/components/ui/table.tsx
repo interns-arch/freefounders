@@ -1,4 +1,4 @@
-import { MoveHorizontal } from 'lucide-react';
+import { MoveHorizontal } from '@/components/icons';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 

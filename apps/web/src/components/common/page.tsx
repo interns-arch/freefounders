@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Inbox, RotateCcw } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Inbox, RotateCcw } from '@/components/icons';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';

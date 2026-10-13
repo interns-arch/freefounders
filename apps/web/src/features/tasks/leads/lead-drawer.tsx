@@ -7,7 +7,6 @@ import {
   QUOTATION_STATUSES,
   fmtINR,
   type Lead,
-  type LeadEventType,
   type LeadPriority,
   type LeadStatus,
   type Quotation,
@@ -23,7 +22,7 @@ import {
   useUpdateQuotation,
   useUploadLeadDocument,
 } from '@freefounders/core/tasks';
-import { FileText, Mail, Paperclip, Pencil, Phone, Trash2 } from 'lucide-react';
+import { FileText, Mail, Paperclip, Pencil, Phone, Trash2 } from '@/components/icons';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
@@ -41,15 +40,6 @@ import { safeHref } from '@/lib/safe-url';
 
 export const STAGE_TONE: Record<LeadStatus, Tone> = { new: 'info', contacted: 'primary', quotation_sent: 'warning', negotiation: 'warning', won: 'success', lost: 'danger' };
 export const LEAD_PRIORITY_TONE: Record<LeadPriority, Tone> = { low: 'neutral', normal: 'neutral', high: 'warning', urgent: 'danger' };
-const EVENT_TONE: Record<string, string> = {
-  created: 'bg-primary',
-  status_change: 'bg-warning',
-  assignment: 'bg-info',
-  note: 'bg-muted-foreground',
-  follow_up: 'bg-warning',
-  document: 'bg-info',
-  quotation: 'bg-success',
-};
 const QUOTE_TONE: Record<QuotationStatus, Tone> = { draft: 'neutral', sent: 'info', accepted: 'success', rejected: 'danger' };
 
 export function LeadDrawer({ lead, onClose }: { lead: Lead | null; onClose: () => void }) {
@@ -285,7 +275,6 @@ function Timeline({ leadId, readOnly, events, loading }: { leadId: number; readO
       <ol className="space-y-3">
         {events?.map((ev) => (
           <li key={ev.id} className="flex gap-3 text-sm">
-            <span className={cn('mt-1.5 size-2.5 shrink-0 rounded-full', EVENT_TONE[ev.type as LeadEventType] ?? 'bg-muted-foreground')} aria-hidden />
             <div className="min-w-0">
               <span className="font-medium">{ev.type_display}</span> <span className="whitespace-pre-line">{ev.body}</span>
               <div className="text-xs text-muted-foreground">

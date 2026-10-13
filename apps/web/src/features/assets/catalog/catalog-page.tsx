@@ -4,7 +4,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from '@dnd-kit/utilities';
 import { buildAttributesSchema, FIELD_TYPE_LABELS } from '@eam/shared';
 
-import { ChevronRight, Eye, GripVertical, Hash, Lock, Package, Pencil, Plus, Shapes, Trash2 } from 'lucide-react';
+import { ChevronRight, Eye, GripVertical, Hash, Lock, Package, Pencil, Plus, Shapes, Trash2 } from '@/components/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';

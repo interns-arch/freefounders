@@ -1,5 +1,5 @@
 import { ASSET_STATUS_LABELS, ASSET_STATUSES, HOLDER_TYPE_LABELS, type HolderType } from '@eam/shared';
-import { Activity, AlertTriangle, ArrowRight, Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, PackageCheck, Plus, ScanLine, ShieldAlert, UserPlus, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, PackageCheck, Plus, ScanLine, ShieldAlert, UserPlus, Wrench } from '@/components/icons';
 import { Link, useNavigate } from 'react-router';
 import { EnumBadge, HOLDER_ICONS } from '@/components/common/badges';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';

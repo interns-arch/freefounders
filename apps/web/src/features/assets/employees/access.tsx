@@ -1,4 +1,4 @@
-import { Copy, Eye, EyeOff, KeyRound, Share2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, KeyRound, Share2 } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useQrLinks } from '@/components/common/codes';

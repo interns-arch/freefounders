@@ -4,7 +4,7 @@
  */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type ManualMarkStatus, type TeamDayRow, useManualMark, useTeamDay } from '@freefounders/core/hr';
-import { CalendarCheck, CalendarOff, ChevronLeft, ChevronRight, Clock3, LogOut, Palmtree, RefreshCw, UserRoundX } from 'lucide-react';
+import { CalendarCheck, CalendarOff, ChevronLeft, ChevronRight, Clock3, LogOut, Palmtree, Radio, RefreshCw, UserRoundX } from '@/components/icons';
 import { type ComponentType, type FormEvent, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { type Column, DataTable } from '@/components/common/data-table';
@@ -193,10 +193,7 @@ export function TeamDayView({ live }: { live: boolean }) {
       {live && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-success/60 motion-reduce:animate-none" />
-              <span className="relative inline-flex size-2 rounded-full bg-success" />
-            </span>
+            <Radio className="size-4 text-success" />
             Live · {longDay(today)}
           </span>
           <span>

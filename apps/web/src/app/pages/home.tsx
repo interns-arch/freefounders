@@ -10,7 +10,7 @@ import { useAssetsDashboard } from '@freefounders/core/assets';
 import { nearestOffice, useHrConfig, useLeaveBalances, useOfficeLocations, usePendingCorrections, usePendingLeaves } from '@freefounders/core/hr';
 import { useMyTaskTiles, useWaitingCounts } from '@freefounders/core/tasks';
 import { ADMIN_SCREENS } from '@/features/admin/nav';
-import { ArrowRight, Camera, Fingerprint, LogIn, LogOut, MapPin, ScanLine, Settings2, ShieldCheck, Users } from 'lucide-react';
+import { ArrowRight, Camera, Fingerprint, LogIn, LogOut, MapPin, ScanLine, Settings2, ShieldCheck, Users } from '@/components/icons';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
@@ -228,14 +228,13 @@ function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info'; childr
   return (
     <span
       className={cn(
-        'inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap',
+        'inline-flex w-fit items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[12px] font-semibold whitespace-nowrap',
         tone === 'ok' && 'border-success/30 bg-success/10 text-success',
         tone === 'warn' && 'border-warning/40 bg-warning/12 text-warning',
         tone === 'bad' && 'border-destructive/30 bg-destructive/10 text-destructive',
         tone === 'info' && 'border-primary/25 bg-primary/8 text-primary',
       )}
     >
-      <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden />
       {children}
     </span>
   );

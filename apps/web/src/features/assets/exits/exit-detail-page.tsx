@@ -1,5 +1,5 @@
 import { EXIT_ITEM_STATUSES, type ExitItemStatus, humanize } from '@eam/shared';
-import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, ClipboardCheck, Lock, Plus, ScanLine, ShieldAlert, Undo, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, ClipboardCheck, Lock, Plus, ScanLine, ShieldAlert, Undo, XCircle } from '@/components/icons';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -27,8 +27,6 @@ const ITEM_BUTTON: Record<ExitItemStatus, string> = {
   DAMAGED: 'data-[on=true]:bg-warning/12 data-[on=true]:text-warning dark:data-[on=true]:bg-warning/15 dark:data-[on=true]:text-warning',
   MISSING: 'data-[on=true]:bg-destructive/12 data-[on=true]:text-destructive dark:data-[on=true]:bg-destructive/15 dark:data-[on=true]:text-destructive',
 };
-
-const EXIT_ITEM_BAR: Record<'RETURNED' | 'DAMAGED' | 'PENDING' | 'MISSING', string> = { RETURNED: 'bg-success', DAMAGED: 'bg-app-admin', PENDING: 'bg-warning', MISSING: 'bg-destructive' };
 
 export default function ExitDetailPage() {
   const { id } = useParams();
@@ -207,7 +205,6 @@ export default function ExitDetailPage() {
           return (
             <Card key={s} className="flex flex-col justify-between p-4">
               <p className="flex items-center gap-1.5 font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-                <span className={cn('size-1.5 rounded-full', EXIT_ITEM_BAR[s])} aria-hidden />
                 {humanize(s)}
               </p>
               <p className={cn('mt-1.5 font-mono text-[28px] leading-none font-semibold tabular', tone)}>{n}</p>

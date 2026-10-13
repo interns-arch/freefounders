@@ -1,5 +1,5 @@
 import { Command as CommandPrimitive } from 'cmdk';
-import { Search, X } from 'lucide-react';
+import { Search, X } from '@/components/icons';
 import { Dialog as DialogPrimitive, DropdownMenu as MenuPrimitive, Popover as PopoverPrimitive } from 'radix-ui';
 import * as React from 'react';
 import { cn } from '@/lib/utils';

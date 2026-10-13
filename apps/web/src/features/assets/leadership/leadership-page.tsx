@@ -1,4 +1,4 @@
-import { Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, UserPlus, Users } from 'lucide-react';
+import { Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, UserPlus, Users } from '@/components/icons';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { StatTile } from '@/features/assets/components/stat-tile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/primitives';

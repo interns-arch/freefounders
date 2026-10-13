@@ -1,7 +1,7 @@
 /** /tasks/intake — the AI inbox: inbound WhatsApp / Gmail messages, how the AI read them, and the lead each became (old pages/Intake.jsx). */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { INTAKE_CHANNELS, INTAKE_STATUSES, type InboundMessage, type IntakeChannel, type IntakeStatus, useIntakeMessages, useSimulateIntake } from '@freefounders/core/tasks';
-import { Bot, Mail, MessageCircle, Send } from 'lucide-react';
+import { Bot, Mail, MessageCircle, Send } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';

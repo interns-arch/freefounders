@@ -5,7 +5,7 @@
 import { errorMessage, useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
 import { type Sop, useRetireSop, useSaveSop, useSops, useTaskDepartments } from '@freefounders/core/tasks';
-import { BookOpen, Plus } from 'lucide-react';
+import { BookOpen, Plus } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState } from '@/components/common/page';

@@ -13,7 +13,7 @@ import {
   useToggleTaskFollow,
   useWorkTaskList,
 } from '@freefounders/core/tasks';
-import { AlarmClock, ClipboardList, Plus, Repeat, UserRound, X } from 'lucide-react';
+import { AlarmClock, ClipboardList, Plus, Repeat, UserRound, X } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, ErrorState } from '@/components/common/page';
@@ -168,7 +168,7 @@ export function TaskListTab({
         </ToggleChip>
         {status === 'in_progress' && <span className="text-xs text-muted-foreground">Showing in progress only</span>}
         {fDone && (
-          <span className={cn('inline-flex h-9 items-center gap-1 rounded-full border px-3 text-[13px] font-semibold', fDone === 'on_time' ? 'border-success/40 bg-success/10 text-success' : 'border-destructive/40 bg-destructive/10 text-destructive')}>
+          <span className={cn('inline-flex h-9 items-center gap-1 rounded-md border px-3 text-[13px] font-semibold', fDone === 'on_time' ? 'border-success/40 bg-success/10 text-success' : 'border-destructive/40 bg-destructive/10 text-destructive')}>
             {fDone === 'on_time' ? 'Finished on time' : 'Finished late'}
             <Button variant="ghost" size="icon-xs" className="-mr-1.5 size-6 hover:bg-transparent hover:text-inherit" aria-label="Clear finished filter" onClick={() => set({ done: null })}>
               <X className="size-3.5" />

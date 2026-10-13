@@ -4,7 +4,7 @@ import { Badge, type BadgeTone } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
 /* Soft-tinted pills, the way the old Tasks app drew status and priority (rounded, bold, tinted background, no border). */
-const PILL = 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold tracking-[0.01em] [&>svg]:size-3';
+const PILL = 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-bold tracking-[0.01em] [&>svg]:size-3';
 const STATUS_PILL: Record<TaskStatus, string> = {
   open: 'bg-info/10 text-info',
   in_progress: 'bg-warning/12 text-warning',
@@ -17,11 +17,10 @@ const PRIORITY_PILL: Record<TaskPriority, string> = {
   urgent: 'bg-destructive/10 text-destructive',
 };
 
-/** Open / In progress / Done as a tinted pill (with a dot, so colour is not the only cue). */
+/** Open / In progress / Done as a tinted label (the text says the status, so colour is not the only cue). */
 export function StatusPill({ status, label, className }: { status: TaskStatus; label: string; className?: string }) {
   return (
     <span className={cn(PILL, STATUS_PILL[status], className)}>
-      <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden />
       {label}
     </span>
   );
@@ -42,7 +41,7 @@ export function CountPill({ children, tone = 'primary', className }: { children:
   return (
     <span
       className={cn(
-        'inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-px font-mono text-[11px] font-semibold tabular',
+        'inline-flex min-w-5 items-center justify-center rounded-sm px-1.5 py-px font-mono text-[11px] font-semibold tabular',
         tone === 'primary' && 'bg-card text-primary ring-1 ring-inset ring-primary/25',
         tone === 'neutral' && 'bg-muted text-muted-foreground',
         tone === 'danger' && 'bg-destructive/10 text-destructive',
@@ -57,7 +56,7 @@ export function CountPill({ children, tone = 'primary', className }: { children:
 /** A small neutral tag on a task row (category, group, recurrence…). */
 export function Chip({ children, title, tone = 'outline', className }: { children: ReactNode; title?: string; tone?: BadgeTone; className?: string }) {
   return (
-    <Badge tone={tone} title={title} className={cn('rounded-full px-2 font-medium', tone === 'outline' && 'bg-card text-muted-foreground', className)}>
+    <Badge tone={tone} title={title} className={cn('px-2 font-medium', tone === 'outline' && 'bg-card text-muted-foreground', className)}>
       {children}
     </Badge>
   );
@@ -94,7 +93,7 @@ export function ToggleChip({ on, onChange, children, title, tone = 'primary' }: 
       title={title}
       onClick={() => onChange(!on)}
       className={cn(
-        'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none [&_svg]:size-3.5',
+        'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none [&_svg]:size-3.5',
         on && tone === 'primary' && 'border-primary/50 bg-primary/8 text-primary hover:text-primary',
         on && tone === 'danger' && 'border-destructive/50 bg-destructive/10 text-destructive hover:border-destructive/60 hover:text-destructive',
       )}

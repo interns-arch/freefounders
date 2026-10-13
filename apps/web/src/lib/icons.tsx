@@ -37,7 +37,7 @@ import {
   KeyRound,
   Landmark,
   Laptop,
-  type LucideIcon,
+  type IconComponent,
   Microwave,
   Monitor,
   Mouse,
@@ -59,11 +59,11 @@ import {
   Tv,
   Wrench,
   Zap,
-} from 'lucide-react';
+} from '@/components/icons';
 import { cn } from './utils';
 
 /** Icons an admin can pick for categories and asset types. */
-const ICONS: Record<string, LucideIcon> = {
+const ICONS: Record<string, IconComponent> = {
   box: Box,
   package: Package,
   laptop: Laptop,

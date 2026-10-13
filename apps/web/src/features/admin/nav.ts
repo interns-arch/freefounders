@@ -1,6 +1,6 @@
 import type { Access } from '@freefounders/core';
 import { PEOPLE_SCREEN } from '@freefounders/core/admin';
-import { Settings2, ShieldCheck, Users } from 'lucide-react';
+import { Settings2, ShieldCheck, Users } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 
 /** Who may open each Admin screen (PLAN.md §19.19): owners and admins all; anyone else by their roles' Admin permissions. */

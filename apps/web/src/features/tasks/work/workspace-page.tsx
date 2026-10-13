@@ -1,6 +1,6 @@
 import { useAccess } from '@freefounders/core';
 import { type TaskTemplate, useTaskInboxCounts, useTaskPeople } from '@freefounders/core/tasks';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown } from '@/components/icons';
 import { useCallback, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageHeader } from '@/components/common/page';

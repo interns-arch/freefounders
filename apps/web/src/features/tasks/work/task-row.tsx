@@ -1,5 +1,5 @@
 import type { WorkTask } from '@freefounders/core/tasks';
-import { AlarmClock, Bell, BellOff, CalendarClock, CheckCircle2, Clock, FileText, Pencil, Repeat, Timer, Users } from 'lucide-react';
+import { AlarmClock, Bell, BellOff, CalendarClock, CheckCircle2, Clock, FileText, Pencil, Repeat, Timer, Users } from '@/components/icons';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
@@ -58,7 +58,7 @@ export function TaskRow({ t, me, isAdmin, scope, actions }: { t: WorkTask; me: n
             {t.priority !== 'normal' && <PriorityPill priority={t.priority} label={t.priority_display} />}
             {t.status === 'in_progress' && <StatusPill status="in_progress" label={t.progress_percent != null ? `${t.progress_percent}% · ${t.status_display}` : t.status_display} />}
             {t.pending_change_requests > 0 && (
-              <Badge tone="orange" className="rounded-full" title="Pending change request">
+              <Badge tone="orange" title="Pending change request">
                 <Pencil /> {t.pending_change_requests} change request{t.pending_change_requests === 1 ? '' : 's'}
               </Badge>
             )}

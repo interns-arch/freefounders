@@ -1,6 +1,6 @@
 import { FIELD_TYPE_LABELS, FIELD_TYPES, type FieldType, NUMERIC_FIELD_TYPES, OPTION_FIELD_TYPES, slugifyKey } from '@eam/shared';
 import { useMutation } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { X } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Field } from '@/components/common/form';

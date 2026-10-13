@@ -2,7 +2,7 @@ import { useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
 import { type DashboardCounts, type TaskDashboard, useTaskCategoryNames, useTaskDashboard } from '@freefounders/core/tasks';
 import { BarElement, CategoryScale, Chart as ChartJS, LinearScale, Tooltip } from 'chart.js';
-import { AlarmClock, CheckCircle2, CircleDashed, Hourglass, Loader, Timer } from 'lucide-react';
+import { AlarmClock, CheckCircle2, CircleDashed, Hourglass, Loader, Timer } from '@/components/icons';
 import { type ComponentType, useEffect, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { EmptyState, ErrorState } from '@/components/common/page';

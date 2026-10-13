@@ -1,5 +1,5 @@
 import { RECON_COLUMNS, RECON_SOURCE_LABELS, type ReconSource } from '@eam/shared';
-import { CardSim, FileSpreadsheet, GitCompareArrows, ShieldCheck, Upload, Users } from 'lucide-react';
+import { CardSim, FileSpreadsheet, GitCompareArrows, ShieldCheck, Upload, Users } from '@/components/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';

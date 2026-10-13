@@ -8,7 +8,7 @@ import {
   useMarkTaskNotificationRead,
   useTaskNotifications,
 } from '@freefounders/core/tasks';
-import { Bell, Mail, MessageCircle, X } from 'lucide-react';
+import { Bell, Mail, MessageCircle, X } from '@/components/icons';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -120,7 +120,7 @@ export function NotificationsPage() {
                   ))}
                 </div>
               </div>
-              {!n.read_at && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary ring-4 ring-primary/15" aria-label="Unread" />}
+              {!n.read_at && <Chip tone="primary" className="mt-0.5">New</Chip>}
               <Button size="icon-xs" variant="ghost" title="Delete this notification" aria-label={`Delete notification: ${n.title}`} onClick={() => del.mutate(n.id)}>
                 <X />
               </Button>

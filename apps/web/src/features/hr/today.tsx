@@ -1,6 +1,6 @@
 /** Attendance → Today: check in / check out (GPS and/or punch photo, per company setting). Built for phones. */
 import { useAccess } from '@freefounders/core';
-import { Activity, Camera, Clock, LogIn, LogOut, MapPin, Timer } from 'lucide-react';
+import { Activity, Camera, Clock, LogIn, LogOut, MapPin, Timer } from '@/components/icons';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
@@ -65,8 +65,7 @@ export function TodayTab() {
                   <div className="font-mono text-3xl font-bold tracking-tight tabular-nums" aria-live="off">
                     {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                   </div>
-                  <span className={cn('mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold', stateTone)}>
-                    <span className={cn('size-1.5 rounded-full bg-current', checkedIn && !checkedOut && 'animate-pulse')} />
+                  <span className={cn('mt-1 inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs font-semibold', stateTone)}>
                     {stateLabel}
                   </span>
                 </div>
@@ -75,12 +74,12 @@ export function TodayTab() {
 
             <div className="px-4 py-4 sm:px-5">
               <ul className="mb-4 flex flex-wrap gap-2 text-[13px]">
-                <li className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-muted-foreground">
+                <li className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1 text-muted-foreground">
                   <MapPin className={cn('size-3.5', data.geofence_enabled && 'text-primary')} />
                   {data.geofence_enabled ? 'Location check is ON — allow GPS access.' : 'Location check is off.'}
                 </li>
                 {data.photo === 'required' && (
-                  <li className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-muted-foreground">
+                  <li className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1 text-muted-foreground">
                     <Camera className="size-3.5 text-primary" /> A photo is taken at every check-in and check-out.
                   </li>
                 )}

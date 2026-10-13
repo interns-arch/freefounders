@@ -1873,6 +1873,18 @@ choice also in these themes" (the brand colour keeps replacing `--primary` in bo
   "Keyboard shortcuts". Phone app: Android font-size setting enlarges text up to 130 % (WebView `textZoom`), so layouts
   never break. Checked 320/360/393 px light and dark on 9 screens: no sideways scrolling.
 
+### 19.26 Hugeicons, no dots, no capsules (2026-10-13)
+Founder: "use hugeicons for icon libraries, and everywhere I do not want these dots and these capsules".
+- Icons: `@hugeicons/react` 1.1.10 + `@hugeicons/core-free-icons` 4.3.5 (the current packages behind the linked
+  `hugeicons-react` repo); `apps/web/src/components/icons.tsx` exports the 213 icon names the screens used (208 Hugeicons,
+  stroke 1.75, mapping table in the file); `lucide-react` removed. JS +111 KB raw / +24 KB gzip in total; the shared chunk
+  carries all icons (per-icon files would let pages load only their own: optional follow-up).
+- Status labels, badges, chips, counters: no leading dot; `rounded-sm` (6 px). Chips, tab groups, header page label, phone
+  bottom-bar highlight: `rounded-md` (8 px). Where a dot was the only signal it became text, a small tag or an icon
+  (calendar legend, late marker, Live, unread = "New"). Round stays for avatars, switches, radios, the bell count,
+  icon buttons, progress bars, score rings; two chart legends keep small colour squares.
+- Checked: web build; e2e 59/59; 28 screenshots desktop/phone, light/dark.
+
 ---
 
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)

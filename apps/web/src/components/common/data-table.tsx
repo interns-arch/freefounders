@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown } from '@/components/icons';
 import type React from 'react';
 import { isValidElement, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';

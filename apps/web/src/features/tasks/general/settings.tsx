@@ -21,7 +21,7 @@ import {
   useTaskSettings,
   useTeamPeople,
 } from '@freefounders/core/tasks';
-import { ArrowDown, ArrowUp, ExternalLink, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ExternalLink, X } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useConfirm } from '@/components/common/confirm';

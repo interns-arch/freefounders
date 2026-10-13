@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority';
-import { Check, Minus } from 'lucide-react';
+import { Check, Minus } from '@/components/icons';
 import { Avatar as AvatarPrimitive, Checkbox as CheckboxPrimitive, Progress as ProgressPrimitive, Separator as SeparatorPrimitive, Switch as SwitchPrimitive, Tabs as TabsPrimitive, Tooltip as TooltipPrimitive } from 'radix-ui';
 import * as React from 'react';
 import { cn, initials } from '@/lib/utils';
@@ -23,7 +23,7 @@ export function CardContent({ className, ...props }: React.ComponentProps<'div'>
 
 // ─── Badge ────────────────────────────────────────────────────────────────
 export const badgeVariants = cva(
-  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.5] [&>svg]:size-3',
+  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-2 py-0.5 text-xs font-semibold leading-[1.5] [&>svg]:size-3',
   {
     variants: {
       tone: {
@@ -45,10 +45,10 @@ export const badgeVariants = cva(
 );
 export type BadgeTone = NonNullable<VariantProps<typeof badgeVariants>['tone']>;
 
-export function Badge({ className, tone, dot, children, ...props }: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants> & { dot?: boolean }) {
+/** Status label: a small 6 px-rounded rectangle, tinted background + text colour (no dot, no capsule). */
+export function Badge({ className, tone, children, ...props }: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants>) {
   return (
     <span data-slot="badge" className={cn(badgeVariants({ tone }), className)} {...props}>
-      {dot && <span className="size-1.5 rounded-full bg-current opacity-80" />}
       {children}
     </span>
   );

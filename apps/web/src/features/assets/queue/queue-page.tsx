@@ -1,5 +1,5 @@
 import type { Priority } from '@eam/shared';
-import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, LifeBuoy, ListOrdered, UserPlus } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, LifeBuoy, ListOrdered, UserPlus } from '@/components/icons';
 import { Link, useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
@@ -58,7 +58,6 @@ export default function QueuePage() {
             >
               <span className={cn('absolute inset-y-0 left-0 w-1', BAR[p])} aria-hidden />
               <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold tracking-wider uppercase">
-                <span className={cn('size-2 rounded-full', BAR[p])} />
                 {LABEL[p]}
               </div>
               <div className="mt-1 font-mono text-[26px] leading-none font-semibold tabular">{counts ? counts[p] : '–'}</div>
@@ -126,7 +125,6 @@ function GroupedList({ items, reset }: { items: QueueItem[]; reset: unknown }) {
         return (
           <section key={p}>
             <h2 className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-muted px-4 py-1.5 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-              <span className={cn('size-2 rounded-full', BAR[p])} />
               {LABEL[p]} <span className="rounded bg-card px-1.5 py-px tabular">{all}</span>
             </h2>
             <ul className="divide-y">
@@ -162,7 +160,7 @@ function QueueRow({ item, compact }: { item: QueueItem; compact?: boolean }) {
         </div>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        <EnumBadge value={item.priority} tones={PRIORITY_TONE} dot={false} />
+        <EnumBadge value={item.priority} tones={PRIORITY_TONE} />
         <span className={cn('whitespace-nowrap text-xs', item.overdue ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
           {item.overdue ? `Overdue · ${item.kind === 'ONBOARDING' ? 'joined' : 'needed'} ${formatDate(item.dueDate)}` : item.dueDate ? `${item.kind === 'ONBOARDING' ? 'Joins' : 'Needed'} ${formatDate(item.dueDate)}` : relativeTime(item.createdAt)}
         </span>

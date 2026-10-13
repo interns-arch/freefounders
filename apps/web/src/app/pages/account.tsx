@@ -1,5 +1,5 @@
 import { ApiError, errorMessage, useChangePassword, usePlatformMe } from '@freefounders/core';
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { WeakPasswordNote } from '@/components/common/weak-password-note';

@@ -1,7 +1,7 @@
 /** HR → My leave (balances, requests, apply / cancel) and Holidays. */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type LeaveRequest, type LeaveType, useAddHoliday, useApplyLeave, useCancelLeave, useDeleteHoliday, useHolidays, useLeaveBalances, useLeaveTypes, useMyLeaves } from '@freefounders/core/hr';
-import { CalendarDays, CalendarHeart, Plus } from 'lucide-react';
+import { CalendarDays, CalendarHeart, Plus } from '@/components/icons';
 import { useState } from 'react';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';

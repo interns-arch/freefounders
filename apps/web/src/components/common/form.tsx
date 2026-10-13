@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle } from '@/components/icons';
 import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode, useEffect, useId, useRef } from 'react';
 import { type FieldErrors, type FieldValues, type Path, useForm, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';

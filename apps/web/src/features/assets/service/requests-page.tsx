@@ -1,7 +1,7 @@
 import { humanize, PRIORITIES } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
 import { useMutation } from '@tanstack/react-query';
-import { Check, ClipboardList, PackageCheck, Plus, UserPlus, X } from 'lucide-react';
+import { Check, ClipboardList, PackageCheck, Plus, UserPlus, X } from '@/components/icons';
 import { DetailList } from '@/components/common/page';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/overlays';
 import { Link, useSearchParams } from 'react-router';
@@ -54,7 +54,7 @@ export default function RequestsPage() {
           className={cn('flex-1 rounded-md px-3 py-1.5 text-center text-[13px] font-medium transition sm:flex-none', v.active ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
         >
           {v.label}
-          {v.count > 0 && <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">{v.count}</span>}
+          {v.count > 0 && <span className="ml-1.5 rounded-sm bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">{v.count}</span>}
         </Link>
       ))}
     </div>
@@ -172,7 +172,7 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
         </div>
       ),
     },
-    { key: 'priority', header: 'Priority', hideOnMobile: true, cell: (r) => <EnumBadge value={r.priority} tones={PRIORITY_TONE} dot={false} /> },
+    { key: 'priority', header: 'Priority', hideOnMobile: true, cell: (r) => <EnumBadge value={r.priority} tones={PRIORITY_TONE} /> },
     { key: 'needed', header: 'Needed by', hideOnMobile: true, cell: (r) => <span className="whitespace-nowrap text-muted-foreground">{r.neededBy ? formatDate(r.neededBy) : '—'}</span> },
     {
       key: 'status',
@@ -350,7 +350,7 @@ function RequestSheet({ id, fromList, actions, onClose }: { id: string | null; f
             <div className="space-y-5">
               <div className="flex flex-wrap items-center gap-2">
                 <EnumBadge value={r.status} tones={REQUEST_TONE} />
-                <EnumBadge value={r.priority} tones={PRIORITY_TONE} dot={false} />
+                <EnumBadge value={r.priority} tones={PRIORITY_TONE} />
                 {(r.status === 'PENDING' || r.status === 'APPROVED') && (
                   <span className={cn('text-xs', r.custom ? 'text-muted-foreground' : r.availableCount ? 'text-success' : 'text-destructive')}>{r.custom ? 'Not in catalog' : `${r.availableCount} in stock`}</span>
                 )}

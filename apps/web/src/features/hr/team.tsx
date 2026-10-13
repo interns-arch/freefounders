@@ -1,7 +1,7 @@
 /** HR → Approvals (leave + corrections). Who is in today lives in live.tsx / daily.tsx (PLAN.md §19.15). */
 import { errorMessage } from '@freefounders/core';
 import { usePendingCorrections, usePendingLeaves, useReviewHrRequest } from '@freefounders/core/hr';
-import { Check, ClipboardCheck, Inbox, Palmtree, X } from 'lucide-react';
+import { Check, ClipboardCheck, Inbox, Palmtree, X } from '@/components/icons';
 import { useState } from 'react';
 import { EmptyState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';

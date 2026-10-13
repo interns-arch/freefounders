@@ -1,6 +1,6 @@
 import { useAccess } from '@freefounders/core';
 import { useEmployeesReport, useWorkTaskList } from '@freefounders/core/tasks';
-import { AlarmClock, ClipboardList, Lightbulb, Repeat } from 'lucide-react';
+import { AlarmClock, ClipboardList, Lightbulb, Repeat } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, ErrorState } from '@/components/common/page';

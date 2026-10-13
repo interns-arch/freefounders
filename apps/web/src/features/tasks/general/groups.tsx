@@ -1,7 +1,7 @@
 /** /tasks/groups — team workspaces (old pages/Groups.jsx). ?group=<id> opens one group. */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type Group, useAddGroupMembers, useArchiveGroup, useGroupDashboard, useGroups, useRemoveGroupMember, useSaveGroup, useSetTaskStatus, useTaskList, useTaskRoleOptions, useTeamPeople } from '@freefounders/core/tasks';
-import { ArrowLeft, ArrowRight, Boxes, Link2, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Boxes, Link2, Plus } from '@/components/icons';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useConfirm } from '@/components/common/confirm';
@@ -267,7 +267,6 @@ function GroupDashboardView({ group }: { group: Group }) {
         <ul className="grid gap-3">
           {q.data.recent_activity.map((a, i) => (
             <li key={i} className="flex gap-2 text-sm">
-              <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
               <div>
                 <strong>{a.task_title}</strong> <span className="text-muted-foreground">{a.text}</span>
                 <div className="text-xs text-muted-foreground">

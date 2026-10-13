@@ -4,7 +4,7 @@
  */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { ATTENDANCE_REPORT_TYPES, type AttendanceReportInput, type AttendanceReportType, type ReportFormat, useDownloadAttendanceReport, useTeamDay } from '@freefounders/core/hr';
-import { Download, FileSpreadsheet, History, Upload } from 'lucide-react';
+import { Download, FileSpreadsheet, History, Upload } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';

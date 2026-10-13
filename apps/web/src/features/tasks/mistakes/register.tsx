@@ -22,7 +22,7 @@ import {
   useReviewMistake,
   useSops,
 } from '@freefounders/core/tasks';
-import { Flag, PartyPopper, Plus, Sparkles, TriangleAlert } from 'lucide-react';
+import { Flag, PartyPopper, Plus, Sparkles, TriangleAlert } from '@/components/icons';
 import { useEffect, useId, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState } from '@/components/common/page';

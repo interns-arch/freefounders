@@ -1,7 +1,7 @@
 /** Small presentational pieces shared by the general Tasks screens and HR (no data, theme colours only). */
 import { useAccess } from '@freefounders/core';
 import type { TaskPriority, TaskStatus } from '@freefounders/core/tasks';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from '@/components/icons';
 import type { ComponentType, ReactNode } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, PageLoader } from '@/components/common/page';
@@ -40,10 +40,10 @@ const ICON_TONE: Record<Tone, string> = {
   info: 'bg-info/10 text-info',
 };
 
-/** A small round count (e.g. "3" next to a tab or a title). */
+/** A small count (e.g. "3" next to a tab or a title). */
 export function CountPill({ tone = 'neutral', className, children, ...rest }: { tone?: Tone; className?: string; children: ReactNode } & React.ComponentProps<'span'>) {
   return (
-    <span className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-xs font-semibold tabular-nums', PILL[tone], className)} {...rest}>
+    <span className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1.5 font-mono text-xs font-semibold tabular-nums', PILL[tone], className)} {...rest}>
       {children}
     </span>
   );
@@ -52,7 +52,7 @@ export function CountPill({ tone = 'neutral', className, children, ...rest }: { 
 /** A small coloured label (status, priority, counts). */
 export function Chip({ tone = 'neutral', className, children, ...rest }: { tone?: Tone; className?: string; children: ReactNode } & React.ComponentProps<'span'>) {
   return (
-    <span className={cn('inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.15rem]', CHIP[tone], className)} {...rest}>
+    <span className={cn('inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-2 py-0.5 text-xs font-semibold leading-[1.15rem]', CHIP[tone], className)} {...rest}>
       {children}
     </span>
   );
@@ -236,7 +236,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className={cn('inline-flex max-w-full flex-wrap gap-0.5 rounded-full border bg-muted p-0.5', className)}>
+    <div role="group" aria-label={label} className={cn('inline-flex max-w-full flex-wrap gap-0.5 rounded-md border bg-muted p-0.5', className)}>
       {options.map(([v, l]) => (
         <button
           key={v}
@@ -244,7 +244,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === v}
           onClick={() => onChange(v)}
           className={cn(
-            'inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-10 max-sm:px-3.5',
+            'inline-flex cursor-pointer items-center gap-1.5 rounded-sm px-3 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-10 max-sm:px-3.5',
             value === v && 'bg-card text-primary shadow-card ring-1 ring-border',
           )}
         >

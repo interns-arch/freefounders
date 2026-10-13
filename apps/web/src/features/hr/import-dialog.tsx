@@ -4,7 +4,7 @@
  */
 import { errorMessage } from '@freefounders/core';
 import { type ImportResult, type ImportRow, useImportAttendance, useImportTemplate } from '@freefounders/core/hr';
-import { CheckCircle2, Download, FileUp } from 'lucide-react';
+import { CheckCircle2, Download, FileUp } from '@/components/icons';
 import { type FormEvent, useId, useState } from 'react';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { Button } from '@/components/ui/button';

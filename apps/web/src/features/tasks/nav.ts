@@ -1,5 +1,5 @@
 import type { Access } from '@freefounders/core';
-import { BarChart3, Bell, Bot, Boxes, CheckSquare, Home, Link2, Megaphone, Settings2, Target, TriangleAlert, UsersRound } from 'lucide-react';
+import { BarChart3, Bell, Bot, Boxes, CheckSquare, Home, Link2, Megaphone, Settings2, Target, TriangleAlert, UsersRound } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 
 /** Who opens each Tasks screen (PLAN.md §19.19): each feature is its own permission; a module switched off hides it too. */

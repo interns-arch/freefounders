@@ -1,6 +1,6 @@
 import { type Access, useAccess } from '@freefounders/core';
 import { GRANT_APP_NAMES, type SyncResult } from '@freefounders/core/admin';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle } from '@/components/icons';
 import type { ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router';
 import { cn } from '@/lib/utils';
@@ -18,19 +18,17 @@ const APP_TONE: Record<string, string> = {
   assets: 'bg-app-assets/12 text-app-assets border-app-assets/25',
   platform: 'bg-app-admin/12 text-app-admin border-app-admin/25',
 };
-const APP_DOT: Record<string, string> = { tasks: 'bg-app-tasks', assets: 'bg-app-assets', platform: 'bg-app-admin' };
 
 /** "Tasks" / "Assets" / "Admin" chip in the app's colour. */
 export function AppChip({ app, className }: { app: string; className?: string }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.5] whitespace-nowrap',
+        'inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-xs font-semibold leading-[1.5] whitespace-nowrap',
         APP_TONE[app] ?? 'border-border bg-muted text-muted-foreground',
         className,
       )}
     >
-      <span className={cn('size-1.5 rounded-full', APP_DOT[app] ?? 'bg-current')} aria-hidden />
       {GRANT_APP_NAMES[app as keyof typeof GRANT_APP_NAMES] ?? app}
     </span>
   );
@@ -45,7 +43,7 @@ export function Pill({ tone = 'neutral', children, className }: { tone?: 'neutra
     info: 'border-info/25 bg-info/10 text-info',
     success: 'border-success/25 bg-success/10 text-success',
   }[tone];
-  return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold leading-[1.5] whitespace-nowrap', cls, className)}>{children}</span>;
+  return <span className={cn('inline-flex items-center rounded-sm border px-2 py-0.5 text-xs font-semibold leading-[1.5] whitespace-nowrap', cls, className)}>{children}</span>;
 }
 
 export function ErrorNote({ children, className }: { children: ReactNode; className?: string }) {

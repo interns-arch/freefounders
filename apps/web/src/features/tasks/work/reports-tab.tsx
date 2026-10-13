@@ -1,6 +1,6 @@
 import { useAccess } from '@freefounders/core';
 import { type ReportRow, useEffortDisputes, useEmployeesReport, useTaskDashboard, useTimeReport } from '@freefounders/core/tasks';
-import { BarChart3, Download, Lightbulb, Scale, Timer } from 'lucide-react';
+import { BarChart3, Download, Lightbulb, Scale, Timer } from '@/components/icons';
 import { type ReactNode, useState } from 'react';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -156,7 +156,7 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
             aria-current={tab === v ? 'page' : undefined}
             onClick={() => setTab(v)}
             className={cn(
-              'h-8 shrink-0 cursor-pointer rounded-full border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
+              'h-8 shrink-0 cursor-pointer rounded-md border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
               tab === v && 'border-transparent bg-primary text-primary-foreground hover:text-primary-foreground',
             )}
           >

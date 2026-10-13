@@ -38,17 +38,6 @@ export const STATUS_TEXT: Record<string, string> = {
   week_off: 'text-muted-foreground',
 };
 
-/** The small dot used in legends and calendar cells. */
-export const STATUS_DOT: Record<string, string> = {
-  present: 'bg-success',
-  late: 'bg-warning',
-  half_day: 'bg-warning/60',
-  absent: 'bg-destructive',
-  leave: 'bg-info',
-  holiday: 'bg-primary',
-  week_off: 'bg-muted-foreground/50',
-};
-
 export function AttendanceChip({ status, extra }: { status: AttendanceStatus; extra?: string }) {
   return (
     <Chip tone={STATUS_TONE[status] ?? 'neutral'}>

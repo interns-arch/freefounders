@@ -1,6 +1,6 @@
 import { useAccess } from '@freefounders/core';
 import { ensureAssetsCookie } from '@freefounders/core/assets';
-import { ChevronDown, Home, LayoutGrid } from 'lucide-react';
+import { ChevronDown, Home, LayoutGrid } from '@/components/icons';
 import { type RefObject, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { PageLoader } from '@/components/common/page';
@@ -294,7 +294,7 @@ export function AppShell() {
       </Sheet>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-1.5 border-b bg-card px-3 sm:gap-2 lg:px-6">
-          <span className="flex min-w-0 items-center gap-2 rounded-full border bg-background py-1 pr-3 pl-1 text-[13px] font-semibold">
+          <span className="flex min-w-0 items-center gap-2 rounded-md border bg-background py-1 pr-3 pl-1 text-[13px] font-semibold">
             <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', look ? look.soft : 'bg-primary/8 text-primary')} aria-hidden>
               {look ? <look.icon className="size-3.5" /> : <Home className="size-3.5" />}
             </span>
@@ -320,14 +320,14 @@ export function AppShell() {
         >
           {tabs.map((t) => (
             <Link key={t.label} to={t.to} aria-current={t.active ? 'page' : undefined} className={cn(tabClass, t.active && 'font-semibold text-primary')}>
-              <span className={cn('rounded-full px-4 py-1 transition-colors', t.active && 'bg-primary/10')}>
+              <span className={cn('rounded-md px-4 py-1 transition-colors', t.active && 'bg-primary/10')}>
                 <t.icon className="size-5" aria-hidden />
               </span>
               <span className="max-w-full truncate">{t.label}</span>
             </Link>
           ))}
           <button type="button" onClick={() => setDrawer(true)} aria-haspopup="dialog" aria-expanded={drawer} className={cn(tabClass, 'cursor-pointer')}>
-            <span className="rounded-full px-4 py-1">
+            <span className="rounded-md px-4 py-1">
               <LayoutGrid className="size-5" aria-hidden />
             </span>
             More

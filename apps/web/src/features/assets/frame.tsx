@@ -1,6 +1,6 @@
 import { errorMessage } from '@freefounders/core';
 import { resolveCode } from '@freefounders/core/assets';
-import { Plus, ScanLine, Search } from 'lucide-react';
+import { Plus, ScanLine, Search } from '@/components/icons';
 import { type ReactNode, Suspense, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';

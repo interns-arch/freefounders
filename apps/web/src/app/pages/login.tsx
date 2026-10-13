@@ -1,5 +1,5 @@
 import { errorMessage, session, useSignIn } from '@freefounders/core';
-import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from '@/components/icons';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -51,8 +51,7 @@ export function LoginPage() {
       <aside className="hidden bg-primary text-primary-foreground lg:flex lg:flex-col lg:justify-between lg:p-12 dark:border-r dark:border-border dark:bg-card dark:text-card-foreground" aria-hidden>
         <Logo onPrimary />
         <div className="max-w-md space-y-7">
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary-foreground/35 px-3 py-1 font-mono text-[11px] font-semibold tracking-widest uppercase dark:border-primary/35 dark:text-primary">
-            <span className="size-1.5 rounded-full bg-current" />
+          <span className="inline-flex items-center gap-2 rounded-sm border border-primary-foreground/35 px-3 py-1 font-mono text-[11px] font-semibold tracking-widest uppercase dark:border-primary/35 dark:text-primary">
             One sign-in · every app
           </span>
           <p className="text-[2.6rem] leading-[1.1] font-extrabold tracking-tight dark:text-foreground">Run your whole team from one place.</p>

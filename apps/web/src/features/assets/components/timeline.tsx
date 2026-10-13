@@ -16,7 +16,7 @@ import {
   UserPlus,
   Wrench,
   XCircle,
-} from 'lucide-react';
+} from '@/components/icons';
 import { Link } from 'react-router';
 import { Skeleton } from '@/components/ui/primitives';
 import type { HistoryEvent } from '@freefounders/core/assets';

@@ -1,4 +1,4 @@
-import { ArrowRight, Loader2, Plus, ScanLine } from 'lucide-react';
+import { ArrowRight, Loader2, Plus, ScanLine } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AssetStatusBadge, EmployeeStatusBadge } from '@/components/common/badges';

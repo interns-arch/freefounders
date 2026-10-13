@@ -15,7 +15,7 @@ import {
   useLinks,
   useToggleLinkFavorite,
 } from '@freefounders/core/tasks';
-import { ExternalLink, FolderPlus, Link2, Plus, Star, Trash2 } from 'lucide-react';
+import { ExternalLink, FolderPlus, Link2, Plus, Star, Trash2 } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';

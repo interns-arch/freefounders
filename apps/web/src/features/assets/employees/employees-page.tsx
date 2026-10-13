@@ -1,6 +1,6 @@
 import { EMPLOYEE_STATUS_LABELS, type EmployeeStatus } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { Plus, Printer, Users } from 'lucide-react';
+import { Plus, Printer, Users } from '@/components/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { EmployeeStatusBadge } from '@/components/common/badges';

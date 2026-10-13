@@ -1,6 +1,6 @@
 import { humanize, PRIORITIES, TICKET_STATUSES, type TicketStatus } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { AlertTriangle, HelpCircle, LifeBuoy, Plus, SearchX, Wrench } from 'lucide-react';
+import { AlertTriangle, HelpCircle, LifeBuoy, Plus, SearchX, Wrench } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -68,7 +68,7 @@ export default function TicketsPage() {
         );
       },
     },
-    { key: 'priority', header: 'Priority', cell: (t) => <EnumBadge value={t.priority} tones={PRIORITY_TONE} dot={false} /> },
+    { key: 'priority', header: 'Priority', cell: (t) => <EnumBadge value={t.priority} tones={PRIORITY_TONE} /> },
     { key: 'status', header: 'Status', cell: (t) => <EnumBadge value={t.status} tones={TICKET_TONE} /> },
     { key: 'reporter', header: 'Reported by', hideOnMobile: true, cell: (t) => <span className="whitespace-nowrap">{t.reportedByName ?? '—'}</span> },
     { key: 'assignee', header: 'Assignee', hideOnMobile: true, cell: (t) => <span className="whitespace-nowrap text-muted-foreground">{t.assigneeName ?? 'Unassigned'}</span> },
@@ -173,8 +173,8 @@ function TicketSheet({ id, onClose }: { id: string | null; onClose: () => void }
             <>
               <div className="flex flex-wrap gap-2">
                 <EnumBadge value={t.status} tones={TICKET_TONE} />
-                <EnumBadge value={t.priority} tones={PRIORITY_TONE} dot={false} />
-                <EnumBadge value={t.type} tones={{ ISSUE: 'blue', DAMAGE: 'orange', LOSS: 'red', REPAIR: 'amber', OTHER: 'gray' }} dot={false} />
+                <EnumBadge value={t.priority} tones={PRIORITY_TONE} />
+                <EnumBadge value={t.type} tones={{ ISSUE: 'blue', DAMAGE: 'orange', LOSS: 'red', REPAIR: 'amber', OTHER: 'gray' }} />
               </div>
               <DetailList
                 columns={1}

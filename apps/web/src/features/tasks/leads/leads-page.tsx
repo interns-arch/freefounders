@@ -17,7 +17,7 @@ import {
   useTeamPeople,
   useUpdateLead,
 } from '@freefounders/core/tasks';
-import { AlarmClock, Clock, IndianRupee, Plus, RefreshCw, Target, Trophy } from 'lucide-react';
+import { AlarmClock, Clock, IndianRupee, Plus, RefreshCw, Target, Trophy } from '@/components/icons';
 import { type Dispatch, type SetStateAction, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
@@ -237,7 +237,6 @@ function LeadColumn({
     >
       <header className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <span className={cn('size-2 rounded-full', { new: 'bg-info', contacted: 'bg-primary', quotation_sent: 'bg-warning', negotiation: 'bg-warning', won: 'bg-success', lost: 'bg-destructive' }[s])} aria-hidden />
           {label}
         </h2>
         <Chip>{cards.length}</Chip>

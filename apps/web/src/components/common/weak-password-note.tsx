@@ -1,5 +1,5 @@
 import { type PasswordAbout, PLATFORM_PASSWORD_MIN, weakPasswordWarning } from '@freefounders/core/admin';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 /**

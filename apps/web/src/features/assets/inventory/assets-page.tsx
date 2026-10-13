@@ -8,7 +8,7 @@ import {
   humanize,
   OWNERSHIP_TYPES,
 } from '@eam/shared';
-import { ArrowRightLeft, Boxes, LayoutGrid, List, Plus, Printer, ScanLine, Tags, X } from 'lucide-react';
+import { ArrowRightLeft, Boxes, LayoutGrid, List, Plus, Printer, ScanLine, Tags, X } from '@/components/icons';
 import { SearchField } from '@/components/common/search-field';
 import { Fragment, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -22,7 +22,6 @@ import { Card, Skeleton } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { ASSET_STATUS_BAR } from '@/lib/status';
 import { useAssetList, useAssetType, useAssetTypes, useCategories, usePrefetchAsset } from '@freefounders/core/assets';
 import type { AssetListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
@@ -215,7 +214,6 @@ export default function AssetsPage() {
                 active ? 'border-primary/40 bg-card text-primary shadow-xs' : 'border-transparent text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-xs',
               )}
             >
-              {s !== 'ALL' && <span className={cn('size-1.5 rounded-full', ASSET_STATUS_BAR[s])} aria-hidden />}
               {s === 'ALL' ? 'All' : ASSET_STATUS_LABELS[s]}
               <span className={cn('rounded-md px-1.5 font-mono text-[11px] tabular', active ? 'bg-primary/8' : 'bg-muted')}>{formatNumber(n)}</span>
             </button>

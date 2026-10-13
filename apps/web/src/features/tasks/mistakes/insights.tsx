@@ -1,6 +1,6 @@
 /** The founder's "action required" card, process smells, repeat offenders and department scores (managers and admin). */
 import { useMistakeDepartmentScores, useMistakeFounderSummary, useMistakePatterns } from '@freefounders/core/tasks';
-import { BarChart3, ChevronDown, ChevronRight, Flag } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronRight, Flag } from '@/components/icons';
 import { useState } from 'react';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { cn } from '@/lib/utils';

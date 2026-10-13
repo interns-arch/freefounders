@@ -17,7 +17,7 @@ import {
   useTaskFormCategories,
   useWorkloads,
 } from '@freefounders/core/tasks';
-import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Pencil, Plus, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Pencil, Plus, Sparkles, X } from '@/components/icons';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { Field, FormErrorSummary, FormSection } from '@/components/common/form';

@@ -17,7 +17,7 @@ import {
   useTeamDirectory,
   useUpdateManagedUser,
 } from '@freefounders/core/tasks';
-import { BarChart3, ExternalLink, UserPlus, UsersRound } from 'lucide-react';
+import { BarChart3, ExternalLink, UserPlus, UsersRound } from '@/components/icons';
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';

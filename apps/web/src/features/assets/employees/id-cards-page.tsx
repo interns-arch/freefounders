@@ -1,4 +1,4 @@
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer } from '@/components/icons';
 import { Link, useSearchParams } from 'react-router';
 import { LocalQrWarning, QRCode, useQrLinks } from '@/components/common/codes';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';

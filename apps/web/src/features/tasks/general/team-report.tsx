@@ -4,7 +4,7 @@
  */
 import { errorMessage } from '@freefounders/core';
 import { type TeamReportRow, useSendOverdueEmail, useTeamReport } from '@freefounders/core/tasks';
-import { ChevronDown, ChevronRight, Download, Mail, TriangleAlert } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, Mail, TriangleAlert } from '@/components/icons';
 import { Fragment, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Link } from 'react-router';

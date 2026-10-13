@@ -9,7 +9,7 @@ import {
   INITIAL_ASSET_STATUSES,
   OWNERSHIP_TYPES,
 } from '@eam/shared';
-import { Info, UserPlus } from 'lucide-react';
+import { Info, UserPlus } from '@/components/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';

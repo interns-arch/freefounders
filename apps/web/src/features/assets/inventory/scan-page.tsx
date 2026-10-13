@@ -1,4 +1,4 @@
-import { Camera, CameraOff, IdCard, Loader2, ScanLine, Search, Smartphone, Tag } from 'lucide-react';
+import { Camera, CameraOff, IdCard, Loader2, ScanLine, Search, Smartphone, Tag } from '@/components/icons';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
