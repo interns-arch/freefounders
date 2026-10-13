@@ -6,7 +6,11 @@ project. External services (WhatsApp Cloud API, Gmail API, Claude API, Neon
 Postgres) are wired purely through environment variables and stay **OFF** until
 their own new credentials are added to `backend/.env`.
 
-**Status: CRM, workspace modules, Forms, Leave & Attendance, Payroll and the Template Directory are complete. 206 backend API tests, all passing.**
+**Status: CRM, workspace modules, Leave & Attendance, Payroll and the Template Directory are complete. 206 backend API tests, all passing.**
+
+> FreeFounders, 2026-10-13 (PLAN.md §19.23): the **Idea board** and **Web forms** were removed at the founder's request
+> (the `webforms` app, the `workspace` Idea models, their API, permissions and screens). Their tables are dropped by
+> `accounts/0022_remove_forms_and_ideas` and `workspace/0002_remove_idea_board`. The history below still mentions them.
 
 ---
 
@@ -42,16 +46,14 @@ their own new credentials are added to `backend/.env`.
 | **Task Engine v2 (A+B)** | **Assignment hierarchy** — level-based, not department-based: Admin→anyone, Managers→managers+employees, Employees→fellow employees (cross-department fine, never upward); the assignee picker only offers allowed people. **Effort values** — the assigner sets effort (min/hr, optional); the assignee can record a one-time counter-estimate that never overwrites it (both logged for reviews). Task IDs (`T-00042`), relative due times ("6 hours from now"), recurrence end-dates. **Soft delete** — admin-only deletion moves tasks to a restorable Deleted bin. **Edit lockdown** — assignee: status only; creator: no direct edits; admin: full (logged). **Modification Requests** — in-system: assignee's request → creator approves; creator's own request → admin approves; every request/decision notified + logged to admin; approvable changes: due date, effort, priority, title, stop-recurrence, reassign, cancel. **Completion evidence** — admin toggles (Automation page) forcing remarks and/or a proof file on completion, collected by a modal and enforced server-side on every path. |
 | **Tasks** | 7-tab area: Dashboard (6 tiles, date ranges, My/Delegated/Group scopes, category table, bar chart), My Tasks, Delegated, Subscribed (follow via 🔔), Templates, Activities audit feed, Holidays calendar. Category + frequency; recurring tasks auto-create the next occurrence on completion. Lead-linked tasks write into the lead timeline. |
 | **Dashboard** | Tiles (total/new/active/won/lost/pipeline ₹/conversion %/pending follow-ups/overdue/assigned tasks/overdue tasks), leads-per-day chart, pipeline-by-stage bars, employee performance, lead-source performance, recent WhatsApp/Gmail feed, recent lead activity. Admin sees all; managers see their department automatically. |
-| **Groups** | Team mini-workspaces: owner + members, category, archive (never hard-delete). Each group has Dashboard (task tiles + recent activity), Tasks, Ideas, Links and Members tabs. Tasks carry an optional group; **group members see the group's tasks** even when not assignee. Managers/admin create; owner/admin manage members. |
+| **Groups** | Team mini-workspaces: owner + members, category, archive (never hard-delete). Each group has Dashboard (task tiles + recent activity), Tasks, Links and Members tabs. Tasks carry an optional group; **group members see the group's tasks** even when not assignee. Managers/admin create; owner/admin manage members. |
 | **Notices** | Company notice board (separate from per-user Notifications): draft → publish (schedulable) → expire/archive, priority, category, attachment, and audience targeting — everyone / role / department / group / specific users. Per-user read tracking with All/Read/Unread filters + search. Admin manages. |
 | **Links** | Shared bookmark manager: named collections ("Important Tools"), per-link description, group-scoped visibility, ★ favorites, search + filters. http/https-only URL validation. Anyone adds; edit/delete own (managers/admin any); managers manage collections. |
-| **Idea Board** | My / Shared / Group idea boards with votes, comments, categories and a review workflow (New → Under Review → Approved/Rejected → Implemented). Authors edit their own ideas; only managers/admin change status. Group ideas require membership. |
 | **Leave & Attendance** | **Attendance**: check-in/out with server-computed status (Present / Late / Half Day / Absent / Leave / Holiday / Week Off), working hours, late & early-checkout flags, missing-checkout detection, month view with per-status totals, correction requests with manager review that rewrites the day. **Leave**: types with annual quotas & document rules, apply with date range (working days only — skips holidays/week-offs), overlap guard, balances (quota/used/pending), cancel, manager approve/reject with remarks + notification; **approved leave writes LEAVE days into attendance** and blocks check-in. **Geo-fencing**: admin-defined office locations (lat/lng/radius); when `GEOFENCE_ENABLED=true` the server haversine-validates the GPS sent at check-in and rejects anything outside every fence. **Face recognition** (`FACE_RECOGNITION_ENABLED`): admin-only enrolment storing a numeric descriptor (never an image), euclidean matching against `FACE_MATCH_THRESHOLD`, and attendance is **never** marked on a below-threshold or unenrolled scan. |
 | **Mobile / installable app** | Below 820px the sidebar becomes a slide-in drawer behind a top app bar (page title + notification bell); grids collapse to one column, tables scroll on their own, modals become bottom sheets, kanban columns become swipeable, tap targets grow, and notched phones get safe-area padding. Installs to a phone home screen as a **PWA** (manifest, 192/512/maskable icons, iOS meta tags, quick-action shortcuts) and a service worker caches the app shell for instant opening — but **never `/api` or `/media`**, so business data is always live. The app needs a connection to do anything beyond opening. |
 | **Face attendance** | Removed in FreeFounders (PLAN.md §19.18): a punch is the office geofence + a selfie stored with it. Old face profiles and the `face_verified` / `face_confidence` columns are kept readable; `FACE_RECOGNITION_ENABLED` is switched off for every company (migration `hr 0006`) and no longer read. |
 | **Payroll** | Salary structures with history (monthly gross, optional basic, PF %, professional tax, other deduction, effective-from — a new entry never overwrites the old, so old payslips stay explainable). Monthly payroll runs computed **from the recorded attendance**: working days = calendar − week-offs − holidays; payable = present + late + half-days(×0.5) + *paid* leave; the rest is LWP. Advances are recovered automatically and settled on finalise. Draft runs can be recalculated freely; finalising locks the month. Per-employee payslip breakdown, CSV export, and a **My Salary** tab where every employee sees their own finalised payslips only. Guardrails: PF is charged on *earned* basic, and a payslip can never go below zero. |
 | **Industry Template Directory** | A browsable library of ready-made task templates, kept **separate** from the company's own private Task Templates. Browse by industry (13 seeded: E-commerce, Distributor, Automotive & Spare Parts, Garment Manufacturing, Construction, Education, Financial Services, CA Firm, Travel, Photography, Health & Wellness, Service Provider, Hiring Agency) → category → template → preview its steps → **Create tasks** (steps become real tasks, spaced by `offset_days`, optionally assigned to a teammate or a group) or **Add to my Task Templates**. Content lives in JSON/CSV and loads via `manage.py load_directory` — never hand-written in code. |
-| **Forms** | Real form builder: 10 field types (short/long text, number, email, phone, date, dropdown, radio, checkbox, file), required toggle, options, reorder/edit/delete, draft → publish → disable → reopen. Filled in-app by employees AND by customers via an unauthenticated **share link** (`/f/<token>`). Server-side validation, submissions list with answers + files, **CSV export**. Integrations: a submission can auto-create a **Lead** (field→attribute mapping, source=web, routed by the *existing* `auto_assign()` round-robin) and/or a **follow-up Task** assigned to the lead's assignee — both notified through the existing notification center. |
 
 ## 2. Tech stack
 
@@ -146,18 +148,7 @@ NoticeRead      notice, user, read_at (unique together)
 LinkCollection  name, created_by
 Link            collection, title, url, description, group?, added_by,
                 favorites M2M
-Idea            title, description, category, author, group?, status (new|
-                under_review|approved|rejected|implemented), priority,
-                votes M2M
-IdeaComment     idea, author, body
 Task (EXTENDED) + group? -> workspace.Group (group members see group tasks)
-Form            name, description, status (draft|published|closed),
-                public_token (share link), created_by, create_lead,
-                lead_department, create_task, task_title
-FormField       form, label, type (10 types), required, options JSON,
-                lead_attr (maps answer -> Lead attribute), order
-FormSubmission  form, submitted_by?, answers JSON, lead?, task?
-SubmissionFile  submission, field_id, file, filename
 OfficeLocation  name, latitude, longitude, radius_m, active (geo-fence)
 Attendance      user+date (unique), check_in/out (+lat/lng each), location,
                 status (present|absent|half_day|late|leave|holiday|week_off),
@@ -224,15 +215,6 @@ All under `/api/`, JWT `Authorization: Bearer <token>` unless noted.
 | `notices/{id}/publish\|archive\|read/` | POST | admin / admin / targeted user | lifecycle + read tracking |
 | `link-collections/` | CRUD | read: any · write: admin/manager | bookmark collections |
 | `links/` + `/{id}/` + `/{id}/favorite/` | CRUD + POST | visible-scoped; edit own | shared bookmarks (http/https only) |
-| `ideas/` + `/{id}/` | CRUD | visible-scoped; status change admin/manager | idea board (`?scope=my\|shared\|group`) |
-| `ideas/{id}/comments\|vote/` | GET/POST | visible-scoped | discussion + vote toggle |
-| `forms/` + `/{id}/` | CRUD | list: published (fill) / `?manage=true` own+admin · create: admin/manager | form builder |
-| `forms/{id}/add_field\|reorder_fields/` | POST | form owner/admin | builder field ops |
-| `form-fields/{id}/` | PATCH/DELETE | form owner/admin | edit/delete one field |
-| `forms/{id}/publish\|close\|reopen/` | POST | form owner/admin | lifecycle (publish needs ≥1 field) |
-| `forms/{id}/submit/` | POST | any signed-in | in-app submission (validated) |
-| `forms/{id}/submissions/` · `/export/` | GET | form owner/admin | submissions list · CSV download |
-| `public/forms/{token}/` · `/submit/` | GET/POST | **anonymous** | share-link form + submission |
 | `attendance/` | GET | own · `?scope=team` for approvers | attendance history (date/status filters) |
 | `attendance/today/` | GET | any | today's record + can-check-in/out + feature flags |
 | `attendance/check_in\|check_out/` | POST | any | mark attendance (GPS + optional face descriptor) |
@@ -337,27 +319,16 @@ Neon). Copy to `.env` and fill in what you have; blanks stay safely off.
 | `tests_tasks_area.py` | 16 tests — my/delegated/subscribed scopes, auto-subscribe, dashboard tiles/categories/ranges, group-scope guard, recurrence, templates/holidays permissions, activities scoping, team directory. |
 | `migrations/` | 0001 lead schema · 0002 assignment rule + `reminded_at` · 0003 task · 0004 holiday/template/activity + task category/frequency/subscribers. |
 
-### `backend/workspace/` — Groups, Notices, Links, Idea Board
+### `backend/workspace/` — Groups, Notices, Links
 | File | What it does |
 |---|---|
-| `models.py` | `Group` (+members M2M, owner, active), `Notice`/`NoticeRead` (audience-targeted announcements with lifecycle + read tracking), `LinkCollection`/`Link` (bookmarks, group-scoped visibility, favorites), `Idea`/`IdeaComment` (boards with votes + review statuses). |
-| `access.py` | Workspace visibility/permission helpers (mirrors `crm/scoping.py`): `visible_groups`, `can_create_group` (managers+), `can_manage_group` (owner/admin), `notice_targets` + `notices_for` (audience resolution), `visible_links`, `can_edit_link`, `visible_ideas`, `can_review_ideas`. |
+| `models.py` | `Group` (+members M2M, owner, active), `Notice`/`NoticeRead` (audience-targeted announcements with lifecycle + read tracking), `LinkCollection`/`Link` (bookmarks, group-scoped visibility, favorites). |
+| `access.py` | Workspace visibility/permission helpers (mirrors `crm/scoping.py`): `visible_groups`, `can_create_group` (managers+), `can_manage_group` (owner/admin), `notice_targets` + `notices_for` (audience resolution), `visible_links`, `can_edit_link`. |
 | `serializers.py` | All workspace serializers, including notice audience validation (role/department/group/user-id checks) and http/https-only URL validation on links. |
-| `views.py` | `GroupViewSet` (create=manager+, archive-on-delete, `add_member`/`remove_member`, `dashboard` action with task tiles + recent activity), `NoticeViewSet` (targeted feed vs `?manage=true` admin listing, `publish`/`archive`/`read` actions, read/unread/search filters), `LinkCollectionViewSet`, `LinkViewSet` (+`favorite` toggle), `IdeaViewSet` (scope filters, author-vs-reviewer edit rules, `comments`, `vote`). |
-| `urls.py` / `admin.py` | Routers `groups`, `notices`, `link-collections`, `links`, `ideas`; Django-admin registrations. |
-| `tests.py` | 21 tests — group create permission, membership visibility, member management guards, archive-not-delete, group-task visibility + foreign-group guard, group dashboard math, notice targeting (all 5 audience types), draft/scheduled/expired hiding, read flow, admin-only manage + publish/archive, audience validation, link URL-scheme rejection, group-link scoping, edit-own + favorites, idea scopes, membership guard, status-change capability, comments + votes. |
-| `migrations/` | 0001 all workspace models. (Plus `crm/0005_task_group` for the Task→Group link.) |
-
-### `backend/webforms/` — the form builder
-| File | What it does |
-|---|---|
-| `models.py` | `Form` (status lifecycle, unguessable `public_token` share link, integration flags), `FormField` (10 types, options, `lead_attr` mapping, order), `FormSubmission` (answers JSON, links to created Lead/Task, `person()` resolution), `SubmissionFile`. |
-| `services.py` | `validate_answers()` — full server-side validation (required, email, phone regex, number, ISO date, choice membership, 10 MB file cap). `create_submission()` — validate → store → `_run_integrations()`: builds a Lead from the `lead_attr`-mapped answers and hands it to the **existing** `crm.assignment.auto_assign` (no second pipeline), then creates the follow-up Task for the lead's assignee (falling back to the form creator) and notifies via `notifications.service.notify`. |
-| `views.py` | `FormViewSet` — published list for filling vs `?manage=true` builder list; `get_object` lets owners reach their drafts; actions `publish` (needs ≥1 field) / `close` / `reopen`, `add_field`, `reorder_fields`, `submit` (in-app), `submissions`, `export` (CSV via `csv.writer`). `FormFieldViewSet` (PATCH/DELETE one field). Public endpoints `public_form` / `public_submit` (`AllowAny`, published-only, token-addressed). |
-| `serializers.py` | Form/field/submission serializers; `PublicFormSerializer` strips tokens + integration config from what anonymous visitors see; choice-fields require options. |
-| `urls.py` / `admin.py` | Router (`forms`, `form-fields`) + `public/forms/<token>/[submit/]`; admin with inline fields. |
-| `tests.py` | 13 tests — builder permissions, field add/edit/reorder/delete + options validation, publish guard, foreign-manager blocked, public GET/submit + draft hidden, validation errors, closed-form rejection, employee attribution, file upload, **lead integration with round-robin rotation across two submissions**, task-for-lead-assignee, task-only fallback to creator, CSV export content, submissions listing. |
-| `migrations/` | 0001 all webforms models. |
+| `views.py` | `GroupViewSet` (create=manager+, archive-on-delete, `add_member`/`remove_member`, `dashboard` action with task tiles + recent activity), `NoticeViewSet` (targeted feed vs `?manage=true` admin listing, `publish`/`archive`/`read` actions, read/unread/search filters), `LinkCollectionViewSet`, `LinkViewSet` (+`favorite` toggle). |
+| `urls.py` / `admin.py` | Routers `groups`, `notices`, `link-collections`, `links`; Django-admin registrations. |
+| `tests.py` | 21 tests — group create permission, membership visibility, member management guards, archive-not-delete, group-task visibility + foreign-group guard, group dashboard math, notice targeting (all 5 audience types), draft/scheduled/expired hiding, read flow, admin-only manage + publish/archive, audience validation, link URL-scheme rejection, group-link scoping, edit-own + favorites. |
+| `migrations/` | 0001 all workspace models, 0002 removes the Idea board. (Plus `crm/0005_task_group` for the Task→Group link.) |
 
 ### `backend/hr/` — Leave & Attendance
 | File | What it does |
@@ -431,13 +402,9 @@ Neon). Copy to `.env` and fill in what you have; blanks stay safely off.
 | `src/pages/Intake.jsx` | AI Inbox (admin + managers): every inbound message with channel tag, status, classification chips (intent / vehicle / items / priority / department / provider) and the lead it became; **Simulator** (admin) posts any text through the real pipeline. |
 | `src/pages/Users.jsx` | Two views in one route: **Directory** for all roles (search, role filter, Mobile / Reports To / Department / role badges — read-only) and **ManageTeam** for admins (same table + status, Edit/Deactivate/Activate, member-count, reporting-manager filter, and the add/edit modal incl. role, department, WhatsApp number, reports-to, password). |
 | `src/pages/Settings.jsx` | Automation page (admin): per-department assignment-rule cards — active toggle, strategy select, ordered member pills with move-up/down/remove, add-member dropdown, "next in rotation" hint. |
-| `src/pages/Groups.jsx` | Groups: card grid of your groups → detail view with **Dashboard / Tasks / Ideas / Links / Members** tabs; create/edit/archive for managers+owners, member add/remove, group task list with checkbox completion, quick group-idea input. |
+| `src/pages/Groups.jsx` | Groups: card grid of your groups → detail view with **Dashboard / Tasks / Links / Members** tabs; create/edit/archive for managers+owners, member add/remove, group task list with checkbox completion. |
 | `src/pages/Notices.jsx` | Notice board: All/Read/Unread + search feed with expand-to-read (auto mark-read); admin **Manage** mode — draft/publish/archive/delete table + create/edit modal with the audience picker (everyone/role/department/group/users), scheduling and expiry. |
 | `src/pages/Links.jsx` | Links: collections with grouped link lists, add-link modal (collection, optional group visibility), ★ favorite toggle + favorites filter, search, new-collection input for managers. |
-| `src/pages/Ideas.jsx` | Idea Board: Shared/My/Group tabs, vote button, expandable comments thread, status pills, review dropdown for managers/admin, new-idea modal (shared or group board). |
-| `src/pages/Forms.jsx` | Forms: Fill mode (published-form cards → in-app fill) and My Forms mode (create, builder, submissions). Builder: share-link card with copy, name/description, lead/task integration toggles (+ department, task title, field→lead mapping), field editor (add/edit-required/maps-to/reorder/delete), publish/disable/reopen. Submissions: table with person/lead/task, expandable answer detail + file links, **Export CSV** (authenticated blob download). |
-| `src/pages/FormRenderer.jsx` | Shared renderer for all 10 field types — used by the in-app fill page and the public page; multipart submit (answers + `file_<id>` uploads), per-field server error display, loading/busy state. |
-| `src/pages/PublicForm.jsx` | The `/f/<token>` share-link page — works **without login**, branded card, thank-you state, not-found handling. |
 | `src/face.js` | Lazy loader for the face engine: dynamically imports `@vladmandic/face-api`, loads the three model nets from `/models`, and exposes `describeFace(video)` → a 128-number descriptor (throws user-facing messages for "no face" / "more than one face") plus `isSupported()`. |
 | `src/pages/FaceCapture.jsx` | The camera modal used for both check-in and enrolment: `getUserMedia`, mirrored preview with a guide oval, progress status while models load, per-error messages (permission denied / no camera / no face), always stops the camera stream on close, and returns only the descriptor. |
 | `src/pages/Payroll.jsx` | Two exports used by the HR page: **PayrollAdmin** (`hr.manage`) with Monthly-payroll / Salaries / Advances sub-tabs — run a month, recalculate a draft, finalise, per-employee payslip table, CSV download; and **MySalary** (everyone) — current salary, payslip history, and a line-by-line payslip breakdown. |
@@ -470,11 +437,11 @@ venv\Scripts\python backend\manage.py test crm        # one app
 `crm/tests_assignment.py` (12), `crm/tests_dashboard.py` (5),
 `crm/tests_tasks.py` (11), `crm/tests_tasks_area.py` (16),
 `notifications/tests.py` (6), `intake/tests.py` (18),
-`workspace/tests.py` (21), `webforms/tests.py` (13), `hr/tests.py` (28), `hr/tests_hr_role.py` (12), `directory/tests.py` (14), `payroll/tests.py` (19) —
+`workspace/tests.py`, `hr/tests.py` (28), `hr/tests_hr_role.py` (12), `directory/tests.py` (14), `payroll/tests.py` (19) —
 run the command for the authoritative count.
 Every phase was additionally verified end-to-end in the browser (login flows,
 drag-and-drop, uploads, round-robin, notifications, simulator, group
-workspaces, notice targeting, favorites, votes).
+workspaces, notice targeting, favorites).
 
 ## 11. How the automations work
 

@@ -269,7 +269,7 @@ export function PeoplePage() {
               <DialogHeader>
                 <DialogTitle>Login ready</DialogTitle>
                 <DialogDescription>
-                  Give these to <strong className="text-foreground">{open.person.fullName}</strong>. They will choose their own password the first time they sign in.
+                  Give these to <strong className="text-foreground">{open.person.fullName}</strong>. They can keep it, or change it themselves from their account menu.
                 </DialogDescription>
               </DialogHeader>
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 rounded-lg border border-primary/20 bg-accent/40 p-4 text-sm">

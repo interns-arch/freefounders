@@ -3,8 +3,8 @@
     python manage.py compress_media            # dry run: what would be saved
     python manage.py compress_media --apply    # replace each photo that gets smaller
 
-Goes through every stored file (task attachments, lead documents, leave documents, form uploads, notice attachments,
-punch photos; every company in multi-company mode) and re-encodes the photos exactly like a new upload: punch photos to
+Goes through every stored file (task attachments, lead documents, leave documents, notice attachments, punch
+photos; every company in multi-company mode) and re-encodes the photos exactly like a new upload: punch photos to
 720 px, the rest to 2000 px, upright, without metadata. PDFs, spreadsheets and other files are never touched. With
 --apply the smaller copy is saved first, the row is pointed at it, then the old file is deleted, so a row never points
 at a missing file.
@@ -20,14 +20,12 @@ from config.images import DOCUMENT, SELFIE, compress_image
 def _targets():
     from crm.models import LeadDocument, TaskAttachment
     from hr.models import Attendance, LeaveRequest
-    from webforms.models import SubmissionFile
     from workspace.models import Notice
 
     return [
         (TaskAttachment, "file", DOCUMENT),
         (LeadDocument, "file", DOCUMENT),
         (LeaveRequest, "document", DOCUMENT),
-        (SubmissionFile, "file", DOCUMENT),
         (Notice, "attachment", DOCUMENT),
         (Attendance, "check_in_photo", SELFIE),
         (Attendance, "check_out_photo", SELFIE),

@@ -1,5 +1,5 @@
-import { errorMessage } from '@freefounders/core';
-import { LEVEL_LABELS, type Role, roleApps, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles } from '@freefounders/core/admin';
+import { errorMessage, usePlatformMe } from '@freefounders/core';
+import { LEVEL_LABELS, type Role, roleApps, roleLimits, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles } from '@freefounders/core/admin';
 import { Lock, Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
@@ -21,6 +21,9 @@ export function RolesPage() {
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
   const [error, setError] = useState('');
   const onError = (err: unknown) => setError(errorMessage(err));
+  // Without being the owner: only roles within my own permissions and level can be changed or copied (R1).
+  const limits = roleLimits(usePlatformMe().data, catalogue.data);
+  const editingRole = editing && editing !== 'new' ? editing : null;
 
   const columns: Column<Role>[] = [
     {
@@ -65,45 +68,50 @@ export function RolesPage() {
     {
       key: 'actions',
       header: <span className="sr-only">Actions</span>,
-      cell: (r) => (
-        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-          <Button variant="outline" size="xs" onClick={() => setEditing(r)} disabled={!catalogue.data} aria-label={`${r.system ? 'View' : 'Edit'} ${r.name}`}>
-            {r.system ? 'View' : 'Edit'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            aria-label={`Duplicate ${r.name}`}
-            disabled={duplicate.isPending}
-            onClick={() => {
-              setError('');
-              duplicate.mutate(r.id, { onError });
-            }}
-          >
-            Duplicate
-          </Button>
-          {!r.system && (
+      cell: (r) => {
+        const problem = limits.roleProblem(r, 'edit');
+        const view = r.system || !!problem;
+        return (
+          <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+            <Button variant="outline" size="xs" onClick={() => setEditing(r)} disabled={!catalogue.data} aria-label={`${view ? 'View' : 'Edit'} ${r.name}`}>
+              {view ? 'View' : 'Edit'}
+            </Button>
             <Button
               variant="ghost"
               size="xs"
-              className="text-destructive hover:text-destructive"
-              aria-label={`Archive ${r.name}`}
-              onClick={async () => {
+              aria-label={`Duplicate ${r.name}`}
+              title={problem ?? undefined}
+              disabled={duplicate.isPending || !!problem}
+              onClick={() => {
                 setError('');
-                const ok = await confirm({
-                  title: `Archive "${r.name}"?`,
-                  description: r.people ? `${r.people} people lose it (and any app only it gave them).` : undefined,
-                  confirmText: 'Archive',
-                  destructive: true,
-                });
-                if (ok.confirmed) archive.mutate(r.id, { onError });
+                duplicate.mutate(r.id, { onError });
               }}
             >
-              Archive
+              Duplicate
             </Button>
-          )}
-        </div>
-      ),
+            {!view && (
+              <Button
+                variant="ghost"
+                size="xs"
+                className="text-destructive hover:text-destructive"
+                aria-label={`Archive ${r.name}`}
+                onClick={async () => {
+                  setError('');
+                  const ok = await confirm({
+                    title: `Archive "${r.name}"?`,
+                    description: r.people ? `${r.people} people lose it (and any app only it gave them).` : undefined,
+                    confirmText: 'Archive',
+                    destructive: true,
+                  });
+                  if (ok.confirmed) archive.mutate(r.id, { onError });
+                }}
+              >
+                Archive
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -131,7 +139,16 @@ export function RolesPage() {
           empty={<EmptyState icon={ShieldCheck} title="No roles yet" />}
         />
       </Card>
-      {editing && catalogue.data && <RoleEditor role={editing === 'new' ? null : editing} catalogue={catalogue.data} roles={roles.data ?? []} onClose={() => setEditing(null)} />}
+      {editing && catalogue.data && (
+        <RoleEditor
+          role={editingRole}
+          catalogue={catalogue.data}
+          roles={roles.data ?? []}
+          limits={limits}
+          lockedReason={editingRole && !editingRole.system ? limits.roleProblem(editingRole, 'edit') : null}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }

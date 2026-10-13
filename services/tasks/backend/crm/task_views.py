@@ -31,7 +31,7 @@ from .models import (
     TaskStatus, TaskTemplate,
 )
 from .scoping import (
-    assignable_users, assignment_level, can_assign_to, can_delete_task,
+    assign_refusal, assignable_users, assignment_level, can_assign_to, can_delete_task,
     can_edit_task, delete_refusal, visible_leads, visible_tasks,
 )
 from .serializers import (
@@ -536,7 +536,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         assignee = serializer.validated_data.get("assigned_to")
         if assignee and not can_assign_to(user, assignee):
-            raise PermissionDenied("That person is not an active user.")
+            raise PermissionDenied(assign_refusal(user, assignee))
         # B6: effort is mandatory when creating a task by hand -- scoring
         # depends on it (system-created tasks from forms/templates are exempt).
         missing = {}
@@ -657,7 +657,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         else:
             new_assignee = data.get("assigned_to", task.assigned_to)
             if new_assignee and new_assignee != task.assigned_to and not can_assign_to(user, new_assignee):
-                raise PermissionDenied("That person is not an active user.")
+                raise PermissionDenied(assign_refusal(user, new_assignee))
 
         old_assignee, old_status = task.assigned_to, task.status
 
@@ -1084,7 +1084,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     # ---- extra actions ---------------------------------------------------
     @action(detail=False, methods=["get"])
     def assignees(self, request):
-        """A1: the people THIS user may assign to -- every active user."""
+        """A1: the people THIS user may assign to -- every active user with tasks.assign, else only themselves."""
         users = list(assignable_users(request.user).order_by("first_name", "username"))
         return Response(people_for_picker(users))
 
@@ -1957,8 +1957,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         someone else, counted by the day the task was given: the chosen day
         (?date=YYYY-MM-DD, default today), that day's week (Mon-Sun), its
         month, and overall. Self-assigned work is counted apart. Automatic
-        repeats of a recurring task and tasks made by a web form are not
-        anyone "giving" work, so they are left out. Plain counts, no labels.
+        repeats of a recurring task and tasks made by a web form (old ones:
+        Web forms were removed, PLAN.md §19.23) are not anyone "giving" work,
+        so they are left out. Plain counts, no labels.
 
         Admins and super admins get everyone (?department= narrows it);
         everybody else gets only their own row. Read-only."""
@@ -2782,6 +2783,9 @@ class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
             applied.append("repeat_until")
         if "assigned_to" in changes:
             target = User.objects.filter(pk=changes["assigned_to"], is_active=True).first()
+            if target and target != task.assigned_to and not can_assign_to(actor, target):
+                # approving a reassignment is giving the task: the approver needs tasks.assign too
+                raise PermissionDenied(assign_refusal(actor, target))
             if target:
                 task.assigned_to = target
                 applied.append(f"assigned_to -> {target.username}")

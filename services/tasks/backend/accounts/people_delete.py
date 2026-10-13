@@ -16,8 +16,8 @@ Optional JSON body (the founder's choices; no body = delete everything, as descr
   leads hand_over: leads assigned to / created by them get `to` as assignee / creator (a lead event records it), so
                    the tasks linked to those leads are not deleted. leads delete: the leads go with their linked tasks.
   history delete:  everything not handed over goes, exactly as described below.
-  history keep:    finished tasks, attendance, leave, payroll, comments, activity, notices, ideas, mistakes, form
-                   submissions etc. stay. The user row stays, anonymised and unusable: name "Deleted user", username
+  history keep:    finished tasks, attendance, leave, payroll, comments, activity, notices, mistakes etc. stay.
+                   The user row stays, anonymised and unusable: name "Deleted user", username
                    deleted-<random>, email/WhatsApp blank, unusable password, inactive, platform_person_id NULL (that
                    person id can never sign in or be matched again). Personal data still goes (PERSONAL below): face
                    profile, punch photos and leave documents (files and fields), notifications, WhatsApp deliveries,
@@ -37,22 +37,21 @@ DELETE -- the row belongs to the person (and its own dependents go with it, by t
   crm.Task assigned_to / created_by        tasks assigned to them AND tasks they created for others (the founder's
                                            call); with them: sub-tasks (parent), completions, change requests,
                                            attachments (+files), activities/comments, checklist, day logs,
-                                           subscribers; DutyRun/FormSubmission/Mistake pointers to the task -> NULL
+                                           subscribers; DutyRun/Mistake pointers to the task -> NULL
   crm.Lead assigned_to / created_by        leads + events, documents (+files), quotations, and the tasks about those
-                                           leads (Task.lead is CASCADE); inbound messages/forms/mistakes -> NULL lead
-  crm.LeadEvent.actor, crm.TaskActivity.actor, crm.TaskDayLog.author, mistakes.MistakeEvent.actor,
-  workspace.IdeaComment.author             entries they wrote, also on other people's records
+                                           leads (Task.lead is CASCADE); inbound messages/mistakes -> NULL lead
+  crm.LeadEvent.actor, crm.TaskActivity.actor, crm.TaskDayLog.author,
+  mistakes.MistakeEvent.actor              entries they wrote, also on other people's records
   crm.TaskCompletion.submitted_by, crm.TaskChangeRequest.requested_by, crm.DutyRun.user, crm.TaskTemplate.created_by
   notifications.Notification.user, notifications.WhatsAppDelivery.user (messages to them)
-  workspace.Notice.author (+attachment file, reads), workspace.Idea.author (+votes, comments), workspace.Link.added_by
+  workspace.Notice.author (+attachment file, reads), workspace.Link.added_by
   workspace.LinkCollection.created_by      only when no one else has links in it (else -> NULL, see below)
-  webforms.Form.created_by (+fields, submissions, files), webforms.FormSubmission.submitted_by (+files)
   mistakes.Mistake.employee / reported_by  mistakes logged against them and by them (+events)
   mistakes.SOP.created_by                  SOPs they wrote (mistakes citing them -> NULL sop)
   hr.Attendance.user (+punch photos), hr.AttendanceCorrection.user, hr.CompOff.user, hr.LeaveRequest.user
   (+document), hr.FaceProfile.user, payroll.SalaryStructure.user, payroll.Advance.user, payroll.Payslip.user
   accounts.UserAccessRole.user, admin.LogEntry.user, token_blacklist.OutstandingToken.user, and the m2m rows
-  (group memberships, task subscriptions, link favourites, idea votes, notice reads, auth groups/permissions)
+  (group memberships, task subscriptions, link favourites, notice reads, auth groups/permissions)
   tenancy.OutboxEvent                      events about a deleted task (payload.taskId)
 
 NULL -- the row belongs to someone else or to the company; only the pointer to the person is cleared:
@@ -120,12 +119,6 @@ RELATIONS = {
     "workspace.LinkCollection.created_by": NULL,  # deleted instead when only their own links are in it
     "workspace.Link_favorites.user": DELETE,
     "workspace.Link.added_by": DELETE,
-    "workspace.Idea_votes.user": DELETE,
-    "workspace.Idea.author": DELETE,
-    "workspace.IdeaComment.author": DELETE,
-    # webforms
-    "webforms.Form.created_by": DELETE,
-    "webforms.FormSubmission.submitted_by": DELETE,
     # hr
     "hr.Attendance.user": DELETE,
     "hr.AttendanceCorrection.user": DELETE,

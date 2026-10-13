@@ -4,11 +4,14 @@
 shows, every action, every form field and every rule. It describes **what the UI must do, not how it should look**. Use it to
 design a completely new UI; when the new design is built, this document is the checklist that nothing was lost.
 
-**What it does not cover.** The modules that still run on the old ("classic") screens (Leads, AI inbox, Mistakes, Forms,
-Links, Idea board, Payroll, SIM cards, Reconciliation; see §0.6), and the mobile app (Phase 7, which will reuse the same data
+**What it does not cover.** The modules that still run on the old ("classic") screens (Leads, AI inbox, Mistakes,
+Links, Payroll, SIM cards, Reconciliation; see §0.6), and the mobile app (Phase 7, which will reuse the same data
 layer and should follow the same design).
 
 Generated from the code on 2026-10-08. Source of truth if anything here disagrees with the app: the app.
+
+> **Update 2026-10-13 (PLAN.md §19.23): Web forms and the Idea board are removed** at the founder's request: no Forms or
+> Idea board screens, menu items, module switches or permissions, no public form page (`/f/…`), and no Ideas tab in a group.
 
 
 > **Update 2026-10-09 (PLAN.md §19):** the "Workspace chooser" is now the **Workspace Portal** (same URL `/`, heading
@@ -43,8 +46,7 @@ Generated from the code on 2026-10-08. Source of truth if anything here disagree
 > (OK / Error + reason), "Import N rows", then "Created · Updated · Skipped" and "Done".
 
 > **Update 2026-10-09, later (PLAN.md §19.10): no more classic screens.** §0.6 is void: Leads (`/tasks/leads`, `?lead=`), AI inbox
-> (`/tasks/intake`), Mistakes & SOPs (`/tasks/mistakes`, `?tab=sops`, `?open=`), Forms (`/tasks/forms`, `/tasks/forms/:id`,
-> `…/submissions`, `…/fill`; public `/f/:token?c=<company>`), Links (`/tasks/links`), Idea board (`/tasks/ideas`), Payroll & My
+> (`/tasks/intake`), Mistakes & SOPs (`/tasks/mistakes`, `?tab=sops`, `?open=`), Links (`/tasks/links`), Payroll & My
 > salary (`/attendance/payroll`, `/attendance/salary`), SIM cards (`/assets/sims`) and Reconciliation (`/assets/reconciliation`,
 > `/assets/reconciliation/:id`) are all screens of the new app; an unknown `/tasks/…` or `/assets/…` path shows "Page not found".
 
@@ -110,7 +112,7 @@ in light and dark mode. Change the tokens to change the whole product; the mobil
     `employee:view` (a plain employee: sees only their own assets, requests, tickets, QR).
 - **Module switches** (Admin → Settings → Modules): a company can switch parts off; switched-off parts disappear from menus,
   their screens refuse to open, and their reminders stop. Switchable: Leads & quotations, AI inbox, Payroll, Mistake register,
-  Web forms, Links, Idea board (Tasks); SIM register & reconciliation (Assets).
+  Links (Tasks); SIM register & reconciliation (Assets).
 - **People directory** (Admin → People): department, designation, reports-to (manager), joining date, active/inactive.
   It drives approvals ("manager first"), the Team/Department scopes, exits and joiners in every app.
 
@@ -138,7 +140,7 @@ in light and dark mode. Change the tokens to change the whole product; the mobil
 ### 0.6 Classic screens (not part of this redesign yet)
 These open the old screens at `/classic/tasks/…` or `/classic/assets/…` with the same sign-in. Menu items for them carry a
 "opens the classic screen" marker. They are switched off for new companies; CarTrends uses some of them.
-Leads · AI inbox · Mistake register & SOPs · Web forms · Links · Idea board · Payroll & My salary (HR tabs link out) ·
+Leads · AI inbox · Mistake register & SOPs · Links · Payroll & My salary (HR tabs link out) ·
 SIM cards · SIM reconciliation. Any `/tasks/…` or `/assets/…` URL the new app does not have also falls back to the classic
 screen, so nothing is ever a dead end.
 
@@ -273,7 +275,7 @@ updated in the same change. Removing a function is not.
 - Any path under `/tasks` or `/assets` the new app does not have → full page load to `/classic<path><query>` (homes get a
   trailing slash). Same sign-in. Old links therefore always open something.
 - Menu items that open classic screens: Tasks › More: "Leads" (Leads on + any leads view capability), "AI inbox"
-  (`intake.view`), "Mistakes", "Forms", "Links", "Idea board" (each: its module on). Assets › More: "SIM cards",
+  (`intake.view`), "Mistakes", "Links" (each: its module on). Assets › More: "SIM cards",
   "Reconciliation" (IT + SIM module on).
 
 ### Errors
@@ -350,7 +352,7 @@ out." · "Cancel", "Save roles".
   on their last day." · "Done".
 
 > **Update 2026-10-12 (PLAN.md §19.19): every feature is a permission.** The role editor lists every feature of Tasks
-> (incl. Attendance, Leads, Notices, Mistakes & SOPs, Web forms, Links & ideas, HR administration), Assets and the **Admin**
+> (incl. Attendance, Leads, Notices, Mistakes & SOPs, Links, HR administration), Assets and the **Admin**
 > workspace (a third "app": "Manage people", "Reset passwords", "Start exits", "Delete people permanently", "Manage roles",
 > "Company settings"), each with a one-line description. Only the **Super Admin** (Owner) role is locked; "Admin" and every
 > other role can be edited and archived. Menus and buttons follow the permissions: e.g. a role with only "Live attendance"
@@ -767,9 +769,7 @@ The menu is the Tasks list (`TASKS_NAV`) followed by the HR list (`HR_NAV`). "Cl
 | "Leads" | `/classic/tasks/leads` | "More" | module `leads` AND any `leads.view*` capability | yes |
 | "AI inbox" | `/classic/tasks/intake` | "More" | capability `intake.view` | yes |
 | "Mistakes" | `/classic/tasks/mistakes` | "More" | module `mistakes` | yes |
-| "Forms" | `/classic/tasks/forms` | "More" | module `forms` | yes |
 | "Links" | `/classic/tasks/links` | "More" | module `links` | yes |
-| "Idea board" | `/classic/tasks/ideas` | "More" | module `ideas` | yes |
 | "Task settings" | `/tasks/settings` | "Settings" | capability `settings.manage` | no |
 | "Attendance & leave" | `/tasks/hr` | "People" | always (tabs inside are gated) | no |
 
@@ -1028,7 +1028,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 
 - **URL**: `/tasks/groups`.
   - `?group={id}` opens one group.
-  - `&tab=dashboard|tasks|ideas|links|members` picks the section (default dashboard).
+  - `&tab=dashboard|tasks|links|members` picks the section (default dashboard).
   - "Back" removes both params.
   - An unknown or invisible group id shows the list.
 - **Who**:
@@ -1062,7 +1062,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 - Actions (`can_manage` only):
   - "Edit": opens the same dialog.
   - "Archive" (active groups only). Confirm: "Archive {name}?" / "It leaves the group pickers; its tasks keep their history." Button "Archive". On success, returns to the list.
-- Section switch: "Dashboard", "Tasks", "Ideas" (module `ideas` only), "Links" (module `links` only), "Members".
+- Section switch: "Dashboard", "Tasks", "Links" (module `links` only), "Members".
 
 **Dashboard tab**
 - Tiles: "Total tasks", "Pending", "In progress", "Completed", "Overdue" (alert), "Members".
@@ -1077,9 +1077,9 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 - Empty: "No tasks in this group yet."
 - Status-change errors show inline.
 
-**Ideas / Links tabs**
-- Info card: "Ideas for "{group}" are on the Idea board (opens the classic screen)." / "Links scoped to "{group}" are on the Links page (opens the classic screen)."
-- Button "Open Ideas" / "Open Links" (classic).
+**Links tab**
+- Info card: "Links scoped to "{group}" are on the Links page (opens the classic screen)."
+- Button "Open Links" (classic).
 
 **Members tab**
 - Add (`can_manage`): multi-select "People to add" (whole team minus current members), placeholder "— search and pick people to add —". Button "Add {n}" (disabled with 0 selected; "Adding…" while busy).

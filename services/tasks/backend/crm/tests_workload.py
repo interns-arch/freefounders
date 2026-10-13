@@ -43,9 +43,12 @@ class WorkloadTests(Base):
         self.assertTrue(res.data["overloaded"])
 
     def test_employee_sees_workload_of_anyone_they_can_assign_to(self):
-        # no hierarchy: rahul may assign to anyone, so he sees their load
-        self.assertEqual(self._get(self.rahul, self.amit).status_code, 200)
-        self.assertEqual(self._get(self.rahul, self.manager).status_code, 200)
+        # rahul (no tasks.assign) gives tasks only to himself, so he sees only his own load;
+        # a manager with tasks.assign sees anyone's
+        self.assertEqual(self._get(self.rahul, self.rahul).status_code, 200)
+        self.assertEqual(self._get(self.rahul, self.amit).status_code, 403)
+        self.assertEqual(self._get(self.rahul, self.manager).status_code, 403)
+        self.assertEqual(self._get(self.manager, self.amit).status_code, 200)
 
     def test_unknown_user_rejected(self):
         self.as_(self.manager)

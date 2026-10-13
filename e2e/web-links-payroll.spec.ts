@@ -1,4 +1,4 @@
-// Phase 6 parity tests (PLAN.md §18.2): Links, the Idea board and Payroll / My Salary in the new web app.
+// Phase 6 parity tests (PLAN.md §18.2): Links and Payroll / My Salary in the new web app.
 // These modules are off for the demo company by default: each test switches them on through the Platform's
 // Settings Center API and restores the switches at the end. Found by role/label/text only; data is cleaned up.
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test';
@@ -7,7 +7,7 @@ const OWNER = { login: process.env.FF_OWNER ?? 'owner', password: process.env.FF
 const XRW = { 'x-requested-with': 'XMLHttpRequest' };
 const shot = (page: Page, name: string) => page.screenshot({ path: `screenshots/${name}.png`, fullPage: true });
 const auth = (t: string) => ({ ...XRW, authorization: `Bearer ${t}` });
-const MODULES = ['links', 'ideas', 'payroll'] as const;
+const MODULES = ['links', 'payroll'] as const;
 
 async function token(request: APIRequestContext, login = OWNER.login, password = OWNER.password): Promise<string> {
   const res = await request.post('/api/platform/auth/login', { data: { login, password, client: 'mobile' }, headers: XRW });
@@ -24,7 +24,7 @@ async function signIn(page: Page, path: string) {
   if (new URL(page.url()).pathname !== path) await page.goto(path);
 }
 
-/** Switches the three modules on for the demo company (the Platform pushes the change to Tasks); returns the restore. */
+/** Switches the two modules on for the demo company (the Platform pushes the change to Tasks); returns the restore. */
 async function modulesOn(request: APIRequestContext, owner: string) {
   const before = await (await request.get('/api/platform/company', { headers: auth(owner) })).json();
   const tasks = before.modules.find((m: { app: string }) => m.app === 'tasks');
@@ -78,54 +78,6 @@ test('a link is added to a collection, opens in a new tab and can be starred', a
     const left = (await (await request.get('/tasks/api/links/', { headers: auth(owner), params: { collection: coll.id } })).json()) as Array<{ id: number }>;
     for (const l of left) await request.delete(`/tasks/api/links/${l.id}/`, { headers: auth(owner) });
     await request.delete(`/tasks/api/link-collections/${coll.id}/`, { headers: auth(owner) });
-    await restore();
-  }
-});
-
-test('an idea is posted, voted for, commented on and reviewed', async ({ page, request }) => {
-  const owner = await token(request);
-  const restore = await modulesOn(request, owner);
-  const title = `E2E Idea ${Date.now().toString(36)}`;
-  try {
-    await signIn(page, '/tasks/ideas');
-    await expect(page.getByRole('heading', { name: 'Idea board' })).toBeVisible();
-    await page.getByRole('button', { name: 'New idea' }).first().click();
-    const dialog = page.getByRole('dialog', { name: 'New idea' });
-    await dialog.getByLabel('Title *').fill(title);
-    await dialog.getByLabel('Description', { exact: true }).fill('Switch the office lights to sensors.');
-    await dialog.getByLabel('Category').fill('Process');
-    await dialog.getByLabel('Board').selectOption({ label: 'Shared (company-wide)' });
-    await dialog.getByLabel('Priority').selectOption({ label: 'High' });
-    await dialog.getByRole('button', { name: 'Post idea' }).click();
-    await expect(dialog).toBeHidden();
-
-    await expect(page.getByText(title)).toBeVisible();
-    await expect(page.getByText('High priority')).toBeVisible();
-    const vote = page.getByRole('button', { name: `Vote for ${title}` });
-    await vote.click();
-    await expect(vote).toHaveAttribute('aria-pressed', 'true');
-    await expect(vote).toHaveText(/1/);
-
-    // Open the idea and comment on it.
-    await page.getByRole('button', { name: new RegExp(`^${title}`) }).click();
-    const comments = page.getByRole('region', { name: `Comments on ${title}` });
-    await comments.getByLabel('Add a comment', { exact: true }).fill('Great idea, let us pilot it on one floor.');
-    await comments.getByRole('button', { name: 'Post comment' }).click();
-    await expect(comments.getByText('Great idea, let us pilot it on one floor.')).toBeVisible();
-    await expect(page.getByText('1 comment')).toBeVisible();
-
-    // The owner reviews it.
-    await page.getByLabel(`Status of ${title}`).selectOption({ label: 'Approved' });
-    await expect(page.getByRole('button', { name: new RegExp(`^${title}`) })).toContainText('Approved');
-    await shot(page, 'web-ideas');
-
-    // "My ideas" lists it too; the status filter narrows.
-    await page.getByRole('group', { name: 'Board' }).getByRole('button', { name: 'My ideas' }).click();
-    await page.getByLabel('Status', { exact: true }).selectOption({ label: 'Approved' });
-    await expect(page.getByText(title)).toBeVisible();
-  } finally {
-    const mine = await (await request.get('/tasks/api/ideas/', { headers: auth(owner), params: { scope: 'my', search: title, page_size: 100 } })).json();
-    for (const i of mine.results ?? mine) await request.delete(`/tasks/api/ideas/${i.id}/`, { headers: auth(owner) });
     await restore();
   }
 });

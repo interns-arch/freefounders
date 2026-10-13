@@ -39,7 +39,9 @@ interface Step {
 export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate | null; onClose: () => void }) {
   const access = useAccess();
   const me = access.tasks.me;
-  const canAddCategory = access.tasks.can('tasks.assign');
+  // Without "Give tasks to others" a task can only be for themselves (the server refuses anyone else).
+  const canAssign = access.tasks.can('tasks.assign');
+  const canAddCategory = canAssign;
   const team = useTaskAssignees().data ?? [];
   const groups = (useActiveGroups().data ?? []) as TaskGroupOption[];
   const departments = useTaskDepartments().data ?? [];
@@ -62,7 +64,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
   });
   const [unit, setUnit] = useState<EffortUnit>('minutes');
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
-  const [assignees, setAssignees] = useState<number[]>([]); // nobody pre-picked
+  const [assignees, setAssignees] = useState<number[]>(() => (!canAssign && me ? [me.id] : [])); // nobody pre-picked, unless only themselves
   const [fromGroup, setFromGroup] = useState<{ name: string; added: number; skipped: number } | null>(null);
   const [inLoop, setInLoop] = useState<number[]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
@@ -286,7 +288,7 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
                   placeholder={'What exactly has to be done?\nPress Enter for a new line — write as many points as you need.'}
                 />
               </div>
-              <Field label="Assign to" required htmlFor={ids.assign} hint="Anyone in the company. Each person gets their own copy.">
+              <Field label="Assign to" required htmlFor={ids.assign} hint={canAssign ? 'Anyone in the company. Each person gets their own copy.' : 'Your role can only give tasks to yourself.'}>
                 <MultiSelect
                   id={ids.assign}
                   options={team}

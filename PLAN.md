@@ -695,7 +695,7 @@ The portal's Settings page shows the company-wide part and links to each app's s
 | App | Module | Launch default (new companies) |
 |---|---|---|
 | Tasks | Tasks, Template directory, Groups, Notices, Attendance & leave | always on |
-| Tasks | Leads (+ quotations, assignment rules), AI inbox, Payroll, Mistake register, Forms, Links, Idea board | **off** |
+| Tasks | Leads (+ quotations, assignment rules), AI inbox, Payroll, Mistake register, Links (Forms and Idea board removed 2026-10-13, §19.23) | **off** |
 | Assets | Assets, people, onboarding/exit, requests, tickets, maintenance | always on |
 | Assets | SIM register + reconciliation | **off** |
 - **Enforced on the server**: a switched-off module's API answers `404 {"detail":"This module is switched off"}`; its pages leave the
@@ -1096,9 +1096,9 @@ fixes, listed in each module's e2e spec header):
 | Leads & quotations | `/tasks/leads` (pipeline board, drawer with timeline/documents/quotations, `?lead=` deep link) | `core/tasks/extras-leads.ts` |
 | AI inbox | `/tasks/intake` | `core/tasks/extras-intake.ts` |
 | Mistake register & SOPs | `/tasks/mistakes` (`?tab=sops`, `?open=`) | `core/tasks/extras-mistakes.ts` |
-| Web forms | `/tasks/forms`, builder, submissions, fill; public `/f/:token?c=<company>` (no sign-in, no shell) | `core/tasks/extras-forms.ts` |
+| ~~Web forms~~ (removed 2026-10-13, §19.23) | `/tasks/forms`, builder, submissions, fill; public `/f/:token?c=<company>` (no sign-in, no shell) | `core/tasks/extras-forms.ts` |
 | Links | `/tasks/links` | `core/tasks/extras-links.ts` |
-| Idea board | `/tasks/ideas` | `core/tasks/extras-ideas.ts` |
+| ~~Idea board~~ (removed 2026-10-13, §19.23) | `/tasks/ideas` | `core/tasks/extras-ideas.ts` |
 | Payroll, My salary | `/attendance/payroll`, `/attendance/salary` (tabs of the Attendance workspace) | `core/hr/payroll.ts` |
 | SIM cards | `/assets/sims` (the register filtered to the SIM type) | existing asset hooks |
 | Reconciliation | `/assets/reconciliation`, `/assets/reconciliation/:id` | `core/assets/reconciliation.ts` |
@@ -1108,7 +1108,7 @@ and the two old Vite servers from `npm run dev` (`EAM_API_ONLY=1` makes the Asse
 `/tasks/…` or `/assets/…` path now shows "Page not found" inside the shell. The old web apps stay in the repo (standalone
 installs, CarTrends until it moves) and are not served by FreeFounders.
 Backend: in multi-company mode the public form page names its company (`/f/<token>?c=<id>`; `tenancy/middleware.py` accepts
-`?company=`/`X-FF-Company` for `/api/public/*` only).
+`?company=`/`X-FF-Company` for `/api/public/*` only). (Removed with Web forms on 2026-10-13, §19.23.)
 
 Checks: rules + typecheck + build; e2e **44 / 44** (10 new tests across 4 specs); smoke 10/10; Tasks backend 755 + tenancy
 27 (+1 new) pass. `apps/portal` and the old frontends are Phase 9 clean-up candidates.
@@ -1561,7 +1561,7 @@ role" was greyed out with no reason, and he wants "an option for each and every 
 with no predefined restrictions.
 
 **What changed**
-- **Every feature is its own permission** (catalogue version 2). Tasks went from 15 to 52 permissions, grouped like the
+- **Every feature is its own permission** (catalogue version 2). Tasks went from 15 to 52 permissions (47 since Web forms and the Idea board were removed, §19.23), grouped like the
   menus; each has a label, a one-line description (shown under it in the editor) and scopes where they make sense. Assets
   keeps its 24 permissions and now sends a description for each. The **Admin workspace** is a third "app" in the editor,
   **Admin**, with 6 permissions (the Platform's own catalogue).
@@ -1623,13 +1623,13 @@ the old string `hr.approve`)
 | Mistakes & SOPs | `mistakes.review` | Review mistakes | Department · Company | `tasks.view` at Department → Department; `tasks.view` at Company → Company |
 | Mistakes & SOPs | `sops.manage` | Write SOPs | yes/no | `tasks.assign` |
 | Mistakes & SOPs | `mistakes.settings` | Mistake categories and rules | yes/no | `settings.manage` |
-| Web forms | `forms.view` | Fill in forms | yes/no | every role |
-| Web forms | `forms.build` | Build forms | yes/no | `tasks.assign` |
-| Web forms | `forms.all` | All forms and answers | yes/no | `tasks.view` at Company |
+| Web forms | `forms.view` | Fill in forms | yes/no | every role (removed 2026-10-13, §19.23) |
+| Web forms | `forms.build` | Build forms | yes/no | `tasks.assign` (removed 2026-10-13, §19.23) |
+| Web forms | `forms.all` | All forms and answers | yes/no | `tasks.view` at Company (removed 2026-10-13, §19.23) |
 | Links & ideas | `links.view` | Links | yes/no | every role |
 | Links & ideas | `links.manage` | Manage links | yes/no | `tasks.assign` |
-| Links & ideas | `ideas.view` | Idea board | yes/no | every role |
-| Links & ideas | `ideas.review` | Review ideas | yes/no | `tasks.assign` |
+| Links & ideas | `ideas.view` | Idea board | yes/no | every role (removed 2026-10-13, §19.23) |
+| Links & ideas | `ideas.review` | Review ideas | yes/no | `tasks.assign` (removed 2026-10-13, §19.23) |
 | My attendance | `attendance.punch` | Punch in and out | yes/no | every role |
 | My attendance | `attendance.self` | My attendance | yes/no | every role |
 | My attendance | `leave.self` | My leave | yes/no | every role |
@@ -1784,8 +1784,8 @@ company's), #0f7b5f, #e11d48, #f59e0b, #7c3aed: no text under 4.5:1.
   empty/error states as a round tinted icon + one line + next action, flat progress bars and loading lines.
 - Frame: white sidebar with a blue active item (navy in dark mode), workspace groups with tinted icon chips; solid
   header and phone bottom bar (no blur), active tab = blue pill; logo mark flat blue; favicon and `theme-color` metas.
-- Sign-in: the forest-green panel with glows became a flat blue panel (navy card in dark mode) with a small preview of
-  the punch card and its orange Punch in; same form, labels and button.
+- Sign-in: the forest-green panel with glows became a flat blue panel (navy card in dark mode) (the small punch-card preview was taken off
+  on 2026-10-13 at the founder's request); same form, labels and button.
 - Home: flat cards without colour bars, tinted workspace chips, **Punch in / Punch out is the orange CTA**.
   Attendance → Today: flat header band; whichever punch is due (Check in or Check out) is orange, the other outlined.
 - The single main action per screen is orange: Add person, Add task (My Tasks), Add lead, Apply for leave, New idea,
@@ -1806,3 +1806,54 @@ notifications, phone drawer and sign-in, 1440 and 375 px, light and dark: 0 unde
 screenshots. Web build (rules + typecheck + build + SW check) green; mobile 21/21 + typecheck; smoke 10/10; e2e 60/60 (2026-10-13); Tasks 855.
 Found on the way: staff search (Live/Daily/Dashboard/Reports) matched *any* typed word, so "E2E Import x" listed
 every test person; now every word must be in the name (`hr/team.py`, test in `tests_team_views.py`).
+
+### 19.23 Idea board and Web forms removed (2026-10-13)
+
+The founder: "in task remove idea board and forms completely from every where". Both Tasks features are gone; **Intake**
+(the AI inbox, `/tasks/intake`) is a different feature and stays, as do Groups, Notices and Links (they share the
+`workspace` app with the old Idea board) and the lead source "Web".
+
+**Removed**
+- Web app: the screens `/tasks/ideas`, `/tasks/forms` (builder, fill, submissions) and the public share page `/f/:token`
+  (`/tasks/f/:token`); the "Forms" and "Idea board" menu items; the group's "Ideas" tab. `packages/core`:
+  `tasks/extras-ideas.ts`, `tasks/extras-forms.ts`; `access.ts` no longer maps `forms.`/`ideas.` to a module.
+- Tasks API: the `webforms` app (out of `INSTALLED_APPS` and `config/urls.py`; the `public_form`/`public_submit`
+  throttles), the Idea models/API in `workspace` (`/api/ideas/…`), the module switches `forms` and `ideas`
+  (`tenancy/profile.py`), the anonymous `/api/public/*` company hint in `tenancy/middleware.py` (only the form page used it),
+  and their entries in people delete, `reset_data`, `compress_media` and `move_files_to_s3`.
+- Permissions: `forms.view`, `forms.build`, `forms.all`, `ideas.view`, `ideas.review`: **Tasks 52 → 47 permissions**; the
+  group "Links & ideas" is now "Links". `CATALOGUE_VERSION` stays 2 (a new version would re-run the upgrade rules).
+- Data: `workspace/0002_remove_idea_board` drops `workspace_idea`, `workspace_idea_votes`, `workspace_ideacomment`;
+  `accounts/0022_remove_forms_and_ideas` drops the four `webforms_*` tables (an app taken out of `INSTALLED_APPS` keeps its
+  tables otherwise), its `django_migrations` rows and content types, and roles' grants of the five permissions. Both run in
+  `public` and every company schema (`migrate_companies`). Not reversible, on purpose.
+- Import (`scripts/import-company.mjs`): the seven tables are skipped, so old ideas and forms are not carried over.
+- Tests: the idea, form, public-form throttle and share-link tests; `e2e/web-links-ideas-payroll.spec.ts` →
+  `web-links-payroll.spec.ts`, `e2e/web-mistakes-forms.spec.ts` → `web-mistakes.spec.ts`.
+
+Kept on purpose: the delegation/workload counts still leave out old tasks whose description starts "Auto-created from
+form" (history in existing databases).
+
+**Checked**: Tasks 848 pass, 21 skipped (SQLite); tenancy on Postgres 32/32; `makemigrations --check` clean; applied to the
+dev database (public + 4 company schemas: no `webforms_*` / `workspace_idea*` table left); Platform `company sync`
+(Tasks catalogue 47, modules leads/intake/payroll/mistakes/links); web build green; e2e `web-links-payroll`,
+`web-mistakes`, `web-tasks`, `web-tasks-general` 14/14.
+
+### 19.24 Security decisions (2026-10-13)
+Founder answers to the open items of §19.21 (details, rules and test names in `docs/security/{platform,tasks-api}.md`):
+- **Give tasks to others** (`tasks.assign`) is enforced: without it a person gives tasks only to themselves (create,
+  admin edit, approving a reassignment, directory templates, corrective tasks); assignee lists follow. Managers, HR
+  Manager, Admin and Super Admin hold it by default.
+- **Nobody changes their own attendance, salary or advances**, except the Owner (`accounts/access.py::is_owner` = holds
+  `tasks.delete_admin_work`). Own rows in an attendance import are skipped with a message. Self-service (punch, request a
+  correction, apply for leave) unchanged.
+- **Manage roles gives only what you hold** (permissions, scopes, level); never Admin-level or Super Admin; nobody but the
+  Owner raises their own access. Role editor disables what you lack ("You don't have this yourself").
+- **Weak passwords: warned, never blocked** (founder: "weak passwords can also be set"); still 6 characters minimum.
+  Checker `packages/core/src/admin/password-strength.ts` (common list, sequences, name/username/email/company).
+- **No forced password change** at first sign-in (founder); Platform migration 0007 clears the old flag.
+- **Payroll**: partly recovered advances are tracked (`Advance.recovered_amount`, payroll 0002); each payslip deducts
+  only the remaining balance; finalised runs cannot be reopened.
+- Not chosen now: one-time setup link, authenticator OTP, "sign out everywhere" screen. Live-server checklist (S3,
+  enforced CSP, fixed app server address) comes with the AWS phase.
+- Platform migration 0008 removes the old forms/ideas grants (§19.23).

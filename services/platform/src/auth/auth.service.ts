@@ -6,7 +6,7 @@ import { badRequest, type Caller } from '../common/http';
 import { CompanyService } from '../company/company.service';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, type PlatformRole, refreshSessions } from '../db/schema';
-import { platformPermissionsOf } from '../roles/platform-permissions';
+import { heldAccess, platformPermissionsOf } from '../roles/platform-permissions';
 import { ACCESS_TTL_SECONDS, TokensService } from '../keys/tokens.service';
 import { ipLimit, NAME_LIMIT, Throttle } from './throttle';
 
@@ -313,6 +313,12 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       apps: (Object.keys(current.apps) as AppKey[]).map((app) => ({ app, ...APP_INFO[app] })),
       /** Admin workspace permissions (PLAN.md §19.19): owners and admins have them all. */
       permissions: [...(await platformPermissionsOf(this.dbs, caller.personId, row.person.platformRole))].sort(),
+      /**
+       * What their roles give them (R1): the role editor shows what they cannot give. Every app permission with each
+       * scope a role gives it, the Admin permissions, and their highest role level. The owner may give everything.
+       */
+      held: await heldAccess(this.dbs, caller.personId, row.person.platformRole),
+      /** Nothing sets it any more (R7); kept false for older clients. */
       mustChangePassword: row.mustChangePassword ?? false,
     };
   }

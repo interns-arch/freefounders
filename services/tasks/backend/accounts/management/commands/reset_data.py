@@ -80,9 +80,8 @@ class Command(BaseCommand):
         from mistakes.models import Mistake, MistakeEvent
         from notifications.models import Notification
         from intake.models import InboundMessage
-        from webforms.models import Form, FormSubmission, SubmissionFile
         from workspace.models import (Group, Notice, NoticeRead, LinkCollection,
-                                      Link, Idea, IdeaComment)
+                                      Link)
         from hr.models import Attendance, AttendanceCorrection, LeaveRequest, FaceProfile
         from payroll.models import SalaryStructure, Advance, PayrollRun, Payslip
         from rest_framework_simplejwt.token_blacklist.models import (
@@ -94,8 +93,7 @@ class Command(BaseCommand):
                       TaskChecklistItem, TaskAttachment, TaskChangeRequest,
                       TaskActivity, Task,
                       Quotation, LeadDocument, LeadEvent, Lead,
-                      SubmissionFile, FormSubmission, Form,
-                      IdeaComment, Idea, Link, LinkCollection, NoticeRead, Notice, Group,
+                      Link, LinkCollection, NoticeRead, Notice, Group,
                       Payslip, PayrollRun, Advance, SalaryStructure,
                       AttendanceCorrection, LeaveRequest, Attendance, FaceProfile,
                       InboundMessage, Notification,

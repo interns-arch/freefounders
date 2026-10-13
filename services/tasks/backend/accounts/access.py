@@ -106,19 +106,11 @@ CATALOGUE = [
     _p("sops.manage", "Write SOPs", "Mistakes & SOPs", "Add, edit and version SOPs.", upgrade=[{"from": "tasks.assign"}]),
     _p("mistakes.settings", "Mistake categories and rules", "Mistakes & SOPs",
        "Mistake categories and response-time rules.", upgrade=[{"from": "settings.manage"}]),
-    # ── Web forms ──
-    _p("forms.view", "Fill in forms", "Web forms", "See and fill in the company's published forms.", upgrade=EVERYONE),
-    _p("forms.build", "Build forms", "Web forms",
-       "Create forms and see the answers to their own forms.", upgrade=[{"from": "tasks.assign"}]),
-    _p("forms.all", "All forms and answers", "Web forms",
-       "Edit any form and see every form's answers.", upgrade=[{"from": "tasks.view", "fromScopes": ["company"]}]),
-    # ── Links & ideas ──
-    _p("links.view", "Links", "Links & ideas", "Use the shared link library.", upgrade=EVERYONE),
-    _p("links.manage", "Manage links", "Links & ideas",
+    # ── Links ── (Web forms and the Idea board were removed on 2026-10-13, PLAN.md §19.23: their
+    # forms.* / ideas.* permissions are gone; leftover grants are deleted by accounts 0022 and ignored if pushed)
+    _p("links.view", "Links", "Links", "Use the shared link library.", upgrade=EVERYONE),
+    _p("links.manage", "Manage links", "Links",
        "Add link collections and edit anyone's links.", upgrade=[{"from": "tasks.assign"}]),
-    _p("ideas.view", "Idea board", "Links & ideas", "Post ideas and vote on them.", upgrade=EVERYONE),
-    _p("ideas.review", "Review ideas", "Links & ideas",
-       "Move ideas along: under review, planned, done or declined.", upgrade=[{"from": "tasks.assign"}]),
     # ── Attendance: their own ──
     _p("attendance.punch", "Punch in and out", "My attendance",
        "Mark their own attendance each day (with location and photo when the company asks).", upgrade=EVERYONE),
@@ -389,6 +381,15 @@ def is_super_admin(user) -> bool:
     """The one power only Super Admin has: deleting work assigned to an admin."""
     from .permissions import has_capability
     return has_capability(user, "tasks.delete_admin_work")
+
+
+def is_owner(user) -> bool:
+    """The company Owner, the one person who may change their own attendance and pay records.
+
+    Tasks keeps no owner flag of its own. The power only the Owner's role holds is `tasks.delete_admin_work`
+    (super_admin_only: the Platform's Owner role, and the built-in Super Admin role in a standalone install),
+    so holding it is what makes someone the Owner here. A Platform admin given Super Admin in Tasks counts too."""
+    return is_super_admin(user)
 
 
 def role_codes_with(capability: str) -> list[str]:

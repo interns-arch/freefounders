@@ -111,8 +111,7 @@ class PlatformJWTAuthentication(authentication.BaseAuthentication):
 
 class LegacyJWTAuthentication(JWTAuthentication):
     """The app's own SimpleJWT login, exactly as before in a standalone install. In multi-company mode people sign in
-    through the Platform only (no company is named by a legacy token), so a legacy token is never accepted there,
-    not even on the anonymous /api/public/ paths."""
+    through the Platform only (no company is named by a legacy token), so a legacy token is never accepted there."""
 
     def authenticate(self, request):
         from tenancy import schemas

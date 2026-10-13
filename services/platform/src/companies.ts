@@ -6,7 +6,7 @@
 //                              already have an app (safe to repeat)
 // In multi-company mode each app keeps a company's data in its own schema; `create` and `sync` ask the apps
 // (TASKS_INTERNAL_URL, ASSETS_INTERNAL_URL) to create it. Without a password one is generated, printed once,
-// and must be changed at first sign-in.
+// (they can change it from the account menu; nothing forces it).
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { NestFactory } from '@nestjs/core';
@@ -156,11 +156,11 @@ async function main() {
       const company = await dbs.db.transaction(async (tx) => {
         const [c] = await tx.insert(companies).values({ name, code, enabledApps: apps }).returning();
         const [owner] = await tx.insert(people).values({ companyId: c.id, fullName: ownerName, email: ownerEmail, platformRole: 'owner' }).returning();
-        await tx.insert(logins).values({ personId: owner.id, username: opts['owner-login']?.trim() || null, passwordHash: await hashPassword(password), mustChangePassword: generated });
+        await tx.insert(logins).values({ personId: owner.id, username: opts['owner-login']?.trim() || null, passwordHash: await hashPassword(password), mustChangePassword: false });
         return c;
       });
       console.log(`✔ ${company.name} (${company.code}) created; owner ${ownerEmail}`);
-      if (generated) console.log(`  One-time password: ${password}   ← must be changed at first sign-in`);
+      if (generated) console.log(`  Password: ${password}   (shown once; they can change it from the account menu)`);
       await setUpInApps(provisioner, company);
       if (APPS.some((a) => internalUrl(a))) {
         // A new company starts with the launch modules only (PLAN.md §16.2); an admin switches the rest on.

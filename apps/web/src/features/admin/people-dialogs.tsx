@@ -1,4 +1,4 @@
-import { ApiError, type AppKey, errorMessage } from '@freefounders/core';
+import { ApiError, type AppKey, errorMessage, usePlatformMe } from '@freefounders/core';
 import {
   APP_NAMES,
   type AppInfo,
@@ -9,6 +9,7 @@ import {
   PLATFORM_ROLE_LABELS,
   type Role,
   roleApps,
+  roleLimits,
   SUPER_ADMIN_ROLE,
   PLATFORM_PASSWORD_MIN,
   useCompanySettings,
@@ -17,6 +18,7 @@ import {
   useDepartments,
   usePeople,
   useResetLogin,
+  useRoleCatalogue,
   useSetPersonRoles,
   useStartExit,
   useUpdatePerson,
@@ -27,6 +29,7 @@ import { toast } from 'sonner';
 import { Field, FormSection } from '@/components/common/form';
 import { Combobox, type Option } from '@/features/assets/components/pickers';
 import { FormSheet } from '@/components/common/form-sheet';
+import { WeakPasswordNote } from '@/components/common/weak-password-note';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
@@ -79,6 +82,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
   // People directory (PLAN.md §17.1): the company's departments, and who this person can report to.
   const depts = useDepartments();
   const everyone = usePeople('');
+  const companyName = usePlatformMe().data?.company.name;
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   const fail = (err: unknown) => {
@@ -201,11 +205,16 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
                   <Input id="pf-username" name="login.username" value={f.username} onChange={set('username')} autoComplete="off" />
                 </Field>
                 <Field label="Password (blank = generate one)" htmlFor="pf-password" error={errors['login.password']}>
-                  <Input id="pf-password" name="login.password" type="text" value={f.password} onChange={set('password')} autoComplete="off" />
+                  <Input id="pf-password" name="login.password" type="text" value={f.password} onChange={set('password')} autoComplete="off" aria-describedby="pf-password-weak" />
+                  <WeakPasswordNote
+                    id="pf-password-weak"
+                    password={f.password}
+                    about={{ fullName: f.fullName, username: f.username, email: f.email, companyName }}
+                  />
                 </Field>
               </div>
             )}
-            <p className="text-xs text-muted-foreground">They can sign in with their email, employee ID or username.</p>
+            <p className="text-xs text-muted-foreground">They can sign in with their email, employee ID or username, and change the password themselves from their account menu.</p>
           </fieldset>
         )}
         <ErrorNote>{error}</ErrorNote>
@@ -232,6 +241,8 @@ export function PersonRolesDialog({
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(person.roleIds));
   const [error, setError] = useState('');
   const save = useSetPersonRoles();
+  // Only what I have myself, at no higher level (the owner: everything; the Platform checks the same, R1).
+  const limits = roleLimits(usePlatformMe().data, useRoleCatalogue().data);
   const inPlan = new Set(apps.map((a) => a.app));
   // The apps the roles open (the Admin workspace is not an app to open).
   const reach = [...new Set(roles.filter((r) => chosen.has(r.id)).flatMap((r) => roleApps(r)))].filter((a): a is (typeof apps)[number]['app'] => (inPlan as Set<string>).has(a));
@@ -254,14 +265,21 @@ export function PersonRolesDialog({
         </DialogHeader>
         <ul className="max-h-[50vh] divide-y overflow-y-auto rounded-lg border scrollbar-thin">
           {roles.map((r) => {
-            // Only an owner gives or takes Super Admin.
-            const lockedForMe = r.code === SUPER_ADMIN_ROLE && myRole !== 'owner';
+            // Only an owner gives or takes Super Admin; anyone else gives only roles within their own powers (taking one away is fine).
+            const held = person.roleIds.includes(r.id);
+            const problem = held ? null : limits.roleProblem(r, 'give');
+            const lockedForMe = (r.code === SUPER_ADMIN_ROLE && myRole !== 'owner') || !!problem;
             const id = `role-pick-${r.id}`;
             return (
               <li key={r.id} className={cn('flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40', chosen.has(r.id) && 'bg-accent/40')}>
-                <Checkbox id={id} checked={chosen.has(r.id)} disabled={lockedForMe} onCheckedChange={() => toggle(r.id)} />
-                <Label htmlFor={id} className={cn('flex-1 cursor-pointer font-medium', chosen.has(r.id) && 'font-semibold')}>
+                <Checkbox id={id} checked={chosen.has(r.id)} disabled={lockedForMe} onCheckedChange={() => toggle(r.id)} aria-describedby={problem ? `${id}-why` : undefined} />
+                <Label htmlFor={id} className={cn('flex-1 cursor-pointer font-medium', chosen.has(r.id) && 'font-semibold', lockedForMe && 'cursor-not-allowed')}>
                   {r.name}
+                  {problem && (
+                    <span id={`${id}-why`} className="block text-xs font-normal text-muted-foreground">
+                      {problem}
+                    </span>
+                  )}
                 </Label>
                 {r.system && <Pill tone="admin">Locked</Pill>}
                 <span className="flex gap-1">
@@ -398,11 +416,11 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [username, setUsername] = useState('');
-  const [mustChange, setMustChange] = useState(true);
   const [error, setError] = useState('');
-  const [done, setDone] = useState<{ username: string; password: string; mustChange: boolean } | null>(null);
+  const [done, setDone] = useState<{ username: string; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const reset = useResetLogin();
+  const companyName = usePlatformMe().data?.company.name;
   const longEnough = password.length >= PLATFORM_PASSWORD_MIN;
   const needsUsername = creating && !person.email && !person.employeeCode;
   const title = `${creating ? 'Create login' : 'Reset password'} — ${person.fullName}`;
@@ -413,10 +431,10 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
     if (mode === 'type' && !longEnough) return setError(`Use at least ${PLATFORM_PASSWORD_MIN} characters.`);
     const typed = mode === 'type' ? password : undefined;
     reset.mutate(
-      { id: person.id, password: typed, mustChangePassword: mustChange, ...(creating && username.trim() ? { username: username.trim() } : {}) },
+      { id: person.id, password: typed, ...(creating && username.trim() ? { username: username.trim() } : {}) },
       {
         onSuccess: (res) => {
-          setDone({ username: res.username ?? person.email ?? person.employeeCode ?? '', password: typed ?? res.generatedPassword ?? '', mustChange });
+          setDone({ username: res.username ?? person.email ?? person.employeeCode ?? '', password: typed ?? res.generatedPassword ?? '' });
           setPassword('');
         },
         onError: (err) => setError(err instanceof ApiError && err.errors ? Object.values(err.errors)[0] : errorMessage(err)),
@@ -444,11 +462,7 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {done
-              ? done.mustChange
-                ? 'They will choose their own password the first time they sign in.'
-                : 'They can keep using this password.'
-              : 'They will be signed out everywhere.'}
+            {done ? 'They can keep using this password, or change it from their account menu.' : 'They will be signed out everywhere.'}
           </DialogDescription>
         </DialogHeader>
         {done ? (
@@ -514,7 +528,7 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
                       onChange={(e) => setPassword(e.target.value)}
                       autoComplete="new-password"
                       className="pr-10 font-mono"
-                      aria-describedby="rp-password-hint"
+                      aria-describedby="rp-password-hint rp-password-weak"
                       maxLength={200}
                     />
                     <Button
@@ -533,6 +547,11 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
                     {longEnough && <Check className="size-3.5" aria-hidden />}
                     At least {PLATFORM_PASSWORD_MIN} characters
                   </p>
+                  <WeakPasswordNote
+                    id="rp-password-weak"
+                    password={password}
+                    about={{ fullName: person.fullName, username: username || person.login?.username, email: person.email, companyName }}
+                  />
                 </div>
               )}
               <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium">
@@ -540,12 +559,6 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
                 Generate one
               </label>
             </fieldset>
-            <div className="flex items-start gap-2.5">
-              <Checkbox id="rp-must-change" checked={mustChange} onCheckedChange={(v) => setMustChange(v === true)} className="mt-0.5" />
-              <Label htmlFor="rp-must-change" className="text-sm leading-snug font-normal">
-                Ask them to change it at next sign-in
-              </Label>
-            </div>
             <ErrorNote>{error}</ErrorNote>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>
@@ -736,7 +749,7 @@ export function DeletePersonDialog({ person, onClose }: { person: Person; onClos
                 {hasTasks && tasks.mode === 'delete' && <li>their open tasks</li>}
                 {leadsOn && leads.mode === 'delete' && <li>their leads and the leads&rsquo; tasks</li>}
                 {history === 'delete' && (
-                  <li>their finished tasks, comments, attendance, leave, salary records, mistakes, forms and ideas{hasAssets && '; their requests, tickets and asset history'}</li>
+                  <li>their finished tasks, comments, attendance, leave, salary records and mistakes{hasAssets && '; their requests, tickets and asset history'}</li>
                 )}
               </ul>
               <p role="note" className="rounded-md border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm font-medium text-destructive">

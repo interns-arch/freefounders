@@ -1,6 +1,6 @@
-// Phase 6 parity tests (PLAN.md §18.2) for two modules moved out of the classic app: the mistake register (with SOPs)
-// and web forms (builder, public share link, submissions). Found by role/label/text only; data is cleaned up.
-// Both modules are switched off for a new company by default, so the suite switches them on and restores them after.
+// Phase 6 parity tests (PLAN.md §18.2) for the mistake register (with SOPs), moved out of the classic app.
+// Found by role/label/text only; data is cleaned up. The module is switched off for a new company by default, so the
+// suite switches it on and restores it after.
 import { expect, request as playwrightRequest, type APIRequestContext, type Page, test } from '@playwright/test';
 
 const BASE = process.env.FF_URL ?? 'http://localhost:8080';
@@ -26,8 +26,8 @@ async function signIn(page: Page, path: string) {
 
 type ModuleRow = { app: string; modules: Array<{ key: string; on: boolean }> };
 
-// The demo company's switches as they were, restored at the end.
-let before: { mistakes: boolean; forms: boolean } = { mistakes: true, forms: true };
+// The demo company's switch as it was, restored at the end.
+let before: { mistakes: boolean } = { mistakes: true };
 
 test.beforeAll(async () => {
   const api = await playwrightRequest.newContext({ baseURL: BASE });
@@ -36,9 +36,8 @@ test.beforeAll(async () => {
   const tasks = (company.modules as ModuleRow[]).find((m) => m.app === 'tasks');
   before = {
     mistakes: tasks?.modules.find((m) => m.key === 'mistakes')?.on ?? true,
-    forms: tasks?.modules.find((m) => m.key === 'forms')?.on ?? true,
   };
-  const res = await api.put('/api/platform/company/modules', { headers: auth(owner), data: { tasks: { mistakes: true, forms: true } } });
+  const res = await api.put('/api/platform/company/modules', { headers: auth(owner), data: { tasks: { mistakes: true } } });
   expect(res.ok(), await res.text()).toBeTruthy();
   await api.dispose();
 });
@@ -135,76 +134,5 @@ test('a process (SOP) is written and read back', async ({ page, request }) => {
   } finally {
     const all = (await (await request.get('/tasks/api/sops/?all=true', { headers: auth(owner) })).json()) as Array<{ id: number; title: string }>;
     for (const s of all.filter((x) => x.title === title)) await request.delete(`/tasks/api/sops/${s.id}/`, { headers: auth(owner) }); // retires it
-  }
-});
-
-test('a form is built and published; its public link works without signing in; the submission shows up', async ({ page, browser, request }) => {
-  const owner = await token(request);
-  const stamp = Date.now().toString(36);
-  const name = `E2E form ${stamp}`;
-  let formId: number | undefined;
-  try {
-    await signIn(page, '/tasks/forms?view=manage');
-    await expect(page.getByRole('heading', { name: 'Forms' })).toBeVisible();
-    await page.getByLabel('New form name').fill(name);
-    await page.getByRole('button', { name: 'Create form' }).click();
-    await page.waitForURL(/\/tasks\/forms\/\d+$/);
-    formId = Number(new URL(page.url()).pathname.split('/').pop());
-    await expect(page.getByRole('heading', { name })).toBeVisible();
-    await expect(page.getByText('Draft', { exact: true })).toBeVisible();
-
-    // Two fields: a required name and a dropdown.
-    await page.getByLabel('Field label *').fill('Your name');
-    await page.getByRole('checkbox', { name: 'Required' }).click();
-    await page.getByRole('button', { name: 'Add field' }).click();
-    await expect(page.getByRole('list', { name: 'Fields' }).getByText('Your name')).toBeVisible();
-    await page.getByLabel('Field label *').fill('Interested in');
-    await page.getByLabel('Type').selectOption('dropdown');
-    await page.getByLabel('Options (comma-separated) *').fill('Service, Spares, Both');
-    await page.getByRole('button', { name: 'Add field' }).click();
-    await expect(page.getByRole('list', { name: 'Fields' }).getByText('Service · Spares · Both')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Fields (2)' })).toBeVisible();
-
-    await page.getByRole('button', { name: 'Publish' }).click();
-    await expect(page.getByRole('status')).toContainText('The form is live');
-    const share = await page.getByLabel('Share link').inputValue();
-    expect(share).toMatch(/\/f\/[A-Za-z0-9_-]+(\?c=[\w-]+)?$/); // the link names the company (multi-company mode)
-    const publicToken = share.split('/f/')[1]; // token plus ?c=…
-    await shot(page, 'web-forms-builder');
-
-    // The share link in a fresh browser: no sign-in, no app shell.
-    const visitor = await browser.newContext();
-    const pub = await visitor.newPage();
-    await pub.goto(`/f/${publicToken}`);
-    await expect(pub.getByRole('heading', { name })).toBeVisible();
-    await expect(pub.getByRole('navigation')).toHaveCount(0);
-    // Required answers are checked by the server and shown on the field.
-    await pub.getByRole('button', { name: 'Submit' }).click();
-    await expect(pub.getByText('Your name is required.')).toBeVisible();
-    await pub.getByLabel('Your name').fill(`Visitor ${stamp}`);
-    await pub.getByLabel('Interested in').selectOption('Spares');
-    await pub.getByRole('button', { name: 'Submit' }).click();
-    await expect(pub.getByText('Thank you!')).toBeVisible();
-    await shot(pub, 'web-forms-public');
-    // The same page under /tasks/f/… too.
-    await pub.goto(`/tasks/f/${publicToken}`);
-    await expect(pub.getByRole('heading', { name })).toBeVisible();
-    await visitor.close();
-
-    // The submission is in the list.
-    await page.goto(`/tasks/forms/${formId}/submissions`);
-    await expect(page.getByRole('heading', { name: `${name} — submissions` })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
-    await page.getByRole('button', { name: /^View submission/ }).first().click();
-    await expect(page.getByText(`Visitor ${stamp}`)).toBeVisible();
-    await expect(page.getByText('Spares', { exact: true })).toBeVisible();
-
-    // Signed-in people see it on the Fill list.
-    await page.goto('/tasks/forms');
-    await expect(page.getByRole('list', { name: 'Forms to fill' }).getByRole('link', { name: new RegExp(name) })).toBeVisible();
-    await shot(page, 'web-forms-list');
-  } finally {
-    // A form with submissions cannot be deleted: close it so the link stops working.
-    if (formId) await request.post(`/tasks/api/forms/${formId}/close/`, { headers: auth(owner) });
   }
 });

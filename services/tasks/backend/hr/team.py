@@ -600,7 +600,12 @@ def _apply_row(row, by_name, today_text, existing):
 
 
 def import_attendance(upload, by_user, dry_run=True) -> dict:
+    from accounts.permissions import SELF_EDIT_MESSAGE, editing_own_records
     rows = validate_rows(read_rows(upload))
+    for r in rows:
+        # The importer's own rows are skipped (the rest of the file still goes in), except for the Owner.
+        if r["ok"] and editing_own_records(by_user, r["_user"]):
+            r["ok"], r["error"] = False, SELF_EDIT_MESSAGE
     good = [r for r in rows if r["ok"]]
     existing = {}
     if good:

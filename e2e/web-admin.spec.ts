@@ -295,7 +295,7 @@ test('People: reset with a typed password (shown once), they sign in with it, th
     const row = page.getByRole('row', { name: new RegExp(name) });
     await expect(row).toBeVisible();
 
-    // ⋯ → Reset password: type one, untick "Ask them to change it".
+    // ⋯ → Reset password: type one (a weak one is only warned about), no "ask them to change it" any more (R7).
     await row.getByRole('button', { name: `More actions for ${name}` }).click();
     await page.getByRole('menuitem', { name: 'Reset password' }).click();
     const reset = page.getByRole('dialog', { name: `Reset password — ${name}` });
@@ -304,15 +304,21 @@ test('People: reset with a typed password (shown once), they sign in with it, th
     await reset.getByLabel('New password').fill('abc12');
     await expect(reset.getByText('At least 6 characters')).toBeVisible();
     await expect(reset.getByRole('button', { name: 'Save password' })).toBeDisabled();
+    const weak = reset.getByText(/^Weak password: easy to guess/);
+    await reset.getByLabel('New password').fill('123456');
+    await expect(weak).toHaveText('Weak password: easy to guess (simple pattern like 123456 or qwerty). You can still save it.');
+    await expect(reset.getByRole('button', { name: 'Save password' })).toBeEnabled();
+    await reset.getByLabel('New password').fill('Password@1');
+    await expect(weak).toContainText('(common password)');
+    await reset.getByLabel('New password').fill(`${login}!`);
+    await expect(weak).toContainText('it contains a name, username, email or the company name');
     await reset.getByLabel('New password').fill(chosen);
     await expect(reset.getByLabel('New password')).toHaveAttribute('type', 'password');
     await reset.getByRole('button', { name: 'Show password' }).click();
     await expect(reset.getByLabel('New password')).toHaveAttribute('type', 'text');
-    const ask = reset.getByLabel('Ask them to change it at next sign-in');
-    await expect(ask).toBeChecked();
-    await ask.click();
-    await expect(ask).not.toBeChecked();
+    await expect(reset.getByText(/Ask them to change it/)).toHaveCount(0);
     await reset.getByRole('button', { name: 'Save password' }).click();
+    await expect(reset.getByText('They can keep using this password, or change it from their account menu.')).toBeVisible();
 
     // Shown once: the password, Copy, Share on WhatsApp, the note.
     await expect(reset.getByTestId('new-password')).toHaveText(chosen);
@@ -534,7 +540,7 @@ test('Roles: any role from blank — only Live attendance and Notices; they see 
     await page.getByRole('button', { name: 'Show Tasks menu' }).click();
     const tasks = page.getByRole('navigation', { name: 'Tasks menu' });
     await expect(tasks.getByRole('link', { name: 'Notices' })).toBeVisible();
-    for (const hidden of ['Notifications', 'Team performance', 'Task settings', 'Mistakes', 'Forms', 'Links', 'Idea board']) {
+    for (const hidden of ['Notifications', 'Team performance', 'Task settings', 'Mistakes', 'Links']) {
       await expect(tasks.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
     }
     await expect(page.getByRole('link', { name: 'People & access' })).toHaveCount(0);
@@ -580,6 +586,66 @@ test('Admin permissions: a member with only "Manage people" gets People & access
     await expect(page).toHaveURL((url) => url.pathname === '/people');
     const theirs = await token(request, who.login, who.password);
     expect((await request.patch('/api/platform/company', { headers: auth(theirs), data: { shortName: 'Nope' } })).status()).toBe(403);
+  } finally {
+    if (personId) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
+    await request.delete(`/api/platform/roles/${roleId}`, { headers: auth(owner) });
+  }
+});
+
+test('Manage roles without being the owner: only what you have yourself can be ticked, at your scope and level (R1)', async ({ page, request }) => {
+  const owner = await token(request);
+  const s = stamp();
+  const role = await request.post('/api/platform/roles', {
+    headers: auth(owner),
+    data: {
+      name: `E2E Role desk ${s}`,
+      level: 1,
+      grants: [
+        { app: 'platform', permission: 'roles.manage' },
+        { app: 'tasks', permission: 'notices.view' },
+        { app: 'tasks', permission: 'hr.live', scope: 'team' },
+      ],
+    },
+  });
+  expect(role.status(), await role.text()).toBe(201);
+  const roleId = (await role.json()).id as string;
+  let personId: string | undefined;
+  try {
+    const who = await personWithRoles(request, owner, `${s}r`, [roleId]);
+    personId = who.personId;
+    await openSignedIn(page, '/roles', who.login, who.password);
+    await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible();
+
+    // Super Admin and the Admin-level role: look only.
+    await expect(page.getByRole('button', { name: 'Duplicate Super Admin', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'View Admin', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'New role' }).click();
+    const editor = page.getByRole('dialog', { name: 'New role' });
+    await expect(editor.getByText('You can give only what you have yourself.')).toBeVisible();
+    await expect(editor.getByRole('checkbox', { name: 'Tasks: See notices', exact: true })).toBeEnabled();
+    await expect(editor.getByRole('checkbox', { name: 'Tasks: See tasks', exact: true })).toBeDisabled();
+    await expect(editor.getByRole('checkbox', { name: 'Admin: Manage people', exact: true })).toBeDisabled();
+    await expect(editor.getByText("You don't have this yourself").first()).toBeVisible();
+    await expect(editor.getByLabel('Level').locator('option', { hasText: 'Admin' })).toBeDisabled();
+    await expect(editor.getByLabel('Level').locator('option', { hasText: 'Manager' })).toBeDisabled();
+
+    // A scope wider than their own cannot be picked.
+    await editor.getByLabel('Search permissions').fill('live attendance');
+    await editor.getByRole('checkbox', { name: 'Tasks: Live attendance', exact: true }).click();
+    const scopes = editor.getByRole('radiogroup', { name: 'Scope for Live attendance' });
+    await expect(scopes.getByRole('radio', { name: 'Team' })).toHaveAttribute('aria-checked', 'true');
+    await expect(scopes.getByRole('radio', { name: 'Company' })).toBeDisabled();
+    await editor.getByRole('button', { name: 'Cancel' }).click();
+
+    // The API refuses the same, with a clear reason.
+    const theirs = await token(request, who.login, who.password);
+    const refused = await request.post('/api/platform/roles', {
+      headers: auth(theirs),
+      data: { name: `E2E Not mine ${s}`, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'own' }] },
+    });
+    expect(refused.status()).toBe(403);
+    expect((await refused.json()).message).toContain('You can only give permissions you have yourself');
   } finally {
     if (personId) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
     await request.delete(`/api/platform/roles/${roleId}`, { headers: auth(owner) });

@@ -1,19 +1,17 @@
 import { ApiError, errorMessage, useChangePassword, usePlatformMe } from '@freefounders/core';
 import { Loader2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useNavigate } from 'react-router';
+import { WeakPasswordNote } from '@/components/common/weak-password-note';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Logo } from '../shell-parts';
-import { safeNext } from '../session-guard';
 
-/** Change password; forced on first sign-in when an admin set it (PLAN.md §13). */
+/** Change your own password, whenever you like (account menu). Never forced, also not after an admin set it (R7). */
 export function AccountPage() {
-  const [params] = useSearchParams();
   const navigate = useNavigate();
   const me = usePlatformMe();
   const change = useChangePassword();
-  const first = params.has('first') || !!me.data?.mustChangePassword;
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [again, setAgain] = useState('');
@@ -33,7 +31,6 @@ export function AccountPage() {
           setCurrent('');
           setNext('');
           setAgain('');
-          if (first) navigate(safeNext(params.get('next')) ?? '/', { replace: true });
         },
         onError: (err) => setProblem(err instanceof ApiError && err.errors ? Object.values(err.errors)[0] : errorMessage(err)),
       },
@@ -46,11 +43,9 @@ export function AccountPage() {
       <form onSubmit={submit} className="w-full max-w-[400px] space-y-5 rounded-xl border bg-card p-7 shadow-card-lg" aria-labelledby="pw-title">
         <div className="space-y-1">
           <h1 id="pw-title" className="text-2xl font-bold tracking-tight">
-            {first ? 'Choose a new password' : 'Change password'}
+            Change password
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {first ? 'Your password was set by an admin. Pick your own before you continue.' : 'Your other devices will be signed out; this one stays signed in.'}
-          </p>
+          <p className="text-sm text-muted-foreground">Your other devices will be signed out; this one stays signed in.</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="pw-current">Current password</Label>
@@ -58,7 +53,12 @@ export function AccountPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="pw-new">New password</Label>
-          <Input id="pw-new" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required />
+          <Input id="pw-new" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" aria-describedby="pw-new-weak" required />
+          <WeakPasswordNote
+            id="pw-new-weak"
+            password={next}
+            about={{ fullName: me.data?.person.fullName, email: me.data?.person.email, username: me.data?.person.employeeCode, companyName: me.data?.company.name }}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="pw-again">New password again</Label>
@@ -69,17 +69,15 @@ export function AccountPage() {
             {problem}
           </p>
         )}
-        {done && !first && (
+        {done && (
           <p role="status" className="rounded-md border border-success/20 bg-success/8 px-3 py-2 text-sm font-medium text-success">
             Password changed.
           </p>
         )}
         <div className="flex gap-2">
-          {!first && (
-            <Button type="button" variant="outline" className="flex-1" onClick={() => navigate(-1)}>
-              Back
-            </Button>
-          )}
+          <Button type="button" variant="outline" className="flex-1" onClick={() => navigate(-1)}>
+            Back
+          </Button>
           <Button type="submit" className="flex-1" disabled={change.isPending}>
             {change.isPending && <Loader2 className="size-4 animate-spin" />}
             Save password

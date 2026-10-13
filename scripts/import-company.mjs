@@ -55,6 +55,9 @@ const SKIP = {
   tasks: new Set([
     'django_migrations', 'django_content_type', 'auth_permission', 'auth_group_permissions', 'accounts_user_user_permissions',
     'django_session', 'django_admin_log', 'token_blacklist_outstandingtoken', 'token_blacklist_blacklistedtoken', 'tenancy_companysetting',
+    // The founder removed the Idea board and Web forms (2026-10-13, PLAN.md §19.23): their old data is not carried over.
+    'workspace_idea', 'workspace_idea_votes', 'workspace_ideacomment',
+    'webforms_form', 'webforms_formfield', 'webforms_formsubmission', 'webforms_submissionfile',
   ]),
   assets: new Set(['__ff_migrations', 'sessions']),
 };

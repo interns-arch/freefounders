@@ -440,7 +440,7 @@ class MistakeViewSet(viewsets.ModelViewSet):
     def create_task(self, request, pk=None):
         """Task integration: spawn the corrective/audit task, linked back."""
         from crm.models import Task, TaskStatus
-        from crm.scoping import can_assign_to
+        from crm.scoping import assign_refusal, can_assign_to
         mistake = self.get_object()
         if not can_review(request.user, mistake):
             raise PermissionDenied("Only the accountable manager or admin can create the corrective task.")
@@ -460,7 +460,7 @@ class MistakeViewSet(viewsets.ModelViewSet):
         assignee = User.objects.filter(pk=request.data.get("assigned_to"), is_active=True).first() \
             or mistake.employee
         if not can_assign_to(request.user, assignee):
-            raise PermissionDenied("That person is not an active user.")
+            raise PermissionDenied(assign_refusal(request.user, assignee))
         title = str(request.data.get("title", "")).strip() \
             or f"Corrective action for {mistake.code}: {mistake.category}"
         try:

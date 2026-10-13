@@ -351,3 +351,63 @@ class ManualMarkDateTests(_Base):
         self.assertEqual(Attendance.objects.get(user=self.rahul, date=MON).status, AttendanceStatus.HALF_DAY)
         future = (timezone.localdate() + timedelta(days=1)).isoformat()
         self.assertEqual(c.post("/api/attendance/manual_mark/", {"user": self.rahul.id, "date": future}, format="json").status_code, 400)
+
+
+class OwnRecordsTests(_Base):
+    """Nobody changes their own attendance, except the Owner (founder, 2026-10-13; docs/security/tasks-api.md).
+    The Owner is whoever holds tasks.delete_admin_work: the Platform's Owner role, or Super Admin standalone."""
+    MESSAGE = "You cannot change your own attendance/salary — ask another HR person or the Owner."
+
+    def setUp(self):
+        super().setUp()
+        self.owner = User.objects.create_user("owner", "o@x.com", "pass@12345", role=Role.SUPER_ADMIN,
+                                              department="management", first_name="Olga", employee_code="CT-100")
+        self.hr.employee_code = "CT-050"
+        self.hr.save(update_fields=["employee_code"])
+
+    def mark(self, actor, target):
+        return self.as_(actor).post("/api/attendance/manual_mark/", {"user": target.id, "status": "present",
+                                                                     "date": MON.isoformat()}, format="json")
+
+    def test_hr_cannot_mark_their_own_day(self):
+        res = self.mark(self.hr, self.hr)
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.json()["detail"], self.MESSAGE)
+        self.assertFalse(Attendance.objects.filter(user=self.hr).exists())
+        self.assertEqual(self.mark(self.hr, self.rahul).status_code, 200)   # anyone else: as before
+
+    def test_the_owner_may_mark_their_own_day(self):
+        self.assertEqual(self.mark(self.owner, self.owner).status_code, 200)
+        self.assertEqual(Attendance.objects.get(user=self.owner, date=MON).status, "present")
+
+    def _import(self, actor, rows):
+        buf = io.StringIO()
+        csv.writer(buf).writerows([ImportTests.HEADER, *rows])
+        f = SimpleUploadedFile("days.csv", buf.getvalue().encode(), content_type="text/csv")
+        res = self.as_(actor).post("/api/attendance/import/", {"file": f, "dry_run": "false"}, format="multipart")
+        self.assertEqual(res.status_code, 200, res.content)
+        return res.json()
+
+    def test_import_skips_the_importers_own_rows_and_applies_the_rest(self):
+        out = self._import(self.hr, [["CT-050", "2026-09-14", "09:00", "18:30", "", ""],
+                                     ["CT-001", "2026-09-14", "09:00", "18:30", "", ""]])
+        self.assertEqual((out["created"], out["skipped"]), (1, 1))
+        self.assertEqual(out["skipped_rows"], [{"line": 2, "error": self.MESSAGE}])
+        self.assertFalse(Attendance.objects.filter(user=self.hr).exists())
+        self.assertTrue(Attendance.objects.filter(user=self.rahul, date=MON).exists())
+
+    def test_the_owner_imports_their_own_rows(self):
+        out = self._import(self.owner, [["CT-100", "2026-09-14", "09:00", "18:30", "", ""]])
+        self.assertEqual((out["created"], out["skipped"]), (1, 0))
+
+    def test_self_service_still_works_and_own_requests_still_need_someone_else(self):
+        day = timezone.localdate() - timedelta(days=1)
+        c = self.as_(self.hr)
+        res = c.post("/api/attendance-corrections/", {"date": day.isoformat(), "requested_check_in": f"{day}T09:30:00Z",
+                                                      "reason": "Forgot"}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        # deciding your own request was already refused for everyone (Owner included): unchanged
+        self.assertEqual(c.post(f"/api/attendance-corrections/{res.json()['id']}/review/",
+                                {"decision": "approved"}).status_code, 403)
+        self.assertEqual(self.as_(self.owner).post(f"/api/attendance-corrections/{res.json()['id']}/review/",
+                                                   {"decision": "approved"}).status_code, 200)

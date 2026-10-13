@@ -1,13 +1,13 @@
 """Uploaded files are served only by signed, expiring links.
 
-Task attachments, lead documents, leave documents, form uploads and notice attachments used to be served by plain
+Task attachments, lead documents, leave documents and notice attachments used to be served by plain
 `/media/<path>` URLs: anyone who knew or guessed a path (`task_files/<task id>/<file name>`) could fetch the file
 without signing in, from any company. Now:
 
 - the API hands out `file_url(f)`: on the local disk `/media/<path>?s=<signature>`, signed with SECRET_KEY and valid
   for MEDIA_LINK_SECONDS (on S3 the storage already returns a presigned, expiring link, AWS_QUERYSTRING_AUTH);
 - `/media/<path>` answers 404 unless the signature matches that exact path and has not expired. Only the endpoints
-  that may show a file (task detail, lead detail, leave list, form submissions, notices) hand out its link, so a link
+  that may show a file (task detail, lead detail, leave list, notices) hand out its link, so a link
   is as private as the record it came with.
 
 Responses never run as a page of the app: only images and PDFs are shown inline; anything else (HTML, SVG, scripts…)

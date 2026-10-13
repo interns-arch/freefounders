@@ -15,6 +15,7 @@ import {
   useTaskProgress,
   useTaskStep,
   useTaskWorkSettings,
+  useTeamPeople,
 } from '@freefounders/core/tasks';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { toast } from 'sonner';
@@ -241,7 +242,11 @@ function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onC
   const access = useAccess();
   const isAdmin = access.tasks.can('tasks.view_all');
   const me = access.tasks.me;
-  const team = useTaskAssignees().data ?? [];
+  // An admin edit gives the task directly (only people they may give tasks to); a request only proposes a new
+  // person, and whoever approves it needs "Give tasks to others", so anyone can be proposed.
+  const assignees = useTaskAssignees().data;
+  const everyone = useTeamPeople().data;
+  const team = (isAdmin ? assignees : everyone) ?? [];
   const request = useRequestTaskChange();
   const edit = useEditTask();
   const del = useDeleteTask();

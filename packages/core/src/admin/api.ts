@@ -94,6 +94,11 @@ function useInvalidateAdmin() {
   const qc = useQueryClient();
   return () => qc.invalidateQueries({ queryKey: adminKeys.all });
 }
+/** Role changes can change what the signed-in person holds themselves (/auth/me `held`, R1). */
+function useInvalidateRoles() {
+  const qc = useQueryClient();
+  return () => Promise.all([qc.invalidateQueries({ queryKey: adminKeys.all }), qc.invalidateQueries({ queryKey: ['platform', 'me'] })]);
+}
 
 export function useCreatePerson() {
   const invalidate = useInvalidateAdmin();
@@ -121,7 +126,7 @@ export function useDeletePerson() {
   return useMutation({ mutationFn: ({ id, confirm, options }: { id: string; confirm: string; options?: DeleteOptions }) => adminApi.deletePerson(id, confirm, options), onSuccess: invalidate });
 }
 export function useSetPersonRoles() {
-  const invalidate = useInvalidateAdmin();
+  const invalidate = useInvalidateRoles();
   return useMutation({ mutationFn: ({ id, roleIds }: { id: string; roleIds: string[] }) => adminApi.setPersonRoles(id, roleIds), onSuccess: invalidate });
 }
 /** Start someone's exit (PLAN.md §17.4): Assets lists the assets to recover, Tasks makes the exit checklist. */
@@ -135,7 +140,7 @@ export function useStartExit() {
 
 /** POST /roles, or PATCH /roles/:id when `id` is given. */
 export function useSaveRole() {
-  const invalidate = useInvalidateAdmin();
+  const invalidate = useInvalidateRoles();
   return useMutation({
     mutationFn: ({ id, ...body }: RoleInput & { id?: string }) => (id ? adminApi.updateRole(id, body) : adminApi.createRole(body)),
     onSuccess: invalidate,
@@ -146,7 +151,7 @@ export function useDuplicateRole() {
   return useMutation({ mutationFn: adminApi.duplicateRole, onSuccess: invalidate });
 }
 export function useArchiveRole() {
-  const invalidate = useInvalidateAdmin();
+  const invalidate = useInvalidateRoles();
   return useMutation({ mutationFn: adminApi.archiveRole, onSuccess: invalidate });
 }
 

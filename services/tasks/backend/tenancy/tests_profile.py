@@ -47,7 +47,7 @@ class ProfileTests(TestCase):
         self.assertEqual(cat["app"], "tasks")
         keys = {m["key"]: m["default"] for m in cat["modules"]}
         self.assertEqual(keys, {"leads": False, "intake": False, "payroll": False, "mistakes": False,
-                                "forms": False, "links": False, "ideas": False})
+                                "links": False})
 
     def test_switched_off_modules_answer_404_and_leave_me(self):
         self.assertTrue(self.push(modules={"leads": False, "payroll": False, "rockets": False}).json()["applied"])
@@ -76,10 +76,6 @@ class ProfileTests(TestCase):
         self.assertEqual(self.api.get("/api/leads/").status_code, 404)
         self.push(version=2, modules={"leads": True})
         self.assertEqual(self.api.get("/api/leads/").status_code, 200)
-
-    def test_public_forms_follow_the_forms_switch(self):
-        self.push(modules={"forms": False})
-        self.assertEqual(APIClient().get("/api/public/forms/abc/").status_code, 404)
 
     def test_branding_reaches_me_and_emails(self):
         self.push()

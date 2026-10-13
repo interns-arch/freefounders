@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Group, Idea, IdeaComment, Link, LinkCollection, Notice
+from .models import Group, Link, LinkCollection, Notice
 
 
 @admin.register(Group)
@@ -17,5 +17,3 @@ class NoticeAdmin(admin.ModelAdmin):
 
 admin.site.register(LinkCollection)
 admin.site.register(Link)
-admin.site.register(Idea)
-admin.site.register(IdeaComment)

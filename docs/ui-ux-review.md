@@ -86,7 +86,7 @@ HR/workforce dashboard; flat style, glassmorphism rejected for low-end phones). 
   `#047857` (the suggested `#059669` is 3.8), amber warning `#975d00` (kept apart from the orange CTA); dark mode navy
   surfaces with `#60a5fa` primary and navy text on it (7.4). Brand colours aim at the same levels (5.3:1 / 6:1).
 - [x] Primary action → one orange CTA per screen (`Button variant="cta"`): Punch in/out, Check in/out (the due one),
-  Add person / task / lead / asset / employee, Apply for leave, Raise ticket, New request / idea / role, Add link.
+  Add person / task / lead / asset / employee, Apply for leave, Raise ticket, New request / role, Add link.
 - [x] Style → no gradients, glows, backdrop blur or hover lifts; one radius scale (6 / 8 / 12 px); three soft shadows.
 - [x] Measured → computed contrast of every visible text node, 16 screens + menus/drawer/sign-in, 375 and 1440 px,
   light and dark, default theme and five brand colours: 0 under AA. Fixed on the way: faded weekend headers, picker

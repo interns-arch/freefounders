@@ -71,10 +71,8 @@ export interface LoginReset {
 export interface ResetLoginInput {
   /** Needed only when the person has no login and no email or employee ID to sign in with. */
   username?: string;
-  /** At least PLATFORM_PASSWORD_MIN characters. */
+  /** At least PLATFORM_PASSWORD_MIN characters (a weak one is only warned about: weakPasswordWarning). */
   password?: string;
-  /** Default true: they choose their own password at their next sign-in. */
-  mustChangePassword?: boolean;
 }
 
 /** The shortest password the Platform accepts (founder's choice, PLAN.md §19.12). */

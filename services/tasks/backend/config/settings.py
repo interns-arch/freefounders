@@ -61,7 +61,6 @@ INSTALLED_APPS = [
     "notifications",
     "intake",
     "workspace",
-    "webforms",
     "hr",
     "directory",
     "payroll",
@@ -145,12 +144,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "config.pagination.DefaultPagination",
     "PAGE_SIZE": 25,
-    # Throttled: the anonymous endpoints (public web forms, per client address) and the paid AI calls (per person).
-    # LocMem cache = per process;
-    # behind the gateway set NUM_PROXIES=1 so the address is the visitor's, not the gateway's.
+    # Throttled: the paid AI calls (per person). LocMem cache = per process;
+    # behind the gateway set NUM_PROXIES=1 so a client address is the visitor's, not the gateway's.
     "DEFAULT_THROTTLE_RATES": {
-        "public_form": env("THROTTLE_PUBLIC_FORM", "120/min"),
-        "public_submit": env("THROTTLE_PUBLIC_SUBMIT", "20/min"),
         "ai": env("THROTTLE_AI", "30/min"),  # per person: AI drafting, proofreading, voice notes, summaries
     },
     "NUM_PROXIES": int(env("NUM_PROXIES", "0")) or None,
@@ -211,7 +207,7 @@ DAY_LOG_EPOCH = env("DAY_LOG_EPOCH", "")
 # Uploads: S3 when a bucket is configured, the local disk otherwise.
 #
 # This matters more than it looks. A container's own disk is WIPED on every
-# deploy and restart, so task attachments, leave documents and form uploads
+# deploy and restart, so task attachments, leave documents and notice files
 # were disappearing while their database rows stayed behind. S3 keeps them.
 # Set AWS_STORAGE_BUCKET_NAME (plus keys and region) to switch it on; leave
 # it blank and everything behaves exactly as before.

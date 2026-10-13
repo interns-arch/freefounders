@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import HasCapability, has_capability
+from accounts.permissions import HasCapability, has_capability, refuse_own_records
 from crm.serializers import UserBriefSerializer
 
 from . import services
@@ -54,12 +54,14 @@ class SalaryStructureSerializer(serializers.ModelSerializer):
 
 class AdvanceSerializer(serializers.ModelSerializer):
     user_detail = UserBriefSerializer(source="user", read_only=True)
+    # what is still to be recovered from coming payslips
+    balance = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = Advance
         fields = ["id", "user", "user_detail", "amount", "given_on", "reason",
-                  "recovered", "created_at"]
-        read_only_fields = ["recovered"]
+                  "recovered", "recovered_amount", "balance", "created_at"]
+        read_only_fields = ["recovered", "recovered_amount"]
 
     def validate_amount(self, value):
         if value <= 0:
@@ -125,14 +127,17 @@ class SalaryStructureViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         self._guard()
+        refuse_own_records(self.request.user, serializer.validated_data.get("user"))
         serializer.save(created_by=self.request.user)
 
     def perform_update(self, serializer):
         self._guard()
+        refuse_own_records(self.request.user, serializer.instance.user_id, serializer.validated_data.get("user"))
         serializer.save()
 
     def perform_destroy(self, instance):
         self._guard()
+        refuse_own_records(self.request.user, instance.user_id)
         if Payslip.objects.filter(breakdown__structure_id=instance.pk).exists():
             raise ValidationError({"detail": "This salary has already been used in a payslip — "
                                              "add a new one with a later effective date instead."})
@@ -165,17 +170,29 @@ class AdvanceViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         self._guard()
+        refuse_own_records(self.request.user, serializer.validated_data.get("user"))
         serializer.save(created_by=self.request.user)
 
     def perform_update(self, serializer):
         self._guard()
-        if serializer.instance.recovered:
+        adv = serializer.instance
+        refuse_own_records(self.request.user, adv.user_id, serializer.validated_data.get("user"))
+        if adv.recovered:
             raise ValidationError({"detail": "A recovered advance cannot be edited."})
+        if adv.recovered_amount > 0:
+            # part of it is already in a finalised payslip: the person and the amount below that stay fixed
+            new_user = serializer.validated_data.get("user")
+            if new_user is not None and new_user.pk != adv.user_id:
+                raise ValidationError({"user": "Part of this advance is already recovered; it stays with this person."})
+            if serializer.validated_data.get("amount", adv.amount) < adv.recovered_amount:
+                raise ValidationError({"amount": f"{adv.recovered_amount} of this advance is already recovered; "
+                                                 "the amount cannot be less than that."})
         serializer.save()
 
     def perform_destroy(self, instance):
         self._guard()
-        if instance.recovered:
+        refuse_own_records(self.request.user, instance.user_id)
+        if instance.recovered or instance.recovered_amount > 0:
             raise ValidationError({"detail": "A recovered advance cannot be deleted."})
         instance.delete()
 

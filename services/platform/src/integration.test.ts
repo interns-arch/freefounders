@@ -342,7 +342,7 @@ describe('people administration', () => {
     assert.equal((await call('GET', '/people', { token })).status, 403);
   });
 
-  test('admin adds a person with a login; they must change the generated password', async () => {
+  test('admin adds a person with a login; nobody is forced to change the generated password (R7)', async () => {
     const { token } = await login('admin@acme.test');
     const created = await call('POST', '/people', {
       token,
@@ -355,7 +355,8 @@ describe('people administration', () => {
 
     const nina = await call('POST', '/auth/login', { body: { login: 'nina', password: created.body.generatedPassword } });
     assert.equal(nina.status, 200);
-    assert.equal(nina.body.mustChangePassword, true);
+    assert.equal(nina.body.mustChangePassword, false, 'no forced change at the first sign-in');
+    assert.equal((await call('GET', '/auth/me', { token: nina.body.accessToken })).body.mustChangePassword, false);
 
     const list = await call('GET', '/people?search=nina', { token });
     assert.equal(list.body.length, 1);
@@ -395,7 +396,8 @@ describe('people administration', () => {
     assert.equal(reset.status, 200);
     assert.equal((await call('POST', '/auth/refresh', { cookie: before.cookie })).status, 401);
     const after = await call('POST', '/auth/login', { body: { login: 'mia', password: 'Reset@1234' } });
-    assert.equal(after.body.mustChangePassword, true);
+    assert.equal(after.status, 200);
+    assert.equal(after.body.mustChangePassword, false, 'not forced to change it (R7)');
     await dbs.db.update(logins).set({ passwordHash: await hashPassword(PASSWORD), mustChangePassword: false }).where(eq(logins.personId, ids.member));
   });
 
@@ -417,7 +419,11 @@ describe('people administration', () => {
 describe('apps', () => {
   test('granting Tasks provisions the user there and puts it in the token', async () => {
     const admin = await login('admin@acme.test');
-    const grant = await call('PUT', `/people/${ids.member}/apps/tasks`, { token: admin.token, body: { appRole: 'warehouse' } });
+    const refused = await call('PUT', `/people/${ids.member}/apps/tasks`, { token: admin.token, body: { appRole: 'warehouse' } });
+    assert.equal(refused.status, 403, 'an app role the role builder does not know yet: the owner only (R1)');
+    assert.match(refused.body.message, /Only the owner can choose "warehouse" inside Tasks/);
+    const owner = await login('olivia');
+    const grant = await call('PUT', `/people/${ids.member}/apps/tasks`, { token: owner.token, body: { appRole: 'warehouse' } });
     assert.equal(grant.status, 200, JSON.stringify(grant.body));
     assert.equal(grant.body.localUserId, '42');
     const last = provisionCalls.at(-1)!;
@@ -558,7 +564,7 @@ describe('role builder (Phase 3)', () => {
   });
 
   test('roles are checked against what the apps offer; locked roles stay locked', async () => {
-    const admin = await login('admin@acme.test');
+    const admin = await login('olivia'); // the owner: may give everything (R1)
     const make = (body: unknown) => call('POST', '/roles', { token: admin.token, body });
     const ok = await make({ name: 'Floor Lead', level: 2, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'department' }, { app: 'tasks', permission: 'tasks.assign' }] });
     assert.equal(ok.status, 201, JSON.stringify(ok.body));
@@ -583,7 +589,7 @@ describe('role builder (Phase 3)', () => {
   });
 
   test('giving roles opens the apps they need; taking them away closes the apps', async () => {
-    const admin = await login('admin@acme.test');
+    const admin = await login('olivia');
     const before = await login('rita');
     const given = await call('PUT', `/people/${ids.rita}/roles`, { token: admin.token, body: { roleIds: [roleIds.floor] } });
     assert.equal(given.status, 200, JSON.stringify(given.body));
@@ -609,7 +615,7 @@ describe('role builder (Phase 3)', () => {
   });
 
   test('archiving a role takes it from everyone and closes apps it alone gave', async () => {
-    const admin = await login('admin@acme.test');
+    const admin = await login('olivia');
     const res = await call('DELETE', `/roles/${roleIds.copy}`, { token: admin.token });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     const list = await call('GET', '/roles', { token: admin.token });
@@ -622,7 +628,7 @@ describe('role builder (Phase 3)', () => {
   });
 
   test('an app ahead of the Platform (e.g. Platform restored from a backup) still gets the change', async () => {
-    const admin = await login('admin@acme.test');
+    const admin = await login('olivia');
     fakeAccessVersion += 1000;
     const before = accessPushes.length;
     const res = await call('PUT', `/people/${ids.rita}/roles`, { token: admin.token, body: { roleIds: [roleIds.floor] } });
@@ -725,7 +731,7 @@ describe('every feature is a permission (§19.19)', () => {
     });
     try {
       (roles as unknown as { catalogues: Map<string, unknown> }).catalogues.clear();
-      const admin = await login('admin@acme.test');
+      const admin = await login('olivia');
       const list = await call('GET', '/roles', { token: admin.token });
       const byCode = Object.fromEntries(list.body.map((r: { code: string }) => [r.code, r]));
       const perms = (code: string) => byCode[code].grants.filter((g: { app: string }) => g.app === 'tasks').map((g: { permission: string; scope: string }) => `${g.permission}@${g.scope}`).sort();
@@ -907,7 +913,7 @@ describe('people directory (Phase 5)', () => {
 
 describe('role duties (Phase 5)', () => {
   test('duties are saved with lasting ids, checked, and sent to the apps with the role', async () => {
-    const admin = await login('admin@acme.test');
+    const admin = await login('olivia');
     const bad = await call('POST', '/roles', { token: admin.token, body: { name: 'Duty Bad', grants: [], duties: [{ title: 'Weekly sweep', frequency: 'weekly' }] } });
     assert.equal(bad.status, 400, 'weekly needs a day');
     const created = await call('POST', '/roles', {
@@ -1037,7 +1043,7 @@ describe('cross-app flows (Phase 5)', () => {
 });
 
 describe('reset with a chosen password (§19.12)', () => {
-  test('at least 6 characters; "ask them to change it" is on unless turned off', async () => {
+  test('at least 6 characters; weak ones are accepted; never a forced change (R3, R7)', async () => {
     const admin = await login('admin@acme.test');
     const short = await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'abcde' } });
     assert.equal(short.status, 400);
@@ -1050,9 +1056,12 @@ describe('reset with a chosen password (§19.12)', () => {
     assert.equal(first.status, 200);
     assert.equal(first.body.mustChangePassword, false);
 
-    const ask = await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'abc1234' } });
-    assert.equal(ask.status, 200);
-    assert.equal((await call('POST', '/auth/login', { body: { login: 'mia', password: 'abc1234' } })).body.mustChangePassword, true);
+    const ask = await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'abc1234', mustChangePassword: true } });
+    assert.equal(ask.status, 200, 'an old client asking for a forced change is fine');
+    assert.equal((await call('POST', '/auth/login', { body: { login: 'mia', password: 'abc1234' } })).body.mustChangePassword, false, 'but nothing forces it');
+    const weak = await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'mia123' } });
+    assert.equal(weak.status, 200, 'a weak password (their own name) is only warned about in the web app, never refused');
+    assert.equal((await call('PUT', `/people/${ids.member}/login`, { token: admin.token, body: { password: 'abc1234' } })).status, 200);
     const [row] = await dbs.db.select().from(logins).where(eq(logins.personId, ids.member));
     assert.match(row.passwordHash, /^\$argon2id\$/, 'hashed only');
 
@@ -1420,6 +1429,105 @@ describe('security hardening (docs/security/platform.md)', () => {
     assert.equal((await call('PUT', `/people/${ids.admin}/roles`, { token: r.token, body: { roleIds: [] } })).status, 403, 'not an admin');
     assert.equal((await call('PUT', `/people/${ids.owner}/roles`, { token: r.token, body: { roleIds: [] } })).status, 403, 'not the owner');
     assert.equal((await call('PUT', `/people/${plain}/roles`, { token: r.token, body: { roleIds: [] } })).status, 200, 'members: yes');
+  });
+
+  test('Manage roles gives only what you have: permissions, scopes, level; never Admin-level or Super Admin (R1)', async () => {
+    const owner = await login('olivia');
+    const roleList = async () => (await call('GET', '/roles', { token: owner.token })).body as Array<{ id: string; code: string; name: string }>;
+    const mk = async (name: string, grants: Array<{ app: string; permission: string; scope?: string }>, level = 1) => {
+      const r = await call('POST', '/roles', { token: owner.token, body: { name, level, grants } });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      return r.body.id as string;
+    };
+    // Rex: Manage roles, Tasks "See tasks" at Team, and "Give tasks"; a Manager-level role.
+    const rexRole = await mk('R1 Lead', [
+      { app: 'platform', permission: 'roles.manage' },
+      { app: 'tasks', permission: 'tasks.view', scope: 'team' },
+      { app: 'tasks', permission: 'tasks.assign' },
+    ], 2);
+    const rex = await addPerson(ids.acme, 'Rex Roles', 'r1_rex');
+    const pat = await addPerson(ids.acme, 'Pat Plain', 'r1_pat');
+    assert.equal((await call('PUT', `/people/${rex}/roles`, { token: owner.token, body: { roleIds: [rexRole] } })).status, 200);
+    const r = await login('r1_rex');
+    const make = (body: unknown) => call('POST', '/roles', { token: r.token, body });
+
+    const me = await call('GET', '/auth/me', { token: r.token });
+    assert.equal(me.body.held.level, 2);
+    assert.deepEqual(
+      me.body.held.grants.map((g: { app: string; permission: string; scope: string }) => `${g.app}:${g.permission}@${g.scope}`).sort(),
+      ['platform:roles.manage@', 'tasks:tasks.assign@', 'tasks:tasks.view@team'],
+      '/auth/me says what they hold, for the role editor',
+    );
+
+    // Create: only what they hold, at no wider scope, no higher level, never Admin level.
+    const ok = await make({ name: 'R1 Helper', level: 1, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'own' }, { app: 'tasks', permission: 'tasks.assign' }] });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    const own = await make({ name: 'R1 Same', level: 2, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'team' }, { app: 'platform', permission: 'roles.manage' }] });
+    assert.equal(own.status, 201, 'their own permissions and level: yes');
+    const wider = await make({ name: 'R1 Wider', grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'company' }] });
+    assert.equal(wider.status, 403);
+    assert.match(wider.body.message, /only give permissions you have yourself.*Tasks · See tasks at Company \(you have Team\)/);
+    const notHeld = await make({ name: 'R1 More', grants: [{ app: 'platform', permission: 'people.delete' }] });
+    assert.equal(notHeld.status, 403);
+    assert.match(notHeld.body.message, /Admin · Delete people permanently/);
+    const ownerOnly = await make({ name: 'R1 Boss', grants: [{ app: 'tasks', permission: 'tasks.delete_admin_work' }] });
+    assert.equal(ownerOnly.status, 403);
+    assert.match(ownerOnly.body.message, /Owner only/);
+    const admin3 = await make({ name: 'R1 Admin', level: 3, grants: [] });
+    assert.equal(admin3.status, 403);
+    assert.match(admin3.body.message, /Only the owner can create or edit Admin-level roles/);
+    assert.equal((await make({ name: 'R1 X', level: 3 })).status, 403);
+
+    // Edit: not a role beyond them (as it is or as it would be), not to a higher level.
+    const all = await roleList();
+    const byCode = (code: string) => all.find((x) => x.code === code)!.id;
+    const helper = ok.body.id as string;
+    assert.equal((await call('PATCH', `/roles/${helper}`, { token: r.token, body: { description: 'Edited' } })).status, 200);
+    assert.equal((await call('PATCH', `/roles/${helper}`, { token: r.token, body: { level: 3 } })).status, 403, 'not to Admin level');
+    assert.equal((await call('PATCH', `/roles/${helper}`, { token: r.token, body: { grants: [{ app: 'platform', permission: 'people.manage' }] } })).status, 403, 'not adding what they lack');
+    const editAdmin = await call('PATCH', `/roles/${byCode('ff_admin')}`, { token: r.token, body: { description: 'mine now' } });
+    assert.equal(editAdmin.status, 403);
+    assert.match(editAdmin.body.message, /Only the owner can edit Admin-level roles/);
+    const bigger = await mk('R1 Bigger', [{ app: 'platform', permission: 'people.manage' }]);
+    const editBigger = await call('PATCH', `/roles/${bigger}`, { token: r.token, body: { grants: [] } });
+    assert.equal(editBigger.status, 403, 'not taking apart a role with more than they have');
+    assert.match(editBigger.body.message, /Only the owner can edit "R1 Bigger": it has permissions you do not have yourself/);
+    assert.equal((await call('DELETE', `/roles/${bigger}`, { token: r.token })).status, 403, 'nor archive it');
+    assert.equal((await call('DELETE', `/roles/${byCode('ff_admin')}`, { token: r.token })).status, 403);
+
+    // Duplicate: never Super Admin; an Admin-level role's copy is Admin level too.
+    const dupSuper = await call('POST', `/roles/${byCode('ff_super_admin')}/duplicate`, { token: r.token });
+    assert.equal(dupSuper.status, 403);
+    assert.match(dupSuper.body.message, /Only the owner can duplicate Super Admin/);
+    assert.equal((await call('POST', `/roles/${byCode('ff_admin')}/duplicate`, { token: r.token })).status, 403);
+    assert.equal((await call('POST', `/roles/${helper}/duplicate`, { token: r.token })).status, 201, 'a role within their powers: yes');
+
+    // Giving roles: only within their own permissions and level, to others and to themselves.
+    assert.equal((await call('PUT', `/people/${pat}/roles`, { token: r.token, body: { roleIds: [helper] } })).status, 200);
+    const giveBigger = await call('PUT', `/people/${pat}/roles`, { token: r.token, body: { roleIds: [helper, bigger] } });
+    assert.equal(giveBigger.status, 403);
+    assert.match(giveBigger.body.message, /You cannot give "R1 Bigger": it has permissions you do not have yourself \(Admin · Manage people\)/);
+    const selfRaise = await call('PUT', `/people/${rex}/roles`, { token: r.token, body: { roleIds: [rexRole, bigger] } });
+    assert.equal(selfRaise.status, 403, 'nobody but the owner raises their own access');
+    const level3 = await call('PUT', `/people/${pat}/roles`, { token: r.token, body: { roleIds: [byCode('ff_admin')] } });
+    assert.equal(level3.status, 403);
+    assert.match(level3.body.message, /You cannot give "Admin": it is an Admin-level role and your own level is Manager/);
+    assert.equal((await call('PUT', `/people/${pat}/roles`, { token: r.token, body: { roleIds: [helper] } })).status, 200, 'keeping a role already held is fine');
+    assert.equal((await call('PUT', `/people/${pat}/roles`, { token: r.token, body: { roleIds: [] } })).status, 200, 'taking roles away is fine');
+
+    // A platform admin is limited the same way (only the owner keeps everything); the owner may do all of it.
+    const adam = await login('admin@acme.test');
+    // An app role is a role too: checked through the role builder's copy of it.
+    const asApp = await call('PUT', `/people/${pat}/apps/tasks`, { token: adam.token, body: { appRole: 'super_admin' } });
+    assert.equal(asApp.status, 403);
+    assert.match(asApp.body.message, /You cannot give "Super Admin \(Tasks\)": it is an Admin-level role/);
+    const warehouse = await call('PUT', `/people/${pat}/apps/tasks`, { token: adam.token, body: { appRole: 'warehouse' } });
+    assert.equal(warehouse.status, 403);
+    assert.match(warehouse.body.message, /You cannot give "Warehouse Team": it has permissions you do not have yourself \(Tasks · See tasks/);
+    assert.equal((await call('POST', '/roles', { token: adam.token, body: { name: 'R1 Admin desk', grants: [{ app: 'platform', permission: 'people.manage' }] } })).status, 201, 'admins hold every Admin permission');
+    assert.equal((await call('POST', '/roles', { token: adam.token, body: { name: 'R1 Tasks', grants: [{ app: 'tasks', permission: 'tasks.assign' }] } })).status, 403, 'but no Tasks permission without a role');
+    assert.equal((await call('POST', `/roles/${byCode('ff_super_admin')}/duplicate`, { token: owner.token })).status, 201, 'the owner may duplicate Super Admin');
+    assert.equal((await call('PUT', `/people/${pat}/roles`, { token: owner.token, body: { roleIds: [bigger, byCode('ff_admin')] } })).status, 200, 'the owner gives anything');
   });
 
   test("another company's people, roles and departments: invisible and untouchable (404/400), no company smuggling", async () => {

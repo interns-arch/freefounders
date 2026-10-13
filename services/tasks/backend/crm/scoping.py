@@ -41,8 +41,10 @@ def can_assign(user) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Task assignment: NO hierarchy. Anyone may assign a task to anyone, at any
-# level and in any department. ROLE_LEVEL is kept only for the delete rules
+# Task assignment: NO hierarchy. Whoever holds "Give tasks to others"
+# (tasks.assign) may assign a task to anyone, at any level and in any
+# department; everyone else only to themselves (founder's decision,
+# docs/security/tasks-api.md). ROLE_LEVEL is kept only for the delete rules
 # below (work handed to an admin is protected from deletion).
 # ---------------------------------------------------------------------------
 from accounts.models import Role
@@ -89,16 +91,29 @@ def delete_refusal(user, task) -> str:
     return ("Only the person who gave out this task, or an admin, can delete it.")
 
 
+ASSIGN_SELF_ONLY = "Your role can only give tasks to yourself."
+
+
 def can_assign_to(assigner, assignee) -> bool:
-    """No hierarchy: anyone may assign a task to any active user, in any
-    direction (employee -> manager -> admin included)."""
-    return bool(assignee and assignee.is_active)
+    """No hierarchy: with tasks.assign, any active user, in any direction
+    (employee -> manager -> admin included); without it, only themselves."""
+    if not (assignee and assignee.is_active):
+        return False
+    return assignee.pk == assigner.pk or has_capability(assigner, "tasks.assign")
+
+
+def assign_refusal(assigner, assignee) -> str:
+    """Why can_assign_to() said no, in words the person can act on."""
+    if not (assignee and assignee.is_active):
+        return "That person is not an active user."
+    return ASSIGN_SELF_ONLY
 
 
 def assignable_users(user):
-    """Active users this person may assign tasks to -- everyone."""
+    """Active users this person may assign tasks to: everyone with tasks.assign, else only themselves."""
     from accounts.models import User
-    return User.objects.filter(is_active=True)
+    qs = User.objects.filter(is_active=True)
+    return qs if has_capability(user, "tasks.assign") else qs.filter(pk=user.pk)
 
 
 def visible_tasks(user, include_deleted=False):

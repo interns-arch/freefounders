@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from accounts.permissions import has_capability
 
-from .models import Group, Idea, Link, Notice, NoticeAudience, NoticeStatus
+from .models import Group, Link, Notice, NoticeAudience, NoticeStatus
 
 
 def is_workspace_admin(user) -> bool:
@@ -75,14 +75,3 @@ def can_edit_link(user, link: Link) -> bool:
     return (is_workspace_admin(user) or has_capability(user, "links.manage")
             or link.added_by_id == user.id)
 
-
-def visible_ideas(user):
-    qs = Idea.objects.select_related("author", "group").prefetch_related("votes")
-    if is_workspace_admin(user):
-        return qs
-    return qs.filter(Q(group__isnull=True) | Q(group__members=user)
-                     | Q(group__owner=user) | Q(author=user)).distinct()
-
-
-def can_review_ideas(user) -> bool:
-    return has_capability(user, "ideas.review")

@@ -445,9 +445,11 @@ class ITTeamRoleTests(TestCase):
         from crm.scoping import can_assign_to
         self.assertTrue(can_assign_to(self.lead, self.member))
 
-    def test_the_team_can_assign_upward_to_the_lead(self):
+    def test_the_team_gives_tasks_only_to_themselves(self):
+        # IT Team has no "Give tasks to others" (tasks.assign): only their own tasks (founder, 2026-10-13)
         from crm.scoping import can_assign_to
-        self.assertTrue(can_assign_to(self.member, self.lead))
+        self.assertFalse(can_assign_to(self.member, self.lead))
+        self.assertTrue(can_assign_to(self.member, self.member))
 
     def test_they_see_only_their_own_work(self):
         from .permissions import capabilities_for

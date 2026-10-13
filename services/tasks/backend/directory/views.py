@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from accounts.models import User
 from accounts.permissions import HasCapability, HasPermission, has_capability
 from crm.models import Task, TaskActivity, TaskTemplate
-from crm.scoping import can_assign_to
+from crm.scoping import assign_refusal, can_assign_to
 from crm.serializers import TaskSerializer, TaskTemplateSerializer
 
 from .models import DirectoryTemplate, Industry
@@ -126,7 +126,7 @@ class DirectoryTemplateViewSet(viewsets.ModelViewSet):
             if not assignee:
                 raise ValidationError({"assigned_to": "Unknown or inactive user."})
             if not can_assign_to(request.user, assignee):
-                raise PermissionDenied("That person is not an active user.")
+                raise PermissionDenied(assign_refusal(request.user, assignee))
 
         group = None
         if request.data.get("group"):

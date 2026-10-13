@@ -46,7 +46,11 @@ class Advance(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     given_on = models.DateField()
     reason = models.CharField(max_length=200, blank=True, default="")
-    recovered = models.BooleanField(default=False)
+    recovered = models.BooleanField(default=False)  # fully recovered (recovered_amount >= amount)
+    # How much finalised payslips have taken back so far; an advance bigger than one month's pay is recovered
+    # over several months, each from what is still left.
+    recovered_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # the payslip that recovered the last of it
     recovered_in = models.ForeignKey("payroll.Payslip", null=True, blank=True,
                                      on_delete=models.SET_NULL, related_name="recovered_advances")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
@@ -55,6 +59,14 @@ class Advance(models.Model):
 
     class Meta:
         ordering = ["-given_on", "-id"]
+
+    @property
+    def balance(self):
+        """Still to be recovered."""
+        from decimal import Decimal
+        if self.recovered:
+            return Decimal("0.00")
+        return max(Decimal(self.amount) - Decimal(self.recovered_amount or 0), Decimal("0.00"))
 
 
 class RunStatus(models.TextChoices):

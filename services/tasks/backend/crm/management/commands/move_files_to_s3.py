@@ -16,7 +16,6 @@ from django.core.management.base import BaseCommand, CommandError
 
 from crm.models import LeadDocument, TaskAttachment
 from hr.models import LeaveRequest
-from webforms.models import SubmissionFile
 from workspace.models import Notice
 
 TARGETS = [
@@ -24,7 +23,6 @@ TARGETS = [
     (LeadDocument, "file"),
     (LeaveRequest, "document"),
     (Notice, "attachment"),
-    (SubmissionFile, "file"),
 ]
 
 

@@ -8,6 +8,7 @@ import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
 import { ProvisionClient } from '../provision/provision.client';
+import { RolesService } from '../roles/roles.service';
 import { DirectoryService } from './directory.service';
 import { FlowsService } from './flows.service';
 
@@ -58,8 +59,8 @@ export const personUpdateSchema = z.object({
 export const setLoginSchema = z.object({
   username: optional(loginIdSchema),
   password: passwordSchema.optional(),
-  /** Default true: they pick their own password at their next sign-in. */
-  mustChangePassword: z.boolean().optional(),
+  // No forced change at the next sign-in any more (founder, docs/security/platform.md R7): an old client's
+  // `mustChangePassword` is simply ignored. They can change it themselves from the account menu.
 });
 /** Delete choices (PLAN.md §19.12): `to` is a Platform person id; the apps find that person's user themselves. */
 const handOverOr = <M extends string>(other: M) =>
@@ -251,7 +252,7 @@ export class PeopleService {
           throw badRequest('A login needs a username, email or employee ID to sign in with', { 'login.username': 'Required' });
         }
         const password = input.login.password ?? (generatedPassword = generatePassword());
-        await tx.insert(logins).values({ personId: p.id, username: input.login.username ?? null, passwordHash: await hashPassword(password), mustChangePassword: true });
+        await tx.insert(logins).values({ personId: p.id, username: input.login.username ?? null, passwordHash: await hashPassword(password), mustChangePassword: false });
       }
       return { person: this.view(p), generatedPassword };
     });
@@ -305,7 +306,7 @@ export class PeopleService {
 
   /**
    * Creates or resets a person's login, with the admin's own password or a generated one (returned once, never stored
-   * readable). They must change it at their next sign-in unless the admin turns that off.
+   * readable). They are not forced to change it (R7); they can from the account menu.
    */
   async setLogin(caller: Caller, id: string, input: z.infer<typeof setLoginSchema>) {
     const p = await this.get(caller, id);
@@ -321,7 +322,7 @@ export class PeopleService {
     }
     let generatedPassword: string | undefined;
     const password = input.password ?? (generatedPassword = generatePassword());
-    const values = { username, passwordHash: await hashPassword(password), mustChangePassword: input.mustChangePassword ?? true, failedLogins: 0, lockedUntil: null, passwordChangedAt: new Date(), updatedAt: new Date() };
+    const values = { username, passwordHash: await hashPassword(password), mustChangePassword: false, failedLogins: 0, lockedUntil: null, passwordChangedAt: new Date(), updatedAt: new Date() };
     if (existing) await this.dbs.db.update(logins).set(values).where(eq(logins.personId, id));
     else await this.dbs.db.insert(logins).values({ personId: id, ...values });
     await this.auth.revokeAll(id);
@@ -440,6 +441,8 @@ export class PeopleService {
     this.assertMemberTarget(caller, p);
     // An app role is a set of powers inside that app (e.g. Tasks' Super Admin): choosing one is giving permissions.
     if (appRole && !caller.permissions?.has('roles.manage')) throw new ForbiddenException('Choosing a role inside an app needs the Manage roles permission');
+    // ...and, like giving roles, only one within the caller's own permissions and level (R1).
+    if (appRole && (APPS as readonly string[]).includes(app)) await this.moduleRef.get(RolesService, { strict: false }).assertCanGiveAppRole(caller, app as AppKey, appRole);
     const [company] = await this.dbs.db.select({ enabledApps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
     if (!company?.enabledApps.includes(app)) throw badRequest(`Your plan does not include ${app}`);
     const [login] = await this.dbs.db.select({ username: logins.username }).from(logins).where(eq(logins.personId, id)).limit(1);

@@ -7,8 +7,6 @@ refused up front with a clear 401 instead of a database error. That includes
 the app's own username/password login: in multi-company mode people sign in
 through the Platform only.
 """
-import re
-
 import jwt
 from django.http import JsonResponse
 
@@ -18,11 +16,6 @@ from . import schemas
 
 # Paths that never touch a company's data.
 NO_COMPANY_PATHS = ("/health", "/api/internal/companies")
-# Anonymous endpoints (the web-form share link): no token, so the link itself names the company
-# (?company=<id> or X-FF-Company). An unknown id is refused like any other; the views behind these
-# paths allow anyone by design and only serve what was published under an unguessable token.
-PUBLIC_PATHS = ("/api/public/",)
-UUID_RE = re.compile(r"^[0-9a-fA-F-]{32,36}$")
 
 
 def _company_id(request) -> str | None:
@@ -42,14 +35,6 @@ def _company_id(request) -> str | None:
     return claims.get("cid") if isinstance(claims.get("cid"), str) else None
 
 
-def _public_company_id(request) -> str | None:
-    """The company a share link names, for the anonymous public endpoints only."""
-    if not request.path.startswith(PUBLIC_PATHS):
-        return None
-    hint = request.GET.get("company") or request.headers.get("X-FF-Company") or ""
-    return hint if UUID_RE.match(hint) else None
-
-
 class CompanyMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -61,7 +46,7 @@ class CompanyMiddleware:
         request.company_id = None
         schema = schemas.NO_COMPANY
         if not request.path.startswith(NO_COMPANY_PATHS):
-            company_id = _company_id(request) or _public_company_id(request)
+            company_id = _company_id(request)
             found = schemas.schema_for(company_id) if company_id else None
             if found:
                 request.company_id, schema = company_id, found

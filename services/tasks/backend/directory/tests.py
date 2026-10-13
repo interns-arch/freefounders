@@ -188,14 +188,19 @@ class UseTemplateTests(TestCase):
 
     def test_create_tasks_hierarchy_and_notifies(self):
         from notifications.models import Notification
-        # No hierarchy: anyone may assign to anyone
+        # No hierarchy for who holds tasks.assign; without it, only themselves (founder, 2026-10-13)
         self.as_(self.rahul)
         res = self.client.post(f"/api/directory/templates/{self.tpl.id}/create_tasks/",
                                {"assigned_to": self.manager.id}, format="json")
-        self.assertEqual(res.status_code, 201)          # employee -> manager: yes
+        self.assertEqual(res.status_code, 403)          # employee -> manager: no
+        self.assertEqual(str(res.data["detail"]), "Your role can only give tasks to yourself.")
         res = self.client.post(f"/api/directory/templates/{self.tpl.id}/create_tasks/",
                                {"assigned_to": self.amit.id}, format="json")
-        self.assertEqual(res.status_code, 201)          # employee -> employee: yes
+        self.assertEqual(res.status_code, 403)          # employee -> employee: no
+        self.as_(self.manager)
+        res = self.client.post(f"/api/directory/templates/{self.tpl.id}/create_tasks/",
+                               {"assigned_to": self.amit.id}, format="json")
+        self.assertEqual(res.status_code, 201)          # manager -> employee: yes
         self.assertEqual(Task.objects.filter(assigned_to=self.amit).count(), 2)
         self.assertTrue(Notification.objects.filter(user=self.amit, type="task_assigned").exists())
 

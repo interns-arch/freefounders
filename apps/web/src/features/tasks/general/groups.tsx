@@ -1,7 +1,7 @@
 /** /tasks/groups — team workspaces (old pages/Groups.jsx). ?group=<id> opens one group. */
 import { errorMessage, useAccess } from '@freefounders/core';
 import { type Group, useAddGroupMembers, useArchiveGroup, useGroupDashboard, useGroups, useRemoveGroupMember, useSaveGroup, useSetTaskStatus, useTaskList, useTaskRoleOptions, useTeamPeople } from '@freefounders/core/tasks';
-import { ArrowLeft, ArrowRight, Boxes, Lightbulb, Link2, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Boxes, Link2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useConfirm } from '@/components/common/confirm';
@@ -162,7 +162,7 @@ function GroupForm({ initial, onClose }: { initial?: Group; onClose: () => void 
 
 // ─── one group ───────────────────────────────────────────────────────────
 
-type GroupTab = 'dashboard' | 'tasks' | 'ideas' | 'links' | 'members';
+type GroupTab = 'dashboard' | 'tasks' | 'links' | 'members';
 
 function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
   const access = useAccess();
@@ -170,11 +170,10 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
   const [editing, setEditing] = useState(false);
   const archive = useArchiveGroup();
   const confirm = useConfirm();
-  // Ideas and Links are modules a company can switch off (PLAN.md §16.2).
+  // Links is a module a company can switch off (PLAN.md §16.2).
   const tabs: Array<[GroupTab, string]> = [
     ['dashboard', 'Dashboard'],
     ['tasks', 'Tasks'],
-    ...(access.tasks.module('ideas') ? ([['ideas', 'Ideas']] as Array<[GroupTab, string]>) : []),
     ...(access.tasks.module('links') ? ([['links', 'Links']] as Array<[GroupTab, string]>) : []),
     ['members', 'Members'],
   ];
@@ -222,9 +221,6 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
       <Segmented label="Group sections" value={tab} onChange={setTab} options={tabs} />
       {tab === 'dashboard' && <GroupDashboardView group={group} />}
       {tab === 'tasks' && <GroupTasks group={group} />}
-      {tab === 'ideas' && (
-        <ClassicCard icon={Lightbulb} href="/tasks/ideas?scope=group" title="Ideas" text={`Ideas for "${group.name}" are on the Idea board.`} />
-      )}
       {tab === 'links' && <ClassicCard icon={Link2} href="/tasks/links" title="Links" text={`Links scoped to "${group.name}" are on the Links page.`} />}
       {tab === 'members' && <GroupMembers group={group} />}
       <GroupDialog open={editing} initial={group} onClose={() => setEditing(false)} />

@@ -7,7 +7,7 @@ from config.media import file_url
 from accounts.models import User
 from crm.serializers import UserBriefSerializer
 
-from .models import Group, Idea, IdeaComment, Link, LinkCollection, Notice
+from .models import Group, Link, LinkCollection, Notice
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -127,29 +127,3 @@ class LinkSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Only http/https URLs are allowed.")
         return value
 
-
-class IdeaCommentSerializer(serializers.ModelSerializer):
-    author = UserBriefSerializer(read_only=True)
-
-    class Meta:
-        model = IdeaComment
-        fields = ["id", "author", "body", "created_at"]
-
-
-class IdeaSerializer(serializers.ModelSerializer):
-    author_detail = UserBriefSerializer(source="author", read_only=True)
-    group_name = serializers.CharField(source="group.name", read_only=True, default=None)
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    vote_count = serializers.IntegerField(source="votes.count", read_only=True)
-    comment_count = serializers.IntegerField(source="comments.count", read_only=True)
-    voted = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Idea
-        fields = ["id", "title", "description", "category", "author_detail",
-                  "group", "group_name", "status", "status_display", "priority",
-                  "vote_count", "comment_count", "voted", "created_at", "updated_at"]
-
-    def get_voted(self, obj):
-        request = self.context.get("request")
-        return bool(request and obj.votes.filter(pk=request.user.pk).exists())

@@ -10,7 +10,7 @@ import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, people, personApps, personRoles, type RoleDuty, roleGrants, roles } from '../db/schema';
 import { type AppCatalogue, internalUrl, ProvisionClient, type UpgradeRule } from '../provision/provision.client';
-import { PLATFORM_APP, PLATFORM_CATALOGUE } from './platform-permissions';
+import { heldAccess, PLATFORM_APP, PLATFORM_CATALOGUE } from './platform-permissions';
 
 /**
  * The two roles every company starts with. Their codes are new, so they never collide with an app's own roles.
@@ -81,6 +81,15 @@ export type RoleInput = z.infer<typeof roleInputSchema>;
 type Grant = { app: GrantApp; permission: string; scope: string };
 type Catalogue = AppCatalogue & { app: GrantApp };
 const CATALOGUE_TTL_MS = 10 * 60_000;
+
+/** What a person with Manage roles who is not the owner may give (docs/security/platform.md R1). */
+type Powers = { level: number; held: Map<string, Set<string>> };
+type RoleRow = typeof roles.$inferSelect;
+const LEVEL_NAMES: Record<number, string> = { 1: 'Member', 2: 'Manager', 3: 'Admin' };
+const APP_NAMES: Record<string, string> = { tasks: 'Tasks', assets: 'Assets', [PLATFORM_APP]: 'Admin' };
+const levelRole = (level: number) => `${level >= 3 ? 'an' : 'a'} ${LEVEL_NAMES[level] ?? level}-level role`;
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const listed = (items: string[]) => (items.length > 5 ? `${items.slice(0, 5).join('; ')} and ${items.length - 5} more` : items.join('; '));
 
 const ruleMatches = (rule: UpgradeRule, had: Map<string, string>, level: number) => {
   if (rule.everyone) return true;
@@ -305,8 +314,11 @@ export class RolesService {
   }
 
   async create(caller: Caller, input: RoleInput) {
+    const powers = await this.powersOf(caller);
+    if (powers && input.level >= 3) throw new ForbiddenException('Only the owner can create or edit Admin-level roles');
     await this.assertNameFree(caller.companyId, input.name);
     const grants = await this.validGrants(caller.companyId, input.grants as Grant[]);
+    if (powers) this.assertCanBuild(powers, await this.catalogue(caller.companyId), input.level, grants);
     const id = await this.dbs.db.transaction(async (tx) => {
       const [role] = await tx
         .insert(roles)
@@ -325,6 +337,13 @@ export class RolesService {
     if (role.archived) throw badRequest('This role is archived');
     if (input.name) await this.assertNameFree(caller.companyId, input.name, id);
     const grants = input.grants ? await this.validGrants(caller.companyId, input.grants as Grant[]) : null;
+    const powers = await this.powersOf(caller);
+    if (powers) {
+      // Both the role as it is and as it will be must be within the caller's own powers.
+      await this.assertCanTouch(caller, powers, role, 'edit');
+      const cat = await this.catalogue(caller.companyId);
+      this.assertCanBuild(powers, cat, input.level ?? role.level, grants ?? (await this.grantsOf([role.id])).get(role.id) ?? []);
+    }
     await this.dbs.db.transaction(async (tx) => {
       await tx
         .update(roles)
@@ -350,6 +369,7 @@ export class RolesService {
 
   async duplicate(caller: Caller, id: string) {
     const role = await this.getRole(caller.companyId, id);
+    if (role.system && caller.role !== 'owner') throw new ForbiddenException(`Only the owner can duplicate ${role.name}`);
     const grants = await this.dbs.db.select().from(roleGrants).where(eq(roleGrants.roleId, id));
     let name = `${role.name} (copy)`;
     for (let n = 2; ; n++) {
@@ -371,6 +391,8 @@ export class RolesService {
   async archive(caller: Caller, id: string) {
     const role = await this.getRole(caller.companyId, id);
     if (role.system) throw new ForbiddenException(`${role.name} is locked: the company always keeps it`);
+    const powers = await this.powersOf(caller);
+    if (powers) await this.assertCanTouch(caller, powers, role, 'archive');
     const holders = await this.holders(id);
     await this.dbs.db.transaction(async (tx) => {
       await tx.update(roles).set({ archived: true, updatedAt: new Date() }).where(eq(roles.id, id));
@@ -379,6 +401,104 @@ export class RolesService {
     for (const personId of holders) await this.applyApps(caller.companyId, personId);
     const sync = await this.push(caller.companyId);
     return { ok: true, sync };
+  }
+
+  // ─── who may give what (docs/security/platform.md R1) ───────────────────
+
+  /** Null for the owner (everything); otherwise the permissions (with their scopes) and the level the caller holds. */
+  private async powersOf(caller: Caller): Promise<Powers | null> {
+    if (caller.role === 'owner') return null;
+    const mine = await heldAccess(this.dbs, caller.personId, caller.role);
+    const held = new Map<string, Set<string>>();
+    for (const g of mine.grants) {
+      const k = `${g.app}:${g.permission}`;
+      held.set(k, (held.get(k) ?? new Set()).add(g.scope));
+    }
+    return { level: mine.level, held };
+  }
+
+  private async grantsOf(roleIds: string[]): Promise<Map<string, Grant[]>> {
+    const out = new Map<string, Grant[]>();
+    if (!roleIds.length) return out;
+    for (const g of await this.dbs.db.select().from(roleGrants).where(inArray(roleGrants.roleId, roleIds))) {
+      out.set(g.roleId, [...(out.get(g.roleId) ?? []), { app: g.app as GrantApp, permission: g.permission, scope: g.scope }]);
+    }
+    return out;
+  }
+
+  /** The grants the caller cannot give: not held, held at a narrower scope, or Owner-only. Readable, for the 403. */
+  private lacking(powers: Powers, cat: Catalogue[], grants: Grant[]): string[] {
+    const out: string[] = [];
+    for (const g of grants) {
+      const p = cat.find((c) => c.app === g.app)?.permissions.find((x) => x.key === g.permission);
+      const label = `${APP_NAMES[g.app] ?? g.app} · ${p?.label ?? g.permission}`;
+      if (p?.superAdminOnly) {
+        out.push(`${label} (Owner only)`);
+        continue;
+      }
+      const mine = powers.held.get(`${g.app}:${g.permission}`);
+      if (!mine) {
+        out.push(label);
+        continue;
+      }
+      if (p?.scopes && g.scope) {
+        const best = Math.max(...[...mine].map((s) => p.scopes!.indexOf(s)));
+        if (p.scopes.indexOf(g.scope) > best) out.push(`${label} at ${cap(g.scope)} (you have ${best >= 0 ? cap(p.scopes[best]) : 'none'})`);
+      }
+    }
+    return out;
+  }
+
+  /** A role the caller makes or saves: below Admin level, at most their own level, and only permissions they have. */
+  private assertCanBuild(powers: Powers, cat: Catalogue[], level: number, grants: Grant[]) {
+    if (level >= 3) throw new ForbiddenException('Only the owner can create or edit Admin-level roles');
+    if (level > powers.level) {
+      throw new ForbiddenException(`You can give at most your own level (${LEVEL_NAMES[powers.level]}), not ${LEVEL_NAMES[level] ?? level}`);
+    }
+    const missing = this.lacking(powers, cat, grants);
+    if (missing.length) throw new ForbiddenException(`You can only give permissions you have yourself. Not allowed: ${listed(missing)}`);
+  }
+
+  /** A role the caller edits or archives must already be within their powers (no taking a bigger role apart). */
+  private async assertCanTouch(caller: Caller, powers: Powers, role: RoleRow, verb: 'edit' | 'archive') {
+    if (role.level >= 3) throw new ForbiddenException(`Only the owner can ${verb} Admin-level roles`);
+    const missing = this.lacking(powers, await this.catalogue(caller.companyId), (await this.grantsOf([role.id])).get(role.id) ?? []);
+    if (role.level > powers.level || missing.length) {
+      const why = role.level > powers.level ? `is ${levelRole(role.level)} (yours: ${LEVEL_NAMES[powers.level]})` : `has permissions you do not have yourself (${listed(missing)})`;
+      throw new ForbiddenException(`Only the owner can ${verb} "${role.name}": it ${why}`);
+    }
+  }
+
+  /** Giving roles to a person (themselves included): each one within the caller's own permissions and level. */
+  private async assertCanGive(caller: Caller, given: RoleRow[]) {
+    if (!given.length) return;
+    const powers = await this.powersOf(caller);
+    if (!powers) return;
+    const cat = await this.catalogue(caller.companyId);
+    const grants = await this.grantsOf(given.map((r) => r.id));
+    for (const role of given) {
+      if (role.level > powers.level) {
+        throw new ForbiddenException(`You cannot give "${role.name}": it is ${levelRole(role.level)} and your own level is ${LEVEL_NAMES[powers.level]}`);
+      }
+      const missing = this.lacking(powers, cat, grants.get(role.id) ?? []);
+      if (missing.length) throw new ForbiddenException(`You cannot give "${role.name}": it has permissions you do not have yourself (${listed(missing)})`);
+    }
+  }
+
+  /**
+   * Choosing a role inside an app when giving the app (PUT /people/:id/apps/:app) is giving its permissions: the same
+   * rule, through the role builder's copy of that app role. An app role the role builder does not know: the owner only.
+   */
+  async assertCanGiveAppRole(caller: Caller, app: AppKey, appRole: string) {
+    if (caller.role === 'owner') return;
+    const code = app === 'tasks' ? appRole : `${app}:${appRole}`;
+    const [role] = await this.dbs.db
+      .select()
+      .from(roles)
+      .where(and(eq(roles.companyId, caller.companyId), eq(roles.code, code), eq(roles.archived, false)))
+      .limit(1);
+    if (!role) throw new ForbiddenException(`Only the owner can choose "${appRole}" inside ${APP_NAMES[app] ?? app}: it is not a role in the role builder`);
+    await this.assertCanGive(caller, [role]);
   }
 
   private async holders(roleId: string): Promise<string[]> {
@@ -416,6 +536,8 @@ export class RolesService {
     if (superRole && current.includes(superRole.id) !== wanted.includes(superRole.id) && caller.role !== 'owner') {
       throw new ForbiddenException('Only an owner can give or take the Super Admin role');
     }
+    // Only what the caller has themselves, at no higher level (R1): nobody but the owner raises anyone's access, their own included.
+    await this.assertCanGive(caller, found.filter((r) => !current.includes(r.id)));
     await db.transaction(async (tx) => {
       await tx.delete(personRoles).where(eq(personRoles.personId, personId));
       if (wanted.length) await tx.insert(personRoles).values(wanted.map((roleId) => ({ personId, roleId })));

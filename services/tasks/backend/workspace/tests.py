@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 from accounts.models import Role, User
 from crm.models import Task
 
-from .models import Group, Idea, Link, LinkCollection, Notice
+from .models import Group, Link, LinkCollection, Notice
 
 
 def make(username, role, department="sales"):
@@ -214,59 +214,6 @@ class LinkTests(Base):
         self.assertEqual(len(self.client.get("/api/links/?favorites=true").data), 0)
         self.as_(self.rahul)
         self.assertEqual(self.client.patch(f"/api/links/{link.id}/", {"title": "B"}).status_code, 200)
-
-
-class IdeaTests(Base):
-    def test_scopes_my_shared_group(self):
-        g = Group.objects.create(name="G", owner=self.manager)
-        g.members.add(self.rahul)
-        Idea.objects.create(title="Shared idea", author=self.amit)
-        Idea.objects.create(title="Group idea", author=self.manager, group=g)
-        Idea.objects.create(title="My idea", author=self.rahul)
-        self.as_(self.rahul)
-        my = [i["title"] for i in self.client.get("/api/ideas/?scope=my").data["results"]]
-        self.assertEqual(my, ["My idea"])
-        shared = sorted(i["title"] for i in self.client.get("/api/ideas/?scope=shared").data["results"])
-        self.assertEqual(shared, ["My idea", "Shared idea"])
-        grp = [i["title"] for i in self.client.get("/api/ideas/?scope=group").data["results"]]
-        self.assertEqual(grp, ["Group idea"])
-        # amit is not in the group -> group idea invisible
-        self.as_(self.amit)
-        grp = [i["title"] for i in self.client.get("/api/ideas/?scope=group").data["results"]]
-        self.assertEqual(grp, [])
-
-    def test_group_idea_requires_membership(self):
-        g = Group.objects.create(name="G", owner=self.manager)
-        self.as_(self.rahul)
-        res = self.client.post("/api/ideas/", {"title": "X", "group": g.id})
-        self.assertEqual(res.status_code, 403)
-
-    def test_status_change_needs_review_capability(self):
-        idea = Idea.objects.create(title="I", author=self.rahul)
-        self.as_(self.rahul)
-        self.assertEqual(self.client.patch(f"/api/ideas/{idea.id}/", {"status": "approved"}).status_code, 403)
-        self.assertEqual(self.client.patch(f"/api/ideas/{idea.id}/", {"title": "I2"}).status_code, 200)
-        self.as_(self.manager)
-        res = self.client.patch(f"/api/ideas/{idea.id}/", {"status": "approved"})
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["status"], "approved")
-
-    def test_cannot_edit_others_idea(self):
-        idea = Idea.objects.create(title="I", author=self.rahul)
-        self.as_(self.amit)
-        self.assertEqual(self.client.patch(f"/api/ideas/{idea.id}/", {"title": "hack"}).status_code, 403)
-
-    def test_comments_and_votes(self):
-        idea = Idea.objects.create(title="I", author=self.rahul)
-        self.as_(self.amit)
-        res = self.client.post(f"/api/ideas/{idea.id}/comments/", {"body": "Nice one"})
-        self.assertEqual(res.status_code, 201)
-        self.assertEqual(len(self.client.get(f"/api/ideas/{idea.id}/comments/").data), 1)
-        self.assertEqual(self.client.post(f"/api/ideas/{idea.id}/comments/", {"body": "  "}).status_code, 400)
-        res = self.client.post(f"/api/ideas/{idea.id}/vote/")
-        self.assertEqual(res.data, {"voted": True, "vote_count": 1})
-        res = self.client.post(f"/api/ideas/{idea.id}/vote/")
-        self.assertEqual(res.data, {"voted": False, "vote_count": 0})
 
 
 class GroupMemberPickingTests(Base):

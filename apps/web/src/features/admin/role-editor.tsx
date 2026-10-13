@@ -11,6 +11,7 @@ import {
   LEVEL_HINTS,
   LEVEL_LABELS,
   type Role,
+  type RoleLimits,
   type Scope,
   SCOPE_LABELS,
   useSaveRole,
@@ -38,9 +39,25 @@ const matches = (p: CataloguePermission, term: string) =>
  * New role / Edit <role> / view the locked Owner role (PLAN.md §15, §19.19): name, level (with what it really does),
  * every permission of every app grouped like the menus (search, select all / clear per app and per group, a line
  * under each permission, a scope next to the scoped ones), and duties. A new role starts blank or as a copy of another.
+ * Someone who is not the owner can tick only what they have themselves, at no wider scope or higher level (R1): the
+ * rest is shown disabled with the reason. `lockedReason`: a role beyond them, shown read-only.
  */
-export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Role | null; catalogue: AppCatalogue[]; roles?: Role[]; onClose: () => void }) {
-  const locked = !!role?.system;
+export function RoleEditor({
+  role,
+  catalogue,
+  roles = [],
+  limits,
+  lockedReason,
+  onClose,
+}: {
+  role: Role | null;
+  catalogue: AppCatalogue[];
+  roles?: Role[];
+  limits: RoleLimits;
+  lockedReason?: string | null;
+  onClose: () => void;
+}) {
+  const locked = !!role?.system || !!lockedReason;
   const [name, setName] = useState(role?.name ?? '');
   const [nameError, setNameError] = useState('');
   const [description, setDescription] = useState(role?.description ?? '');
@@ -48,6 +65,7 @@ export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Rol
   const [grants, setGrants] = useState<Map<string, Grant>>(() => new Map((role?.grants ?? []).map((g) => [key(g), g])));
   const [duties, setDuties] = useState<Duty[]>(() => role?.duties ?? []);
   const [copiedFrom, setCopiedFrom] = useState('');
+  const [copyNote, setCopyNote] = useState('');
   const [search, setSearch] = useState('');
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState('');
@@ -65,24 +83,25 @@ export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Rol
     [catalogue],
   );
   const known = useMemo(() => new Set(catalogue.flatMap((c) => c.permissions.map((p) => key({ app: c.app, permission: p.key })))), [catalogue]);
+  const perm = (g: Pick<Grant, 'app' | 'permission'>) => catalogue.find((c) => c.app === g.app)?.permissions.find((p) => p.key === g.permission);
 
   const toggle = (app: GrantApp, p: CataloguePermission) =>
     setGrants((prev) => {
       const next = new Map(prev);
       const k = key({ app, permission: p.key });
       if (next.has(k)) next.delete(k);
-      // A newly ticked permission starts at the narrowest scope; widen it on purpose.
-      else next.set(k, { app, permission: p.key, scope: p.scopes ? p.scopes[0] : '' });
+      // A newly ticked permission starts at the narrowest scope; widen it on purpose. Only what I have myself (R1).
+      else if (!limits.permissionProblem(app, p)) next.set(k, { app, permission: p.key, scope: p.scopes ? p.scopes[0] : '' });
       return next;
     });
-  /** Ticks (or clears) every listed permission; ones already ticked keep their scope. */
+  /** Ticks (or clears) every listed permission I may give; ones already ticked keep their scope. */
   const setMany = (app: GrantApp, list: CataloguePermission[], on: boolean) =>
     setGrants((prev) => {
       const next = new Map(prev);
       for (const p of list) {
         const k = key({ app, permission: p.key });
         if (!on) next.delete(k);
-        else if (!next.has(k)) next.set(k, { app, permission: p.key, scope: p.scopes ? p.scopes[0] : '' });
+        else if (!next.has(k) && !limits.permissionProblem(app, p)) next.set(k, { app, permission: p.key, scope: p.scopes ? p.scopes[0] : '' });
       }
       return next;
     });
@@ -98,14 +117,31 @@ export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Rol
 
   const copyFrom = (id: string) => {
     setCopiedFrom(id);
+    setCopyNote('');
     const from = roles.find((r) => r.id === id);
     if (!from) {
       setGrants(new Map());
       setLevel(1);
       return;
     }
-    setGrants(new Map(from.grants.map((g) => [key(g), g])));
-    setLevel(from.system ? 3 : from.level);
+    // Only what I may give myself (R1): permissions I lack are left out, scopes narrowed to mine, level capped.
+    const kept = new Map<string, Grant>();
+    let left = 0;
+    for (const g of from.grants) {
+      const p = perm(g);
+      if (!p || limits.permissionProblem(g.app, p)) {
+        if (p) left++;
+        continue;
+      }
+      const scope = !p.scopes || limits.scopeAllowed(g.app, p, g.scope) ? g.scope : ([...p.scopes].reverse().find((sc) => limits.scopeAllowed(g.app, p, sc)) ?? p.scopes[0]);
+      if (scope !== g.scope) left++;
+      kept.set(key(g), { ...g, scope });
+    }
+    const wanted = from.system ? 3 : from.level;
+    const allowed = [3, 2, 1].find((l) => l <= wanted && limits.levelAllowed(l, 'edit')) ?? 1;
+    setGrants(kept);
+    setLevel(allowed);
+    if (left || allowed !== wanted) setCopyNote(`Left out or narrowed what you don’t have yourself${allowed !== wanted ? `; level set to ${LEVEL_LABELS[allowed]}` : ''}.`);
   };
 
   const submit = (e: FormEvent) => {
@@ -132,7 +168,7 @@ export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Rol
   };
 
   const total = grants.size;
-  const copyable = roles.filter((r) => !r.archived);
+  const copyable = roles.filter((r) => !r.archived && (limits.unlimited || !r.system));
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
@@ -141,14 +177,18 @@ export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Rol
           <SheetHeader>
             <SheetTitle>{role ? (locked ? role.name : `Edit ${role.name}`) : 'New role'}</SheetTitle>
             <SheetDescription>
-              {locked
-                ? `${role?.description ?? ''} Duplicate it to make an editable copy.`
-                : 'Tick what this role may do, and how far each permission reaches. Nothing is ticked until you choose.'}
+              {lockedReason
+                ? `${lockedReason}. You can look but not change it.`
+                : locked
+                  ? `${role?.description ?? ''} ${limits.unlimited ? 'Duplicate it to make an editable copy.' : 'Only the owner can copy it.'}`
+                  : limits.unlimited
+                    ? 'Tick what this role may do, and how far each permission reaches. Nothing is ticked until you choose.'
+                    : 'Tick what this role may do, and how far each permission reaches. You can give only what you have yourself.'}
             </SheetDescription>
           </SheetHeader>
           <SheetBody className="space-y-6">
             {!role && copyable.length > 0 && (
-              <Field label="Start from" htmlFor="role-copy" hint="Copies that role's permissions and level; change anything before saving.">
+              <Field label="Start from" htmlFor="role-copy" hint={copyNote || "Copies that role's permissions and level; change anything before saving."}>
                 <NativeSelect id="role-copy" value={copiedFrom} onChange={(e) => copyFrom(e.target.value)}>
                   <option value="">Blank: nothing ticked</option>
                   {copyable.map((r) => (
@@ -176,11 +216,15 @@ export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Rol
               </Field>
               <Field label="Level" htmlFor="role-level" hint={LEVEL_HINTS[level]}>
                 <NativeSelect id="role-level" value={level} onChange={(e) => setLevel(Number(e.target.value))} disabled={locked}>
-                  {[1, 2, 3].map((l) => (
-                    <option key={l} value={l}>
-                      {LEVEL_LABELS[l]}
-                    </option>
-                  ))}
+                  {[1, 2, 3].map((l) => {
+                    const off = l !== level && !limits.levelAllowed(l, 'edit');
+                    return (
+                      <option key={l} value={l} disabled={off}>
+                        {LEVEL_LABELS[l]}
+                        {off ? (l >= 3 ? ' (owner only)' : ' (above your level)') : ''}
+                      </option>
+                    );
+                  })}
                 </NativeSelect>
               </Field>
               <Field label="Description (optional)" htmlFor="role-description" className="sm:col-span-2">
@@ -272,6 +316,7 @@ export function RoleEditor({ role, catalogue, roles = [], onClose }: { role: Rol
                                       p={p}
                                       grant={grants.get(key({ app: app.app, permission: p.key }))}
                                       locked={locked}
+                                      limits={limits}
                                       onToggle={() => toggle(app.app, p)}
                                       onScope={(s) => setScope(app.app, p.key, s)}
                                     />
@@ -324,6 +369,7 @@ function PermissionRow({
   p,
   grant,
   locked,
+  limits,
   onToggle,
   onScope,
 }: {
@@ -332,19 +378,29 @@ function PermissionRow({
   p: CataloguePermission;
   grant: Grant | undefined;
   locked: boolean;
+  limits: RoleLimits;
   onToggle: () => void;
   onScope: (s: Scope) => void;
 }) {
   const id = `perm-${app}-${p.key}`;
+  // Not mine to give (R1): shown, but cannot be ticked (an already ticked one can still be cleared).
+  const problem = locked ? null : limits.permissionProblem(app, p);
+  const off = locked || (!grant && !!problem);
+  const describedBy = [p.description ? `${id}-d` : '', problem ? `${id}-why` : ''].filter(Boolean).join(' ') || undefined;
   return (
     <li className={cn('-mx-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md px-2 py-1.5 transition-colors', grant && 'bg-accent/40')}>
       <span className="flex min-h-11 min-w-0 flex-1 items-start gap-2.5 sm:min-h-0">
-        <Checkbox id={id} className="mt-0.5" checked={!!grant} onCheckedChange={onToggle} disabled={locked} aria-label={`${appName}: ${p.label}`} aria-describedby={p.description ? `${id}-d` : undefined} />
-        <label htmlFor={id} className="min-w-0 cursor-pointer">
+        <Checkbox id={id} className="mt-0.5" checked={!!grant} onCheckedChange={onToggle} disabled={off} aria-label={`${appName}: ${p.label}`} aria-describedby={describedBy} />
+        <label htmlFor={id} className={cn('min-w-0', off && !locked ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer')}>
           <span className={cn('block text-sm', grant && 'font-medium')}>{p.label}</span>
           {p.description && (
             <span id={`${id}-d`} className="block text-xs text-muted-foreground">
               {p.description}
+            </span>
+          )}
+          {problem && (
+            <span id={`${id}-why`} className="block text-xs font-medium text-warning">
+              {problem}
             </span>
           )}
         </label>
@@ -357,7 +413,8 @@ function PermissionRow({
               key={s}
               role="radio"
               aria-checked={grant.scope === s}
-              disabled={locked}
+              disabled={locked || (grant.scope !== s && !limits.scopeAllowed(app, p, s))}
+              title={!locked && grant.scope !== s && !limits.scopeAllowed(app, p, s) ? 'Wider than your own scope' : undefined}
               onClick={() => onScope(s)}
               className={cn(
                 'min-h-10 cursor-pointer rounded-full px-3 text-xs font-medium text-muted-foreground transition outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed sm:min-h-0 sm:px-2.5 sm:py-0.5',

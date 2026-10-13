@@ -1,4 +1,4 @@
-import { session, useClaims, usePlatformMe } from '@freefounders/core';
+import { session, useClaims } from '@freefounders/core';
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { PageLoader } from '@/components/common/page';
@@ -6,7 +6,8 @@ import { persistedCacheReady } from './query-persist';
 
 /**
  * Every page behind sign-in. A fresh page has no token in memory yet: renew it from the refresh cookie first.
- * Signed out → /login?next=<here>. Must change the password (admin-set) → /account first.
+ * Signed out → /login?next=<here>. Nobody is sent to change their password first (docs/security/platform.md R7):
+ * they can change it any time from the account menu.
  */
 export function RequireSession() {
   const claims = useClaims();
@@ -20,14 +21,10 @@ export function RequireSession() {
       .then((ok) => (ok ? persistedCacheReady() : undefined))
       .finally(() => setChecked(true));
   }, []);
-  const me = usePlatformMe();
 
   if (!checked) return <PageLoader />;
   const here = loc.pathname + loc.search;
   if (!claims) return <Navigate to={`/login${here !== '/' ? `?next=${encodeURIComponent(here)}` : ''}`} replace />;
-  if (me.data?.mustChangePassword && loc.pathname !== '/account') {
-    return <Navigate to={`/account?first=1&next=${encodeURIComponent(here)}`} replace />;
-  }
   return <Outlet />;
 }
 

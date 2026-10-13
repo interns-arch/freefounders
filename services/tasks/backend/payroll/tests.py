@@ -195,6 +195,135 @@ class AdvanceTests(Base):
         self.assertEqual(run2.payslips.get(user=self.rahul).advance_deduction, Decimal("0.00"))
 
 
+class PartialRecoveryTests(Base):
+    """An advance bigger than one month's pay is recovered over several months, each from what is left
+    (it used to be deducted in full again every month)."""
+
+    def setUp(self):
+        super().setUp()
+        for month in (MONTH, 10):
+            for day in range(1, 32):
+                try:
+                    d = date(YEAR, month, day)
+                except ValueError:
+                    break
+                if d.weekday() != 6:
+                    Attendance.objects.create(user=self.rahul, date=d, status="present")
+        self.adv = Advance.objects.create(user=self.rahul, amount=Decimal("40000"), given_on=date(YEAR, MONTH, 5))
+
+    def run_for(self, month):
+        run = PayrollRun.objects.create(year=YEAR, month=month)
+        services.generate_run(run, User.objects.filter(is_active=True))
+        return run
+
+    def test_partially_recovered_advance_is_deducted_only_for_the_balance(self):
+        sep = self.run_for(MONTH)
+        self.assertEqual(sep.payslips.get(user=self.rahul).advance_deduction, Decimal("26000.00"))
+        result = services.finalise(sep)
+        self.assertEqual((result["advances_settled"], result["advances_part_recovered"]), (0, 1))
+        self.adv.refresh_from_db()
+        self.assertEqual(self.adv.recovered_amount, Decimal("26000.00"))
+        self.assertFalse(self.adv.recovered)
+        self.assertEqual(self.adv.balance, Decimal("14000.00"))
+
+        octo = self.run_for(10)
+        slip = octo.payslips.get(user=self.rahul)
+        self.assertEqual(slip.advance_deduction, Decimal("14000.00"))      # the balance, not 40000 again
+        self.assertEqual(slip.breakdown["advance_outstanding"], 14000.0)
+        services.finalise(octo)
+        self.adv.refresh_from_db()
+        self.assertTrue(self.adv.recovered)
+        self.assertEqual(self.adv.recovered_amount, Decimal("40000.00"))
+        self.assertEqual(self.adv.recovered_in, slip)
+
+        nov = self.run_for(11)
+        self.assertEqual(nov.payslips.get(user=self.rahul).advance_deduction, Decimal("0.00"))
+
+    def test_recovery_goes_oldest_first_across_several_advances(self):
+        newer = Advance.objects.create(user=self.rahul, amount=Decimal("1000"), given_on=date(YEAR, MONTH, 20))
+        self.adv.amount = Decimal("25500")
+        self.adv.save()
+        services.finalise(self.run_for(MONTH))            # 26000 recovered: 25500 + 500 of the newer one
+        self.adv.refresh_from_db()
+        newer.refresh_from_db()
+        self.assertTrue(self.adv.recovered)
+        self.assertEqual((newer.recovered, newer.recovered_amount), (False, Decimal("500.00")))
+        self.assertEqual(self.run_for(10).payslips.get(user=self.rahul).advance_deduction, Decimal("500.00"))
+
+    def test_regenerating_a_draft_and_finalising_twice_never_count_twice(self):
+        sep = self.run_for(MONTH)
+        services.generate_run(sep, User.objects.filter(is_active=True))   # recalculated draft: nothing recorded
+        self.adv.refresh_from_db()
+        self.assertEqual(self.adv.recovered_amount, Decimal("0"))
+        services.finalise(sep)
+        with self.assertRaises(ValueError):
+            services.finalise(sep)
+        self.adv.refresh_from_db()
+        self.assertEqual(self.adv.recovered_amount, Decimal("26000.00"))
+
+    def test_a_stale_draft_cannot_be_finalised(self):
+        """October drafted before September was finalised: its deduction no longer matches the balance."""
+        octo = self.run_for(10)
+        services.finalise(self.run_for(MONTH))
+        with self.assertRaises(ValueError):
+            services.finalise(octo)
+        self.adv.refresh_from_db()
+        self.assertEqual(self.adv.recovered_amount, Decimal("26000.00"))  # the failed finalise changed nothing
+        services.generate_run(octo, User.objects.filter(is_active=True))
+        services.finalise(octo)
+        self.adv.refresh_from_db()
+        self.assertTrue(self.adv.recovered)
+
+    def test_api_shows_recovered_amount_and_balance_and_protects_the_recovered_part(self):
+        services.finalise(self.run_for(MONTH))
+        self.as_(self.hr)
+        row = self.client.get("/api/advances/").data[0]
+        self.assertEqual((row["recovered_amount"], row["balance"]), ("26000.00", "14000.00"))
+        self.assertEqual(self.client.patch(f"/api/advances/{self.adv.id}/", {"amount": "20000"}).status_code, 400)
+        self.assertEqual(self.client.patch(f"/api/advances/{self.adv.id}/", {"user": self.manager.id}).status_code, 400)
+        self.assertEqual(self.client.delete(f"/api/advances/{self.adv.id}/").status_code, 400)
+        self.assertEqual(self.client.patch(f"/api/advances/{self.adv.id}/", {"amount": "30000"}).status_code, 200)
+
+
+class OwnPayRecordsTests(Base):
+    """Nobody sets their own salary or advances, except the Owner (founder, 2026-10-13)."""
+    MESSAGE = "You cannot change your own attendance/salary — ask another HR person or the Owner."
+
+    def setUp(self):
+        super().setUp()
+        self.owner = make("olga", Role.SUPER_ADMIN, "management")
+
+    def test_hr_cannot_create_or_change_their_own_salary_or_advances(self):
+        self.as_(self.hr)
+        res = self.client.post("/api/salary-structures/", {"user": self.hr.id, "monthly_gross": "99000",
+                                                          "effective_from": "2026-01-01"})
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(str(res.data["detail"]), self.MESSAGE)
+        res = self.client.post("/api/advances/", {"user": self.hr.id, "amount": "500", "given_on": "2026-09-05"})
+        self.assertEqual(res.status_code, 403)
+        own = SalaryStructure.objects.create(user=self.hr, monthly_gross=Decimal("30000"), effective_from=date(2026, 1, 1))
+        adv = Advance.objects.create(user=self.hr, amount=Decimal("500"), given_on=date(YEAR, MONTH, 5))
+        self.assertEqual(self.client.patch(f"/api/salary-structures/{own.id}/", {"monthly_gross": "90000"}).status_code, 403)
+        self.assertEqual(self.client.delete(f"/api/salary-structures/{own.id}/").status_code, 403)
+        self.assertEqual(self.client.patch(f"/api/advances/{adv.id}/", {"amount": "1"}).status_code, 403)
+        self.assertEqual(self.client.delete(f"/api/advances/{adv.id}/").status_code, 403)
+        own.refresh_from_db()
+        self.assertEqual(own.monthly_gross, Decimal("30000"))
+        # moving someone else's record onto yourself is the same thing
+        theirs = SalaryStructure.objects.get(user=self.rahul)
+        own.delete()   # (else the same effective date would clash first)
+        self.assertEqual(self.client.patch(f"/api/salary-structures/{theirs.id}/", {"user": self.hr.id}).status_code, 403)
+        # other people's records: as before
+        self.assertEqual(self.client.patch(f"/api/salary-structures/{theirs.id}/", {"monthly_gross": "27000"}).status_code, 200)
+
+    def test_the_owner_may_set_their_own(self):
+        self.as_(self.owner)
+        self.assertEqual(self.client.post("/api/salary-structures/", {
+            "user": self.owner.id, "monthly_gross": "99000", "effective_from": "2026-01-01"}).status_code, 201)
+        self.assertEqual(self.client.post("/api/advances/", {
+            "user": self.owner.id, "amount": "500", "given_on": "2026-09-05"}).status_code, 201)
+
+
 class ApiTests(Base):
     def test_payroll_run_is_hr_only(self):
         self.as_(self.manager)

@@ -12,17 +12,14 @@ from crm.models import Task, TaskActivity, TaskStatus
 from crm.serializers import UserBriefSerializer
 
 from .access import (
-    can_create_group, can_edit_link, can_manage_group, can_review_ideas,
-    notice_targets, notices_for, user_group_ids, visible_groups, visible_ideas,
-    visible_links,
+    can_create_group, can_edit_link, can_manage_group, notice_targets,
+    notices_for, user_group_ids, visible_groups, visible_links,
 )
 from .models import (
-    Group, Idea, IdeaComment, Link, LinkCollection, Notice, NoticeRead,
-    NoticeStatus,
+    Group, Link, LinkCollection, Notice, NoticeRead, NoticeStatus,
 )
 from .serializers import (
-    GroupSerializer, IdeaCommentSerializer, IdeaSerializer,
-    LinkCollectionSerializer, LinkSerializer, NoticeSerializer,
+    GroupSerializer, LinkCollectionSerializer, LinkSerializer, NoticeSerializer,
 )
 from tenancy.company_settings import company_env
 
@@ -52,7 +49,7 @@ class GroupViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_destroy(self, instance):
-        # Archive rather than delete: tasks/ideas/links keep their history.
+        # Archive rather than delete: tasks/links keep their history.
         if not can_manage_group(self.request.user, instance):
             raise PermissionDenied("Only the group owner or an admin can archive this group.")
         instance.active = False
@@ -354,77 +351,3 @@ class LinkViewSet(viewsets.ModelViewSet):
         link.favorites.add(request.user)
         return Response({"favorited": True})
 
-
-class IdeaViewSet(viewsets.ModelViewSet):
-    permission_classes = [HasPermission.of("ideas.view", "ideas.review")]
-    serializer_class = IdeaSerializer
-
-    def get_queryset(self):
-        user = self.request.user
-        qs = visible_ideas(user)
-        p = self.request.query_params
-        scope = p.get("scope")
-        if scope == "my":
-            qs = qs.filter(author=user)
-        elif scope == "shared":
-            qs = qs.filter(group__isnull=True)
-        elif scope == "group":
-            qs = qs.filter(group__isnull=False)
-        if p.get("group"):
-            qs = qs.filter(group_id=p["group"])
-        if p.get("status"):
-            qs = qs.filter(status=p["status"])
-        if p.get("category"):
-            qs = qs.filter(category__iexact=p["category"])
-        if p.get("search"):
-            qs = qs.filter(title__icontains=p["search"])
-        return qs
-
-    def perform_create(self, serializer):
-        group = serializer.validated_data.get("group")
-        if group and group.id not in user_group_ids(self.request.user):
-            from .access import is_workspace_admin
-            if not is_workspace_admin(self.request.user):
-                raise PermissionDenied("You can only post ideas to your own groups.")
-        serializer.save(author=self.request.user, status="new")
-
-    def perform_update(self, serializer):
-        idea = self.get_object()
-        user = self.request.user
-        wants_status = serializer.validated_data.get("status", idea.status)
-        if wants_status != idea.status and not can_review_ideas(user):
-            raise PermissionDenied("Only managers/admin can change idea status.")
-        content_fields = {"title", "description", "category", "priority", "group"}
-        changing_content = any(
-            f in serializer.validated_data and serializer.validated_data[f] != getattr(idea, f)
-            for f in content_fields
-        )
-        if changing_content and idea.author_id != user.id and not can_review_ideas(user):
-            raise PermissionDenied("You can only edit your own ideas.")
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        user = self.request.user
-        if instance.author_id != user.id and not can_review_ideas(user):
-            raise PermissionDenied("You can only delete your own ideas.")
-        instance.delete()
-
-    @action(detail=True, methods=["get", "post"])
-    def comments(self, request, pk=None):
-        idea = self.get_object()
-        if request.method == "GET":
-            return Response(IdeaCommentSerializer(idea.comments.select_related("author"), many=True).data)
-        body = (request.data.get("body") or "").strip()
-        if not body:
-            raise ValidationError({"body": "Comment cannot be empty."})
-        c = IdeaComment.objects.create(idea=idea, author=request.user, body=body[:2000])
-        return Response(IdeaCommentSerializer(c).data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=["post"])
-    def vote(self, request, pk=None):
-        idea = self.get_object()
-        if idea.votes.filter(pk=request.user.pk).exists():
-            idea.votes.remove(request.user)
-            return Response({"voted": False, "vote_count": idea.votes.count()})
-        idea.votes.add(request.user)
-        return Response({"voted": True, "vote_count": idea.votes.count()})

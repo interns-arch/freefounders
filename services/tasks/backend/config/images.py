@@ -23,7 +23,7 @@ _MAX_PIXELS = 120_000_000  # a bigger "photo" is left alone instead of filling t
 # PNG/WEBP/BMP/TIFF decode at full size (JPEG decodes at a fraction via draft()): a tiny file can claim a huge canvas
 # ("decompression bomb"), so those are only opened up to a much smaller size, under Pillow's own warning limit.
 _MAX_PIXELS_FULL_DECODE = 40_000_000
-MAX_UPLOAD_MB = 10  # documents and photos attached to leave, notices, tasks, leads and forms
+MAX_UPLOAD_MB = 10  # documents and photos attached to leave, notices, tasks and leads
 
 
 def check_size(f, max_mb: int = MAX_UPLOAD_MB):

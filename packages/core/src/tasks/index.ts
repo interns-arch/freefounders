@@ -7,6 +7,4 @@ export * from './extras';
 export * from './extras-leads';
 export * from './extras-intake';
 export * from './extras-links';
-export * from './extras-ideas';
 export * from './extras-mistakes';
-export * from './extras-forms';

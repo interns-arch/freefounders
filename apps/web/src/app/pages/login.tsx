@@ -1,5 +1,5 @@
 import { errorMessage, session, useSignIn } from '@freefounders/core';
-import { CheckCircle2, Eye, EyeOff, LogIn, Package, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -66,19 +66,6 @@ export function LoginPage() {
               </li>
             ))}
           </ul>
-          {/* A glimpse of the app: the punch card with its orange call to action (decorative, like the whole panel). */}
-          <div className="max-w-sm rounded-xl border border-border bg-card p-4 text-card-foreground shadow-pop">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-mono text-2xl font-bold tracking-tight tabular-nums">09:30 am</span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-0.5 text-xs font-semibold text-destructive">
-                <span className="size-1.5 rounded-full bg-current" />
-                Not checked in
-              </span>
-            </div>
-            <span className="mt-3 flex h-11 items-center justify-center gap-2 rounded-md bg-cta text-[15px] font-semibold text-cta-foreground">
-              <LogIn className="size-4" /> Punch in
-            </span>
-          </div>
         </div>
         <p className="text-sm">FreeFounders</p>
       </aside>

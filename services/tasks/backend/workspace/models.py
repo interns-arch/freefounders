@@ -1,9 +1,9 @@
-"""Workspace productivity modules: Groups, Notices, Links, Idea Board.
+"""Workspace productivity modules: Groups, Notices, Links.
 
-These sit BESIDE the CRM: Groups scope tasks/ideas/links to a team,
+These sit BESIDE the CRM: Groups scope tasks/links to a team,
 Notices are company announcements (deliberately separate from the
-per-user Notification system), Links is a shared bookmark manager and
-the Idea Board collects/reviews ideas.
+per-user Notification system) and Links is a shared bookmark manager.
+(The Idea Board was removed on 2026-10-13, PLAN.md §19.23.)
 """
 from django.conf import settings
 from django.db import models
@@ -11,7 +11,7 @@ from django.utils import timezone
 
 
 class Group(models.Model):
-    """A department/team mini-workspace. Tasks, ideas and links can be
+    """A department/team mini-workspace. Tasks and links can be
     scoped to a group; members see the group's content."""
     name = models.CharField(max_length=120, unique=True)
     description = models.TextField(blank=True, default="")
@@ -125,48 +125,3 @@ class Link(models.Model):
     def __str__(self):
         return self.title
 
-
-class IdeaStatus(models.TextChoices):
-    NEW = "new", "New"
-    UNDER_REVIEW = "under_review", "Under Review"
-    APPROVED = "approved", "Approved"
-    REJECTED = "rejected", "Rejected"
-    IMPLEMENTED = "implemented", "Implemented"
-
-
-class IdeaPriority(models.TextChoices):
-    LOW = "low", "Low"
-    NORMAL = "normal", "Normal"
-    HIGH = "high", "High"
-
-
-class Idea(models.Model):
-    """Idea Board entry: company-wide when group is null, else scoped to
-    that group. Managers/admin review (status changes)."""
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True, default="")
-    category = models.CharField(max_length=60, blank=True, default="")
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL,
-                               related_name="ideas")
-    group = models.ForeignKey(Group, null=True, blank=True, on_delete=models.CASCADE, related_name="ideas")
-    status = models.CharField(max_length=15, choices=IdeaStatus.choices, default=IdeaStatus.NEW)
-    priority = models.CharField(max_length=10, choices=IdeaPriority.choices, default=IdeaPriority.NORMAL)
-    votes = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="voted_ideas")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return self.title
-
-
-class IdeaComment(models.Model):
-    idea = models.ForeignKey(Idea, on_delete=models.CASCADE, related_name="comments")
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
-    body = models.TextField(max_length=2000)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["created_at"]

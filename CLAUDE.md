@@ -56,7 +56,7 @@ npm run mobile       # phone app: QR for Expo Go (same Wi-Fi; API = EXPO_PUBLIC_
 npm run mobile:check # phone app typecheck + unit tests (also: cd apps/mobile && npx expo export --platform android)
 ```
 Routes on :8080: `/api/platform/*` Platform (:4000) · `/tasks/api/*` Django (:8000) · `/assets/api/*` NestJS (:3000) ·
-`/media/*` Django · everything else the new web app (:5176). `/f/<token>?c=<company>` is the public web-form page. Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
+`/media/*` Django · everything else the new web app (:5176). Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
 Single login is an env switch on the APIs, off by default so each API still runs standalone:
 - APIs: `PLATFORM_JWKS_URL` (Tasks, Assets); Platform: `TASKS_INTERNAL_URL`, `ASSETS_INTERNAL_URL`, `PLATFORM_SECRET`
 How it fits: PLAN.md §13. Tasks uses the Platform token directly (Bearer); Assets exchanges it for

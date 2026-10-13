@@ -51,16 +51,14 @@ class TaskApiTests(TaskBase):
         self.assertIn("Call Ravi", n.title)
         self.assertTrue(self.lead.events.filter(body__contains="Task created").exists())
 
-    def test_exec_assigns_to_peer_and_upward(self):
-        # No hierarchy: employee -> fellow employee and employee -> manager
-        # are both allowed.
+    def test_exec_cannot_assign_to_peer_or_upward(self):
+        # A Sales Executive has no "Give tasks to others" (tasks.assign): own tasks only (founder, 2026-10-13).
         self.as_(self.rahul)
-        res = self.client.post("/api/tasks/", {"due_at": (timezone.now() + timedelta(days=1)).isoformat(), "title": "X", "assigned_to": self.amit.id,
-                                               "effort_minutes": 30})
-        self.assertEqual(res.status_code, 201)
-        res = self.client.post("/api/tasks/", {"due_at": (timezone.now() + timedelta(days=1)).isoformat(), "title": "X", "assigned_to": self.manager.id,
-                                               "effort_minutes": 30})
-        self.assertEqual(res.status_code, 201)
+        for target in (self.amit, self.manager):
+            res = self.client.post("/api/tasks/", {"due_at": (timezone.now() + timedelta(days=1)).isoformat(), "title": "X",
+                                                   "assigned_to": target.id, "effort_minutes": 30})
+            self.assertEqual(res.status_code, 403)
+            self.assertEqual(str(res.data["detail"]), "Your role can only give tasks to yourself.")
 
     def test_exec_can_create_own_task(self):
         self.as_(self.rahul)

@@ -51,14 +51,28 @@ class Base(TestCase):
 
 
 class HierarchyTests(Base):
-    """A1: no hierarchy — anyone may assign a task to anyone."""
+    """A1: no hierarchy for whoever may "Give tasks to others" (tasks.assign) -- they assign to anyone;
+    without it, a person gives tasks only to themselves (founder's decision, 2026-10-13)."""
 
-    def test_employee_can_assign_to_fellow_employee_cross_department(self):
-        res = self.create_task(self.rahul, self.vikram)   # sales exec -> purchase
+    def test_employee_without_tasks_assign_cannot_give_tasks_to_others(self):
+        for target in (self.vikram, self.manager, self.admin):   # cross-department, upward
+            res = self.create_task(self.rahul, target)
+            self.assertEqual(res.status_code, 403)
+            self.assertEqual(str(res.data["detail"]), "Your role can only give tasks to yourself.")
+        self.assertFalse(Task.objects.exclude(assigned_to=self.rahul).filter(created_by=self.rahul).exists())
+
+    def test_employee_without_tasks_assign_can_give_themselves_a_task_and_keep_others_in_loop(self):
+        res = self.create_task(self.rahul, self.rahul, in_loop=[self.amit.id])
         self.assertEqual(res.status_code, 201)
+        self.assertTrue(Task.objects.get(pk=res.data["id"]).subscribers.filter(pk=self.amit.pk).exists())
 
-    def test_employee_can_assign_upward(self):
-        self.assertEqual(self.create_task(self.rahul, self.manager).status_code, 201)
+    def test_employee_with_tasks_assign_added_to_their_role_assigns_to_anyone(self):
+        from accounts.access import forget
+        from accounts.models import AccessGrant, AccessRole
+        AccessGrant.objects.create(role=AccessRole.objects.get(code=self.rahul.role), permission="tasks.assign")
+        forget()
+        self.addCleanup(forget)  # the role cache outlives the test's rolled-back grant
+        self.assertEqual(self.create_task(self.rahul, self.vikram).status_code, 201)
         self.assertEqual(self.create_task(self.rahul, self.admin).status_code, 201)
 
     def test_manager_can_assign_to_anyone_including_admin(self):
@@ -70,10 +84,27 @@ class HierarchyTests(Base):
         self.assertEqual(self.create_task(self.admin, self.manager).status_code, 201)
         self.assertEqual(self.create_task(self.admin, self.rahul).status_code, 201)
 
-    def test_assignees_endpoint_lists_everyone(self):
-        for who in (self.rahul, self.manager, self.admin):
+    def test_assignees_endpoint_lists_everyone_for_assigners_and_only_self_otherwise(self):
+        for who in (self.manager, self.admin):
             self.as_(who)
             self.assertEqual(len(self.client.get("/api/tasks/assignees/").data), 6)
+        self.as_(self.rahul)
+        self.assertEqual([p["id"] for p in self.client.get("/api/tasks/assignees/").data], [self.rahul.id])
+
+    def test_admin_without_tasks_assign_cannot_reassign_to_others(self):
+        """The direct admin edit (tasks.view_all) follows the same rule."""
+        from accounts.access import forget
+        from accounts.models import AccessGrant, AccessRole
+        AccessGrant.objects.filter(role=AccessRole.objects.get(code=self.admin.role), permission="tasks.assign").delete()
+        forget()
+        self.addCleanup(forget)
+        task = Task.objects.create(title="X", assigned_to=self.rahul, created_by=self.manager)
+        self.as_(self.admin)
+        res = self.client.patch(f"/api/tasks/{task.id}/", {"assigned_to": self.amit.id}, format="json")
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(str(res.data["detail"]), "Your role can only give tasks to yourself.")
+        task.refresh_from_db()
+        self.assertEqual(task.assigned_to, self.rahul)
 
     def test_admin_reassignment_still_respects_targets(self):
         task = Task.objects.create(title="X", assigned_to=self.rahul, created_by=self.manager)
@@ -257,6 +288,30 @@ class ChangeRequestTests(Base):
         # admin got the audit log notification
         self.assertTrue(Notification.objects.filter(user=self.admin,
                                                     type="task_change_log").exists())
+
+    def test_approving_a_reassignment_needs_tasks_assign(self):
+        """Anyone may ASK for a task to go to someone else; the approver gives it, so the approver needs
+        "Give tasks to others". Refused: the request stays pending and the task keeps its assignee."""
+        legacy = Task.objects.create(title="Old", assigned_to=self.rahul, created_by=self.amit,
+                                     due_at=timezone.now() + timedelta(days=1))
+        self.as_(self.rahul)
+        rid = self.client.post(f"/api/tasks/{legacy.id}/request_change/",
+                               {"changes": {"assigned_to": self.vikram.id}, "reason": "this is purchase work"},
+                               format="json").data["id"]
+        self.as_(self.amit)   # the creator decides; amit has no tasks.assign
+        res = self.client.post(f"/api/task-change-requests/{rid}/review/", {"decision": "approved"}, format="json")
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(str(res.data["detail"]), "Your role can only give tasks to yourself.")
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.assigned_to, self.rahul)
+        self.assertEqual(TaskChangeRequest.objects.get(pk=rid).status, "pending")
+        # the manager's own task: the manager (tasks.assign) may approve the same request
+        res = self.raise_request(self.rahul, {"assigned_to": self.vikram.id})
+        self.as_(self.manager)
+        self.assertEqual(self.client.post(f"/api/task-change-requests/{res.data['id']}/review/",
+                                          {"decision": "approved"}, format="json").status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.assigned_to, self.vikram)
 
     def test_creator_request_falls_back_to_admin_without_a_manager(self):
         """Last resort only: meera has no "Reports to" on file, so there is
@@ -629,12 +684,19 @@ class VoiceNoteTests(Base):
         self.assertEqual(res.data["due_heard"], past)
 
     def test_a_name_above_the_speakers_level_is_matched(self):
-        """No hierarchy: an employee may task their boss, by speech exactly
+        """No hierarchy: a manager may task their boss, by speech exactly
         as by typing."""
         res = self.draft("boss ko bolo", {"title": "T", "assignee": "boss"},
-                         as_user=self.rahul)
+                         as_user=self.manager)
         self.assertEqual(res.data["assigned_to"], self.admin.id)
         self.assertIsNone(res.data["assignee_heard"])
+
+    def test_without_tasks_assign_only_the_speaker_is_matched(self):
+        """Same rule as typing: without "Give tasks to others" only themselves."""
+        res = self.draft("boss ko bolo", {"title": "T", "assignee": "boss"},
+                         as_user=self.rahul)
+        self.assertIsNone(res.data["assigned_to"])
+        self.assertEqual(res.data["assignee_heard"], "boss")
 
     def two_rahuls(self):
         """The fixture user is literally called "rahul", which would be an

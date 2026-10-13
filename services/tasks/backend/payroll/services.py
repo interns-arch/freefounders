@@ -138,8 +138,8 @@ def build_payslip(run, user) -> Payslip | None:
                 pf -= cut
             excess -= cut
 
-    advances = list(Advance.objects.filter(user=user, recovered=False, given_on__lte=last))
-    advance_total = money(sum((a.amount for a in advances), Decimal(0)))
+    advances = list(outstanding_advances(user, last))
+    advance_total = money(sum((a.balance for a in advances), Decimal(0)))
     # Never push a payslip negative -- recover only what this month can bear.
     recoverable = min(advance_total, max(Decimal(0), earned - pf - ptax - other))
 
@@ -184,28 +184,52 @@ def generate_run(run, users) -> dict:
     return {"payslips": made, "skipped_no_salary": skipped}
 
 
+def outstanding_advances(user, up_to: date):
+    """Advances given by `up_to` with something still to recover, oldest first (recovered in that order)."""
+    return Advance.objects.filter(user=user, recovered=False, given_on__lte=up_to).order_by("given_on", "id")
+
+
 def finalise(run) -> dict:
-    """Lock the run and mark the recovered advances as settled."""
-    if run.status == RunStatus.FINALISED:
-        raise ValueError("This payroll is already finalised.")
-    if not run.payslips.exists():
-        raise ValueError("Generate the payslips before finalising.")
-    recovered = 0
-    for slip in run.payslips.select_related("user"):
-        if slip.advance_deduction <= 0:
-            continue
-        remaining = slip.advance_deduction
-        for adv in Advance.objects.filter(user=slip.user, recovered=False,
-                                          given_on__lte=month_bounds(run.year, run.month)[1]):
+    """Lock the run and record what each payslip took back from the person's advances.
+
+    A payslip's advance deduction is spread over the advances oldest first; an advance is settled once all of it
+    is recovered, otherwise its recovered amount grows and the next month deducts only what is left. A run is
+    finalised once (finalised runs cannot be generated again, changed or deleted), so nothing is counted twice."""
+    from django.db import transaction
+
+    from .models import PayrollRun
+
+    with transaction.atomic():
+        locked = PayrollRun.objects.select_for_update().get(pk=run.pk)  # two clicks cannot both finalise
+        if locked.status == RunStatus.FINALISED:
+            raise ValueError("This payroll is already finalised.")
+        if not run.payslips.exists():
+            raise ValueError("Generate the payslips before finalising.")
+        settled = part = 0
+        last = month_bounds(run.year, run.month)[1]
+        for slip in run.payslips.select_related("user"):
+            remaining = money(slip.advance_deduction)
             if remaining <= 0:
-                break
-            if adv.amount <= remaining:
-                adv.recovered = True
-                adv.recovered_in = slip
-                adv.save(update_fields=["recovered", "recovered_in"])
-                remaining -= adv.amount
-                recovered += 1
-    run.status = RunStatus.FINALISED
-    run.finalised_at = timezone.now()
-    run.save(update_fields=["status", "finalised_at"])
-    return {"advances_settled": recovered}
+                continue
+            for adv in outstanding_advances(slip.user, last).select_for_update():
+                if remaining <= 0:
+                    break
+                take = min(adv.balance, remaining)
+                if take <= 0:
+                    continue
+                adv.recovered_amount = money(adv.recovered_amount + take)
+                remaining -= take
+                if adv.recovered_amount >= adv.amount:
+                    adv.recovered = True
+                    adv.recovered_in = slip
+                    settled += 1
+                else:
+                    part += 1
+                adv.save(update_fields=["recovered_amount", "recovered", "recovered_in"])
+            if remaining > 0:  # advances changed after this draft was generated (e.g. another month finalised)
+                raise ValueError(f"{slip.user.get_full_name() or slip.user.username}'s advances changed after these "
+                                 "payslips were made. Press Generate again, then finalise.")
+        run.status = RunStatus.FINALISED
+        run.finalised_at = timezone.now()
+        run.save(update_fields=["status", "finalised_at"])
+    return {"advances_settled": settled, "advances_part_recovered": part}

@@ -131,19 +131,12 @@ class CrossCompanySecurityTests(SimpleTestCase):
 
     # --- tokens --------------------------------------------------------------------------------------------------
 
-    def test_legacy_app_tokens_are_ignored_even_on_public_paths(self):
-        from webforms.models import Form, FormField, FormStatus, FormSubmission
+    def test_legacy_app_tokens_never_open_the_api(self):
         with schemas.use(B):
-            form = Form.objects.create(name="B enquiry", status=FormStatus.PUBLISHED, created_by=self.b_user)
-            field = FormField.objects.create(form=form, label="Name", type="short_text")
             legacy = str(AccessToken.for_user(User.objects.get(pk=self.b_user.pk)))
-        res = self.api(legacy).post(f"/api/public/forms/{form.public_token}/submit/?company={B_ID}",
-                                    {str(field.pk): "x"}, format="json")
-        self.assertEqual(res.status_code, 201, res.content)
-        with schemas.use(B):
-            self.assertIsNone(FormSubmission.objects.get(form=form).submitted_by_id)  # anonymous, not "sam"
-        # and a legacy token never opens the API itself
         self.assertEqual(self.api(legacy).get("/api/tasks/").status_code, 401)
+        # naming a company does not help: only a Platform token picks one
+        self.assertEqual(self.api(legacy).get(f"/api/tasks/?company={B_ID}").status_code, 401)
 
     def test_access_and_service_tokens_are_not_interchangeable(self):
         self.assertEqual(self.api(access(A_ID, self.a_user)).get("/api/internal/roles").status_code, 401)

@@ -41,7 +41,6 @@ urlpatterns = [
     path("api/", include("notifications.urls")),
     path("api/", include("intake.urls")),
     path("api/", include("workspace.urls")),
-    path("api/", include("webforms.urls")),
     path("api/", include("hr.urls")),
     path("api/", include("directory.urls")),
     path("api/", include("payroll.urls")),

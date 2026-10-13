@@ -17,16 +17,15 @@ from accounts.tests_platform import JWKS, token
 COVERED = {
     "hr.manage": {"hr.approve_all", "hr.live_all", "hr.daily_all", "hr.dashboard_all", "hr.reports_all", "hr.import",
                   "hr.mark", "hr.settings", "payroll.run", "payroll.salaries"},
-    "tasks.assign": {"groups.create", "templates.manage", "mistakes.log", "sops.manage", "forms.build", "links.manage",
-                     "ideas.review"},
+    "tasks.assign": {"groups.create", "templates.manage", "mistakes.log", "sops.manage", "links.manage"},
     "settings.manage": {"notices.publish", "holidays.manage", "tasks.settings", "mistakes.settings"},
-    "tasks.view_all": {"tasks.bin", "tasks.team_performance", "tasks.reports", "forms.all", "mistakes.review_all",
+    "tasks.view_all": {"tasks.bin", "tasks.team_performance", "tasks.reports", "mistakes.review_all",
                        "hr.live_all", "hr.daily_all", "hr.dashboard_all", "hr.reports_all"},
     "tasks.view_department": {"tasks.reports", "mistakes.review_department"},
     "hr.approve": {"hr.live_department", "hr.daily_department", "hr.dashboard_department", "hr.reports_department"},
 }
 EVERYONE = {"attendance.punch", "attendance.self", "leave.self", "holidays.view", "payroll.self", "notices.view",
-            "links.view", "ideas.view", "forms.view", "mistakes.view", "directory.view", "notifications.view"}
+            "links.view", "mistakes.view", "directory.view", "notifications.view"}
 
 
 def covers(caps, cap) -> bool:
@@ -232,24 +231,20 @@ class EnforcementTests(TestCase):
         self.only(("leads.view", "company"), "leads.rules")
         self.assertEqual(self.status("get", "/api/assignment-rules/"), 200)
 
-    def test_notices_links_ideas_forms_mistakes(self):
+    def test_notices_links_mistakes(self):
         self.only()
-        for url in ("/api/notices/", "/api/links/", "/api/ideas/", "/api/forms/", "/api/mistakes/", "/api/sops/",
-                    "/api/directory/industries/"):
+        for url in ("/api/notices/", "/api/links/", "/api/mistakes/", "/api/sops/", "/api/directory/industries/"):
             self.assertEqual(self.status("get", url), 403, url)
-        self.only("notices.view", "links.view", "ideas.view", "forms.view", "mistakes.view", "directory.view")
-        for url in ("/api/notices/", "/api/links/", "/api/ideas/", "/api/forms/", "/api/mistakes/", "/api/sops/",
-                    "/api/directory/industries/"):
+        self.only("notices.view", "links.view", "mistakes.view", "directory.view")
+        for url in ("/api/notices/", "/api/links/", "/api/mistakes/", "/api/sops/", "/api/directory/industries/"):
             self.assertEqual(self.status("get", url), 200, url)
         self.assertEqual(self.status("post", "/api/notices/", {"title": "Hi", "content": "x"}), 403)
         self.assertEqual(self.status("post", "/api/link-collections/", {"name": "C"}), 403)
         self.assertEqual(self.status("post", "/api/sops/", {"title": "S"}), 403)
-        self.assertEqual(self.status("post", "/api/forms/", {"name": "F"}), 403)
-        self.only("notices.publish", "links.manage", "sops.manage", "forms.build")
+        self.only("notices.publish", "links.manage", "sops.manage")
         self.assertAllowed(self.status("post", "/api/notices/", {"title": "Hi", "content": "x"}))
         self.assertEqual(self.status("post", "/api/link-collections/", {"name": "C"}), 201)
         self.assertAllowed(self.status("post", "/api/sops/", {"title": "S"}))
-        self.assertEqual(self.status("post", "/api/forms/", {"name": "F"}), 201)
 
     def test_notifications_list(self):
         self.only()

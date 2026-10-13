@@ -83,17 +83,16 @@ export const session = {
   },
 
   /** Signs in with email, username or employee ID. */
-  async login(login: string, password: string): Promise<{ mustChangePassword: boolean }> {
+  async login(login: string, password: string): Promise<void> {
     const store = config.refreshStore;
     const res = await post('/login', { login, password, ...(store ? { client: 'mobile' } : {}) });
-    const data = (await res.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; mustChangePassword?: boolean; message?: string };
+    const data = (await res.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; message?: string };
     if (!res.ok || !data.accessToken) {
       const { ApiError } = await import('./http');
       throw new ApiError(res.status, data.message ?? 'Sign-in failed');
     }
     if (store && data.refreshToken) await store.set(data.refreshToken);
     set(data.accessToken);
-    return { mustChangePassword: !!data.mustChangePassword };
   },
 
   async logout() {

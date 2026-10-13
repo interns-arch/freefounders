@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import HasCapability, HasPermission, has_capability
+from accounts.permissions import HasCapability, HasPermission, has_capability, refuse_own_records
 
 from . import approvals, services
 from .models import (
@@ -256,6 +256,7 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         target = User.objects.filter(pk=request.data.get("user"), is_active=True).first()
         if not target:
             raise ValidationError({"user": "Unknown or inactive employee."})
+        refuse_own_records(request.user, target)  # nobody marks their own day, except the Owner
         status_value = request.data.get("status", "present")
         if status_value not in ("present", "half_day", "absent"):
             raise ValidationError({"status": "Use present, half_day or absent."})

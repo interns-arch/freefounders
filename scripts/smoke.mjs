@@ -201,9 +201,12 @@ await step('owner adds a member with a login and gives them Tasks only', async (
   assert.equal(grant.status, 200, JSON.stringify(grant.body));
 });
 
-await step('member must change the generated password, then reaches Tasks but not Assets', async () => {
+await step('member signs in with the generated password (no forced change), reaches Tasks but not Assets', async () => {
   const first = await member.signIn(`smoke-${run}`, memberPassword);
-  assert.equal(first.mustChangePassword, true);
+  assert.equal(first.mustChangePassword, false, 'nobody is forced to change it (docs/security/platform.md R7)');
+  const tasksFirst = await member.fetch('GET', '/tasks/api/auth/me', { token: await member.token() });
+  assert.equal(tasksFirst.status, 200, 'straight into Tasks');
+  // Changing it is still possible, any time (account menu).
   const changed = await member.fetch('POST', '/api/platform/auth/change-password', {
     token: await member.token(),
     body: { currentPassword: memberPassword, newPassword: `Smoke-${run}-pw` },

@@ -15,7 +15,13 @@ export interface PlatformMe {
   apps: Array<{ app: AppKey; name: string; path: string }>;
   /** Admin workspace permissions (PLAN.md §19.19): owners and admins have them all. */
   permissions?: string[];
-  mustChangePassword: boolean;
+  /**
+   * What their roles give them (docs/security/platform.md R1): every app permission with each scope a role gives it,
+   * the Admin permissions, and their highest role level. Without being the owner, they can give only this.
+   */
+  held?: { level: number; grants: Array<{ app: 'tasks' | 'assets' | 'platform'; permission: string; scope: string }> };
+  /** Always false now: nobody is forced to change their password (R7). Kept for older servers. */
+  mustChangePassword?: boolean;
 }
 
 export interface TasksMe {
@@ -90,9 +96,7 @@ const TASKS_CAP_MODULE: Array<[string, string]> = [
   ['intake.', 'intake'],
   ['mistakes.', 'mistakes'],
   ['sops.', 'mistakes'],
-  ['forms.', 'forms'],
   ['links.', 'links'],
-  ['ideas.', 'ideas'],
   ['payroll.', 'payroll'],
 ];
 

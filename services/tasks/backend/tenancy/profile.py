@@ -28,10 +28,7 @@ MODULES = [
      ("salary-structures", "advances", "payroll-runs", "payslips")),
     ("mistakes", "Mistake register", "Mistakes, SOPs, escalations and digests", False,
      ("mistakes", "mistake-categories", "sops", "mistake-settings")),
-    ("forms", "Web forms", "Public forms that create leads or tasks", False,
-     ("forms", "form-fields", "public")),
     ("links", "Links", "Shared link collections", False, ("links", "link-collections")),
-    ("ideas", "Idea board", "Ideas, comments and votes", False, ("ideas",)),
 ]
 _OWNER = {segment: key for key, _l, _d, _on, segments in MODULES for segment in segments}
 # Paths under a module's prefix that other, always-on screens use: the team list for Groups, templates, settings.

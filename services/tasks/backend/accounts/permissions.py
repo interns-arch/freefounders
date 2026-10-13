@@ -136,6 +136,24 @@ def has_capability(user, capability: str) -> bool:
     return capability in capabilities(user)
 
 
+SELF_EDIT_MESSAGE = "You cannot change your own attendance/salary — ask another HR person or the Owner."
+
+
+def editing_own_records(actor, *targets) -> bool:
+    """True when `actor` is about to change their own attendance or pay record and is not the Owner
+    (founder's rule, docs/security/tasks-api.md). `targets` are users or user ids; None is ignored."""
+    from .access import is_owner
+    ids = {getattr(t, "pk", t) for t in targets if t is not None}
+    return bool(actor and actor.pk in {int(i) for i in ids if str(i).isdigit()}) and not is_owner(actor)
+
+
+def refuse_own_records(actor, *targets) -> None:
+    """403 with SELF_EDIT_MESSAGE when editing_own_records()."""
+    from rest_framework.exceptions import PermissionDenied
+    if editing_own_records(actor, *targets):
+        raise PermissionDenied(SELF_EDIT_MESSAGE)
+
+
 class IsAdmin(BasePermission):
     message = "Admin role required."
 

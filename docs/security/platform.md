@@ -77,13 +77,13 @@ out of the Platform immediately rather than at the next refresh.
 
 | # | Severity | Risk | Recommendation (needs the founder or infrastructure) |
 |---|---|---|---|
-| R1 | Medium | **Manage roles = admin in practice**: it can grant any permission, make Admin-level (3) roles and duplicate Super Admin, including to oneself (documented in §19.19). | Allow granting only permissions the caller holds, and Admin-level roles only by owners/admins. |
+| R1 | ~~Medium~~ **Fixed 2026-10-13** | ~~Manage roles = admin in practice~~. | See §6. |
 | R2 | Medium | **Lockout as denial of service**: anyone who knows an owner's username/email can keep them locked out (5 wrong tries per 15 min). | 2FA/OTP for owners and admins (then lock less aggressively), or a CAPTCHA/back-off after 3 failures instead of a hard lock. |
-| R3 | Medium | **Password policy** is "at least 6 characters" (founder's choice, kept). | Keep 6 but refuse the ~10 000 most common passwords and passwords equal to the person's name, username, email or company name; or 8+ for owners/admins. |
+| R3 | Medium → **Changed 2026-10-13** | **Password policy** is "at least 6 characters" (founder's choice, kept); weak passwords are now **warned about, never refused** (founder). | See §6. Refusing them stays possible later (the checker exists). |
 | R4 | Medium | **No second factor** for anyone. | OTP (WhatsApp/SMS/TOTP) for owners/admins first. |
 | R5 | Low/Medium | **Global sign-in names**: email, username and employee-ID checks are product-wide, so an admin of one company can learn that an email/username exists in another (409 "Another person already uses this email"). | Accept (sign-in without a company code needs it), or answer a neutral "cannot use this email" message; long-term, company-scoped sign-in. |
 | R6 | Low/Medium | **Tasks and Assets accept an access token until it expires** (≤ 15 min after sign-out/deactivation; stateless by design, §13.4). | Accept, or shorten to 5 min, or have the apps check a small revoked-`fam` list. |
-| R7 | Low | **"Must change password" is enforced by the web app only**; the APIs accept the first token. | Put a `pwc` claim in the token and have the Platform and apps refuse everything but change-password while it is set. |
+| R7 | ~~Low~~ **Removed 2026-10-13** | ~~"Must change password" is enforced by the web app only~~: the founder dropped the forced change. | See §6. |
 | R8 | Low | **Stay signed in 1 year (sliding, no absolute limit)** — founder decision, kept. Revocable via reset, deactivate, logout-all. | Add "Sign out everywhere" and "Where you're signed in" (ip, device, client are stored) to the account screen. |
 | R9 | Low (scale) | **Throttle counters live in each process** (#4, #5); with N processes the IP/name limits become N×. The account lockout itself is in the database and exact. | Fine for one process. For several: a Postgres `UNLOGGED` table `auth_throttle(key, window_start, count)` with an upsert per failure (no Redis), or rate limiting at the gateway/WAF. |
 | R10 | Low | **Key rotation has no command** (`KeysService.rotate()` exists) and changing `PLATFORM_SECRET` makes keys unreadable. | Add `npm run company -- rotate-key`; rotate yearly or on suspicion; document re-sealing keys under a new secret. |
@@ -100,3 +100,45 @@ out of the Platform immediately rather than at the next refresh.
   Assets-cookie assertion added in `single-login.spec.ts` by the Assets/web reviewer (not Platform code). `npm run smoke` → 10 / 10.
 - Live checks against http://localhost:8080 with a throwaway person: parallel lockout (5 checked / 15 refused), sign-out and
   sign-out-everywhere end Platform access at once, unknown names answer "Too many failed attempts" on the 6th try, `no-store` header.
+
+## 6. Founder decisions applied (2026-10-13): R1, R3, R7
+
+**R1: Manage roles gives only what you have.** Everyone except the **owner** (company owner, `platformRole = owner`; platform
+admins included) is limited, in `RolesService` (`powersOf` / `assertCanBuild` / `assertCanTouch` / `assertCanGive`), with a 403
+that names what is not allowed:
+- create / edit a role: only permissions they hold (per app, Tasks/Assets/Admin keys of catalogue v2), at no wider scope than
+  their own widest; never an Owner-only (`superAdminOnly`) permission; never level 3 (Admin); never above their own level (the
+  highest level of their roles, at least 1). Admins hold every Admin permission (access level), and Tasks/Assets ones only
+  through roles;
+- edit or archive: the role as it is must also be within their powers (no taking a bigger role apart), and not Admin-level;
+- duplicate: never Super Admin; the copy goes through the create rule (an Admin-level copy is refused);
+- give roles (`PUT /people/:id/roles`, themselves included): each role added must be within their permissions and at most their
+  level (removing roles is not limited; Super Admin stays owner-only; members still act on members only, §19.21);
+- choosing an app role (`PUT /people/:id/apps/:app` with `appRole`): the same rule through the role builder's copy of that app
+  role (`tasks` code / `assets:<name>`); one the role builder does not know: owner only.
+`GET /auth/me` now returns `held: { level, grants }`; the web role editor (`roleLimits` in `@freefounders/core/admin`) shows what
+they cannot give disabled with "You don't have this yourself" (or "Only the owner can give this"), disables wider scopes and
+higher levels, filters "Copy from", opens roles beyond them read-only ("View"), and disables their Duplicate/Archive; the roles
+dialog on People disables roles they cannot give. Tests: Platform `Manage roles gives only what you have: permissions, scopes,
+level; never Admin-level or Super Admin (R1)` (+ `granting Tasks provisions…` now checks the unknown app role is owner-only);
+e2e `web-admin.spec.ts` `Manage roles without being the owner: only what you have yourself can be ticked… (R1)`.
+
+**R3: weak passwords are warned about, never blocked.** Minimum stays 6 (server unchanged). `passwordWeakness` /
+`weakPasswordWarning` (`packages/core/src/admin/password-strength.ts`, pure, ~4 KB: ~400 common passwords and the words they are
+made of, with digits/years/symbols stripped and look-alike letters undone; only digits, repeated characters, sequences, keyboard
+walks and two such parts joined; the person's name, username, email local part or the company name, case-insensitive). Shown
+under every set-password field (reset password / create login, add person with a login, change own password) as "Weak password:
+easy to guess (…). You can still save it." Tests: `npm test --workspace @freefounders/core` (5 tests); Platform `at least 6
+characters; weak ones are accepted; never a forced change (R3, R7)`; e2e `web-admin.spec.ts` reset-password test checks the
+three warnings and that Save stays enabled.
+
+**R7: no forced password change.** Nothing sets `logins.must_change_password` any more (add person, create/reset login with a
+generated or chosen password, `company create`); an old client's `mustChangePassword: true` is ignored; migration
+`0007_no_forced_password_change` clears it for existing logins (column kept). The web app no longer sends anyone to the change
+screen; "Change password" stays in the account menu; the "Ask them to change it" box and "they will choose their own password"
+copy are gone. Tests: Platform `admin adds a person with a login; nobody is forced to change the generated password (R7)`,
+`resetting a password signs the person out everywhere`; smoke step "member signs in with the generated password (no forced
+change), reaches Tasks but not Assets".
+
+Results (2026-10-13): Platform `npm run typecheck && npm test` → **78 / 78**; core tests 5 / 5; `npm run web:build` clean;
+`npm run smoke` → 10 / 10; e2e `web-admin.spec.ts` + `single-login.spec.ts` → 16 / 16.
