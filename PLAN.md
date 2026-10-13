@@ -1872,3 +1872,172 @@ choice also in these themes" (the brand colour keeps replacing `--primary` in bo
   the header ☰ (the bottom bar's More opens the same menu), the header light/dark button (in the account menu),
   "Keyboard shortcuts". Phone app: Android font-size setting enlarges text up to 130 % (WebView `textZoom`), so layouts
   never break. Checked 320/360/393 px light and dark on 9 screens: no sideways scrolling.
+
+---
+
+## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)
+
+Founder: "use Notion's architecture for making and giving new users; plan how we share this with millions of users and
+hundreds of thousands of companies; how we take payments; suggest the plan and the step before it." Nothing here is
+built yet. It extends §9 (pricing), §10 (operations) and §11 (Phase 8 Subscriptions, Phase 9 Launch).
+
+### 20.1 Targets and the load they mean
+| | Launch | Target |
+|---|---|---|
+| Companies | 1–2 000 | 100 000+ |
+| Users | up to 50 000 | 2 000 000+ (average 20 per company) |
+| Punches | 100 000 / day | 4 000 000 / day; ~40 % between 9:00 and 10:00 → ~220 / s on average, **~1 000 / s at 9:30** |
+| Punch selfies (~40 KB) | 4 GB / day | 160 GB / day → ~14 TB kept with 90-day retention |
+| Cross-app events, notifications | small | millions / day (reminders at shift start for everyone at once) |
+
+Two things in today's design do not survive this and must change before growth (not before launch):
+1. **100 000 Postgres schemas in one database** (one per company, §14) means ~7 million tables: slow migrations, backups
+   and catalogue. → spread companies over many databases (cells, 20.3).
+2. **The Platform polls every app for every company** for cross-app events (`GET /internal/events`, every 5–30 s). At
+   100 000 companies that is 200 000 requests per round. → apps push events to a queue (SQS) instead (20.7).
+Also: photos in Postgres (`bytea` in Assets) and per-process throttles (docs/security) must move to S3 and a shared
+cache.
+
+### 20.2 What Notion does, and what we take
+Notion runs on PostgreSQL **sharded by workspace**: every row carries its workspace ID; 480 *logical* shards (schemas)
+were spread over 32 physical databases (2021), later re-spread over 96 without touching the application, because the app
+only asks "which shard holds workspace X?". Around it: one global identity (one account, many workspaces, a workspace
+switcher), sign-up in seconds with templates, invite links and email-domain auto-join, a free plan that spreads inside
+companies, per-seat billing, and a separate data lake for analytics so reports never load the main databases.
+
+What we take, fitted to what we already have (one schema per company):
+- **Company → cell routing** (Notion's workspace → shard): the Platform's company registry also says which *cell* holds
+  the company. A cell is a full copy of the app stack (Tasks API, Assets API, workers, one Aurora Postgres cluster)
+  holding up to ~2 000 companies (each still its own schema, so isolation and all current code stay). 100 000 companies
+  = ~50 cells. A company can be moved to another cell (dump/restore its schema) without the app changing.
+- **One account, many companies**, company switcher, invite links, domain auto-join, templates on day one.
+- **Free plan to spread**, paid per active user.
+- **Reports and analytics off the main databases** (read replicas, later a data lake).
+
+### 20.3 Architecture (AWS Mumbai `ap-south-1`, backups to Hyderabad `ap-south-2`)
+```
+ Phones (FreeFounders app)   Browsers                      Payment: Razorpay  ─webhooks─┐
+            │                    │                                                          │
+     Route 53 → CloudFront + AWS WAF (rate limits, bot rules) ── web app (S3, cached)       │
+            │                                                                               │
+     ┌──────┴──────────────── GLOBAL ─────────────────────────────────┐                     │
+     │ Platform API (ECS Fargate, autoscaled): sign-up, sign-in,      │◄────────────────────┘
+     │ accounts + memberships, companies → cell, roles, BILLING,      │
+     │ owner console. Aurora "global" (+ reader). Valkey/Redis.       │
+     └──────┬─────────────────────────────────────────────────────────┘
+            │ token carries cid + cell; router sends /tasks/api, /assets/api to the company's cell
+   ┌────────┴────────┐   ┌─────────────────┐        ┌─────────────────┐
+   │ CELL 1          │   │ CELL 2          │  …     │ CELL 50         │   each cell ≤ ~2 000 companies
+   │ Tasks API ×N    │   │ (same)          │        │ (same)          │   (one schema per company)
+   │ Assets API ×N   │   └─────────────────┘        └─────────────────┘
+   │ workers (jobs)  │
+   │ Aurora writer + │   S3: photos, files, exports (private, signed links, lifecycle → cheaper storage → delete)
+   │  reader replica │   SQS / EventBridge: outbox events, jobs, notification fan-out (no polling)
+   │ Valkey (cache,  │   SES email · WhatsApp Cloud API · FCM push (Expo) · Sentry · CloudWatch/OpenTelemetry
+   │  rate limits)   │   Secrets Manager + KMS · GitHub Actions → ECR → ECS (canary cell first)
+   └─────────────────┘
+```
+- Launch = **one cell** + global (no router needed yet: every company is in cell 1). Same code; adding cells later is
+  configuration plus the router.
+- Connection pooling: today the company is chosen with `SET search_path` per request (session state), which blocks
+  transaction pooling (PgBouncer/RDS Proxy pin every session). Change to `SET LOCAL search_path` inside each
+  transaction, then use PgBouncer transaction pooling (thousands of requests on ~100 DB connections per cell).
+- Every cell has a writer + a reader: lists and reports read from the reader; punches and edits go to the writer.
+
+### 20.4 Identity: one account, many companies (Notion model)
+- `accounts` (global: the person's mobile number and/or email, password or Google sign-in, OTP) and `memberships`
+  (account × company × person record × roles). A person who works for two companies, or a consultant, uses one login
+  and a **company switcher**. Today's employee-ID sign-in stays, but only with a company code (IDs are per company).
+- **Mobile number + OTP first** (field staff often have no work email), email + password and "Sign in with Google" too.
+  OTP by SMS (DLT-registered template) or WhatsApp. Admins can turn on authenticator codes (§19.24 left it optional).
+
+### 20.5 New company in seconds (self-serve sign-up)
+1. Website → **Start free** → mobile or work email → OTP → name, password (or Google).
+2. **Create your company**: name, team size, industry, state (needed for GST), choose Attendance / Tasks / Assets.
+3. Instant: the Platform takes a **pre-made empty company schema from a pool** in the least-loaded cell (a background
+   job keeps ~100 ready per cell, migrated and seeded), so nothing waits for migrations. Default content: shift
+   9:30–18:30, leave types, holidays of the chosen state, one sample task, roles Owner/Admin/Manager/Member.
+4. **Invite the team**: link with the role pre-chosen (expires, can be switched off), WhatsApp invite, Excel/CSV import
+   with employee IDs, "anyone with @company.com can join" (domain auto-join, owner approves). Joiners sign in with
+   mobile OTP.
+5. **Getting started checklist**: set the office location (geofence), add 3 people, first punch, install the Android
+   app, connect WhatsApp. A trial banner shows days left and seats used.
+6. Abuse guards: OTP rate limits per number/IP, disposable-email block, CAPTCHA only after suspicious attempts, a limit
+   on new companies per account per day.
+
+### 20.6 Payments and subscriptions (Phase 8)
+- **Provider: Razorpay** (India: UPI Autopay, cards, net banking, e-mandates). Big customers: annual invoice paid by
+  bank transfer (Razorpay payment link / NEFT), marked paid in the owner console.
+- **Plans** (from §9, prices to confirm): Free (decision 1), Tasks ₹99, Assets ₹79, Suite ₹149 per active user per month;
+  annual = 2 months free; 14-day trial of any plan without a card.
+- **Seats** = people with access to at least one app (not switched off). A daily seat snapshot is stored. Adding people
+  mid-month: charged pro-rata on the next invoice (Razorpay subscription add-on); removing: takes effect next cycle.
+  Over the paid seats → the owner is asked to add seats (or seats are added automatically, a company setting).
+- **Life of a subscription** (one state machine in the Platform):
+  `trialing → active → past_due (payment failed: 7 days, banners + WhatsApp/email reminders, Razorpay retries) →
+  read_only (can see and export, cannot add) → suspended (sign-in shows "renew") → deleted after 90 days (export
+  first, DPDP)`. Upgrades are immediate; downgrades and cancellations at the end of the paid period.
+- **Webhooks** (`subscription.activated/charged/pending/halted/cancelled`, `payment.failed`, `invoice.paid`): signature
+  checked, stored once by event ID (`billing_events`, idempotent), applied by a worker; a nightly job compares with
+  Razorpay to catch anything missed.
+- **What a plan unlocks** (entitlements: apps, modules, seat limit, later features such as SSO) is pushed to the apps
+  through the module switches that already exist (`PUT /internal/company`, §16). The apps never deal with money.
+- **GST**: 18 %; CGST + SGST when the customer is in FreeFounders' own state, IGST otherwise; the customer's GSTIN
+  (optional, for input credit) on the invoice; one invoice number series per financial year; PDF emailed and kept in
+  **Billing** (owner only: plan, seats, next charge, payment method, invoices, cancel). Monthly accounting export
+  (Tally / Zoho Books).
+- **New Platform tables**: `plans`, `prices`, `subscriptions`, `seat_snapshots`, `invoices`, `invoice_lines`,
+  `payments`, `billing_events`, `coupons`, `tax_profiles`. **Owner console** (FreeFounders staff only): companies, MRR,
+  trials, failed payments, plan overrides, coupons, support access to a company only with the owner's consent, logged.
+
+### 20.7 Data, files and background work at scale
+- **Files**: punch selfies, attachments and asset photos in S3 (private; links signed for minutes, as §19.21 already
+  does for `/media`); punch photos move to cheaper storage after 30 days and are deleted after the company's retention.
+- **Events between apps**: each app's outbox (already there) is published to SQS/EventBridge by the app's worker; the
+  Platform consumes the queue. This replaces polling every company.
+- **Jobs and reminders**: per-cell workers; mass jobs (shift-start reminders, payroll runs, monthly reports) are split
+  into small batches through the queue and spread over minutes, never one loop over all companies.
+- **Cache and rate limits**: Valkey/Redis per cell (shared throttles, permission cache). §14's "no Redis" holds for
+  launch; this is where it changes (decision 4).
+- **Reports and analytics**: heavy reports on the reader; product-wide statistics and the owner console from a data
+  lake later (change data capture → S3 → Athena), as Notion did.
+- **Noisy neighbours**: per-company request limits and job quotas, so one big import cannot slow a whole cell.
+
+### 20.8 Security and law at scale
+DPDP Act 2023 (consent for location and photos, purpose, retention, export and deletion per company and per person,
+breach notice, grievance officer), data stays in India, encryption at rest (KMS) and in transit, WAF, the §19.21 live
+checklist (enforced CSP, locked app server address, DEBUG off, trusted proxy settings), a yearly penetration test,
+later SOC 2 / ISO 27001 for big customers, enterprise SSO (SAML) and audit-log export.
+
+### 20.9 Operations
+- Deploys: GitHub Actions → images → canary cell → all cells in waves; database changes "expand, then contract" so old
+  and new code both work during a rollout; the company schemas of a cell are migrated in parallel batches, with a
+  dashboard.
+- Monitoring: Sentry (web, app, APIs), CloudWatch + OpenTelemetry traces, per-cell dashboards (latency, errors, punches
+  per minute, queue depth), alerts to a phone, a public status page.
+- Backups: Aurora point-in-time restore (35 days), daily copies to Hyderabad, a monthly restore drill; one company can
+  be restored by its schema.
+- Load test before launch and before each new cell size: 1 000 punches / s with selfies (k6).
+
+### 20.10 Rough monthly cost (AWS, before discounts; to refine with real usage)
+- Launch (global + 1 cell, up to 50 000 users): about ₹60 000 – ₹1 20 000 / month.
+- Each further cell (~2 000 companies): about ₹1.5 – 2.5 lakh / month, plus S3 and messaging by volume. At the target,
+  infrastructure should stay around 3–6 % of revenue (2 000 000 users × ₹99 ≈ ₹19.8 crore / month).
+- Outside AWS: Razorpay ~2 % per payment (UPI Autopay less), WhatsApp per conversation, SMS OTP per message.
+
+### 20.11 The steps, in order
+| Step | Name | What | Done when |
+|---|---|---|---|
+| **0** | **Before strangers can sign up** (the step before) | §19.21 live checklist; photos to S3; staging + production on AWS Mumbai (one cell); https domain; Play Store app with a locked server address; Sentry, backups, status page; legal pages + DPDP consent; load test; the founder checklist in §11 (domain, AWS, Razorpay KYC, Play organisation account, WhatsApp) | CarTrends runs on it as company #1 |
+| 1 | **Self-serve + payments** (Phase 8) | Accounts + memberships, mobile OTP, sign-up, schema pool, invite links, templates, Billing screen, Razorpay, GST invoices, trial/dunning state machine, entitlements, owner console | A stranger signs up, invites 10 people and pays without our help |
+| 2 | **Ready for many companies** | `SET LOCAL` + PgBouncer, Redis, outbox → SQS (no polling), batched reminders, per-company limits, cell router + a second cell, moving a company between cells, canary deploys | Load test with 10 000 companies over 2 cells |
+| 3 | **Millions** | Cells added by automation, readers for reports, data lake, enterprise (SSO, audit export, dedicated cell, custom domain), DR drill, SOC 2 | 50 cells, 99.9 % uptime |
+
+### 20.12 Founder decisions
+1. **Free plan?** Notion grew with one. Proposal: free for up to 5 users, Attendance only; or trial only.
+2. **One account in many companies** (switcher): recommended yes. It changes sign-in (mobile/email are global; an
+   employee ID needs the company code).
+3. **Sign-in for new users**: mobile OTP + password (recommended), plus Google sign-in and email.
+4. **Redis/Valkey** from step 2 (replacing §14's "no Redis" for scale).
+5. **Invoices**: our own GST invoices from the Platform (recommended: full control) or Razorpay's invoices.
+6. **Prices** (§9), minimum seats, annual discount, and the legal entity + GST state that sells.
