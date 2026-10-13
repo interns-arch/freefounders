@@ -74,7 +74,7 @@ function DynamicField({ field, form, name }: { field: FieldDefinition; form: Use
                       onClick={() => f.onChange(on ? selected.filter((x) => x !== o) : [...selected, o])}
                       className={cn(
                         'cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition',
-                        on ? 'border-primary bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:text-foreground',
+                        on ? 'border-primary bg-primary/8 text-primary' : 'bg-card text-muted-foreground hover:text-foreground',
                       )}
                     >
                       {o}

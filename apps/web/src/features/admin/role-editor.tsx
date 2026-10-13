@@ -361,7 +361,7 @@ function PermissionRow({
               onClick={() => onScope(s)}
               className={cn(
                 'min-h-10 cursor-pointer rounded-full px-3 text-xs font-medium text-muted-foreground transition outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed sm:min-h-0 sm:px-2.5 sm:py-0.5',
-                grant.scope === s && 'bg-gradient-to-b from-brand-2 to-primary font-semibold text-primary-foreground shadow-xs',
+                grant.scope === s && 'bg-primary font-semibold text-primary-foreground shadow-xs',
               )}
             >
               {SCOPE_LABELS[s]}

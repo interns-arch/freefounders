@@ -82,7 +82,7 @@ export function LeadsPage() {
         title="Leads"
         description="Every enquiry from first contact to won or lost. Drag a card to move it along, or open it to work on it."
         actions={
-          <Button onClick={() => setAdding(true)}>
+          <Button variant="cta" onClick={() => setAdding(true)}>
             <Plus /> Add lead
           </Button>
         }

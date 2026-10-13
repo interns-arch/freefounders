@@ -1,5 +1,5 @@
 import { errorMessage, session, useSignIn } from '@freefounders/core';
-import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, LogIn, Package, ShieldCheck } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -47,39 +47,47 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      {/* Desktop only: the forest-green panel with two soft glows. Phones get just the form. */}
-      <aside className="relative hidden overflow-hidden bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between lg:p-12" aria-hidden>
-        <div className="pointer-events-none absolute -top-40 -left-32 size-[36rem] rounded-full bg-brand-2/20 blur-3xl" />
-        <div className="pointer-events-none absolute -right-32 -bottom-40 size-[32rem] rounded-full bg-primary/35 blur-3xl" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-black/25" />
-        <div className="relative">
-          <Logo onDark />
-        </div>
-        <div className="relative max-w-md space-y-7">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.07] px-3 py-1 font-mono text-[11px] tracking-widest text-brand-2 uppercase">
-            <span className="size-1.5 rounded-full bg-brand-2" />
+      {/* Desktop only: a flat trust-blue panel (deep navy in dark mode). Phones get just the form. */}
+      <aside className="hidden bg-primary text-primary-foreground lg:flex lg:flex-col lg:justify-between lg:p-12 dark:border-r dark:border-border dark:bg-card dark:text-card-foreground" aria-hidden>
+        <Logo onPrimary />
+        <div className="max-w-md space-y-7">
+          <span className="inline-flex items-center gap-2 rounded-full border border-primary-foreground/35 px-3 py-1 font-mono text-[11px] font-semibold tracking-widest uppercase dark:border-primary/35 dark:text-primary">
+            <span className="size-1.5 rounded-full bg-current" />
             One sign-in · every app
           </span>
-          <p className="text-[2.6rem] leading-[1.08] font-extrabold tracking-tight text-white">Run your whole team from one place.</p>
+          <p className="text-[2.6rem] leading-[1.1] font-extrabold tracking-tight dark:text-foreground">Run your whole team from one place.</p>
           <ul className="space-y-3">
             {POINTS.map((p) => (
-              <li key={p.text} className="flex items-center gap-3 text-[15px] text-sidebar-foreground">
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/[0.07] text-brand-2 ring-1 ring-white/10">
+              <li key={p.text} className="flex items-center gap-3 text-[15px] font-medium">
+                <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary-foreground/12 dark:bg-primary/12 dark:text-primary">
                   <p.icon className="size-[18px]" />
                 </span>
                 {p.text}
               </li>
             ))}
           </ul>
+          {/* A glimpse of the app: the punch card with its orange call to action (decorative, like the whole panel). */}
+          <div className="max-w-sm rounded-xl border border-border bg-card p-4 text-card-foreground shadow-pop">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-mono text-2xl font-bold tracking-tight tabular-nums">09:30 am</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-0.5 text-xs font-semibold text-destructive">
+                <span className="size-1.5 rounded-full bg-current" />
+                Not checked in
+              </span>
+            </div>
+            <span className="mt-3 flex h-11 items-center justify-center gap-2 rounded-md bg-cta text-[15px] font-semibold text-cta-foreground">
+              <LogIn className="size-4" /> Punch in
+            </span>
+          </div>
         </div>
-        <p className="relative text-sm text-sidebar-foreground/60">FreeFounders</p>
+        <p className="text-sm">FreeFounders</p>
       </aside>
       <main id="content" className="flex items-center justify-center bg-background p-4 sm:p-6">
         <div className="w-full max-w-[400px]">
           <div className="mb-5 flex justify-center lg:hidden">
             <Logo />
           </div>
-          <form onSubmit={submit} noValidate className="space-y-5 rounded-xl border bg-card p-5 shadow-card-lg sm:p-7" aria-labelledby="signin-title">
+          <form onSubmit={submit} noValidate className="space-y-5 rounded-xl border bg-card p-5 shadow-card sm:p-7" aria-labelledby="signin-title">
             <h1 id="signin-title" className="text-2xl font-bold tracking-tight">
               Sign in
             </h1>

@@ -1738,3 +1738,71 @@ ui-ux-pro-max skill to improve UI/UX as much as possible without changing the st
   and a Caps Lock note. Structure, URLs and names unchanged.
 - Checks: web build, e2e 60/60, smoke 10/10, Platform 77, Tasks 855 + tenancy 34, Assets 90, mobile 21.
 - Founder decisions pending: see the "For the founder" lists at the end of each security doc.
+
+### 19.22 New theme: trust blue + orange, full visual refresh (2026-10-12)
+Founder: "Trust blue + orange" (palette from the ui-ux-pro-max skill for "B2B SaaS HR attendance workforce dashboard",
+Plus Jakarta Sans), "Full refresh, same screens". Style: **flat, clean, data-dense SaaS** with soft low shadows; the
+skill's glassmorphism suggestion was rejected (blur is slow on low-end phones). Nothing moved: same menus, screens,
+order, features, URLs and every visible name/label/role the e2e tests use.
+
+**Tokens** (`packages/theme/tokens.css` = `src/tokens.ts`; `src/tokens.native.ts` regenerated). Contrast measured
+(WCAG ratio; "tint" = the colour as text on its own faint tint, as in badges, pills and the active menu item).
+
+| Token | Light | Contrast (light) | Dark | Contrast (dark) |
+|---|---|---|---|---|
+| page / card | `#f8fafc` / `#ffffff` | | `#0b1220` / `#131c31` | |
+| text | `#0f172a` | 17.9 card, 17.1 page | `#f1f5f9` | 15.5 card, 17.1 page |
+| muted text | `#475569` | 7.6 card, 6.9 on muted `#f1f5f9` | `#94a3b8` | 6.6 card, 5.9 on muted |
+| primary (buttons, links, active menu, focus) | `#2361e9` (= #2563EB, a hair deeper) | white label 5.3, 4.7 on 8 % tint | `#60a5fa` | navy label 7.4, 6.7 card, 5.5 on 12 % tint |
+| secondary blue (`--brand-2`) | `#3b82f6` | decoration only | `#3b82f6` | decoration only |
+| **CTA orange** (`--cta`) | `#d14400` + white | white label 4.6 (the skill's #EA580C is 3.6 with white) | `#f97316` + navy | navy label 6.7 |
+| danger | `#cb1e20` | 5.6 card, 4.8 tint | `#f87171` | 6.1, 5.4 tint |
+| success | `#047857` | 5.5, 4.8 tint (#059669 was 3.8) | `#34d399` | 8.8, 7.3 tint |
+| warning (amber) | `#975d00` | 5.4, 4.7 tint | `#fbbf24` | 10.2, 8.4 tint |
+| info (sky) | `#0469a1` | 5.9, 5.1 tint | `#38bdf8` | 7.9, 6.6 tint |
+| Attendance accent (violet) | `#7c3aed` | 5.7, 4.9 tint | `#a78bfa` | 6.2, 5.3 tint |
+| Tasks accent (blue) | `#2361e9` | 5.3, 4.6 tint | `#60a5fa` | 6.7, 5.6 tint |
+| Assets accent (teal) | `#0f766e` | 5.5, 4.8 tint | `#2dd4bf` | 9.1, 7.5 tint |
+| Admin accent (slate) | `#475569` | 7.6, 6.5 tint | `#94a3b8` | 6.6, 5.6 tint |
+| sidebar | white, text `#334155` (10.4), active = primary on 8 % tint (4.7) | | deep navy `#080d19`, text `#cbd5e1` (13.1), active 6.5 | |
+| border / field border / ring | `#e2e8f0` / `#cbd5e1` / primary | | `#243049` / `#334155` / primary | |
+
+New token pair `--cta` / `--cta-foreground` (Tailwind `bg-cta text-cta-foreground`, button `variant="cta"`). Radius
+`--radius` 12 px: 6 px tiny things, 8 px controls (buttons, fields, menus), 12 px every card/dialog (`rounded-lg` =
+`rounded-xl` = `rounded-2xl`). Shadows: soft slate, three levels (`shadow-card`, `shadow-card-lg`, `shadow-pop`).
+
+**Brand colour** (Settings) still replaces `--primary`; `lib/brand-colour.ts` now aims at the same contrast as the
+default blues (5.3:1 on white, 6:1 on the dark cards) so brand text also stays readable on its own tint; `--brand-2` and
+`--ring` keep the exact colour. The orange CTA stays orange with any brand colour. Checked with #29b7db (the demo
+company's), #0f7b5f, #e11d48, #f59e0b, #7c3aed: no text under 4.5:1.
+
+**What changed**
+- Building blocks: buttons (primary flat blue, `cta` orange, outline/secondary/ghost hover to a blue tint, destructive,
+  success; no gradients), fields 8 px with a blue focus border, labels medium weight, table headers on a muted band with
+  muted uppercase text and a stronger row hover, badges/pills/chips with the tint levels above, tabs/segmented controls
+  with one weight (no width jump), dialogs/sheets without backdrop blur, toasts (sonner) in theme colours light/dark,
+  empty/error states as a round tinted icon + one line + next action, flat progress bars and loading lines.
+- Frame: white sidebar with a blue active item (navy in dark mode), workspace groups with tinted icon chips; solid
+  header and phone bottom bar (no blur), active tab = blue pill; logo mark flat blue; favicon and `theme-color` metas.
+- Sign-in: the forest-green panel with glows became a flat blue panel (navy card in dark mode) with a small preview of
+  the punch card and its orange Punch in; same form, labels and button.
+- Home: flat cards without colour bars, tinted workspace chips, **Punch in / Punch out is the orange CTA**.
+  Attendance → Today: flat header band; whichever punch is due (Check in or Check out) is orange, the other outlined.
+- The single main action per screen is orange: Add person, Add task (My Tasks), Add lead, Apply for leave, New idea,
+  Add link, New role, Add asset (header), Add employee, Raise ticket, New request, Add location/department/vendor.
+- Sweep: every decorative glow, gradient fill, `brand-2` gradient, custom black shadow and hover lift in the screens is
+  gone (flat tints instead); asset category colour names remapped to the new tokens (orange = CTA orange, teal = Assets
+  teal…); faded text that was under 4.5:1 (calendar weekends, picker placeholders, zero counts, inactive people rows)
+  fixed.
+- Android shell: splash and adaptive-icon background colours in `apps/mobile/app.json` follow the tokens (`#f8fafc`,
+  `#2563eb`, dark `#0b1220`); `palette.ts` already reads `tokens.native.ts`.
+
+**What stayed**: Plus Jakarta Sans + IBM Plex Mono, 15 px desktop / 16 px phone base (16 px fields on phones), every
+layout, menu, URL, name and label; lite mode (`[data-lite]` still strips shadows, blur, gradients, motion) and reduced
+motion; the brand-colour override.
+
+**Checked**: computed contrast of every visible text node (composited backgrounds) on 16 screens + account menu,
+notifications, phone drawer and sign-in, 1440 and 375 px, light and dark: 0 under AA (70 page audits); 375/768/1024/1440
+screenshots. Web build (rules + typecheck + build + SW check) green; mobile 21/21 + typecheck; smoke 10/10; e2e 60/60 (2026-10-13); Tasks 855.
+Found on the way: staff search (Live/Daily/Dashboard/Reports) matched *any* typed word, so "E2E Import x" listed
+every test person; now every word must be in the name (`hr/team.py`, test in `tests_team_views.py`).

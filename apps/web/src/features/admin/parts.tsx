@@ -14,7 +14,7 @@ export function AdminOnly({ allow }: { allow: (a: Access) => boolean }) {
 }
 
 const APP_TONE: Record<string, string> = {
-  tasks: 'bg-app-tasks/12 text-app-tasks border-app-tasks/25',
+  tasks: 'bg-app-tasks/8 text-app-tasks border-app-tasks/25',
   assets: 'bg-app-assets/12 text-app-assets border-app-assets/25',
   platform: 'bg-app-admin/12 text-app-admin border-app-admin/25',
 };

@@ -177,7 +177,7 @@ export function TaskListTab({
         )}
         <span className="flex-1" />
         {scope !== 'all' && (
-          <Button onClick={onAdd}>
+          <Button variant="cta" onClick={onAdd}>
             <Plus /> Add task
           </Button>
         )}

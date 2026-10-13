@@ -11,32 +11,33 @@ import { cn } from '@/lib/utils';
 
 export type Tone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 
+// Text on its own tint: 10 % (8 % for the primary blue) keeps every tone at 4.5:1 or more (PLAN.md §19.22).
 const CHIP: Record<Tone, string> = {
   neutral: 'border-border bg-muted text-muted-foreground',
-  primary: 'border-primary/20 bg-primary/10 text-primary',
+  primary: 'border-primary/20 bg-primary/8 text-primary',
   success: 'border-success/25 bg-success/10 text-success',
-  warning: 'border-warning/30 bg-warning/12 text-warning',
+  warning: 'border-warning/30 bg-warning/10 text-warning',
   danger: 'border-destructive/25 bg-destructive/10 text-destructive',
   info: 'border-info/25 bg-info/10 text-info',
 };
 
-/** Solid tints for small count pills (the old app's badge). */
+/** Flat tints for small count pills. */
 const PILL: Record<Tone, string> = {
   neutral: 'bg-muted text-muted-foreground',
-  primary: 'bg-primary/12 text-primary',
-  success: 'bg-success/14 text-success',
-  warning: 'bg-warning/16 text-warning',
-  danger: 'bg-destructive/12 text-destructive',
-  info: 'bg-info/14 text-info',
+  primary: 'bg-card text-primary ring-1 ring-inset ring-primary/25',
+  success: 'bg-success/10 text-success',
+  warning: 'bg-warning/10 text-warning',
+  danger: 'bg-destructive/10 text-destructive',
+  info: 'bg-info/10 text-info',
 };
 
 const ICON_TONE: Record<Tone, string> = {
   neutral: 'bg-muted text-muted-foreground',
-  primary: 'bg-primary/12 text-primary',
-  success: 'bg-success/12 text-success',
-  warning: 'bg-warning/15 text-warning',
+  primary: 'bg-primary/8 text-primary',
+  success: 'bg-success/10 text-success',
+  warning: 'bg-warning/10 text-warning',
   danger: 'bg-destructive/10 text-destructive',
-  info: 'bg-info/12 text-info',
+  info: 'bg-info/10 text-info',
 };
 
 /** A small round count (e.g. "3" next to a tab or a title). */
@@ -111,9 +112,9 @@ export function Panel({
       {hasHead && (
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3.5 pb-2.5 sm:px-5">
           {title && (
-            <h2 className="flex min-w-0 flex-wrap items-center gap-2 text-[15px] font-bold tracking-tight">
+            <h2 className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold tracking-tight">
               {Icon && (
-                <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-lg', ICON_TONE[tone])}>
+                <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-md', ICON_TONE[tone])}>
                   <Icon className="size-4" />
                 </span>
               )}
@@ -134,7 +135,7 @@ export function SectionHead({ children, className, actions }: { children: ReactN
   return (
     <div className={cn('flex items-center justify-between gap-2 pt-1', className)}>
       <h2 className="flex items-center gap-2 text-xs font-bold tracking-[0.1em] text-muted-foreground uppercase">
-        <span aria-hidden className="h-3 w-1 rounded-full bg-gradient-to-b from-brand-2 to-primary" />
+        <span aria-hidden className="h-3 w-1 rounded-full bg-primary" />
         {children}
       </h2>
       {actions}
@@ -147,7 +148,7 @@ export function Empty({ icon: Icon, children, className, action }: { icon?: Comp
   return (
     <div className={cn('flex flex-col items-center justify-center gap-2 px-4 py-7 text-center text-sm text-muted-foreground', className)}>
       {Icon && (
-        <span className="flex size-10 items-center justify-center rounded-xl border border-dashed bg-muted/40">
+        <span className="flex size-10 items-center justify-center rounded-full bg-muted">
           <Icon className="size-4.5" />
         </span>
       )}
@@ -178,13 +179,13 @@ export function Tile({
   const body = (
     <Card
       className={cn(
-        'flex h-full items-center gap-3.5 p-4 transition-[box-shadow,border-color,transform] duration-150',
-        alert && 'border-destructive/35 bg-gradient-to-b from-card to-destructive/6',
-        to && 'hover:-translate-y-px hover:border-primary/40 hover:shadow-[0_6px_18px_-8px_rgb(0_0_0/0.18)]',
+        'flex h-full items-center gap-3.5 p-4 transition-[box-shadow,border-color] duration-150',
+        alert && 'border-destructive/35 bg-destructive/4',
+        to && 'hover:border-primary/40 hover:shadow-card-lg',
       )}
     >
       {Icon && (
-        <span className={cn('hidden size-10 shrink-0 items-center justify-center rounded-xl min-[420px]:flex sm:size-11', ICON_TONE[alert ? 'danger' : tone])}>
+        <span className={cn('hidden size-10 shrink-0 items-center justify-center rounded-lg min-[420px]:flex sm:size-11', ICON_TONE[alert ? 'danger' : tone])}>
           <Icon className="size-5" />
         </span>
       )}
@@ -235,7 +236,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className={cn('inline-flex max-w-full flex-wrap gap-0.5 rounded-full border bg-muted/60 p-0.5', className)}>
+    <div role="group" aria-label={label} className={cn('inline-flex max-w-full flex-wrap gap-0.5 rounded-full border bg-muted p-0.5', className)}>
       {options.map(([v, l]) => (
         <button
           key={v}
@@ -243,8 +244,8 @@ export function Segmented<T extends string>({
           aria-pressed={value === v}
           onClick={() => onChange(v)}
           className={cn(
-            'inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-10 max-sm:px-3.5',
-            value === v && 'bg-card font-semibold text-primary shadow-[0_1px_2px_rgb(0_0_0/0.08)] ring-1 ring-border',
+            'inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-10 max-sm:px-3.5',
+            value === v && 'bg-card text-primary shadow-card ring-1 ring-border',
           )}
         >
           {l}

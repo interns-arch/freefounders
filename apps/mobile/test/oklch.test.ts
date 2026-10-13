@@ -25,5 +25,5 @@ test('percent lightness, alpha, bad input', () => {
 });
 
 test('the product primary colour', () => {
-  assert.equal(oklchToHex('oklch(0.5 0.12 168)'), '#007856');
+  assert.equal(oklchToHex('oklch(0.54 0.215 262.9)'), '#2361e9'); // trust blue (PLAN.md §19.22)
 });

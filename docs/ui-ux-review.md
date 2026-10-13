@@ -77,3 +77,19 @@ Each line: rule → where → fix. `[x]` = fixed in this pass, `[ ]` = left on p
 - [x] Bar charts (Team performance, Tasks dashboard by category, Leads per day) had values only on hover → values written
   above each bar (up to 24 bars), 12 px axis text, a text summary for screen readers.
 - [x] Score bars were red / amber / green with no key → a key in words under the chart.
+
+## 11. New theme: trust blue + orange (2026-10-12, PLAN.md §19.22)
+The forest-green theme above was replaced by the founder's "trust blue + orange" (ui-ux-pro-max palette for a B2B SaaS
+HR/workforce dashboard; flat style, glassmorphism rejected for low-end phones). Same screens, names and URLs.
+- [x] Colour → every text token reaches 4.5:1 on its surface **and on its own tint** (badges, pills, active menu):
+  primary `#2361e9` (5.3 / 4.7 on tint), CTA `#d14400` with white (4.6; the skill's `#EA580C` is 3.6 with white), success
+  `#047857` (the suggested `#059669` is 3.8), amber warning `#975d00` (kept apart from the orange CTA); dark mode navy
+  surfaces with `#60a5fa` primary and navy text on it (7.4). Brand colours aim at the same levels (5.3:1 / 6:1).
+- [x] Primary action → one orange CTA per screen (`Button variant="cta"`): Punch in/out, Check in/out (the due one),
+  Add person / task / lead / asset / employee, Apply for leave, Raise ticket, New request / idea / role, Add link.
+- [x] Style → no gradients, glows, backdrop blur or hover lifts; one radius scale (6 / 8 / 12 px); three soft shadows.
+- [x] Measured → computed contrast of every visible text node, 16 screens + menus/drawer/sign-in, 375 and 1440 px,
+  light and dark, default theme and five brand colours: 0 under AA. Fixed on the way: faded weekend headers, picker
+  placeholders, zero counts in Delegation, dimmed inactive people rows, stacked tints in the Assets status chips.
+- [ ] Sticky table headers: tables scroll sideways inside their own box, so a sticky header would not stick to the page;
+  left as is.

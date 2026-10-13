@@ -132,16 +132,16 @@ export const ICON_NAMES = Object.keys(ICONS);
  * colours come from the theme tokens (PLAN.md §19.1), so the brand colour and dark mode reach every tile.
  */
 export const COLORS: Record<string, { bg: string; text: string; bar: string; ring: string }> = {
-  blue: { bg: 'bg-info/12 dark:bg-info/18', text: 'text-info', bar: 'bg-info', ring: 'ring-info/30' },
-  indigo: { bg: 'bg-app-assets/12 dark:bg-app-assets/18', text: 'text-app-assets', bar: 'bg-app-assets', ring: 'ring-app-assets/30' },
-  violet: { bg: 'bg-app-attendance/12 dark:bg-app-attendance/18', text: 'text-app-attendance', bar: 'bg-app-attendance', ring: 'ring-app-attendance/30' },
-  emerald: { bg: 'bg-success/12 dark:bg-success/18', text: 'text-success', bar: 'bg-success', ring: 'ring-success/30' },
-  teal: { bg: 'bg-primary/12 dark:bg-primary/18', text: 'text-primary', bar: 'bg-primary', ring: 'ring-primary/30' },
-  cyan: { bg: 'bg-brand-2/15 dark:bg-brand-2/18', text: 'text-primary', bar: 'bg-brand-2', ring: 'ring-brand-2/30' },
-  amber: { bg: 'bg-warning/12 dark:bg-warning/18', text: 'text-warning', bar: 'bg-warning', ring: 'ring-warning/30' },
-  orange: { bg: 'bg-app-admin/12 dark:bg-app-admin/18', text: 'text-app-admin', bar: 'bg-app-admin', ring: 'ring-app-admin/30' },
-  red: { bg: 'bg-destructive/12 dark:bg-destructive/18', text: 'text-destructive', bar: 'bg-destructive', ring: 'ring-destructive/30' },
-  rose: { bg: 'bg-destructive/8 dark:bg-destructive/14', text: 'text-destructive', bar: 'bg-destructive/70', ring: 'ring-destructive/25' },
+  blue: { bg: 'bg-info/10 dark:bg-info/18', text: 'text-info', bar: 'bg-info', ring: 'ring-info/30' },
+  indigo: { bg: 'bg-app-tasks/10 dark:bg-app-tasks/18', text: 'text-app-tasks', bar: 'bg-app-tasks', ring: 'ring-app-tasks/30' },
+  violet: { bg: 'bg-app-attendance/10 dark:bg-app-attendance/18', text: 'text-app-attendance', bar: 'bg-app-attendance', ring: 'ring-app-attendance/30' },
+  emerald: { bg: 'bg-success/10 dark:bg-success/18', text: 'text-success', bar: 'bg-success', ring: 'ring-success/30' },
+  teal: { bg: 'bg-app-assets/10 dark:bg-app-assets/18', text: 'text-app-assets', bar: 'bg-app-assets', ring: 'ring-app-assets/30' },
+  cyan: { bg: 'bg-brand-2/10 dark:bg-brand-2/18', text: 'text-info', bar: 'bg-brand-2', ring: 'ring-brand-2/30' },
+  amber: { bg: 'bg-warning/10 dark:bg-warning/18', text: 'text-warning', bar: 'bg-warning', ring: 'ring-warning/30' },
+  orange: { bg: 'bg-cta/10 dark:bg-cta/18', text: 'text-cta', bar: 'bg-cta', ring: 'ring-cta/30' },
+  red: { bg: 'bg-destructive/10 dark:bg-destructive/18', text: 'text-destructive', bar: 'bg-destructive', ring: 'ring-destructive/30' },
+  rose: { bg: 'bg-destructive/6 dark:bg-destructive/14', text: 'text-destructive', bar: 'bg-destructive/70', ring: 'ring-destructive/25' },
   slate: { bg: 'bg-muted', text: 'text-muted-foreground', bar: 'bg-muted-foreground', ring: 'ring-border' },
   stone: { bg: 'bg-secondary', text: 'text-secondary-foreground', bar: 'bg-secondary-foreground/60', ring: 'ring-border' },
 };

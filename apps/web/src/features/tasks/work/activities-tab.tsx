@@ -78,7 +78,7 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
                 aria-pressed={on}
                 title={on ? `Showing only ${c.name} — click to clear` : `Show only ${c.name}`}
                 onClick={() => setActor(on ? '' : String(c.user))}
-                className={cn('inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-card py-0.5 pr-2.5 pl-0.5 text-[13px] font-medium shadow-xs transition hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none', on && 'border-primary bg-primary/10 text-primary')}
+                className={cn('inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-card py-0.5 pr-2.5 pl-0.5 text-[13px] font-medium shadow-xs transition hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none', on && 'border-primary bg-primary/8 text-primary')}
               >
                 <Avatar name={c.name} className="size-6 text-xs" />
                 {c.name}

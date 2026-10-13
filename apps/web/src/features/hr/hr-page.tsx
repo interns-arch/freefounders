@@ -84,7 +84,7 @@ export function HrPage() {
     <div className="space-y-4">
       <PageHeader className="mb-0" title="Leave & Attendance" />
       <nav ref={tabsRow} aria-label="Attendance and leave sections" className="no-scrollbar -mx-4 overflow-x-auto px-4 py-1 lg:mx-0 lg:px-0">
-        <div className="flex w-max gap-0.5 rounded-full border bg-muted/60 p-0.5">
+        <div className="flex w-max gap-0.5 rounded-full border bg-muted p-0.5">
           {tabs.map(([v, label]) => (
             <button
               key={v}
@@ -92,8 +92,8 @@ export function HrPage() {
               aria-current={tab === v ? 'page' : undefined}
               onClick={() => choose(v)}
               className={cn(
-                'inline-flex h-8 cursor-pointer items-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground max-sm:h-10 max-sm:px-4',
-                tab === v && 'bg-card font-semibold text-primary shadow-[0_1px_2px_rgb(0_0_0/0.08)] ring-1 ring-border',
+                'inline-flex h-8 cursor-pointer items-center rounded-full px-3.5 text-[13px] font-semibold whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground max-sm:h-10 max-sm:px-4',
+                tab === v && 'bg-card text-primary shadow-card ring-1 ring-border',
               )}
             >
               {label}

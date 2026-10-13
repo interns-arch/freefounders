@@ -86,7 +86,7 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
         </Button>
         {userName && <span className="text-sm font-medium text-muted-foreground">· {userName}</span>}
         {data && (
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary/8 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
             <Timer className="size-3.5" /> Total {data.total_hours} h
           </span>
         )}
@@ -224,10 +224,10 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
   const pad = (x: number) => String(x).padStart(2, '0');
   const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   return (
-    <div className="rounded-2xl border bg-card p-2 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] sm:p-3">
-      <div className="mb-1 grid grid-cols-7 gap-1 text-center font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+    <div className="rounded-2xl border bg-card p-2 shadow-card sm:p-3">
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center font-mono text-[11px] font-semibold tracking-[0.08em] text-foreground/80 uppercase">
         {DOW.map((d, i) => (
-          <div key={d} className={cn('py-1', i >= 5 && 'text-muted-foreground/70')}>
+          <div key={d} className={cn('py-1', i >= 5 && 'text-muted-foreground')}>
             {d}
           </div>
         ))}
@@ -251,15 +251,15 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
               className={cn(
                 'relative flex aspect-square min-h-10 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border text-sm transition-[box-shadow,transform,border-color] disabled:cursor-default sm:aspect-auto sm:h-[4.25rem] sm:rounded-xl',
                 STATUS_CELL[d.status ?? 'future'],
-                d.status && 'hover:-translate-y-px hover:shadow-sm',
-                !d.status && 'text-muted-foreground/70',
+                d.status && 'hover:shadow-sm',
+                !d.status && 'text-muted-foreground',
                 isSel && 'ring-2 ring-primary ring-offset-1 ring-offset-card',
               )}
             >
               <span
                 className={cn(
                   'flex size-6 items-center justify-center rounded-full font-mono text-[13px] font-semibold tabular-nums',
-                  isToday && 'bg-gradient-to-b from-brand-2 to-primary text-primary-foreground shadow-sm',
+                  isToday && 'bg-primary text-primary-foreground shadow-sm',
                 )}
               >
                 {num}

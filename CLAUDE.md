@@ -36,6 +36,9 @@ from source. Its web side is `apps/web/src/lib/native-bridge.ts` (used only insi
 hex/rgb/oklch). Each area owns `src/features/<area>/` and `packages/core/src/<area>/`. Same URLs as the old apps
 (`/tasks/…`, `/assets/…`). **Every module is in the new app** (PLAN.md §19.10); the old web apps, the Capacitor shell and
 `apps/portal` were deleted in §19.13 (git history has them). The services are APIs only.
+Theme (PLAN.md §19.22): "trust blue + orange", flat SaaS: blue `--primary` for actions/links/active menu, orange `--cta`
+(`<Button variant="cta">`) only for the one main action of a screen (Punch in/out, Add task…), white sidebar (navy in dark
+mode), 12 px cards / 8 px controls; text ≥ 4.5:1 on its surface and on its own tint; no gradients, glows or blur.
 Attendance is its own area at `/attendance/<tab>` (HR screens; `/tasks/hr?tab=` redirects). `/` is **Home** inside the app
 frame (attendance card with punch-in first, then Tasks/Assets counts, admin shortcuts; PLAN.md §19.14); on phones `/` lands on
 `/attendance` and `/?home=1` opens Home. One menu for everything: sidebar groups Attendance / Tasks / Assets / Admin from

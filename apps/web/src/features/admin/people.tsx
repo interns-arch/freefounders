@@ -17,7 +17,6 @@ import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/overlays';
 import { Avatar, Card } from '@/components/ui/primitives';
-import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill } from './parts';
 import { DeletePersonDialog, ExitDialog, PersonRolesDialog, PersonSheet, ResetPasswordDialog } from './people-dialogs';
 
@@ -76,7 +75,7 @@ export function PeoplePage() {
       key: 'person',
       header: 'Person',
       cell: (p) => (
-        <div className={cn('flex min-w-44 items-center gap-3', p.status === 'inactive' && 'opacity-60')}>
+        <div className="flex min-w-44 items-center gap-3">
           <Avatar name={p.fullName} className="size-9" />
           <div className="min-w-0">
             <p className="truncate font-semibold">{p.fullName}</p>
@@ -218,7 +217,7 @@ export function PeoplePage() {
         description={`Everyone at ${me?.company.name ?? 'your company'}: their login and their roles. Roles decide which apps they can open.`}
         actions={
           can('people.manage') && (
-            <Button onClick={() => setOpen({ kind: 'add' })}>
+            <Button variant="cta" onClick={() => setOpen({ kind: 'add' })}>
               <Plus /> Add person
             </Button>
           )

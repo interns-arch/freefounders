@@ -181,10 +181,10 @@ function CardTitle({ w, index, children }: { w: Exclude<Workspace, 'admin'>; ind
   const look = WORKSPACE_LOOK[w];
   return (
     <div className="flex items-center gap-3">
-      <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', look.solid)} aria-hidden>
+      <span className={cn('grid size-10 shrink-0 place-items-center rounded-lg', look.soft)} aria-hidden>
         <look.icon className="size-5" />
       </span>
-      <h2 id={`card-${w}`} className="min-w-0 flex-1 text-[17px] leading-tight font-bold tracking-tight">
+      <h2 id={`card-${w}`} className="min-w-0 flex-1 text-[17px] leading-tight font-semibold tracking-tight">
         <Link to={WORKSPACE_HOME[w]} className="rounded outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50">
           {TITLES[w]}
         </Link>
@@ -203,7 +203,6 @@ function CardTitle({ w, index, children }: { w: Exclude<Workspace, 'admin'>; ind
  */
 function WorkspaceCard({ w, index, badge, children, action }: { w: Exclude<Workspace, 'admin'>; index: number; badge?: ReactNode; children: ReactNode; action: ReactNode }) {
   const navigate = useNavigate();
-  const look = WORKSPACE_LOOK[w];
   const openIfCard = (e: React.MouseEvent) => {
     // Clicks on buttons, links, inputs inside the card are theirs.
     if ((e.target as HTMLElement).closest('button, a, input, label, [role=dialog]')) return;
@@ -213,9 +212,8 @@ function WorkspaceCard({ w, index, badge, children, action }: { w: Exclude<Works
     <section
       aria-labelledby={`card-${w}`}
       onClick={openIfCard}
-      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-shadow hover:shadow-card-lg focus-within:ring-2 focus-within:ring-ring/40"
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-[box-shadow,border-color] hover:border-primary/30 hover:shadow-card-lg focus-within:ring-2 focus-within:ring-ring/40"
     >
-      <div aria-hidden className={cn('absolute inset-x-0 top-0 h-1', look.dot)} />
       <div className="flex flex-1 flex-col gap-4 p-5">
         <CardTitle w={w} index={index} />
         {badge}
@@ -234,7 +232,7 @@ function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info'; childr
         tone === 'ok' && 'border-success/30 bg-success/10 text-success',
         tone === 'warn' && 'border-warning/40 bg-warning/12 text-warning',
         tone === 'bad' && 'border-destructive/30 bg-destructive/10 text-destructive',
-        tone === 'info' && 'border-primary/25 bg-primary/10 text-primary',
+        tone === 'info' && 'border-primary/25 bg-primary/8 text-primary',
       )}
     >
       <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden />
@@ -253,12 +251,12 @@ function Count({ label, value, alert, to, small }: { label: string; value: numbe
       <span className="mt-0.5 block text-[12px] text-muted-foreground">{label}</span>
     </>
   );
-  const cls = cn('block rounded-lg border bg-background/60 px-2 py-2 text-center', alert && value ? 'border-destructive/30 bg-destructive/6' : '');
+  const cls = cn('block rounded-lg border bg-muted/40 px-2 py-2.5 text-center', alert && value ? 'border-destructive/30 bg-destructive/6' : '');
   return to ? (
     <Link
       to={to}
       aria-label={`${value ?? '—'} ${label}`}
-      className={cn(cls, 'transition outline-none hover:border-primary/50 hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/40')}
+      className={cn(cls, 'transition outline-none hover:border-primary/40 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40')}
     >
       {body}
     </Link>
@@ -310,11 +308,8 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
   ) : (
     <Pill tone="bad">Not checked in</Pill>
   );
-  const look = WORKSPACE_LOOK.attendance;
-
   return (
     <section aria-labelledby="card-attendance" className="relative overflow-hidden rounded-xl border bg-card shadow-card">
-      <div aria-hidden className={cn('absolute inset-x-0 top-0 h-1', look.dot)} />
       <div className="grid gap-4 p-4 sm:p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6">
         <div className="flex flex-col gap-4">
           <CardTitle w="attendance" index={index} />
@@ -347,7 +342,7 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
             )}
           </div>
           {punches && (state === 'in' || state === 'out') ? (
-            <Button size="lg" className="h-13 w-full text-base" disabled={p.busy} loading={p.busy && !p.waitingForCamera} onClick={() => p.markIt(state === 'in' ? 'check_in' : 'check_out')}>
+            <Button variant="cta" size="lg" className="h-13 w-full text-base" disabled={p.busy} loading={p.busy && !p.waitingForCamera} onClick={() => p.markIt(state === 'in' ? 'check_in' : 'check_out')}>
               {p.usesCamera ? <Fingerprint /> : state === 'in' ? <LogIn /> : <LogOut />}
               {state === 'in' ? 'Punch in' : 'Punch out'}
             </Button>
@@ -406,7 +401,7 @@ function TasksCard({ index, onOpen }: { index: number; onOpen: (to?: string) => 
       badge={!t ? <Skeleton className="h-6 w-24" /> : t.overdue > 0 ? <Pill tone="bad">{t.overdue} overdue</Pill> : <Pill tone="ok">On track</Pill>}
       action={
         <>
-          <Button size="lg" className="h-12 w-full text-base" onClick={() => onOpen()}>
+          <Button size="lg" className="h-11 w-full" onClick={() => onOpen()}>
             Open Tasks <ArrowRight />
           </Button>
           <Button variant="ghost" size="sm" className="min-h-11 w-full justify-between lg:min-h-9" onClick={() => onOpen('/tasks/tasks')}>
@@ -439,7 +434,7 @@ function AssetsCard({ index, access, onOpen }: { index: number; access: Access; 
       badge={dash.error ? <Pill tone="warn">Unavailable right now</Pill> : !d ? <Skeleton className="h-6 w-24" /> : <Pill tone="ok">Up to date</Pill>}
       action={
         <>
-          <Button size="lg" className="h-12 w-full text-base" onClick={() => onOpen()}>
+          <Button size="lg" className="h-11 w-full" onClick={() => onOpen()}>
             Open Assets <ArrowRight />
           </Button>
           <Button variant="ghost" size="sm" className="min-h-11 w-full justify-between lg:min-h-9" onClick={() => onOpen(canScan ? '/assets/scan' : '/assets/requests')}>
@@ -495,7 +490,7 @@ function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
   ].filter((x) => x.show(access));
   return (
     <section aria-labelledby="admin-title">
-      <h2 id="admin-title" className="mb-3 text-base font-bold tracking-tight">
+      <h2 id="admin-title" className="mb-3 text-base font-semibold tracking-tight">
         Admin
       </h2>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -504,13 +499,13 @@ function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
             key={x.to}
             type="button"
             onClick={() => onOpen(x.to)}
-            className="group flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left shadow-card transition hover:border-primary/50 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
+            className="group flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left shadow-card transition hover:border-primary/30 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
           >
-            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-app-admin/12 text-app-admin" aria-hidden>
+            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-app-admin/10 text-app-admin" aria-hidden>
               <x.icon className="size-5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-bold tracking-tight group-hover:text-primary">{x.name}</span>
+              <span className="block text-[15px] font-semibold tracking-tight group-hover:text-primary">{x.name}</span>
               <span className="block truncate text-[12.5px] text-muted-foreground">{x.blurb}</span>
             </span>
             <ArrowRight className="size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />

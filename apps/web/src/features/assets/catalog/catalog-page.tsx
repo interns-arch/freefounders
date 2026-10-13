@@ -451,7 +451,7 @@ function CategoryPanel({ category, types, onOpenType, onDeleted }: { category: C
               <ul className="grid gap-2 sm:grid-cols-2">
                 {types.map((t) => (
                   <li key={t.id}>
-                    <button type="button" onClick={() => onOpenType(t.id)} className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border bg-muted/20 p-3 text-left transition hover:-translate-y-px hover:border-primary/40 hover:bg-card hover:shadow-md hover:shadow-primary/5">
+                    <button type="button" onClick={() => onOpenType(t.id)} className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border bg-muted/20 p-3 text-left transition hover:border-primary/40 hover:bg-card hover:shadow-card-lg">
                       <AssetIcon icon={t.icon ?? t.categoryIcon} color={t.categoryColor} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium group-hover:text-primary">{t.name}</span>

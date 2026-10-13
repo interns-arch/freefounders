@@ -284,9 +284,9 @@ function StatTile({
 }) {
   const bubble: Record<Tone, string> = {
     neutral: 'bg-muted text-muted-foreground',
-    primary: 'bg-primary/12 text-primary',
+    primary: 'bg-primary/8 text-primary',
     success: 'bg-success/12 text-success',
-    warning: 'bg-warning/15 text-warning',
+    warning: 'bg-warning/10 text-warning',
     danger: 'bg-destructive/10 text-destructive',
     info: 'bg-info/12 text-info',
   };

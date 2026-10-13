@@ -58,9 +58,8 @@ export function EmptyState({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-14 text-center', className)}>
-      <div className="relative mb-4 flex size-14 items-center justify-center rounded-2xl border border-primary/15 bg-gradient-to-br from-accent to-card shadow-card">
+      <div aria-hidden className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/8 ring-8 ring-primary/4">
         <Icon className="size-6 text-primary" />
-        <span aria-hidden className="absolute -right-1 -bottom-1 size-3 rounded-full border-2 border-card bg-brand-2" />
       </div>
       <p className="text-[15px] font-semibold">{title}</p>
       {description && <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
@@ -72,7 +71,7 @@ export function EmptyState({
 export function ErrorState({ error, onRetry, className }: { error: unknown; onRetry?: () => void; className?: string }) {
   return (
     <div role="alert" className={cn('flex flex-col items-center justify-center px-6 py-12 text-center', className)}>
-      <div className="mb-4 flex size-14 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/8">
+      <div aria-hidden className="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/8 ring-8 ring-destructive/4">
         <AlertTriangle className="size-6 text-destructive" />
       </div>
       <p className="text-[15px] font-semibold">Couldn’t load this</p>

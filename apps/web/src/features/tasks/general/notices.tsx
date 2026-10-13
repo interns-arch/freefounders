@@ -103,13 +103,13 @@ function NoticeFeed() {
         {q.data?.map((n) => {
           const Icon = PRIORITY_ICON[n.priority] ?? Pin;
           const isOpen = openId === n.id;
-          const bubble = n.priority === 'urgent' ? 'bg-destructive/10 text-destructive' : n.priority === 'important' ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary';
+          const bubble = n.priority === 'urgent' ? 'bg-destructive/10 text-destructive' : n.priority === 'important' ? 'bg-warning/10 text-warning' : 'bg-primary/8 text-primary';
           return (
             <li key={n.id}>
               <div
                 className={cn(
-                  'rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] transition hover:border-primary/40 hover:shadow-sm',
-                  !n.read && 'border-primary/30 bg-gradient-to-r from-primary/8 to-card',
+                  'rounded-xl border bg-card shadow-card transition hover:border-primary/40 hover:shadow-sm',
+                  !n.read && 'border-primary/30 bg-primary/4',
                   n.priority === 'urgent' && 'border-l-4 border-l-destructive',
                   n.priority === 'important' && 'border-l-4 border-l-warning',
                   isOpen && 'border-primary/40',

@@ -18,18 +18,21 @@ import { Avatar } from '@/components/ui/primitives';
 import { type LiteChoice, useLite } from '@/lib/lite';
 import { cn } from '@/lib/utils';
 
-/** FreeFounders mark, or the company's logo and short name (Settings Center). */
-export function Logo({ company, inverted = false, compact = false, subtitle, onDark = false }: { company?: Access['brand']; inverted?: boolean; compact?: boolean; subtitle?: string; onDark?: boolean }) {
+/**
+ * FreeFounders mark, or the company's logo and short name (Settings Center). `onPrimary`: drawn on the blue sign-in
+ * panel (white mark and name in light mode; that panel is deep navy in dark mode, where the normal look is used).
+ */
+export function Logo({ company, compact = false, subtitle, onPrimary = false }: { company?: Access['brand']; compact?: boolean; subtitle?: string; onPrimary?: boolean }) {
   return (
     <span className="flex min-w-0 items-center gap-2.5">
       {company?.logoUrl ? (
-        <img src={company.logoUrl} alt="" className="h-8 max-w-20 shrink-0 rounded-md bg-white object-contain p-0.5" />
+        <img src={company.logoUrl} alt="" className="h-8 max-w-20 shrink-0 rounded-md bg-white object-contain p-0.5 ring-1 ring-border" />
       ) : (
         <span
           aria-hidden
           className={cn(
-            'grid size-8 shrink-0 place-items-center rounded-[9px] text-[13px] font-extrabold shadow-sm shadow-black/20',
-            inverted ? 'bg-primary-foreground text-primary' : 'bg-gradient-to-br from-brand-2 to-primary text-white',
+            'grid size-8 shrink-0 place-items-center rounded-md text-[13px] font-extrabold',
+            onPrimary ? 'bg-primary-foreground text-primary dark:bg-primary dark:text-primary-foreground' : 'bg-primary text-primary-foreground',
           )}
         >
           {company ? company.shortName.slice(0, 1).toUpperCase() : 'FF'}
@@ -37,8 +40,8 @@ export function Logo({ company, inverted = false, compact = false, subtitle, onD
       )}
       {!compact && (
         <span className="min-w-0 leading-tight">
-          <span className={cn('block truncate text-[15.5px] font-extrabold tracking-tight', onDark && 'text-white')}>{company?.shortName ?? 'FreeFounders'}</span>
-          {subtitle && <span className={cn('block truncate font-mono text-[10px] tracking-wider uppercase', onDark ? 'text-sidebar-foreground/60' : 'text-muted-foreground')}>{subtitle}</span>}
+          <span className={cn('block truncate text-[15.5px] font-extrabold tracking-tight', onPrimary && 'text-primary-foreground dark:text-foreground')}>{company?.shortName ?? 'FreeFounders'}</span>
+          {subtitle && <span className="block truncate font-mono text-[11px] tracking-wider text-muted-foreground uppercase">{subtitle}</span>}
         </span>
       )}
     </span>
@@ -110,10 +113,10 @@ export function NotificationsBell() {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[22rem] overflow-hidden p-0">
-        <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+        <div className="flex items-center justify-between border-b px-4 py-2.5">
           <span className="text-sm font-bold">
             Notifications
-            {unread > 0 && <span className="ml-2 rounded-full bg-brand-2/20 px-1.5 font-mono text-[11px] font-semibold text-primary">{unread}</span>}
+            {unread > 0 && <span className="ml-2 rounded-full bg-primary/8 px-1.5 font-mono text-[11px] font-semibold text-primary">{unread}</span>}
           </span>
           <Button variant="ghost" size="xs" onClick={() => markRead.mutate()} disabled={!unread || markRead.isPending}>
             <CheckCheck className="size-3.5" /> Mark all read
@@ -124,7 +127,7 @@ export function NotificationsBell() {
             <li key={n.id}>
               <button
                 type="button"
-                className={cn('flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/60', !n.read && 'bg-primary/5 shadow-[inset_3px_0_0_0_var(--brand-2)]')}
+                className={cn('flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/60', !n.read && 'bg-primary/5 shadow-[inset_3px_0_0_0_var(--primary)]')}
                 onClick={() => {
                   setOpen(false);
                   if (n.href) navigate(n.href);

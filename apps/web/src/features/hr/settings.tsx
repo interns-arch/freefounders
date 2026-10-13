@@ -115,7 +115,7 @@ function AttendanceRules() {
           <legend className="mb-1.5 text-[13px] font-medium">Weekly off</legend>
           <div role="group" aria-label="Weekly off days" className="flex flex-wrap gap-1.5">
             {WEEKDAYS.map((d, i) => (
-              <label key={d} className={cn('flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors hover:bg-accent', week.includes(i) && 'border-primary/40 bg-primary/10 font-semibold text-primary')}>
+              <label key={d} className={cn('flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors hover:bg-accent', week.includes(i) && 'border-primary/40 bg-primary/8 font-semibold text-primary')}>
                 <Checkbox checked={week.includes(i)} onCheckedChange={() => toggleDay(i)} aria-label={d} /> {d}
               </label>
             ))}

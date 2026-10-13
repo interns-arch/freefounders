@@ -115,7 +115,7 @@ export default function ReconRunPage() {
             onClick={() => set({ tab: t.value })}
             className={cn(
               'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-              tab.value === t.value ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+              tab.value === t.value ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
             {t.label} <span className="ml-0.5 tabular opacity-70">{count(t)}</span>

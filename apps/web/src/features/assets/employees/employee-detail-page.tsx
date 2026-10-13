@@ -164,7 +164,6 @@ export default function EmployeeDetailPage() {
 
       {/* Who */}
       <Card className="relative overflow-hidden p-4 sm:p-5">
-        <span className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-3xl" aria-hidden />
         <div className="relative flex items-start gap-3 sm:gap-4">
           <Avatar name={e.fullName} className="size-14 text-base ring-4 ring-primary/10 sm:size-16 sm:text-lg" />
           <div className="min-w-0 flex-1">
@@ -445,7 +444,7 @@ function IdCardPanel({ employee: e, self }: { employee: EmployeeDetail; self: bo
 function ContactRow({ icon, label, value, href }: { icon: ReactNode; label: string; value: string; href: string }) {
   return (
     <a href={href} className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-muted active:bg-muted">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary [&_svg]:size-4">{icon}</span>
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/8 text-primary [&_svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-xs text-muted-foreground">{label}</span>
         <span className="block truncate text-sm font-medium">{value}</span>
@@ -574,7 +573,7 @@ function PickAssetDialog({
             onClick={() => onAddNew('')}
             className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-dashed border-primary/40 p-3 text-left transition hover:bg-primary/5"
           >
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/8 text-primary">
               <Plus className="size-4" />
             </span>
             <span>

@@ -1,19 +1,22 @@
 import { CalendarClock, CheckSquare, type LucideIcon, Package, ShieldCheck } from 'lucide-react';
 import type { Workspace } from './nav';
 
-/** How each workspace is told apart (PLAN.md §19.1): its icon and accent colour (theme tokens only). */
-export const WORKSPACE_LOOK: Record<Workspace, { icon: LucideIcon; dot: string; text: string; soft: string; solid: string; glow: string }> = {
+/**
+ * How each workspace is told apart (PLAN.md §19.1, §19.22): its icon and accent colour (theme tokens only). `soft` is
+ * the flat tinted chip used in the menu, the header pill and the Home cards; `solid` a filled chip (white icon in light
+ * mode, navy icon in dark mode, where the accents are light).
+ */
+export const WORKSPACE_LOOK: Record<Workspace, { icon: LucideIcon; dot: string; text: string; soft: string; solid: string }> = {
   attendance: {
     icon: CalendarClock,
     dot: 'bg-app-attendance',
     text: 'text-app-attendance',
     soft: 'bg-app-attendance/10 text-app-attendance',
-    solid: 'bg-app-attendance text-white',
-    glow: 'from-app-attendance/12',
+    solid: 'bg-app-attendance text-white dark:text-background',
   },
-  tasks: { icon: CheckSquare, dot: 'bg-app-tasks', text: 'text-app-tasks', soft: 'bg-app-tasks/10 text-app-tasks', solid: 'bg-app-tasks text-white', glow: 'from-app-tasks/12' },
-  assets: { icon: Package, dot: 'bg-app-assets', text: 'text-app-assets', soft: 'bg-app-assets/10 text-app-assets', solid: 'bg-app-assets text-white', glow: 'from-app-assets/12' },
-  admin: { icon: ShieldCheck, dot: 'bg-app-admin', text: 'text-app-admin', soft: 'bg-app-admin/10 text-app-admin', solid: 'bg-app-admin text-white', glow: 'from-app-admin/10' },
+  tasks: { icon: CheckSquare, dot: 'bg-app-tasks', text: 'text-app-tasks', soft: 'bg-app-tasks/10 text-app-tasks', solid: 'bg-app-tasks text-white dark:text-background' },
+  assets: { icon: Package, dot: 'bg-app-assets', text: 'text-app-assets', soft: 'bg-app-assets/10 text-app-assets', solid: 'bg-app-assets text-white dark:text-background' },
+  admin: { icon: ShieldCheck, dot: 'bg-app-admin', text: 'text-app-admin', soft: 'bg-app-admin/10 text-app-admin', solid: 'bg-app-admin text-white dark:text-background' },
 };
 
 /** The workspaces this person can open, in portal order. Attendance comes with Tasks (PLAN.md §19.4, option A). */

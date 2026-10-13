@@ -73,7 +73,7 @@ export function LinksPage() {
         title="Links"
         description="Company bookmarks, grouped in collections. Star the ones you use most."
         actions={
-          <Button onClick={() => setAdding(true)}>
+          <Button variant="cta" onClick={() => setAdding(true)}>
             <Plus /> Add link
           </Button>
         }

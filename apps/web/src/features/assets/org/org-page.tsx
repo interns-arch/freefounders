@@ -113,7 +113,7 @@ export default function OrgPage({ kind }: { kind: OrgKind }) {
         title={TITLES[kind].title}
         description={TITLES[kind].description}
         actions={
-          <Button size="sm" onClick={() => quickAdd.open(kind)}>
+          <Button variant="cta" size="sm" onClick={() => quickAdd.open(kind)}>
             <Plus /> Add {meta.label.toLowerCase()}
           </Button>
         }

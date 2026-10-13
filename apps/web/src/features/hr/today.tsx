@@ -34,7 +34,7 @@ export function TodayTab() {
   const checkedIn = !!a?.check_in;
   const checkedOut = !!a?.check_out;
   const stateLabel = checkedOut ? 'Done for today' : checkedIn ? 'Checked in' : 'Not checked in';
-  const stateTone = checkedOut ? 'bg-primary/12 text-primary' : checkedIn ? 'bg-success/14 text-success' : 'bg-muted text-muted-foreground';
+  const stateTone = checkedOut ? 'bg-primary/8 text-primary' : checkedIn ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground';
 
   const time = (iso: string | null | undefined) => <span className="text-xl sm:text-[22px]">{fmtTime(iso)}</span>;
   return (
@@ -42,14 +42,13 @@ export function TodayTab() {
       {punches ? (
         <>
           {/* Marking attendance is the first thing on a phone: the card comes first, the day's tiles after it. */}
-          <section aria-label="Mark attendance" className="relative max-w-2xl overflow-hidden rounded-2xl border bg-card shadow-[0_1px_3px_0_rgb(0_0_0/0.04)]">
+          <section aria-label="Mark attendance" className="relative max-w-2xl overflow-hidden rounded-xl border bg-card shadow-card">
             {/* Header band: the clock and today's state. */}
-            <div className="relative overflow-hidden border-b bg-gradient-to-br from-primary/12 via-card to-brand-2/10 px-4 py-4 sm:px-5">
-              <div aria-hidden className="pointer-events-none absolute -top-16 -right-10 size-44 rounded-full bg-brand-2/20 blur-2xl" />
-              <div className="relative flex flex-wrap items-center justify-between gap-3">
+            <div className="border-b bg-muted/40 px-4 py-4 sm:px-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight">
-                    <span className="flex size-7 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                  <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+                    <span className="flex size-8 items-center justify-center rounded-md bg-app-attendance/10 text-app-attendance">
                       <Clock className="size-4" />
                     </span>
                     Mark attendance
@@ -87,16 +86,18 @@ export function TodayTab() {
                 )}
               </ul>
               <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
+                {/* The orange call to action is whichever punch is due now; the other one stays quiet. */}
                 <Button
                   size="lg"
-                  className="h-14 rounded-xl text-base font-semibold shadow-md shadow-primary/25"
+                  variant={data.can_check_in ? 'cta' : 'outline'}
+                  className="h-14 text-base"
                   disabled={p.busy || !data.can_check_in}
                   loading={p.busy && !p.waitingForCamera}
                   onClick={() => p.markIt('check_in')}
                 >
                   {p.usesCamera ? <Camera className="size-5" /> : <LogIn className="size-5" />} Check in
                 </Button>
-                <Button size="lg" variant="outline" className="h-14 rounded-xl text-base font-semibold" disabled={p.busy || !data.can_check_out} onClick={() => p.markIt('check_out')}>
+                <Button size="lg" variant={data.can_check_out ? 'cta' : 'outline'} className="h-14 text-base" disabled={p.busy || !data.can_check_out} onClick={() => p.markIt('check_out')}>
                   {p.usesCamera ? <Camera className="size-5" /> : <LogOut className="size-5" />} Check out
                 </Button>
               </div>
@@ -104,13 +105,13 @@ export function TodayTab() {
           </section>
         </>
       ) : (
-        <p role="note" className="max-w-2xl rounded-2xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+        <p role="note" className="max-w-2xl rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
           Your role doesn't include punching in.
         </p>
       )}
       <ErrorNote>{p.err}</ErrorNote>
       {p.fix && (
-        <Button size="lg" className="h-12 w-full max-w-2xl rounded-xl" onClick={p.fix.run}>
+        <Button size="lg" className="h-12 w-full max-w-2xl" onClick={p.fix.run}>
           <MapPin className="size-5" /> {p.fix.label}
         </Button>
       )}

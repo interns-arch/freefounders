@@ -15,7 +15,7 @@ export function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
       <DialogPrimitive.Content
         className={cn(
           'fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-xl border bg-popover p-6 shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] motion-reduce:animate-none',
@@ -64,7 +64,7 @@ export function SheetContent({
       : 'left-0 border-r data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left';
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
       <DialogPrimitive.Content
         className={cn(
           'fixed inset-y-0 z-50 flex h-full w-full flex-col bg-card shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:duration-200 motion-reduce:animate-none',
@@ -84,7 +84,7 @@ export function SheetContent({
   );
 }
 export function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col gap-1 border-b bg-muted/30 px-6 py-5 pr-14 max-sm:px-4 max-sm:py-4', className)} {...props} />;
+  return <div className={cn('flex flex-col gap-1 border-b px-6 py-5 pr-14 max-sm:px-4 max-sm:py-4', className)} {...props} />;
 }
 export function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
   return <div className={cn('flex-1 overflow-y-auto px-6 py-5 scrollbar-thin max-sm:px-4', className)} {...props} />;

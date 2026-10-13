@@ -34,7 +34,7 @@ export function MyLeaveTab() {
     <div className="max-w-4xl space-y-4">
       <SectionHead
         actions={
-          <Button onClick={() => setApplying(true)} disabled={!types.data}>
+          <Button variant="cta" onClick={() => setApplying(true)} disabled={!types.data}>
             <Plus /> Apply for leave
           </Button>
         }
@@ -54,7 +54,6 @@ export function MyLeaveTab() {
           const low = b.quota > 0 && pct <= 25;
           return (
             <Card key={b.leave_type} className={cn('relative overflow-hidden p-4', low && 'border-warning/40')}>
-              <div aria-hidden className={cn('pointer-events-none absolute -top-10 -right-8 size-28 rounded-full blur-2xl', low ? 'bg-warning/20' : 'bg-brand-2/15')} />
               <p className="relative flex items-center gap-1.5 truncate font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase" title={b.name}>
                 <CalendarHeart className={cn('size-3.5 shrink-0', low ? 'text-warning' : 'text-primary')} />
                 <span className="truncate">{b.name}</span>
@@ -64,7 +63,7 @@ export function MyLeaveTab() {
                 <span className="text-sm font-medium text-muted-foreground"> / {b.quota}</span>
               </p>
               <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-                <div className={cn('h-full rounded-full', low ? 'bg-warning' : 'bg-gradient-to-r from-primary to-brand-2')} style={{ width: `${pct}%` }} />
+                <div className={cn('h-full rounded-full', low ? 'bg-warning' : 'bg-primary')} style={{ width: `${pct}%` }} />
               </div>
               <div className="relative mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                 <span>{b.paid ? 'paid' : 'unpaid'}</span>
@@ -211,7 +210,7 @@ export function HolidaysTab() {
     <div className="max-w-2xl space-y-4">
       {canManage && (
         <form
-          className="flex flex-wrap items-end gap-2 rounded-xl border bg-card p-3 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)]"
+          className="flex flex-wrap items-end gap-2 rounded-xl border bg-card p-3 shadow-card"
           onSubmit={(e) => {
             e.preventDefault();
             add.mutate(f, { onSuccess: () => setF({ name: '', date: '' }) });
@@ -253,7 +252,7 @@ export function HolidaysTab() {
                 <TR key={h.id}>
                   <TD className="font-medium">
                     <span className="flex items-center gap-2.5">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
                         <CalendarHeart className="size-4" />
                       </span>
                       {h.name}

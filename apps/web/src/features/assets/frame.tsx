@@ -99,7 +99,7 @@ function FrameInner({ children }: { children: ReactNode }) {
           type="button"
           onClick={() => setPaletteOpen(true)}
           aria-label="Search assets, people, tags"
-          className="flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 text-sm text-muted-foreground shadow-xs transition hover:border-primary/40 max-sm:h-11 sm:max-w-md"
+          className="flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-muted-foreground shadow-xs transition hover:border-primary/40 max-sm:h-11 sm:max-w-md"
         >
           <Search className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-left">Search assets, people, tags…</span>

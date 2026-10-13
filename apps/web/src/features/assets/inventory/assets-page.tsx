@@ -190,7 +190,7 @@ export default function AssetsPage() {
               <ScanLine /> Scan
             </Button>
             {can('asset:create') && (
-              <Button size="sm" onClick={() => quickAdd.open('asset', { defaults: { assetTypeId: f.assetTypeId } })}>
+              <Button variant="cta" size="sm" onClick={() => quickAdd.open('asset', { defaults: { assetTypeId: f.assetTypeId } })}>
                 <Plus /> Add asset
               </Button>
             )}
@@ -212,12 +212,12 @@ export default function AssetsPage() {
               aria-selected={active}
               className={cn(
                 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition max-sm:min-h-10',
-                active ? 'border-primary/30 bg-primary/10 text-primary shadow-xs' : 'border-transparent text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-xs',
+                active ? 'border-primary/40 bg-card text-primary shadow-xs' : 'border-transparent text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-xs',
               )}
             >
               {s !== 'ALL' && <span className={cn('size-1.5 rounded-full', ASSET_STATUS_BAR[s])} aria-hidden />}
               {s === 'ALL' ? 'All' : ASSET_STATUS_LABELS[s]}
-              <span className={cn('rounded-md px-1.5 font-mono text-[11px] tabular', active ? 'bg-primary/15' : 'bg-muted')}>{formatNumber(n)}</span>
+              <span className={cn('rounded-md px-1.5 font-mono text-[11px] tabular', active ? 'bg-primary/8' : 'bg-muted')}>{formatNumber(n)}</span>
             </button>
           );
         })}
@@ -229,10 +229,10 @@ export default function AssetsPage() {
           <div className="flex items-center gap-2">
             <SearchField className="flex-1" label="Search assets" placeholder="Search name, tag, serial, holder, specs…" value={search} onChange={setSearch} />
             <div className="flex shrink-0 rounded-lg border bg-card p-0.5">
-              <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('table')} aria-label="Table view" aria-pressed={view === 'table'} className={cn(view === 'table' && 'bg-primary/10 text-primary hover:bg-primary/15')}>
+              <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('table')} aria-label="Table view" aria-pressed={view === 'table'} className={cn(view === 'table' && 'bg-primary/8 text-primary hover:bg-primary/15')}>
                 <List />
               </Button>
-              <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('cards')} aria-label="Card view" aria-pressed={view === 'cards'} className={cn(view === 'cards' && 'bg-primary/10 text-primary hover:bg-primary/15')}>
+              <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="icon-xs" onClick={() => setView('cards')} aria-label="Card view" aria-pressed={view === 'cards'} className={cn(view === 'cards' && 'bg-primary/8 text-primary hover:bg-primary/15')}>
                 <LayoutGrid />
               </Button>
             </div>
@@ -356,7 +356,7 @@ export default function AssetsPage() {
                     type="button"
                     onMouseEnter={() => prefetch(a)}
                     onClick={() => navigate(`/assets/assets/${a.id}`)}
-                    className={cn('group flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-4 text-left transition hover:-translate-y-px hover:border-primary/40 hover:shadow-md hover:shadow-primary/5', selected.has(a.id) && 'border-primary ring-1 ring-primary/30')}
+                    className={cn('group flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-4 text-left transition hover:border-primary/40 hover:shadow-card-lg', selected.has(a.id) && 'border-primary ring-1 ring-primary/30')}
                   >
                     <div className="flex items-start gap-3">
                       <AssetIcon icon={a.typeIcon ?? a.categoryIcon} color={a.categoryColor} size="lg" />

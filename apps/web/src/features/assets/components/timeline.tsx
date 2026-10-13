@@ -26,7 +26,7 @@ import { EmptyState } from '@/components/common/page';
 const ACTION_STYLE: { match: RegExp; icon: React.ComponentType<{ className?: string }>; tone: string }[] = [
   { match: /^CREATED|ITEM_ADDED/, icon: CirclePlus, tone: 'bg-success/12 text-success' },
   { match: /ASSIGNED|FULFILLED/, icon: UserPlus, tone: 'bg-info/12 text-info' },
-  { match: /TRANSFER/, icon: ArrowLeftRight, tone: 'bg-primary/12 text-primary' },
+  { match: /TRANSFER/, icon: ArrowLeftRight, tone: 'bg-primary/8 text-primary' },
   { match: /RETURNED/, icon: Undo2, tone: 'bg-warning/12 text-warning' },
   { match: /MAINTENANCE|REPAIR/, icon: Wrench, tone: 'bg-warning/12 text-warning' },
   { match: /LOST|MISSING|UNITS_LOST/, icon: SearchX, tone: 'bg-destructive/12 text-destructive' },

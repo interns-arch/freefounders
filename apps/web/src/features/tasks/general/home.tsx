@@ -66,10 +66,8 @@ export function HomePage() {
     <>
       <section
         aria-label="Welcome"
-        className="relative overflow-hidden rounded-2xl border bg-card px-4 py-4 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] sm:px-5 sm:py-5"
+        className="relative overflow-hidden rounded-2xl border bg-card px-4 py-4 shadow-card sm:px-5 sm:py-5"
       >
-        {/* A soft brand tint in the corner, like the workspace cards. */}
-        <div aria-hidden className="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-gradient-to-br from-brand-2/25 to-primary/5 blur-2xl" />
         <div className="relative flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight sm:text-[26px]">
@@ -358,7 +356,7 @@ function LeadsDashboard({
                 <div key={s.status} className="flex items-center gap-2 text-sm" title={`${s.label}: ${s.count}`}>
                   <span className="w-28 truncate text-muted-foreground">{s.label}</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-gradient-to-r from-primary to-brand-2" style={{ width: `${(s.count / maxStatus) * 100}%` }} />
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${(s.count / maxStatus) * 100}%` }} />
                   </div>
                   <span className="w-8 text-right tabular-nums">{s.count}</span>
                 </div>

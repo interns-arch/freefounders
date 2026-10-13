@@ -43,7 +43,7 @@ export function TR({ className, ...props }: React.ComponentProps<'tr'>) {
   return (
     <tr
       className={cn(
-        'border-b transition-colors hover:bg-muted/40 focus-visible:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset data-[state=selected]:bg-primary/6',
+        'border-b transition-colors hover:bg-muted/60 focus-visible:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset data-[state=selected]:bg-primary/6',
         className,
       )}
       {...props}
@@ -53,7 +53,7 @@ export function TR({ className, ...props }: React.ComponentProps<'tr'>) {
 export function TH({ className, ...props }: React.ComponentProps<'th'>) {
   return (
     <th
-      className={cn('h-10 whitespace-nowrap bg-muted/50 px-3 text-left align-middle text-xs font-bold tracking-[0.05em] text-foreground/80 uppercase first:pl-4 last:pr-4', className)}
+      className={cn('h-10 whitespace-nowrap bg-muted/70 px-3 text-left align-middle text-xs font-semibold tracking-wide text-muted-foreground uppercase first:pl-4 last:pr-4', className)}
       {...props}
     />
   );

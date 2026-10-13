@@ -8,7 +8,7 @@ const PILL = 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-
 const STATUS_PILL: Record<TaskStatus, string> = {
   open: 'bg-info/10 text-info',
   in_progress: 'bg-warning/12 text-warning',
-  done: 'bg-primary/10 text-primary',
+  done: 'bg-primary/8 text-primary',
 };
 const PRIORITY_PILL: Record<TaskPriority, string> = {
   low: 'bg-muted text-muted-foreground',
@@ -43,9 +43,9 @@ export function CountPill({ children, tone = 'primary', className }: { children:
     <span
       className={cn(
         'inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-px font-mono text-[11px] font-semibold tabular',
-        tone === 'primary' && 'bg-primary/12 text-primary',
+        tone === 'primary' && 'bg-card text-primary ring-1 ring-inset ring-primary/25',
         tone === 'neutral' && 'bg-muted text-muted-foreground',
-        tone === 'danger' && 'bg-destructive/12 text-destructive',
+        tone === 'danger' && 'bg-destructive/10 text-destructive',
         className,
       )}
     >
@@ -95,7 +95,7 @@ export function ToggleChip({ on, onChange, children, title, tone = 'primary' }: 
       onClick={() => onChange(!on)}
       className={cn(
         'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none [&_svg]:size-3.5',
-        on && tone === 'primary' && 'border-primary/50 bg-primary/10 text-primary hover:text-primary',
+        on && tone === 'primary' && 'border-primary/50 bg-primary/8 text-primary hover:text-primary',
         on && tone === 'danger' && 'border-destructive/50 bg-destructive/10 text-destructive hover:border-destructive/60 hover:text-destructive',
       )}
     >
@@ -137,7 +137,7 @@ export function StatTile({
         {hint && <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>}
       </div>
       {Icon && (
-        <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary', tone === 'alert' && 'bg-destructive/10 text-destructive', tone === 'good' && 'bg-success/10 text-success')}>
+        <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary', tone === 'alert' && 'bg-destructive/10 text-destructive', tone === 'good' && 'bg-success/10 text-success')}>
           <Icon className="size-4" />
         </span>
       )}
@@ -145,13 +145,13 @@ export function StatTile({
   );
   const cls = cn(
     'flex items-start gap-3 rounded-xl border bg-card p-4 text-left shadow-xs',
-    tone === 'alert' && 'border-destructive/35 bg-gradient-to-b from-card to-destructive/5',
-    tone === 'good' && 'bg-gradient-to-b from-card to-success/5',
+    tone === 'alert' && 'border-destructive/35 bg-destructive/4',
+    tone === 'good' && 'bg-success/4',
     active && 'ring-2 ring-primary/40',
     className,
   );
   return onClick ? (
-    <button type="button" title={title} onClick={onClick} className={cn(cls, 'cursor-pointer transition hover:-translate-y-px hover:border-primary/40 hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none')}>
+    <button type="button" title={title} onClick={onClick} className={cn(cls, 'cursor-pointer transition hover:border-primary/40 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none')}>
       {body}
     </button>
   ) : (

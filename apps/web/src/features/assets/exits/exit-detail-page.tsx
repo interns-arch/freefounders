@@ -139,7 +139,6 @@ export default function ExitDetailPage() {
           <ArrowLeft className="size-3.5" /> Exits
         </Link>
         <Card className="relative overflow-hidden p-4 sm:p-5">
-          <span className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-gradient-to-br from-warning/12 to-transparent blur-3xl" aria-hidden />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4">
             <Avatar name={x.employee.fullName} className="size-14 text-base ring-4 ring-warning/15" />
@@ -191,7 +190,6 @@ export default function ExitDetailPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Card className="relative overflow-hidden p-4 sm:col-span-2">
-          <span className={cn('pointer-events-none absolute -top-10 -right-10 size-32 rounded-full bg-gradient-to-br to-transparent blur-2xl', blocking ? 'from-warning/16' : 'from-success/16')} aria-hidden />
           <div className="relative flex items-end justify-between">
             <div>
               <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Recovery progress</p>

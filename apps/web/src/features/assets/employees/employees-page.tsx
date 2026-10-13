@@ -136,7 +136,7 @@ export default function EmployeesPage() {
               </Button>
             )}
             {can('employee:manage') && (
-              <Button size="sm" onClick={() => quickAdd.open('employee')}>
+              <Button variant="cta" size="sm" onClick={() => quickAdd.open('employee')}>
                 <Plus /> Add employee
               </Button>
             )}
@@ -153,7 +153,7 @@ export default function EmployeesPage() {
               onClick={() => set({ status: t.value || null, includeExited: null })}
               className={cn(
                 'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-                active ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+                active ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >
               {t.label}

@@ -142,7 +142,7 @@ export function TaskRow({ t, me, isAdmin, scope, actions }: { t: WorkTask; me: n
           <Button
             variant="outline"
             size="xs"
-            className={cn(t.subscribed && 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary')}
+            className={cn(t.subscribed && 'border-primary/40 bg-primary/8 text-primary hover:bg-primary/15 hover:text-primary')}
             aria-label={`${t.subscribed ? 'Unfollow' : 'Follow'} ${t.code}`}
             aria-pressed={t.subscribed}
             title={t.subscribed ? 'Unfollow' : 'Follow this task'}

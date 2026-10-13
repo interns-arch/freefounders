@@ -73,7 +73,7 @@ export function IdeasPage() {
         title="Idea board"
         description="Share an idea, vote for the ones you like, and discuss them. Managers review and mark what gets done."
         actions={
-          <Button onClick={() => setAdding(true)}>
+          <Button variant="cta" onClick={() => setAdding(true)}>
             <Plus /> New idea
           </Button>
         }
@@ -131,7 +131,7 @@ export function IdeasPage() {
                     onClick={() => vote.mutate(i.id)}
                     className={cn(
                       'flex w-11 shrink-0 cursor-pointer flex-col items-center rounded-lg border py-1 font-mono text-xs font-semibold tabular-nums transition-colors',
-                      i.voted ? 'border-primary/30 bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      i.voted ? 'border-primary/30 bg-primary/8 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                     )}
                   >
                     <ChevronUp className="size-4" />

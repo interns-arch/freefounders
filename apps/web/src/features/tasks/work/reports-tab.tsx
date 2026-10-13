@@ -157,7 +157,7 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
             onClick={() => setTab(v)}
             className={cn(
               'h-8 shrink-0 cursor-pointer rounded-full border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
-              tab === v && 'border-transparent bg-gradient-to-b from-brand-2 to-primary text-primary-foreground shadow-primary/25 hover:text-primary-foreground',
+              tab === v && 'border-transparent bg-primary text-primary-foreground hover:text-primary-foreground',
             )}
           >
             {l}

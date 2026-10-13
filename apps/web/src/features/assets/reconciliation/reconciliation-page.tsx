@@ -70,7 +70,7 @@ export default function ReconciliationPage() {
           <Card key={s.source}>
             <CardHeader>
               <div className="flex items-start gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
                   <s.icon className="size-5" />
                 </span>
                 <div className="min-w-0">

@@ -56,7 +56,7 @@ export function ApprovalsTab() {
       </section>
       <section className="space-y-2">
         <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
+          <span className="flex size-7 items-center justify-center rounded-lg bg-warning/10 text-warning">
             <ClipboardCheck className="size-4" />
           </span>
           <h2 className="text-[15px] font-bold tracking-tight">Attendance corrections ({corrections.data?.length ?? '…'})</h2>

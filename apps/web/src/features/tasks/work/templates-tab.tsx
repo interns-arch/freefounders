@@ -255,7 +255,7 @@ export function DirectoryTab() {
               key={i.id}
               type="button"
               onClick={() => (setIndustry(i), setCategory(''))}
-              className="flex cursor-pointer gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition hover:-translate-y-px hover:border-primary/40 hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
+              className="flex cursor-pointer gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition hover:border-primary/40 hover:shadow-card-lg focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
             >
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xl" aria-hidden>
                 {i.icon}
@@ -351,7 +351,7 @@ function DirectoryTemplateDetail({ tpl, canManageTemplates, onDone }: { tpl: Dir
       <ol className="space-y-1.5 text-sm">
         {tpl.steps.map((s, i) => (
           <li key={i} className="flex gap-2.5 rounded-lg border bg-card px-3 py-2">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary tabular">{i + 1}</span>
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/8 font-mono text-[11px] font-semibold text-primary tabular">{i + 1}</span>
             <span className="min-w-0 flex-1">
             <strong className="font-semibold">{s.title}</strong>
             {!!s.offset_days && s.offset_days > 0 && (

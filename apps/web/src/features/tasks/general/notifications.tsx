@@ -97,8 +97,8 @@ export function NotificationsPage() {
             </>
           );
           return (
-            <li key={n.id} className={cn('flex items-start gap-3 rounded-xl border bg-card p-3 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] transition hover:border-primary/40', !n.read_at && 'border-primary/30 bg-gradient-to-r from-primary/8 to-card')}>
-              <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', n.read_at ? 'bg-muted text-muted-foreground' : 'bg-primary/12 text-primary')}>
+            <li key={n.id} className={cn('flex items-start gap-3 rounded-xl border bg-card p-3 shadow-card transition hover:border-primary/40', !n.read_at && 'border-primary/30 bg-primary/4')}>
+              <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', n.read_at ? 'bg-muted text-muted-foreground' : 'bg-primary/8 text-primary')}>
                 <Bell className="size-4" />
               </span>
               <div className="min-w-0 flex-1">

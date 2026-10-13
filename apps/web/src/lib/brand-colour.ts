@@ -4,9 +4,11 @@
  * The brand colour replaces --primary, which is used for button fills (white text on it in light mode, dark text in
  * dark mode) and for text and icons on cards (links, active tabs, pills). A light brand colour such as a sky blue
  * would leave white button text and blue links at about 2.4:1. So --primary keeps the brand's hue and chroma but its
- * lightness is moved just enough for 4.5:1: darker in light mode, lighter in dark mode. --brand-2 (gradients,
- * highlights, the sidebar marker) and --ring keep the colour exactly as chosen. A colour that already passes is used
- * unchanged.
+ * lightness is moved just enough: darker in light mode, lighter in dark mode. The targets (5.3:1 on white, 6:1 on the
+ * dark cards: the same as the default blues) leave room for text in the brand colour on its own faint tint (active
+ * menu item, badges, pills: PLAN.md §19.22). --brand-2
+ * (the secondary highlight) and --ring keep the colour exactly as chosen. A colour that already passes is used
+ * unchanged. The orange call-to-action colour (--cta) is not touched: it stays orange with any brand colour.
  */
 
 type Lch = [number, number, number];
@@ -46,11 +48,13 @@ function luminance([L, C, H]: Lch): number {
 
 const ratio = (y1: number, y2: number) => (Math.max(y1, y2) + 0.05) / (Math.min(y1, y2) + 0.05);
 
-/** A little above 4.5:1, so rounding never lands under it. */
-const TARGET = 4.6;
-/** Luminance of white (light-mode cards and button text) and of the dark theme's cards (tokens.css .dark --card). */
+/** Dark mode: 6:1 on the dark cards (as the default light blue) keeps text in the colour at 4.5:1 or more on its own tint. */
+const TARGET_DARK = 6;
+/** Light mode: 5.3:1 on white (as the default blue) keeps text in the colour at 4.5:1 or more on its own 6–8 % tint, on cards and on the page. */
+const TARGET_LIGHT = 5.3;
+/** Luminance of white (light-mode cards and button text) and of the dark theme's cards (tokens.css .dark --card, #131c31). */
 const WHITE_Y = 1;
-const DARK_CARD_Y = 0.0075;
+const DARK_CARD_Y = 0.0119;
 
 const css = ([L, C, H]: Lch) => `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${H.toFixed(1)})`;
 
@@ -73,24 +77,24 @@ export function brandColours(colour: string | null | undefined): BrandColours | 
   const [L, C, H] = lch;
 
   let light = colour;
-  if (ratio(WHITE_Y, luminance(lch)) < TARGET) {
+  if (ratio(WHITE_Y, luminance(lch)) < TARGET_LIGHT) {
     let lo = 0;
     let hi = L;
     for (let i = 0; i < 24; i++) {
       const mid = (lo + hi) / 2;
-      if (ratio(WHITE_Y, luminance([mid, C, H])) >= TARGET) lo = mid;
+      if (ratio(WHITE_Y, luminance([mid, C, H])) >= TARGET_LIGHT) lo = mid;
       else hi = mid;
     }
     light = css([lo, C, H]);
   }
 
   let dark = colour;
-  if (ratio(luminance(lch), DARK_CARD_Y) < TARGET) {
+  if (ratio(luminance(lch), DARK_CARD_Y) < TARGET_DARK) {
     let lo = L;
     let hi = 1;
     for (let i = 0; i < 24; i++) {
       const mid = (lo + hi) / 2;
-      if (ratio(luminance([mid, C, H]), DARK_CARD_Y) >= TARGET) hi = mid;
+      if (ratio(luminance([mid, C, H]), DARK_CARD_Y) >= TARGET_DARK) hi = mid;
       else lo = mid;
     }
     dark = css([hi, C, H]);

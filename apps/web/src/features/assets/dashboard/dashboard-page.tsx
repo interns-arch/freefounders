@@ -313,8 +313,7 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
   return (
     <div className="mx-auto max-w-3xl space-y-4 sm:space-y-5">
       {/* Welcome */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-2 via-primary to-primary p-5 text-primary-foreground shadow-lg shadow-primary/20 sm:p-6">
-        <div className="absolute -top-16 -right-10 size-48 rounded-full bg-primary-foreground/10 blur-2xl" />
+      <div className="relative overflow-hidden rounded-2xl bg-primary p-5 text-primary-foreground sm:p-6">
         <div className="relative flex items-start gap-4">
           <div className="min-w-0 flex-1">
             {company.short && <p className="font-mono text-[11px] font-medium tracking-wider text-primary-foreground/75 uppercase">{company.short}</p>}
@@ -356,7 +355,7 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
           onClick={() => quickAdd.open('request')}
           className="flex cursor-pointer flex-col items-start gap-3 rounded-2xl border bg-card p-4 text-left shadow-xs transition hover:border-primary/40 hover:shadow-sm active:scale-[0.98]"
         >
-          <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-primary/8 text-primary">
             <Plus className="size-5" />
           </span>
           <span>

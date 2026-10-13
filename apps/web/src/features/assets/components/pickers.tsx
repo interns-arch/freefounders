@@ -106,7 +106,7 @@ export function Combobox({
           )}
         >
           {current?.icon}
-          <span className={cn('flex-1 truncate', !label && 'text-muted-foreground/70')}>{label ?? placeholder}</span>
+          <span className={cn('flex-1 truncate', !label && 'text-muted-foreground')}>{label ?? placeholder}</span>
           {clearable && value && !disabled ? (
             <span
               role="button"

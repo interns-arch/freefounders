@@ -67,13 +67,12 @@ export function GroupsPage() {
               type="button"
               onClick={() => setParams({ group: String(g.id) })}
               className={cn(
-                'group relative cursor-pointer overflow-hidden rounded-xl border bg-card p-4 text-left shadow-[0_1px_3px_0_rgb(0_0_0/0.04)] transition hover:-translate-y-px hover:border-primary/40 hover:shadow-[0_6px_18px_-8px_rgb(0_0_0/0.18)]',
+                'group relative cursor-pointer overflow-hidden rounded-xl border bg-card p-4 text-left shadow-card transition hover:border-primary/40 hover:shadow-card-lg',
                 !g.active && 'opacity-60',
               )}
             >
-              <div aria-hidden className="pointer-events-none absolute -top-10 -right-8 size-28 rounded-full bg-brand-2/12 blur-2xl transition group-hover:bg-brand-2/20" />
               <div className="relative flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
                   <Boxes className="size-4.5" />
                 </span>
                 <div className="min-w-0 flex-1">

@@ -87,7 +87,6 @@ export default function AssetDetailPage() {
           <ArrowLeft className="size-3.5" /> Assets
         </Link>
         <Card className="relative overflow-hidden p-4 sm:p-5">
-          <span className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-3xl" aria-hidden />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <AssetIcon icon={a.type.icon ?? a.category.icon} color={a.category.color} size="xl" className="hidden sm:inline-flex" />
@@ -209,7 +208,7 @@ export default function AssetDetailPage() {
                   <span
                     className={cn(
                       'flex size-6 items-center justify-center rounded-full border-2 text-xs font-semibold',
-                      current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white ring-4 ring-destructive/15 dark:text-background' : 'border-primary bg-gradient-to-b from-brand-2 to-primary text-primary-foreground ring-4 ring-primary/15') : done ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground',
+                      current ? (a.status === 'LOST' ? 'border-destructive bg-destructive text-white ring-4 ring-destructive/15 dark:text-background' : 'border-primary bg-primary text-primary-foreground ring-4 ring-primary/15') : done ? 'border-primary/60 bg-primary/8 text-primary' : 'border-border text-muted-foreground',
                     )}
                   >
                     {done ? <Check className="size-3" /> : i + 1}
@@ -400,7 +399,7 @@ export default function AssetDetailPage() {
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-3">
               {links.ready && (
-                <div className="rounded-2xl border bg-gradient-to-br from-primary/8 to-transparent p-3">
+                <div className="rounded-2xl border bg-primary/4 p-3">
                   <QRCode value={links.asset(a.qrCode)} size={148} className="rounded-lg border bg-white p-1.5" />
                 </div>
               )}

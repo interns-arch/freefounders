@@ -172,11 +172,11 @@ function ProfileCard({ company }: { company: CompanySettings }) {
                 <Palette className="size-4 shrink-0 text-muted-foreground" />
                 <span className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Preview</span>
                 <span className="ml-auto inline-flex items-center gap-2">
-                  <span className="grid size-7 place-items-center rounded-[8px] bg-gradient-to-br from-brand-2 to-primary text-xs font-extrabold text-white">
+                  <span className="grid size-7 place-items-center rounded-md bg-primary text-xs font-extrabold text-primary-foreground">
                     {(shortName || name).slice(0, 1).toUpperCase() || 'A'}
                   </span>
-                  <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Pill</span>
-                  <span className="rounded-sm bg-gradient-to-b from-brand-2 to-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-xs">Button</span>
+                  <span className="rounded-full border border-primary/25 bg-primary/8 px-2 py-0.5 text-xs font-semibold text-primary">Pill</span>
+                  <span className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-xs">Button</span>
                 </span>
               </div>
               {brand?.adjusted && (

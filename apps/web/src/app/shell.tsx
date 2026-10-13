@@ -189,16 +189,17 @@ export function AppShell() {
 
   const groups = workspaces.map((w) => ({ w, items: MENUS[w].filter((i) => !i.show || i.show(access)) }));
 
+  // Flat menu (PLAN.md §19.22): white in light mode, deep navy in dark mode; the current page is a blue tint with blue text.
   const itemClass =
-    'relative flex min-h-11 items-center gap-2.5 rounded-md px-3 py-1.5 text-[14px] font-medium text-sidebar-foreground/80 transition-colors outline-none hover:bg-white/6 hover:text-white focus-visible:ring-2 focus-visible:ring-brand-2/60 lg:min-h-8 [&_svg]:text-sidebar-foreground/55';
-  const activeClass = 'bg-gradient-to-r from-brand-2/22 to-brand-2/5 font-semibold text-white shadow-[inset_3px_0_0_0_var(--brand-2)] [&_svg]:text-brand-2';
+    'relative flex min-h-11 items-center gap-2.5 rounded-md px-3 py-1.5 text-[14px] font-medium text-sidebar-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground lg:min-h-9 [&_svg]:text-muted-foreground';
+  const activeClass = 'bg-primary/8 font-semibold text-primary hover:bg-primary/12 hover:text-primary dark:bg-primary/12 [&_svg]:text-primary';
 
   const sidebar = (
-    <div className="flex h-full flex-col gap-2 bg-gradient-to-b from-white/[0.035] to-transparent px-3.5 pt-4 pb-3">
-      <Link to="/?home=1" className="rounded-lg px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-2/60" aria-label="Home">
-        <Logo company={access.brand} subtitle={access.platform?.company.name !== access.brand?.shortName ? access.platform?.company.name : undefined} onDark />
+    <div className="flex h-full flex-col gap-2 px-3 pt-4 pb-3">
+      <Link to="/?home=1" className="rounded-md px-1.5 py-1 outline-none" aria-label="Home">
+        <Logo company={access.brand} subtitle={access.platform?.company.name !== access.brand?.shortName ? access.platform?.company.name : undefined} />
       </Link>
-      <nav aria-label="Main menu" className="no-scrollbar -mx-1 flex-1 space-y-1 overflow-y-auto px-1 pt-1">
+      <nav aria-label="Main menu" className="no-scrollbar -mx-1 mt-1 flex-1 space-y-0.5 overflow-y-auto border-t border-sidebar-border px-1 pt-3">
         <NavLink to="/?home=1" end className={({ isActive }) => cn(itemClass, isActive && activeClass)}>
           <Home className="size-4 shrink-0" aria-hidden />
           <span className="flex-1 truncate">Home</span>
@@ -207,18 +208,18 @@ export function AppShell() {
           const expanded = w === here || open.includes(w);
           const gl = WORKSPACE_LOOK[w];
           return (
-            <div key={w} className="pt-1.5">
+            <div key={w} className="pt-2">
               <div className="flex items-center gap-0.5">
                 <Link
                   to={WORKSPACE_HOME[w]}
                   aria-current={w === here ? 'page' : undefined}
                   className={cn(
-                    'flex min-h-11 flex-1 items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-bold tracking-wide outline-none transition-colors hover:bg-white/6 hover:text-white focus-visible:ring-2 focus-visible:ring-brand-2/60 lg:min-h-8',
-                    w === here ? 'text-white' : 'text-sidebar-foreground/75',
+                    'flex min-h-11 flex-1 items-center gap-2.5 rounded-md px-2 py-1.5 text-[14px] font-semibold outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground lg:min-h-9',
+                    w === here ? 'text-foreground' : 'text-sidebar-foreground',
                   )}
                 >
-                  <span className={cn('grid size-5 shrink-0 place-items-center rounded-md', gl.solid)} aria-hidden>
-                    <gl.icon className="size-3" />
+                  <span className={cn('grid size-6 shrink-0 place-items-center rounded-md', gl.soft)} aria-hidden>
+                    <gl.icon className="size-3.5" />
                   </span>
                   <span className="flex-1 truncate">{WORKSPACE_NAMES[w]}</span>
                 </Link>
@@ -229,21 +230,21 @@ export function AppShell() {
                   aria-expanded={expanded}
                   aria-controls={`menu-${w}`}
                   aria-label={expanded ? `Hide ${WORKSPACE_NAMES[w]} menu` : `Show ${WORKSPACE_NAMES[w]} menu`}
-                  className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-md text-sidebar-foreground/55 outline-none transition hover:bg-white/6 hover:text-white focus-visible:ring-2 focus-visible:ring-brand-2/60 disabled:cursor-default disabled:opacity-40 lg:size-8"
+                  className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground outline-none transition hover:bg-sidebar-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 lg:size-9"
                 >
                   <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} aria-hidden />
                 </button>
               </div>
               {expanded && (
-                <nav id={`menu-${w}`} aria-label={`${WORKSPACE_NAMES[w]} menu`} className="mt-0.5 space-y-0.5 border-l border-sidebar-border/60 pl-2 ml-[18px]">
+                <nav id={`menu-${w}`} aria-label={`${WORKSPACE_NAMES[w]} menu`} className="mt-0.5 ml-[19px] space-y-0.5 border-l border-sidebar-border pl-2">
                   {items.map((item, i) => {
                     const heading = item.group && item.group !== items[i - 1]?.group;
                     return (
                       <div key={item.to}>
                         {heading && (
-                          <p className="flex items-center gap-2 px-3 pt-2.5 pb-1 font-mono text-[11px] font-semibold tracking-widest text-sidebar-foreground/65 uppercase">
+                          <p className="flex items-center gap-2 px-3 pt-2.5 pb-1 font-mono text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
                             {item.group}
-                            <span aria-hidden className="h-px flex-1 bg-sidebar-border/60" />
+                            <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
                           </p>
                         )}
                         <NavLink to={item.to} end={item.end} className={({ isActive }) => cn(itemClass, isActive && activeClass)}>
@@ -259,8 +260,8 @@ export function AppShell() {
           );
         })}
       </nav>
-      <p className="hidden px-3 font-mono text-xs text-sidebar-foreground/65 lg:block">
-        <button type="button" className="cursor-pointer rounded hover:text-white focus-visible:ring-2 focus-visible:ring-brand-2/60 focus-visible:outline-none" onClick={() => setHelp(true)}>
+      <p className="hidden border-t border-sidebar-border px-3 pt-3 font-mono text-xs text-muted-foreground lg:block">
+        <button type="button" className="cursor-pointer rounded hover:text-foreground" onClick={() => setHelp(true)}>
           Press ? for shortcuts
         </button>
       </p>
@@ -275,7 +276,7 @@ export function AppShell() {
     ...(workspaces.includes('assets') ? [{ to: '/assets', label: 'Assets', icon: WORKSPACE_LOOK.assets.icon, active: here === 'assets' }] : []),
   ];
   // Labels stay 11 px here (the one exception, like iOS/Material tab bars): "Attendance" must fit a fifth of a 360 px phone.
-  const tabClass = 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 pt-1.5 pb-2 text-[11px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
+  const tabClass = 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 pt-1.5 pb-2 text-[11px] font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
 
   return (
     <div className="flex min-h-dvh">
@@ -287,18 +288,18 @@ export function AppShell() {
       </a>
       <aside className="sticky top-0 hidden h-dvh w-[240px] shrink-0 border-r border-sidebar-border bg-sidebar lg:block">{sidebar}</aside>
       <Sheet open={drawer} onOpenChange={setDrawer}>
-        <SheetContent side="left" className="w-[300px] border-sidebar-border bg-sidebar p-0 [&>button]:text-sidebar-foreground [&>button]:hover:bg-white/10">
+        <SheetContent side="left" className="w-[300px] border-sidebar-border bg-sidebar p-0 [&>button]:text-sidebar-foreground [&>button]:hover:bg-sidebar-accent">
           <SheetTitle className="sr-only">Menu</SheetTitle>
           {sidebar}
         </SheetContent>
       </Sheet>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-1.5 border-b bg-card/85 px-2 backdrop-blur sm:gap-2 sm:px-3 lg:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-1.5 border-b bg-card px-2 sm:gap-2 sm:px-3 lg:px-6">
           <Button variant="ghost" size="icon" className="size-11 lg:hidden" onClick={() => setDrawer(true)} aria-label="Menu" aria-haspopup="dialog" aria-expanded={drawer}>
             <Menu className="size-5" />
           </Button>
-          <span className="flex min-w-0 items-center gap-2 rounded-full border bg-background/60 py-1 pr-3 pl-1 text-[13px] font-semibold">
-            <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', look ? look.soft : 'bg-primary/10 text-primary')} aria-hidden>
+          <span className="flex min-w-0 items-center gap-2 rounded-full border bg-background py-1 pr-3 pl-1 text-[13px] font-semibold">
+            <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', look ? look.soft : 'bg-primary/8 text-primary')} aria-hidden>
               {look ? <look.icon className="size-3.5" /> : <Home className="size-3.5" />}
             </span>
             <span className="truncate">{title}</span>
@@ -319,18 +320,18 @@ export function AppShell() {
         </main>
         <nav
           aria-label="Quick menu"
-          className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t bg-card/95 pb-[env(safe-area-inset-bottom)] shadow-card-lg backdrop-blur lg:hidden"
+          className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
         >
           {tabs.map((t) => (
             <Link key={t.label} to={t.to} aria-current={t.active ? 'page' : undefined} className={cn(tabClass, t.active && 'font-semibold text-primary')}>
-              <span className={cn('rounded-full px-3 py-0.5 transition-colors', t.active && 'bg-accent')}>
+              <span className={cn('rounded-full px-4 py-1 transition-colors', t.active && 'bg-primary/10')}>
                 <t.icon className="size-5" aria-hidden />
               </span>
               <span className="max-w-full truncate">{t.label}</span>
             </Link>
           ))}
           <button type="button" onClick={() => setDrawer(true)} aria-haspopup="dialog" aria-expanded={drawer} className={cn(tabClass, 'cursor-pointer')}>
-            <span className="rounded-full px-3 py-0.5">
+            <span className="rounded-full px-4 py-1">
               <LayoutGrid className="size-5" aria-hidden />
             </span>
             More

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
  * field gets focus. Labels are 14 px.
  */
 const fieldBase =
-  'w-full min-w-0 rounded-sm border border-input bg-card px-3 text-sm shadow-xs transition-[color,box-shadow,border-color] outline-none placeholder:text-muted-foreground hover:border-ring/50 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:bg-muted/60 disabled:opacity-60 aria-invalid:border-destructive aria-invalid:ring-destructive/20 max-sm:text-base';
+  'w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm shadow-xs transition-[color,box-shadow,border-color] outline-none placeholder:text-muted-foreground hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:bg-muted/60 disabled:opacity-60 aria-invalid:border-destructive aria-invalid:ring-destructive/20 max-sm:text-base';
 
 /** Phone keyboards and autofill that match the field's type (every default can be overridden by a prop). */
 const TYPE_DEFAULTS: Record<string, Partial<React.ComponentProps<'input'>>> = {
@@ -50,7 +50,7 @@ export function Label({ className, ...props }: React.ComponentProps<typeof Label
   return (
     <LabelPrimitive.Root
       data-slot="label"
-      className={cn('flex items-center gap-1.5 text-sm font-semibold leading-none text-foreground/85 select-none peer-disabled:opacity-50', className)}
+      className={cn('flex items-center gap-1.5 text-sm font-medium leading-none text-foreground select-none peer-disabled:opacity-50', className)}
       {...props}
     />
   );

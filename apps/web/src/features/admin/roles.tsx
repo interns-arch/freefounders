@@ -113,7 +113,7 @@ export function RolesPage() {
         title="Roles"
         description="What each role can do in every app, the Admin workspace included. A person can have several roles; their permissions add up. Only the Owner role (Super Admin) is locked."
         actions={
-          <Button onClick={() => setEditing('new')} disabled={!catalogue.data}>
+          <Button variant="cta" onClick={() => setEditing('new')} disabled={!catalogue.data}>
             <Plus /> New role
           </Button>
         }

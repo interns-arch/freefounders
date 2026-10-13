@@ -12,7 +12,7 @@ export function CardHeader({ className, ...props }: React.ComponentProps<'div'>)
   return <div className={cn('flex items-start justify-between gap-3 px-5 pt-5 pb-3', className)} {...props} />;
 }
 export function CardTitle({ className, ...props }: React.ComponentProps<'h3'>) {
-  return <h3 className={cn('text-[15px] font-bold tracking-tight', className)} {...props} />;
+  return <h3 className={cn('text-base font-semibold tracking-tight', className)} {...props} />;
 }
 export function CardDescription({ className, ...props }: React.ComponentProps<'p'>) {
   return <p className={cn('text-sm text-muted-foreground', className)} {...props} />;
@@ -30,7 +30,7 @@ export const badgeVariants = cva(
         neutral: 'border-transparent bg-muted text-muted-foreground',
         gray: 'border-border bg-muted text-foreground',
         blue: 'border-info/20 bg-info/10 text-info',
-        indigo: 'border-primary/20 bg-primary/10 text-primary',
+        indigo: 'border-primary/20 bg-primary/8 text-primary',
         violet: 'border-app-attendance/20 bg-app-attendance/10 text-app-attendance',
         green: 'border-success/20 bg-success/10 text-success',
         amber: 'border-warning/20 bg-warning/10 text-warning',
@@ -56,7 +56,7 @@ export function Badge({ className, tone, dot, children, ...props }: React.Compon
 
 // ─── Skeleton / Separator / Progress ─────────────────────────────────────
 export function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('animate-pulse rounded-md bg-muted/80', className)} {...props} />;
+  return <div className={cn('animate-pulse rounded-md bg-muted', className)} {...props} />;
 }
 
 export function Separator({ className, orientation = 'horizontal', ...props }: React.ComponentProps<typeof SeparatorPrimitive.Root>) {
@@ -75,7 +75,7 @@ export function Progress({ value, className, indicatorClassName }: { value: numb
     <ProgressPrimitive.Root className={cn('relative h-1.5 w-full overflow-hidden rounded-full bg-muted', className)} value={value}>
       <ProgressPrimitive.Indicator
         // Moves with transform (no layout work per frame); reduced motion and lite mode switch the movement off.
-        className={cn('h-full w-full rounded-full bg-gradient-to-r from-brand-2 to-primary transition-transform duration-500 ease-out', indicatorClassName)}
+        className={cn('h-full w-full rounded-full bg-primary transition-transform duration-500 ease-out', indicatorClassName)}
         style={{ transform: `translateX(-${100 - Math.max(0, Math.min(100, value))}%)` }}
       />
     </ProgressPrimitive.Root>
@@ -142,13 +142,13 @@ export const TooltipProvider = TooltipPrimitive.Provider;
 // ─── Avatar ───────────────────────────────────────────────────────────────
 // Theme colours only, so dark mode and the brand colour follow automatically.
 const AVATAR_COLORS = [
-  'bg-primary/15 text-primary',
-  'bg-app-assets/15 text-app-assets',
-  'bg-warning/15 text-warning',
-  'bg-app-attendance/15 text-app-attendance',
-  'bg-info/15 text-info',
-  'bg-success/15 text-success',
-  'bg-app-admin/15 text-app-admin',
+  'bg-primary/8 text-primary',
+  'bg-app-assets/10 text-app-assets',
+  'bg-warning/10 text-warning',
+  'bg-app-attendance/10 text-app-attendance',
+  'bg-info/10 text-info',
+  'bg-success/10 text-success',
+  'bg-app-admin/10 text-app-admin',
 ];
 
 export function Avatar({ name, className }: { name: string | null | undefined; className?: string }) {
@@ -156,7 +156,7 @@ export function Avatar({ name, className }: { name: string | null | undefined; c
   let h = 0;
   for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
   return (
-    <AvatarPrimitive.Root className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full ring-1 ring-current/10 ring-inset', className)}>
+    <AvatarPrimitive.Root className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full bg-card ring-1 ring-current/10 ring-inset', className)}>
       <AvatarPrimitive.Fallback data-slot="avatar-fallback" className={cn('flex size-full items-center justify-center text-xs font-bold', AVATAR_COLORS[h % AVATAR_COLORS.length])}>
         {initials(n)}
       </AvatarPrimitive.Fallback>

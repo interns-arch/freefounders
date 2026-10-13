@@ -83,10 +83,11 @@ def team_users(user, *, inactive=False, department="", q="", keys=VIEW_KEYS):
         qs = qs.filter(department=department)
     q = (q or "").strip()
     if q:
-        cond = Q(username__icontains=q) | Q(employee_code__icontains=q) | Q(whatsapp_phone__icontains=q)
+        # A name matches when every typed word is in the first or last name ("ravi kumar" finds Ravi Kumar only).
+        name = Q()
         for word in q.split():
-            cond |= Q(first_name__icontains=word) | Q(last_name__icontains=word)
-        qs = qs.filter(cond)
+            name &= Q(first_name__icontains=word) | Q(last_name__icontains=word)
+        qs = qs.filter(Q(username__icontains=q) | Q(employee_code__icontains=q) | Q(whatsapp_phone__icontains=q) | name)
     return list(qs.distinct().order_by("first_name", "last_name", "username"))
 
 

@@ -100,7 +100,7 @@ export function DelegationCard({ department = '', className }: { department?: st
                 </TD>
                 {(['given', 'received'] as Side[]).map((k) =>
                   DELEGATION_WINDOWS.map(([w]) => (
-                    <TD key={k + w} className={cn('text-right tabular-nums', p[k][w] === 0 && 'text-muted-foreground/60', w === win && 'font-semibold')}>
+                    <TD key={k + w} className={cn('text-right tabular-nums', p[k][w] === 0 && 'text-muted-foreground', w === win && 'font-semibold')}>
                       {w === win ? (
                         <span className="inline-flex items-center justify-end gap-2">
                           <span className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-muted lg:inline-block">

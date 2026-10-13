@@ -84,7 +84,10 @@ class ScopeTests(_Base):
         self.assertEqual(self.ids(c.get("/api/attendance/team_day/", {"q": "ct-001"})), {self.rahul.id})
         self.assertEqual(self.ids(c.get("/api/attendance/team_day/", {"q": "98000"})), {self.rahul.id})
         self.assertEqual(self.ids(c.get("/api/attendance/team_day/", {"q": "verma"})), {self.rahul.id})
-        res = c.get("/api/attendance/team_day/")
+        # Every word must match: "Rahul Verma" finds Rahul, "Priya Verma" finds nobody (not everyone with either word).
+        self.assertEqual(self.ids(c.get("/api/attendance/team_day/", {"q": "Rahul Verma"})), {self.rahul.id})
+        self.assertEqual(self.ids(c.get("/api/attendance/team_day/", {"q": "Priya Verma"})), set())
+        res =c.get("/api/attendance/team_day/")
         self.assertIn({"code": "purchase", "name": "Purchase"}, res.json()["departments"])
 
 

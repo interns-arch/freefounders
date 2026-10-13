@@ -53,7 +53,7 @@ export default function QueuePage() {
               key={p}
               type="button"
               onClick={() => set({ priority: active ? '' : p })}
-              className={cn('relative cursor-pointer overflow-hidden rounded-xl border p-3 pl-4 text-left transition', TILE[p], active ? 'ring-2 ring-current/40' : 'hover:-translate-y-px hover:shadow-sm', f.priority && !active && 'opacity-60')}
+              className={cn('relative cursor-pointer overflow-hidden rounded-xl border p-3 pl-4 text-left transition', TILE[p], active ? 'ring-2 ring-current/40' : 'hover:shadow-sm', f.priority && !active && 'opacity-60')}
               aria-pressed={active}
             >
               <span className={cn('absolute inset-y-0 left-0 w-1', BAR[p])} aria-hidden />
@@ -76,7 +76,7 @@ export default function QueuePage() {
               onClick={() => set({ kind: k.value })}
               className={cn(
                 'cursor-pointer rounded-md px-3 py-1 text-[13px] font-medium transition',
-                (f.kind ?? '') === k.value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                (f.kind ?? '') === k.value ? 'bg-primary/8 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >
               {k.label}
@@ -125,7 +125,7 @@ function GroupedList({ items, reset }: { items: QueueItem[]; reset: unknown }) {
         const all = items.filter((i) => i.priority === p).length;
         return (
           <section key={p}>
-            <h2 className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-muted/60 px-4 py-1.5 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase backdrop-blur">
+            <h2 className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-muted px-4 py-1.5 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
               <span className={cn('size-2 rounded-full', BAR[p])} />
               {LABEL[p]} <span className="rounded bg-card px-1.5 py-px tabular">{all}</span>
             </h2>
@@ -181,7 +181,7 @@ export function QueueCard() {
       <CardHeader>
         <div>
           <CardTitle className="flex items-center gap-2">
-            <span className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <span className="flex size-6 items-center justify-center rounded-md bg-primary/8 text-primary">
               <ListOrdered className="size-3.5" />
             </span>
             Priority queue
@@ -212,7 +212,7 @@ export function QueueCard() {
       ) : (
         <CardContent>
           <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm">
-            <span className="flex size-8 items-center justify-center rounded-full bg-success/15 text-success">
+            <span className="flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
               <CheckCircle2 className="size-4" />
             </span>
             <span className="text-success">All clear — nothing waiting.</span>

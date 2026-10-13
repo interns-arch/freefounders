@@ -126,7 +126,7 @@ export function DataTable<T>({
     const [title, ...rest] = cardCols;
     return (
       <div className={cn('relative', className)}>
-        {fetching && !loading && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-gradient-to-r from-brand-2 to-primary motion-reduce:animate-none" />}
+        {fetching && !loading && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-primary motion-reduce:animate-none" />}
         {selectable && list.length > 0 && !loading && (
           <label className="flex items-center gap-2.5 border-b bg-muted/40 px-4 py-2.5 text-sm font-medium">
             <Checkbox
@@ -205,7 +205,7 @@ export function DataTable<T>({
 
   return (
     <div className={cn('relative', className)}>
-      {fetching && !loading && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-gradient-to-r from-brand-2 to-primary motion-reduce:animate-none" />}
+      {fetching && !loading && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-primary motion-reduce:animate-none" />}
       <Table>
         <THead>
           <TR className="hover:bg-transparent">

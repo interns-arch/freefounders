@@ -76,11 +76,11 @@ export function WaitingOnMe({ home }: { home?: HomeSummary }) {
       aria-label="Waiting on you"
       className={cn(
         'flex flex-col gap-3 rounded-2xl border px-3 py-3 sm:px-4 lg:flex-row lg:items-center',
-        hot ? 'border-warning/35 bg-gradient-to-r from-warning/12 via-card to-card' : 'border-primary/20 bg-gradient-to-r from-primary/10 via-card to-card',
+        hot ? 'border-warning/35 bg-warning/6' : 'border-primary/20 bg-primary/4',
       )}
     >
       <div className="flex items-center gap-2.5 lg:min-w-56">
-        <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', hot ? 'bg-warning/18 text-warning' : 'bg-primary/12 text-primary')}>
+        <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl', hot ? 'bg-warning/10 text-warning' : 'bg-primary/8 text-primary')}>
           <Bell className="size-4.5" />
         </span>
         <div className="min-w-0">
@@ -96,7 +96,7 @@ export function WaitingOnMe({ home }: { home?: HomeSummary }) {
               key={i.to}
               to={i.to}
               className={cn(
-                'flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm font-medium transition hover:-translate-y-px hover:border-primary/40 hover:shadow-sm',
+                'flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm font-medium transition hover:border-primary/40 hover:shadow-sm',
                 n > 0 ? 'border-warning/40' : 'border-border',
               )}
             >
@@ -250,7 +250,7 @@ export function ScoreCard({ home, className }: { home?: HomeSummary; className?:
       ) : (
         <div className="flex flex-wrap items-center gap-5">
           <div className="relative mx-auto sm:mx-0">
-            <div aria-hidden className="absolute inset-2 rounded-full bg-gradient-to-br from-brand-2/15 to-transparent" />
+            <div aria-hidden className="absolute inset-2 rounded-full bg-primary/6" />
             <ScoreDial value={me.score} size={128} />
           </div>
           <div className="min-w-40 flex-1 text-sm">
@@ -376,7 +376,7 @@ export function TeamInsights({ home }: { home?: HomeSummary }) {
                     <span className="truncate text-sm">{p.name}</span>
                   </span>
                   <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-gradient-to-r from-warning to-destructive" style={{ width: `${(p.overdue / maxP) * 100}%` }} />
+                    <div className="h-full rounded-full bg-destructive" style={{ width: `${(p.overdue / maxP) * 100}%` }} />
                   </div>
                   <span className="w-14 text-right text-sm tabular-nums">
                     <strong>{p.overdue}</strong>
