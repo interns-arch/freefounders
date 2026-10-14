@@ -13,7 +13,27 @@ export interface Claims {
   role?: 'owner' | 'admin' | 'member';
   /** The apps this person can open, with their user id in each. */
   apps: Partial<Record<AppKey, string>>;
+  /** Read-only company (subscription ended, PLAN.md §21.1): the APIs refuse writes with 402. */
+  ro?: boolean;
   exp: number;
+}
+
+/** The tokens a sign-in answers with (the web gets the refresh token as a cookie; mobile in the body). */
+export interface SignInTokens {
+  accessToken: string;
+  refreshToken?: string;
+}
+
+/** An account in several companies signs in in two steps: pick the company, then `session.loginWithTicket`. */
+export interface CompanyChoice {
+  companyId: string;
+  name: string;
+  code: string;
+  role: string;
+}
+export interface ChooseCompany {
+  chooseCompany: CompanyChoice[];
+  ticket: string;
 }
 
 type Listener = () => void;
@@ -36,11 +56,30 @@ function decode(token: string): Claims | null {
   }
 }
 
+// Who is signed in, in which company: a change of either (sign-in, sign-out, company switch) tells the listeners.
+const identity = (c: Claims | null) => (c ? `${c.sub}|${c.cid}` : null);
+
 function set(token: string | null) {
-  const before = claims?.sub ?? null;
+  const before = identity(claims);
   accessToken = token;
   claims = token ? decode(token) : null;
-  if ((claims?.sub ?? null) !== before) listeners.forEach((l) => l());
+  if (identity(claims) !== before) listeners.forEach((l) => l());
+}
+
+/** Mobile keeps the refresh token itself: requests that sign in say so (`client: 'mobile'`). */
+function clientHint(): { client?: 'mobile' } {
+  return config.refreshStore ? { client: 'mobile' } : {};
+}
+
+/** Keeps the tokens of a sign-in (sign-in, sign-up, company switch, invite accepted). */
+async function keep(data: Partial<SignInTokens> & { message?: string }, status: number) {
+  if (!data.accessToken) {
+    const { ApiError } = await import('./http');
+    throw new ApiError(status, data.message ?? 'Sign-in failed');
+  }
+  const store = config.refreshStore;
+  if (store && data.refreshToken) await store.set(data.refreshToken);
+  set(data.accessToken);
 }
 
 async function post(path: string, body: Record<string, unknown> = {}) {
@@ -82,17 +121,29 @@ export const session = {
     return renewing;
   },
 
-  /** Signs in with email, username or employee ID. */
-  async login(login: string, password: string): Promise<void> {
-    const store = config.refreshStore;
-    const res = await post('/login', { login, password, ...(store ? { client: 'mobile' } : {}) });
-    const data = (await res.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; message?: string };
-    if (!res.ok || !data.accessToken) {
-      const { ApiError } = await import('./http');
-      throw new ApiError(res.status, data.message ?? 'Sign-in failed');
-    }
-    if (store && data.refreshToken) await store.set(data.refreshToken);
-    set(data.accessToken);
+  clientHint,
+
+  /**
+   * Signs in with email, mobile, username or employee ID. An account in several companies gets the list to choose
+   * from (PLAN.md §21.2); then `loginWithTicket`. Otherwise signed in, and nothing is returned.
+   */
+  async login(login: string, password: string): Promise<ChooseCompany | void> {
+    const res = await post('/login', { login, password, ...clientHint() });
+    const data = (await res.json().catch(() => ({}))) as Partial<SignInTokens & ChooseCompany> & { message?: string };
+    if (res.ok && Array.isArray(data.chooseCompany) && data.ticket) return { chooseCompany: data.chooseCompany, ticket: data.ticket };
+    await keep(res.ok ? data : { message: data.message }, res.status);
+  },
+
+  /** Second step of a sign-in with several companies. */
+  async loginWithTicket(ticket: string, companyId: string): Promise<void> {
+    const res = await post('/login', { ticket, companyId, ...clientHint() });
+    const data = (await res.json().catch(() => ({}))) as Partial<SignInTokens> & { message?: string };
+    await keep(res.ok ? data : { message: data.message }, res.status);
+  },
+
+  /** Takes over the tokens another request answered with (sign-up, company switch, new company, invite accepted). */
+  adopt(data: Partial<SignInTokens>): Promise<void> {
+    return keep(data, 200);
   },
 
   async logout() {

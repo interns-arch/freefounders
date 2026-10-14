@@ -9,9 +9,12 @@ import { AllExceptionsFilter } from './common/exception.filter';
 
 export const API_PREFIX = 'api/platform';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const WEBHOOK = /^\/billing\/webhook\/[a-z]+$/;
 
 export async function createApp() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Payment webhooks are signed over the exact bytes received (req.rawBody).
+    rawBody: true,
     logger: process.env.NODE_ENV === 'test' ? ['error'] : ['log', 'warn', 'error'],
   });
   // Mounted at /api/platform on the shared origin, so the gateway forwards paths unchanged.
@@ -27,7 +30,8 @@ export async function createApp() {
   app.use(`/${API_PREFIX}`, (req: Request, res: Response, next: NextFunction) => {
     // Answers carry tokens and people's details: never kept by browsers or proxies (the public logo sets its own).
     res.setHeader('Cache-Control', 'no-store');
-    if (MUTATING.has(req.method) && req.headers['x-requested-with'] !== 'XMLHttpRequest') {
+    // Gateway webhooks carry no cookie or token; their signature is checked instead (billing/gateway.ts).
+    if (MUTATING.has(req.method) && req.headers['x-requested-with'] !== 'XMLHttpRequest' && !WEBHOOK.test(req.path)) {
       res.status(403).json({ statusCode: 403, message: 'Missing request header' });
       return;
     }

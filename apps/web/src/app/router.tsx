@@ -22,17 +22,26 @@ function area(routes: RouteObject[]): RouteObject[] {
  */
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },
+  // Public account pages (PLAN.md §21.1): sign-up, forgot password, invite links.
+  { path: '/signup', lazy: async () => ({ Component: (await import('@/features/account/signup')).SignupPage }), errorElement: <RouteError /> },
+  { path: '/forgot', lazy: async () => ({ Component: (await import('@/features/account/forgot')).ForgotPage }), errorElement: <RouteError /> },
+  { path: '/join/:token', lazy: async () => ({ Component: (await import('@/features/account/join')).JoinPage }), errorElement: <RouteError /> },
   {
     element: <RequireSession />,
     errorElement: <RouteError />,
     children: [
       { path: 'account', element: <AccountPage /> },
+      // Signed in, without the app frame: a new company, the fake payment page, a printable invoice.
+      { path: 'new-company', lazy: async () => ({ Component: (await import('@/features/account/new-company')).NewCompanyPage }) },
+      { path: 'billing/pay/:sessionId', lazy: async () => ({ Component: (await import('@/features/billing/pay')).FakePayPage }) },
+      { path: 'billing/invoices/:id', lazy: async () => ({ Component: (await import('@/features/billing/invoice')).InvoicePage }) },
       {
         element: <AppShell />,
         children: [
           // Home (PLAN.md §19.14): attendance first, then the other areas; /?choose is a plain alias, /?home=1 skips the phone redirect.
           { index: true, element: <HomePage /> },
           ...adminRoutes,
+          { path: 'console', lazy: async () => ({ Component: (await import('@/features/billing/console')).ConsolePage }) },
           { path: 'attendance', children: attendanceRoutes },
           { path: 'tasks', children: area([...tasksRoutes, ...hrRoutes]) },
           { path: 'assets', children: area(assetsRoutes) },

@@ -44,12 +44,29 @@ const buttonVariants = cva(
 interface ButtonProps extends React.ComponentProps<'button'>, VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   loading?: boolean;
+  /** A CTA that still works in a read-only company (renewing, paying). */
+  allowReadOnly?: boolean;
 }
 
-export function Button({ className, variant, size, asChild = false, loading = false, disabled, children, ...props }: ButtonProps) {
+/**
+ * Read-only company (PLAN.md §21.1: the subscription ended): the app frame sets this, and every CTA (the one main
+ * create action of a screen) is disabled with the reason as its tooltip. The APIs refuse writes with 402 anyway.
+ */
+export const ReadOnlyContext = React.createContext(false);
+const READ_ONLY_TITLE = 'Read-only: the subscription has ended';
+
+export function Button({ className, variant, size, asChild = false, loading = false, allowReadOnly = false, disabled, children, title, ...props }: ButtonProps) {
   const Comp = asChild ? Slot.Root : 'button';
+  const readOnly = React.useContext(ReadOnlyContext) && variant === 'cta' && !allowReadOnly;
   return (
-    <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} disabled={disabled || loading} aria-busy={loading || undefined} {...props}>
+    <Comp
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      disabled={disabled || loading || readOnly}
+      aria-busy={loading || undefined}
+      title={readOnly ? READ_ONLY_TITLE : title}
+      {...props}
+    >
       {asChild ? (
         children
       ) : (

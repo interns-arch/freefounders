@@ -7,9 +7,17 @@ import { cn } from '@/lib/utils';
 import { adminHome } from './nav';
 
 /** An Admin screen needs its own Admin permission; anyone else goes to the Admin screen they may open, or the start page. */
-export function AdminOnly({ allow }: { allow: (a: Access) => boolean }) {
+export function AdminOnly({ allow, forms = false }: { allow: (a: Access) => boolean; forms?: boolean }) {
   const access = useAccess();
   if (access.ready && !allow(access)) return <Navigate to={access.admin.any ? adminHome(access) : '/'} replace />;
+  // A read-only company (subscription ended, PLAN.md §21.1): an Admin screen that is only forms can be read, not changed.
+  if (forms && access.readOnly) {
+    return (
+      <fieldset disabled className="m-0 min-w-0 border-0 p-0">
+        <Outlet />
+      </fieldset>
+    );
+  }
   return <Outlet />;
 }
 

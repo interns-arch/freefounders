@@ -4,12 +4,15 @@ import { ChevronDown, Home, LayoutGrid } from '@/components/icons';
 import { type RefObject, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { PageLoader } from '@/components/common/page';
+import { ReadOnlyContext } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Sheet, SheetContent, SheetTitle } from '@/components/ui/overlays';
 import { brandCss } from '@/lib/brand-colour';
 import { useHotkeys } from '@/lib/hotkeys';
 import { cn } from '@/lib/utils';
 import { ADMIN_NAV } from '@/features/admin/nav';
+import { SwitchingOverlay } from '@/features/account/switcher';
+import { BillingBanners } from '@/features/billing/banners';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
 import { TASKS_NAV } from '@/features/tasks/nav';
@@ -151,6 +154,12 @@ export function AppShell() {
   }, [access.brand?.shortName, title]);
 
   const workspaces = useMemo(() => workspacesFor(access.apps, access.admin.any), [access.apps, access.admin.any]);
+
+  // Suspended company (PLAN.md §21.1): only the owner gets in, straight to Billing.
+  const suspended = access.billing?.state === 'suspended';
+  useEffect(() => {
+    if (suspended && access.canManageBilling && !loc.pathname.startsWith('/billing')) navigate('/billing', { replace: true });
+  }, [suspended, access.canManageBilling, loc.pathname, navigate]);
 
   // A group this person cannot open: back to Home.
   useEffect(() => {
@@ -305,11 +314,14 @@ export function AppShell() {
           <NotificationsBell />
           <UserMenu access={access} onShortcuts={() => setHelp(true)} />
         </header>
+        <BillingBanners key={access.claims?.cid} access={access} />
         <main id="content" ref={mainRef} tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none lg:p-6 lg:pb-8 [&_h1:focus]:outline-none">
           {access.ready ? (
-            <Suspense fallback={<PageLoader />}>
-              <Outlet />
-            </Suspense>
+            <ReadOnlyContext.Provider value={access.readOnly}>
+              <Suspense fallback={<PageLoader />}>
+                <Outlet />
+              </Suspense>
+            </ReadOnlyContext.Provider>
           ) : (
             <PageLoader />
           )}
@@ -334,6 +346,7 @@ export function AppShell() {
           </button>
         </nav>
       </div>
+      <SwitchingOverlay />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent className="max-w-md">
           <DialogHeader>

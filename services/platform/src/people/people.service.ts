@@ -7,6 +7,7 @@ import { AuthService, hashPassword } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
+import { assertNewSeat, assertSeatFor } from '../billing/seats';
 import { ProvisionClient } from '../provision/provision.client';
 import { RolesService } from '../roles/roles.service';
 import { DirectoryService } from './directory.service';
@@ -271,6 +272,11 @@ export class PeopleService {
     if (input.employeeCode !== undefined) await this.assertIdentifiersFree(id, null, input.employeeCode);
     if (input.departmentId !== undefined) await this.directory.assertDepartment(caller.companyId, input.departmentId);
     if (input.reportsTo !== undefined) await this.directory.assertReportsTo(caller.companyId, id, input.reportsTo);
+    if (input.status === 'active' && current.status !== 'active') {
+      // Switching someone with apps back on takes a seat again (PLAN.md §21).
+      const [hasApp] = await this.dbs.db.select({ app: personApps.app }).from(personApps).where(eq(personApps.personId, id)).limit(1);
+      if (hasApp) await assertNewSeat(this.dbs, caller.companyId);
+    }
 
     const [p] = await this.dbs.db
       .update(people)
@@ -445,8 +451,18 @@ export class PeopleService {
     if (appRole && (APPS as readonly string[]).includes(app)) await this.moduleRef.get(RolesService, { strict: false }).assertCanGiveAppRole(caller, app as AppKey, appRole);
     const [company] = await this.dbs.db.select({ enabledApps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
     if (!company?.enabledApps.includes(app)) throw badRequest(`Your plan does not include ${app}`);
+    await assertSeatFor(this.dbs, caller.companyId, id);
+    return this.giveApp(caller.companyId, p, app as AppKey, appRole);
+  }
+
+  /**
+   * Opens an app for a person already checked (an admin's grant above, or an invite link): the app finds or creates
+   * their user, we remember its id, the apps get their department and manager, and a new Assets user is onboarded.
+   */
+  async giveApp(companyId: string, p: typeof people.$inferSelect, app: AppKey, appRole?: string) {
+    const id = p.id;
     const [login] = await this.dbs.db.select({ username: logins.username }).from(logins).where(eq(logins.personId, id)).limit(1);
-    const localUserId = await this.provisioner.provision(app as AppKey, caller.companyId, {
+    const localUserId = await this.provisioner.provision(app, companyId, {
       personId: p.id,
       fullName: p.fullName,
       email: p.email,
@@ -460,8 +476,8 @@ export class PeopleService {
       .insert(personApps)
       .values({ personId: id, app, localUserId })
       .onConflictDoUpdate({ target: [personApps.personId, personApps.app], set: { localUserId, grantedAt: new Date() } });
-    await this.directory.push(caller.companyId); // the new user gets their department and manager
-    if (app === 'assets') await this.moduleRef.get(FlowsService, { strict: false }).onboardIfJoining(caller.companyId, id);
+    await this.directory.push(companyId); // the new user gets their department and manager
+    if (app === 'assets') await this.moduleRef.get(FlowsService, { strict: false }).onboardIfJoining(companyId, id);
     return { app, localUserId };
   }
 

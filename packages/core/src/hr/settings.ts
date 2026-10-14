@@ -50,8 +50,8 @@ export interface OfficeLocation {
   active: boolean;
 }
 
-export function useOfficeLocations() {
-  return useQuery({ queryKey: ['hr', 'offices'], queryFn: () => tasksApi.get<DrfPage<OfficeLocation> | OfficeLocation[]>('/office-locations/').then(resultsOf) });
+export function useOfficeLocations(enabled = true) {
+  return useQuery({ queryKey: ['hr', 'offices'], queryFn: () => tasksApi.get<DrfPage<OfficeLocation> | OfficeLocation[]>('/office-locations/').then(resultsOf), enabled });
 }
 export function useAddOffice() {
   const qc = useQueryClient();

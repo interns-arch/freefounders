@@ -60,7 +60,16 @@ const pg = await import(pathToFileURL(at('services/platform/scripts/pg.mjs')).hr
 const postgres = await pg.startPostgres();
 await pg.ensureDatabase('ff_tasks');
 
-start('platform', 'npm', ['run', 'dev'], { cwd: 'services/platform', env: INTERNAL });
+// Sign-up and billing for testing (PLAN.md §21), dev only: one-time codes shown on screen (and in this log), the fake
+// payment gateway's signing secret (a public test value), the billing dev tools, invite links on this address.
+const SIGNUP_DEV = {
+  OTP_DEV_ECHO: '1',
+  BILLING_DEV_TOOLS: '1',
+  FAKE_GATEWAY_SECRET: 'dev-only-fakepay-secret-not-for-production',
+  PUBLIC_WEB_URL: process.env.PUBLIC_URL ?? 'http://localhost:8080',
+  BILLING_TICK_SECONDS: '60',
+};
+start('platform', 'npm', ['run', 'dev'], { cwd: 'services/platform', env: { ...INTERNAL, ...SIGNUP_DEV } });
 
 // The phone app (apps/mobile) reaches the suite over the Wi-Fi at http://<this PC's LAN address>:8080, so Django
 // must accept those addresses as hosts too (dev only; the gateway already listens on every interface).

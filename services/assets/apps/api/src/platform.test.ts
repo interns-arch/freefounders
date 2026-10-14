@@ -175,6 +175,27 @@ describe('platform session exchange', () => {
     assert.ok(left[0].expiresAt.getTime() > Date.now());
   });
 
+  test('a read-only subscription (token claim ro, PLAN.md §21): reads work, writes get 402, also through the session cookie', async () => {
+    const ro = await sign({ cid: randomUUID(), apps: { assets: ids.mia }, ro: true }, { sub: ids.person });
+    assert.equal((await call('GET', '/auth/me', ro)).status, 200);
+    const write = await call('POST', '/auth/change-password', ro, { currentPassword: 'x', newPassword: 'Another@123' });
+    assert.equal(write.status, 402);
+    assert.match(write.body.message, /read-only/);
+    // The exchanged session carries it.
+    const { status, cookie } = await exchange(ro);
+    assert.equal(status, 200);
+    assert.equal(await meWithCookie(cookie!), 200);
+    const viaCookie = await fetch(`${base}/auth/change-password`, {
+      method: 'POST',
+      headers: { cookie: cookie!, 'content-type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
+      body: JSON.stringify({ currentPassword: 'x', newPassword: 'Another@123' }),
+    });
+    assert.equal(viaCookie.status, 402);
+    // Without the claim the same write is not refused for that reason.
+    const normal = await call('POST', '/auth/change-password', await access(ids.person, ids.mia), { currentPassword: 'x', newPassword: 'Another@123' });
+    assert.notEqual(normal.status, 402);
+  });
+
   test('bad or missing tokens get no session', async () => {
     assert.equal((await exchange()).status, 401);
     assert.equal((await exchange(await access(ids.person, ids.mia, { signer: forger }))).status, 401);

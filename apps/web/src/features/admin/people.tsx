@@ -8,7 +8,9 @@ import {
   useRoles,
   useUpdatePerson,
 } from '@freefounders/core/admin';
-import { MoreHorizontal, Plus, Users } from '@/components/icons';
+import { Link2, MoreHorizontal, Plus, Users } from '@/components/icons';
+import { useSearchParams } from 'react-router';
+import { InvitesDialog } from '@/features/account/invites-dialog';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
@@ -47,6 +49,9 @@ export function PeoplePage() {
   const update = useUpdatePerson();
   const confirm = useConfirm();
   const [open, setOpen] = useState<Open | null>(null);
+  // Invite links (PLAN.md §21.1); /people?invite=1 (Getting started) opens them at once.
+  const [params, setParams] = useSearchParams();
+  const [inviting, setInviting] = useState(() => params.has('invite'));
   const [error, setError] = useState('');
   const roleById = useMemo(() => new Map((roles.data ?? []).map((r) => [r.id, r])), [roles.data]);
   const loadError = people.error ?? roles.error ?? apps.error;
@@ -217,9 +222,14 @@ export function PeoplePage() {
         description={`Everyone at ${me?.company.name ?? 'your company'}: their login and their roles. Roles decide which apps they can open.`}
         actions={
           can('people.manage') && (
-            <Button variant="cta" onClick={() => setOpen({ kind: 'add' })}>
-              <Plus /> Add person
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setInviting(true)}>
+                <Link2 /> Invite link
+              </Button>
+              <Button variant="cta" onClick={() => setOpen({ kind: 'add' })}>
+                <Plus /> Add person
+              </Button>
+            </>
           )
         }
       />
@@ -246,6 +256,16 @@ export function PeoplePage() {
         {people.data && <ShowMore {...more.footer} noun="people" className="border-t" />}
       </Card>
 
+      {can('people.manage') && (
+        <InvitesDialog
+          open={inviting}
+          companyName={me?.company.name}
+          onClose={() => {
+            setInviting(false);
+            if (params.has('invite')) setParams({}, { replace: true });
+          }}
+        />
+      )}
       <PersonSheet
         open={open?.kind === 'add' || open?.kind === 'edit'}
         person={open?.kind === 'edit' ? open.person : undefined}

@@ -1,4 +1,11 @@
 import { Module } from '@nestjs/common';
+import { AccountsController, InvitesController } from './accounts/accounts.controller';
+import { AccountsService } from './accounts/accounts.service';
+import { FakeOtpSender, OTP_SENDER, OtpService, TicketsService } from './accounts/otp.service';
+import { BillingController, ConsoleController } from './billing/billing.controller';
+import { BillingService } from './billing/billing.service';
+import { CompanySetupService } from './company/setup.service';
+import { InvitesService } from './invites/invites.service';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthController } from './auth/auth.controller';
 import { AuthGuard } from './auth/auth.guard';
@@ -21,7 +28,28 @@ import { RolesController } from './roles/roles.controller';
 import { RolesService } from './roles/roles.service';
 
 @Module({
-  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController],
-  providers: [DbService, Throttle, KeysService, TokensService, AuthService, PeopleService, ProvisionClient, RolesService, CompanyService, DirectoryService, FlowsService, { provide: APP_GUARD, useClass: AuthGuard }],
+  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController, AccountsController, InvitesController, BillingController, ConsoleController],
+  providers: [
+    DbService,
+    Throttle,
+    KeysService,
+    TokensService,
+    AuthService,
+    PeopleService,
+    ProvisionClient,
+    RolesService,
+    CompanyService,
+    DirectoryService,
+    FlowsService,
+    CompanySetupService,
+    TicketsService,
+    OtpService,
+    // One-time codes go to the Platform log until a real email/SMS sender is connected (PLAN.md §21).
+    { provide: OTP_SENDER, useClass: FakeOtpSender },
+    AccountsService,
+    InvitesService,
+    BillingService,
+    { provide: APP_GUARD, useClass: AuthGuard },
+  ],
 })
 export class AppModule {}

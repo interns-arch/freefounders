@@ -9,6 +9,27 @@ import { type AppKey, type Claims, session } from './session';
 
 // ─── /me of each API ──────────────────────────────────────────────────────
 
+/** The global sign-in behind this membership (PLAN.md §21.1); null for an admin-made login (username / employee ID). */
+export interface MeAccount {
+  id: string;
+  email: string | null;
+  mobile: string | null;
+  /** FreeFounders staff: may open the owner console (/console). */
+  isStaff: boolean;
+}
+
+export type SubscriptionState = 'trialing' | 'active' | 'past_due' | 'read_only' | 'suspended' | 'cancelled';
+
+/** The company's subscription, as everyone sees it (banners, read-only). Null when billing is not in use. */
+export interface MeBilling {
+  plan: string;
+  state: SubscriptionState;
+  trialEndsAt: string | null;
+  readOnly: boolean;
+  /** Days left in the current state: of the trial, or before a failed payment makes the company read-only. */
+  daysLeft: number | null;
+}
+
 export interface PlatformMe {
   person: { id: string; fullName: string; email: string | null; employeeCode: string | null; role: 'owner' | 'admin' | 'member' };
   company: { id: string; name: string; shortName: string | null; colour: string | null; logoUrl: string | null };
@@ -22,6 +43,8 @@ export interface PlatformMe {
   held?: { level: number; grants: Array<{ app: 'tasks' | 'assets' | 'platform'; permission: string; scope: string }> };
   /** Always false now: nobody is forced to change their password (R7). Kept for older servers. */
   mustChangePassword?: boolean;
+  account?: MeAccount | null;
+  billing?: MeBilling | null;
 }
 
 export interface TasksMe {
@@ -131,6 +154,12 @@ export interface Access {
     can: (...permissions: string[]) => boolean;
     module: (key: string) => boolean;
   };
+  /** The subscription (null: no billing, e.g. a complimentary or older install). */
+  billing: MeBilling | null;
+  /** Read-only company: screens hide or disable their create/edit actions (the APIs refuse them with 402 anyway). */
+  readOnly: boolean;
+  /** May open Billing: the owner, or a role with "Manage billing". */
+  canManageBilling: boolean;
   /** Company brand from the Settings Center (null = FreeFounders defaults). */
   brand: { name: string; shortName: string; colour: string | null; logoUrl: string | null } | null;
 }
@@ -178,6 +207,9 @@ export function useAccess(): Access {
       can: (...p) => p.some((x) => perms.has(x)),
       module: (key) => assetsConfig.data?.modules?.[key] !== false,
     },
+    billing: platform.data?.billing ?? null,
+    readOnly: !!(platform.data?.billing?.readOnly ?? claims?.ro),
+    canManageBilling: claims?.role === 'owner' || platform.data?.person.role === 'owner' || (platform.data?.permissions ?? []).some((p) => p === 'billing.manage' || p === 'platform.billing.manage'),
     brand: company ? { name: company.name, shortName: company.shortName || company.name, colour: company.colour, logoUrl: company.logoUrl } : null,
   };
 }

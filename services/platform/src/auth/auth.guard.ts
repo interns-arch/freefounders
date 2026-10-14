@@ -1,9 +1,10 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { and, eq, sql } from 'drizzle-orm';
-import { type AuthedRequest, IS_PUBLIC, NEEDS } from '../common/http';
+import { type AuthedRequest, IS_PUBLIC, NEEDS, READ_ONLY_OK } from '../common/http';
+import { isReadOnly, paymentRequired, READ_ONLY_MESSAGE } from '../billing/seats';
 import { DbService } from '../db/db.service';
-import { companies, people, refreshSessions } from '../db/schema';
+import { companies, people, refreshSessions, subscriptions } from '../db/schema';
 import { TokensService } from '../keys/tokens.service';
 import { type PlatformPermission, platformPermissionsOf } from '../roles/platform-permissions';
 
@@ -14,6 +15,8 @@ import { type PlatformPermission, platformPermissionsOf } from '../roles/platfor
  * the Platform at once (the apps still accept the token until it expires, at most 15 minutes). Admin routes also
  * re-check the person's permissions in the database.
  */
+const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
@@ -39,16 +42,25 @@ export class AuthGuard implements CanActivate {
         role: people.platformRole,
         status: people.status,
         companyStatus: companies.status,
+        billing: subscriptions.state,
         live: sql<boolean>`exists (select 1 from ${refreshSessions} where ${refreshSessions.familyId} = ${caller.sessionFamily}
           and ${refreshSessions.personId} = ${people.id} and ${refreshSessions.revokedAt} is null and ${refreshSessions.expiresAt} > now())`,
       })
       .from(people)
       .innerJoin(companies, eq(companies.id, people.companyId))
+      .leftJoin(subscriptions, eq(subscriptions.companyId, companies.id))
       .where(and(eq(people.id, caller.personId), eq(people.companyId, caller.companyId)))
       .limit(1);
     if (!me || me.status !== 'active' || me.companyStatus !== 'active' || !me.live) throw new UnauthorizedException('Please sign in');
+    // A suspended company (PLAN.md §21.1): only owners stay signed in, to renew it in Billing.
+    if (me.billing === 'suspended' && me.role !== 'owner') throw new UnauthorizedException('Please sign in');
     // Tokens live 15 minutes; a demoted or re-roled person must lose access at once.
     caller.role = me.role as typeof caller.role;
+    caller.readOnly = isReadOnly(me.billing);
+    // Read-only: look and export, change nothing, except billing, sign-out, switching company and one's own password.
+    if (caller.readOnly && !SAFE.has(req.method) && !this.reflector.getAllAndOverride<boolean>(READ_ONLY_OK, targets)) {
+      throw paymentRequired(READ_ONLY_MESSAGE);
+    }
 
     const needs = this.reflector.getAllAndOverride<PlatformPermission[] | undefined>(NEEDS, targets);
     if (needs) {

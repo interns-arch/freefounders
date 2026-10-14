@@ -21,11 +21,12 @@ export class TokensService {
 
   /**
    * Access token read by Tasks and Assets. `apps` maps each app the person may open to their user id inside it.
-   * Claims: sub = person id, cid = company id, name, role (platform role), apps, fam (refresh session family).
+   * Claims: sub = person id, cid = company id, name, role (platform role), apps, fam (refresh session family), and
+   * ro = true while the company's subscription is read-only (PLAN.md §21).
    */
   async signAccess(caller: Caller): Promise<string> {
     const key = await this.keys.signingKey();
-    return new SignJWT({ cid: caller.companyId, name: caller.name, role: caller.role, apps: caller.apps, fam: caller.sessionFamily })
+    return new SignJWT({ cid: caller.companyId, name: caller.name, role: caller.role, apps: caller.apps, fam: caller.sessionFamily, ...(caller.readOnly ? { ro: true } : {}) })
       .setProtectedHeader({ alg: 'EdDSA', kid: key.kid, typ: 'JWT' })
       .setSubject(caller.personId)
       .setIssuer(ISSUER)
@@ -57,6 +58,7 @@ export class TokensService {
         role: payload.role as PlatformRole,
         apps: (payload.apps ?? {}) as Partial<Record<AppKey, string>>,
         sessionFamily: typeof payload.fam === 'string' ? payload.fam : undefined,
+        readOnly: payload.ro === true,
       };
     } catch {
       return null;

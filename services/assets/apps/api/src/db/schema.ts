@@ -231,6 +231,8 @@ export const sessions = pgTable(
     userAgent: text('user_agent'),
     /** Session made from a FreeFounders Platform token: it ends with that token and is never extended. */
     fixedExpiry: boolean('fixed_expiry').notNull().default(false),
+    /** The Platform token said the company's subscription is read-only (`ro`): writes are refused (PLAN.md §21). */
+    readOnly: boolean('read_only').notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],

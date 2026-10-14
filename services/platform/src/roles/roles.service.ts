@@ -11,6 +11,7 @@ import { DbService } from '../db/db.service';
 import { type AppKey, APPS, companies, people, personApps, personRoles, type RoleDuty, roleGrants, roles } from '../db/schema';
 import { type AppCatalogue, internalUrl, ProvisionClient, type UpgradeRule } from '../provision/provision.client';
 import { heldAccess, PLATFORM_APP, PLATFORM_CATALOGUE } from './platform-permissions';
+import { assertSeatFor } from '../billing/seats';
 
 /**
  * The two roles every company starts with. Their codes are new, so they never collide with an app's own roles.
@@ -538,6 +539,7 @@ export class RolesService {
     }
     // Only what the caller has themselves, at no higher level (R1): nobody but the owner raises anyone's access, their own included.
     await this.assertCanGive(caller, found.filter((r) => !current.includes(r.id)));
+    await this.assertSeatForRoles(caller.companyId, personId, wanted);
     await db.transaction(async (tx) => {
       await tx.delete(personRoles).where(eq(personRoles.personId, personId));
       if (wanted.length) await tx.insert(personRoles).values(wanted.map((roleId) => ({ personId, roleId })));
@@ -547,6 +549,56 @@ export class RolesService {
     // A newly opened app needs the person's department and manager too.
     await this.moduleRef.get(DirectoryService, { strict: false }).push(caller.companyId);
     return { roleIds: wanted, apps, sync };
+  }
+
+  /** Roles that would open a first app for someone without one take a seat (PLAN.md §21): 402 when none is free. */
+  private async assertSeatForRoles(companyId: string, personId: string, roleIds: string[]) {
+    if (!roleIds.length) return;
+    const enabled = await this.enabledApps(companyId);
+    const apps = await this.dbs.db.selectDistinct({ app: roleGrants.app }).from(roleGrants).where(inArray(roleGrants.roleId, roleIds));
+    if (!apps.some((a) => enabled.includes(a.app as AppKey) && internalUrl(a.app as AppKey))) return;
+    await assertSeatFor(this.dbs, companyId, personId);
+  }
+
+  /** The R1 rule for roles chosen outside the role builder (invite links): only what the caller holds. */
+  async assertCanGiveRoles(caller: Caller, roleIds: string[]) {
+    const wanted = [...new Set(roleIds)];
+    const found = wanted.length
+      ? await this.dbs.db.select().from(roles).where(and(inArray(roles.id, wanted), eq(roles.companyId, caller.companyId), eq(roles.archived, false)))
+      : [];
+    if (found.length !== wanted.length) throw badRequest('Unknown or archived role', { roleIds: 'Unknown or archived role' });
+    if (found.some((r) => r.code === SUPER_ADMIN.code) && caller.role !== 'owner') throw new ForbiddenException('Only an owner can give or take the Super Admin role');
+    await this.assertCanGive(caller, found);
+    return found;
+  }
+
+  /**
+   * Gives roles already checked when the invite was made (a person joining by an invite link): their apps open, the
+   * apps get the roles and the person's department. Never closes anything.
+   */
+  async giveRolesFromInvite(companyId: string, personId: string, roleIds: string[]) {
+    const live = roleIds.length
+      ? await this.dbs.db.select({ id: roles.id }).from(roles).where(and(inArray(roles.id, roleIds), eq(roles.companyId, companyId), eq(roles.archived, false)))
+      : [];
+    if (live.length) await this.dbs.db.insert(personRoles).values(live.map((r) => ({ personId, roleId: r.id }))).onConflictDoNothing();
+    await this.applyApps(companyId, personId, { close: false });
+    await this.push(companyId);
+  }
+
+  /** After an app was added to the company (plan upgrade): everyone whose roles reach it gets it. Nobody loses one here. */
+  async openAppsFromRoles(companyId: string) {
+    const holders = await this.dbs.db
+      .selectDistinct({ id: personRoles.personId })
+      .from(personRoles)
+      .innerJoin(people, eq(people.id, personRoles.personId))
+      .where(and(eq(people.companyId, companyId), eq(people.status, 'active')));
+    for (const h of holders) {
+      try {
+        await this.applyApps(companyId, h.id, { close: false });
+      } catch (err) {
+        this.log.warn(`Opening apps for ${h.id}: ${(err as Error).message}`);
+      }
+    }
   }
 
   /**

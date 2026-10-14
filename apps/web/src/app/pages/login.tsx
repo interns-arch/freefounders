@@ -1,7 +1,8 @@
-import { errorMessage, session, useSignIn } from '@freefounders/core';
-import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from '@/components/icons';
+import { type ChooseCompany, errorMessage, session, useSignIn } from '@freefounders/core';
+import { useSignInWithTicket } from '@freefounders/core/account';
+import { ArrowRight, Building2, CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from '@/components/icons';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Logo } from '../shell-parts';
@@ -18,6 +19,9 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const signIn = useSignIn();
+  const withTicket = useSignInWithTicket();
+  // An account in several companies picks one (PLAN.md §21.2).
+  const [choose, setChoose] = useState<ChooseCompany | null>(null);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
@@ -41,7 +45,15 @@ export function LoginPage() {
       (gaps.login ? loginRef : passwordRef).current?.focus();
       return;
     }
-    signIn.mutate({ login: login.trim(), password }, { onSuccess: () => navigate(next ?? '/', { replace: true }) });
+    signIn.mutate(
+      { login: login.trim(), password },
+      {
+        onSuccess: (res) => {
+          if (res && res.chooseCompany.length) setChoose(res);
+          else navigate(next ?? '/', { replace: true });
+        },
+      },
+    );
   };
   const watchCaps = (e: KeyboardEvent<HTMLInputElement>) => setCapsLock(e.getModifierState?.('CapsLock') ?? false);
 
@@ -73,6 +85,45 @@ export function LoginPage() {
           <div className="mb-5 flex justify-center lg:hidden">
             <Logo />
           </div>
+          {choose ? (
+            <section className="space-y-4 rounded-xl border bg-card p-5 shadow-card sm:p-7" aria-labelledby="choose-title">
+              <h1 id="choose-title" className="text-2xl font-bold tracking-tight">
+                Choose a company
+              </h1>
+              <p className="text-sm text-muted-foreground">Your account works in more than one company. Which one do you want to open?</p>
+              <ul className="space-y-2">
+                {choose.chooseCompany.map((c) => (
+                  <li key={c.companyId}>
+                    <button
+                      type="button"
+                      disabled={withTicket.isPending}
+                      onClick={() =>
+                        withTicket.mutate({ ticket: choose.ticket, companyId: c.companyId }, { onSuccess: () => navigate(next ?? '/', { replace: true }) })
+                      }
+                      className="flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-md border bg-card px-3 py-2 text-left transition outline-none hover:border-primary/40 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-60"
+                    >
+                      <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary" aria-hidden>
+                        <Building2 className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">{c.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground capitalize">{c.role}</span>
+                      </span>
+                      <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {withTicket.isError && (
+                <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+                  {errorMessage(withTicket.error)}
+                </p>
+              )}
+              <Button variant="ghost" className="w-full" onClick={() => (setChoose(null), withTicket.reset())}>
+                Back
+              </Button>
+            </section>
+          ) : (
           <form onSubmit={submit} noValidate className="space-y-5 rounded-xl border bg-card p-5 shadow-card sm:p-7" aria-labelledby="signin-title">
             <h1 id="signin-title" className="text-2xl font-bold tracking-tight">
               Sign in
@@ -154,8 +205,20 @@ export function LoginPage() {
             <Button type="submit" className="h-11 w-full" size="lg" loading={signIn.isPending}>
               Sign in
             </Button>
+            <p className="text-center text-sm">
+              <Link to="/forgot" className="font-medium text-primary hover:underline">
+                Forgot password?
+              </Link>
+            </p>
           </form>
-          <p className="mt-4 text-center text-xs text-muted-foreground">Forgot your password? Ask your company admin to reset it.</p>
+          )}
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            New to FreeFounders?{' '}
+            <Link to="/signup" className="font-semibold text-primary hover:underline">
+              Start free
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">Signed in with a username or employee ID? Your company admin resets those passwords.</p>
         </div>
       </main>
     </div>

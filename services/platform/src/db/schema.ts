@@ -76,6 +76,29 @@ export const departments = platform.table(
   (t) => [uniqueIndex('departments_company_code_uq').on(t.companyId, t.code), uniqueIndex('departments_company_name_uq').on(t.companyId, sql`lower(${t.name})`)],
 );
 
+/**
+ * A person's global identity (PLAN.md §21): email and/or Indian mobile (+91…), one password, in any number of companies.
+ * Each company membership is a `people` row with `account_id` set. Admin-made logins (`logins`) keep working beside it.
+ */
+export const accounts = platform.table(
+  'accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: text('email'),
+    mobile: text('mobile'),
+    fullName: text('full_name').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    failedLogins: integer('failed_logins').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }).notNull().defaultNow(),
+    /** FreeFounders staff: the owner console (/console). */
+    isStaff: boolean('is_staff').notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('accounts_email_uq').on(sql`lower(${t.email})`), uniqueIndex('accounts_mobile_uq').on(t.mobile)],
+);
+
 export const people = platform.table(
   'people',
   {
@@ -96,11 +119,16 @@ export const people = platform.table(
     joinDate: date('join_date'),
     /** Set by "Start exit" (Phase 5); the person stays active until the exit is complete. */
     lastWorkingDate: date('last_working_date'),
+    /** The account this membership belongs to (PLAN.md §21); null for admin-made people. */
+    accountId: uuid('account_id').references(() => accounts.id),
     ...timestamps,
   },
   (t) => [
-    // Email signs you in, so it must point at exactly one person across all companies.
-    uniqueIndex('people_email_uq').on(sql`lower(${t.email})`),
+    // An admin-made person's email signs them in, so it points at exactly one such person across all companies. People
+    // who belong to an account sign in through the account; their email is unique inside their company only.
+    uniqueIndex('people_email_uq').on(sql`lower(${t.email})`).where(sql`account_id is null`),
+    uniqueIndex('people_company_email_uq').on(t.companyId, sql`lower(${t.email})`),
+    uniqueIndex('people_company_account_uq').on(t.companyId, t.accountId),
     uniqueIndex('people_company_code_uq').on(t.companyId, sql`lower(${t.employeeCode})`),
     index('people_company_idx').on(t.companyId),
   ],
@@ -244,4 +272,267 @@ export const eventCursors = platform.table(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.companyId, t.app] })],
+);
+
+// ─── Sign-up, invites and billing (PLAN.md §21) ──────────────────────────────
+
+/** One-time codes. Only the sha256 of the code is stored; 10 minutes, at most 5 tries, used once. */
+export const otpCodes = platform.table(
+  'otp_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    target: text('target').notNull(),
+    channel: text('channel').notNull(),
+    purpose: text('purpose').notNull(),
+    codeHash: text('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    ip: text('ip'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('otp_codes_target_idx').on(t.target, t.createdAt), index('otp_codes_ip_idx').on(t.ip, t.createdAt)],
+);
+
+/**
+ * Short-lived proofs, stored as sha256 only: `signup` (the identifier was verified by a code, 30 min) and `login`
+ * (an account gave its password and now picks a company, 5 min). Each is used once.
+ */
+export const authTickets = platform.table('auth_tickets', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(),
+  target: text('target'),
+  channel: text('channel'),
+  accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Invite links (only the sha256 of the token is stored). */
+export const invites = platform.table(
+  'invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    tokenHash: text('token_hash').notNull().unique(),
+    roleIds: uuid('role_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    apps: text('apps').array().notNull().default(sql`'{}'::text[]`),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    maxUses: integer('max_uses'),
+    uses: integer('uses').notNull().default(0),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdBy: uuid('created_by').references(() => people.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('invites_company_idx').on(t.companyId)],
+);
+
+/** What can be bought. Prices in paise per seat; `offered` = shown on the Billing page. */
+export const plans = platform.table('plans', {
+  code: text('code').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  apps: text('apps').array().notNull().default(sql`'{}'::text[]`),
+  priceMonthly: integer('price_monthly').notNull().default(0),
+  priceYearly: integer('price_yearly').notNull().default(0),
+  minSeats: integer('min_seats').notNull().default(1),
+  /** null = no limit */
+  maxSeats: integer('max_seats'),
+  offered: boolean('offered').notNull().default(true),
+  sort: integer('sort').notNull().default(0),
+});
+
+/** One per company. States: trialing, active, cancelled, past_due, read_only, suspended (PLAN.md §21.1). */
+export const subscriptions = platform.table('subscriptions', {
+  companyId: uuid('company_id')
+    .primaryKey()
+    .references(() => companies.id),
+  plan: text('plan')
+    .notNull()
+    .references(() => plans.code),
+  interval: text('interval').notNull().default('month'),
+  state: text('state').notNull(),
+  /** Since when (company clock) the subscription is in `state`: past_due → read_only after 7 days, read_only → suspended after 30. */
+  stateSince: timestamp('state_since', { withTimezone: true }).notNull().defaultNow(),
+  /** Paid seats (paid plans). */
+  seats: integer('seats').notNull().default(0),
+  /** A decrease waits for the next period. */
+  nextPeriodSeats: integer('next_period_seats'),
+  trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  /** Dev tools only: the company's billing clock runs this many days ahead. */
+  clockOffsetDays: integer('clock_offset_days').notNull().default(0),
+  ...timestamps,
+});
+
+export interface InvoiceLineInput {
+  description: string;
+  sac: string;
+  quantity: number;
+  /** paise */
+  unitPrice: number;
+  /** paise; negative for a credit */
+  amount: number;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+}
+
+export interface GstParty {
+  name: string;
+  gstin: string | null;
+  state: string;
+  address: string | null;
+  email?: string | null;
+}
+
+/** A purchase started on the Billing page and paid (or not) on the gateway's page. */
+export const checkoutSessions = platform.table(
+  'checkout_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    gateway: text('gateway').notNull(),
+    plan: text('plan')
+      .notNull()
+      .references(() => plans.code),
+    interval: text('interval').notNull(),
+    seats: integer('seats').notNull(),
+    lines: jsonb('lines').$type<InvoiceLineInput[]>().notNull().default([]),
+    subtotal: integer('subtotal').notNull(),
+    cgst: integer('cgst').notNull().default(0),
+    sgst: integer('sgst').notNull().default(0),
+    igst: integer('igst').notNull().default(0),
+    total: integer('total').notNull(),
+    /** open, paid, failed, cancelled */
+    status: text('status').notNull().default('open'),
+    createdBy: uuid('created_by').references(() => people.id, { onDelete: 'set null' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('checkout_sessions_company_idx').on(t.companyId)],
+);
+
+/** GST tax invoices: one number series per financial year (April–March), e.g. FF/2026-27/000001. */
+export const invoices = platform.table(
+  'invoices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    number: text('number').notNull().unique(),
+    financialYear: text('financial_year').notNull(),
+    seq: integer('seq').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+    periodStart: timestamp('period_start', { withTimezone: true }),
+    periodEnd: timestamp('period_end', { withTimezone: true }),
+    seller: jsonb('seller').$type<GstParty>().notNull(),
+    buyer: jsonb('buyer').$type<GstParty>().notNull(),
+    placeOfSupply: text('place_of_supply').notNull(),
+    subtotal: integer('subtotal').notNull(),
+    cgst: integer('cgst').notNull().default(0),
+    sgst: integer('sgst').notNull().default(0),
+    igst: integer('igst').notNull().default(0),
+    total: integer('total').notNull(),
+    status: text('status').notNull().default('paid'),
+    checkoutSessionId: uuid('checkout_session_id').references(() => checkoutSessions.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('invoices_fy_seq_uq').on(t.financialYear, t.seq), index('invoices_company_idx').on(t.companyId)],
+);
+
+export const invoiceLines = platform.table('invoice_lines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  invoiceId: uuid('invoice_id')
+    .notNull()
+    .references(() => invoices.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  description: text('description').notNull(),
+  sac: text('sac').notNull(),
+  quantity: integer('quantity').notNull(),
+  unitPrice: integer('unit_price').notNull(),
+  amount: integer('amount').notNull(),
+  periodStart: timestamp('period_start', { withTimezone: true }),
+  periodEnd: timestamp('period_end', { withTimezone: true }),
+});
+
+/** Last invoice number used per financial year (taken atomically). */
+export const invoiceCounters = platform.table('invoice_counters', {
+  financialYear: text('financial_year').primaryKey(),
+  last: integer('last').notNull().default(0),
+});
+
+export const payments = platform.table(
+  'payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    invoiceId: uuid('invoice_id').references(() => invoices.id),
+    checkoutSessionId: uuid('checkout_session_id').references(() => checkoutSessions.id),
+    gateway: text('gateway').notNull(),
+    gatewayPaymentId: text('gateway_payment_id'),
+    amount: integer('amount').notNull(),
+    /** captured, failed */
+    status: text('status').notNull(),
+    reason: text('reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('payments_company_idx').on(t.companyId)],
+);
+
+/** Gateway webhooks, stored once by event id: a repeated delivery is ignored. */
+export const billingEvents = platform.table(
+  'billing_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    gateway: text('gateway').notNull(),
+    eventId: text('event_id').notNull(),
+    type: text('type').notNull(),
+    payload: jsonb('payload').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('billing_events_gateway_event_uq').on(t.gateway, t.eventId)],
+);
+
+/** The buyer's GST details for invoices. */
+export const billingProfiles = platform.table('billing_profiles', {
+  companyId: uuid('company_id')
+    .primaryKey()
+    .references(() => companies.id),
+  legalName: text('legal_name').notNull(),
+  gstin: text('gstin'),
+  state: text('state').notNull(),
+  address: text('address'),
+  email: text('email'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Seats added mid-period: charged pro rata on the next invoice. */
+export const seatChanges = platform.table(
+  'seat_changes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    seatsFrom: integer('seats_from').notNull(),
+    seatsTo: integer('seats_to').notNull(),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
+    periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+    /** paise, before GST */
+    amount: integer('amount').notNull(),
+    invoiceId: uuid('invoice_id').references(() => invoices.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('seat_changes_company_idx').on(t.companyId)],
 );

@@ -55,6 +55,7 @@ async function quickAdd(page: Page, item: string) {
 const noLoadError = (page: Page) => expect(page.getByText('Couldn’t load this')).toHaveCount(0);
 
 test('every Assets screen opens under /assets with its menu', async ({ page }) => {
+  test.setTimeout(120_000); // 17 full page loads in a row: the dev server sends ~150 modules per load
   await openSignedIn(page, '/assets');
   await expect(page.getByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening)/ })).toBeVisible();
   const menu = page.getByRole('navigation', { name: 'Assets menu' });

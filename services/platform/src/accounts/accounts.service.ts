@@ -1,0 +1,221 @@
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, Logger } from '@nestjs/common';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { z } from 'zod';
+import { AuthService, hashPassword, type Issued, type Meta } from '../auth/auth.service';
+import { BillingService } from '../billing/billing.service';
+import { stateName } from '../billing/gst';
+import { badRequest, type Caller } from '../common/http';
+import { CompanySetupService } from '../company/setup.service';
+import { DbService } from '../db/db.service';
+import { accounts, APPS, companies, logins, people } from '../db/schema';
+import { type Identifier, normaliseIdentifier } from './identifier';
+import { OtpService, TicketsService } from './otp.service';
+
+/** A verified identifier stays usable for sign-up this long (PLAN.md §21.2). */
+export const SIGNUP_TTL_MS = 30 * 60 * 1000;
+/** New companies one account may create per day (abuse guard, §20.5). */
+const COMPANIES_PER_DAY = 5;
+
+const identifierSchema = z.string().trim().min(3, 'Enter your email or mobile number').max(200);
+export const startSchema = z.object({ identifier: identifierSchema });
+export const verifySchema = z.object({ otpId: z.string().uuid('Ask for a new code'), code: z.string().trim().regex(/^[0-9]{6}$/, 'Enter the 6-digit code') });
+export const newPasswordSchema = z.string().min(6, 'Use at least 6 characters').max(200);
+export const companySchema = z.object({
+  name: z.string().trim().min(2, 'Enter the company name').max(120),
+  teamSize: z.string().trim().max(20).optional().nullable(),
+  industry: z.string().trim().max(80).optional().nullable(),
+  state: z.string().trim().max(60).optional().nullable().refine((s) => !s || !!stateName(s), 'Choose a state'),
+  apps: z.array(z.enum(APPS)).min(1, 'Choose at least one app').max(APPS.length),
+});
+export const completeSchema = z.object({
+  signupToken: z.string().min(20).max(200),
+  fullName: z.string().trim().min(1, 'Enter your name').max(120),
+  password: z.string().min(1, 'Enter a password').max(200),
+  company: companySchema,
+  client: z.enum(['web', 'mobile']).default('web'),
+});
+export const forgotSchema = z.object({ identifier: identifierSchema });
+export const resetSchema = z.object({ otpId: z.string().uuid('Ask for a new code'), code: z.string().trim().regex(/^[0-9]{6}$/, 'Enter the 6-digit code'), newPassword: newPasswordSchema });
+export type CompanyInput = z.infer<typeof companySchema>;
+
+export type AccountRow = typeof accounts.$inferSelect;
+
+const expired = () => new BadRequestException({ message: 'Your sign-up has expired. Start again.', errors: { signupToken: 'Expired' } });
+const invalidIdentifier = () => badRequest('Enter a valid email or a 10-digit Indian mobile number', { identifier: 'Enter a valid email or mobile number' });
+
+/**
+ * Accounts (PLAN.md §21): sign-up by one-time code, forgot password, and new companies for an account. Sign-in with an
+ * account and the company switcher live in AuthService.
+ */
+@Injectable()
+export class AccountsService {
+  private readonly log = new Logger('Signup');
+
+  constructor(
+    private readonly dbs: DbService,
+    private readonly auth: AuthService,
+    private readonly otp: OtpService,
+    private readonly tickets: TicketsService,
+    private readonly setup: CompanySetupService,
+    private readonly billing: BillingService,
+  ) {}
+
+  async findAccount(id: Identifier): Promise<AccountRow | undefined> {
+    const [a] = await this.dbs.db
+      .select()
+      .from(accounts)
+      .where(id.kind === 'email' ? sql`lower(${accounts.email}) = ${id.value}` : eq(accounts.mobile, id.value))
+      .limit(1);
+    return a;
+  }
+
+  async accountOfPerson(personId: string): Promise<AccountRow | undefined> {
+    const [row] = await this.dbs.db.select({ account: accounts }).from(people).innerJoin(accounts, eq(accounts.id, people.accountId)).where(eq(people.id, personId)).limit(1);
+    return row?.account;
+  }
+
+  // ─── sign-up ────────────────────────────────────────────────────────────
+
+  async signupStart(identifier: string, ip?: string) {
+    const id = normaliseIdentifier(identifier);
+    if (!id) throw invalidIdentifier();
+    return this.otp.start(id, 'signup', ip);
+  }
+
+  /**
+   * The code proves the identifier: a sign-up token for 30 minutes. An email that already signs in with an admin-made
+   * login (no account) cannot become an account here: they sign in with it (no take-over of a login of a company).
+   */
+  async signupVerify(otpId: string, code: string) {
+    const { target, channel } = await this.otp.verify(otpId, code, 'signup');
+    const id = normaliseIdentifier(target)!;
+    const account = await this.findAccount(id);
+    if (!account) await this.assertNotCompanyLogin(id);
+    const signupToken = await this.tickets.create('signup', SIGNUP_TTL_MS, { target, channel });
+    return { signupToken, accountExists: !!account };
+  }
+
+  private async assertNotCompanyLogin(id: Identifier) {
+    if (id.kind !== 'email') return;
+    const [legacy] = await this.dbs.db
+      .select({ id: people.id })
+      .from(people)
+      .innerJoin(logins, eq(logins.personId, people.id))
+      .where(and(sql`lower(${people.email}) = ${id.value}`, isNull(people.accountId)))
+      .limit(1);
+    if (legacy) throw new ConflictException('This email already signs in to a company here. Sign in with it instead, or use another email.');
+  }
+
+  /**
+   * Step 1 of using a sign-up token (outside any transaction, so a wrong password still counts towards the lockout):
+   * the identifier it proves, and the existing account, whose password must be right. A new account's password is checked.
+   */
+  async checkSignup(signupToken: string, password: string, ip?: string): Promise<{ id: Identifier; existing?: AccountRow }> {
+    const ticket = await this.tickets.peek(signupToken, 'signup');
+    const id = ticket?.target ? normaliseIdentifier(ticket.target) : null;
+    if (!ticket || !id) throw expired();
+    const existing = await this.findAccount(id);
+    if (existing) {
+      await this.auth.verifyAccountPassword(existing, password, `ip:${ip ?? 'unknown'}`);
+      return { id, existing };
+    }
+    const pw = newPasswordSchema.safeParse(password);
+    if (!pw.success) throw badRequest(pw.error.issues[0].message, { password: pw.error.issues[0].message });
+    await this.assertNotCompanyLogin(id);
+    return { id, existing };
+  }
+
+  /** Step 2, inside the caller's transaction: the token is used up (once only) and a new account is created. */
+  async takeSignup(signupToken: string, checked: { id: Identifier; existing?: AccountRow }, fullName: string, password: string): Promise<AccountRow> {
+    if (!(await this.tickets.take(signupToken, 'signup'))) throw expired();
+    if (checked.existing) return checked.existing;
+    const [account] = await this.dbs.db
+      .insert(accounts)
+      .values({ fullName, email: checked.id.kind === 'email' ? checked.id.value : null, mobile: checked.id.kind === 'mobile' ? checked.id.value : null, passwordHash: await hashPassword(password) })
+      .returning();
+    return account;
+  }
+
+  /** POST signup/complete: account + company + owner + 14-day Suite trial, set up in the apps, signed in. */
+  async signupComplete(input: z.infer<typeof completeSchema>, meta: Meta) {
+    const checked = await this.checkSignup(input.signupToken, input.password, meta.ip);
+    if (checked.existing) await this.assertCompanyQuota(checked.existing.id);
+    const { account, ids } = await this.dbs.tx(async () => {
+      const account = await this.takeSignup(input.signupToken, checked, input.fullName, input.password);
+      return { account, ids: await this.insertCompany(account, input.company) };
+    });
+    return this.provisionAndSignIn(account, ids, meta);
+  }
+
+  // ─── new company for an account ─────────────────────────────────────────
+
+  /** POST companies: a new company owned by the caller's account; tokens for it (this session ends). */
+  async createCompany(caller: Caller, input: CompanyInput, meta: Meta) {
+    const account = await this.accountOfPerson(caller.personId);
+    if (!account) throw new ForbiddenException('New companies are made from an account. Sign up with your email or mobile number first.');
+    const ids = await this.dbs.tx(async () => {
+      await this.assertCompanyQuota(account.id);
+      return this.insertCompany(account, input);
+    });
+    const out = await this.provisionAndSignIn(account, ids, meta);
+    if (caller.sessionFamily) await this.auth.revokeFamily(caller.sessionFamily);
+    return out;
+  }
+
+  private async assertCompanyQuota(accountId: string) {
+    const [r] = await this.dbs.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(people)
+      .where(and(eq(people.accountId, accountId), eq(people.platformRole, 'owner'), gt(people.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000))));
+    if ((r?.n ?? 0) >= COMPANIES_PER_DAY) throw new HttpException({ statusCode: 429, message: 'Too many new companies today. Try again tomorrow.' }, 429);
+  }
+
+  /** The rows: company (code from its name), its owner (the account's membership), the trial. */
+  private async insertCompany(account: AccountRow, input: CompanyInput) {
+    const code = await this.setup.freeCode(input.name);
+    const [company] = await this.dbs.db.insert(companies).values({ name: input.name, code, enabledApps: [...new Set(input.apps)] }).returning();
+    const [owner] = await this.dbs.db
+      .insert(people)
+      .values({ companyId: company.id, fullName: account.fullName, email: account.email, mobile: account.mobile, platformRole: 'owner', accountId: account.id })
+      .returning({ id: people.id });
+    await this.billing.startTrial(this.dbs.db, company.id, { legalName: input.name, state: input.state ?? null, email: account.email });
+    if (input.teamSize || input.industry) this.log.log(`New company ${code}: team ${input.teamSize ?? '?'}, industry ${input.industry ?? '?'}`);
+    return { companyId: company.id, ownerId: owner.id, company };
+  }
+
+  /** Same steps as `npm run company -- create` (apps, launch modules, roles: the owner gets the apps, profile, people). */
+  private async provisionAndSignIn(account: AccountRow, ids: { companyId: string; ownerId: string; company: typeof companies.$inferSelect }, meta: Meta): Promise<Issued & { companyId: string; provisionMs: number }> {
+    const started = Date.now();
+    try {
+      await this.setup.provisionNew(ids.company, (line) => this.log.log(line.trim()));
+    } catch (err) {
+      // The company exists; `npm run company -- sync` finishes it. The owner can still sign in.
+      this.log.error(`Setting up ${ids.company.code} in the apps: ${(err as Error).message}`);
+    }
+    const provisionMs = Date.now() - started;
+    this.log.log(`Company ${ids.company.code} for account ${account.id} set up in ${provisionMs} ms`);
+    return { ...(await this.auth.issueFor(ids.ownerId, meta)), companyId: ids.companyId, provisionMs };
+  }
+
+  // ─── forgot password ────────────────────────────────────────────────────
+
+  /** Always the same answer, whether an account exists or not (no account enumeration). */
+  async forgot(identifier: string, ip?: string) {
+    const id = normaliseIdentifier(identifier);
+    if (!id) throw invalidIdentifier();
+    const { otpId, devCode } = await this.otp.start(id, 'reset', ip);
+    return { otpId, ...(devCode ? { devCode } : {}) };
+  }
+
+  async reset(otpId: string, code: string, newPassword: string) {
+    const { target } = await this.otp.verify(otpId, code, 'reset');
+    const account = await this.findAccount(normaliseIdentifier(target)!);
+    if (!account) throw badRequest('There is no account with this email or mobile number. Sign up instead.', { code: 'No account' });
+    await this.dbs.db
+      .update(accounts)
+      .set({ passwordHash: await hashPassword(newPassword), failedLogins: 0, lockedUntil: null, passwordChangedAt: new Date(), updatedAt: new Date() })
+      .where(eq(accounts.id, account.id));
+    await this.auth.revokeAccount(account.id);
+    return { ok: true };
+  }
+}

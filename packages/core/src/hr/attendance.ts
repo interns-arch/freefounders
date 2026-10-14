@@ -60,8 +60,8 @@ export interface AttendanceToday {
 }
 
 /** GET /attendance/today/ */
-export function useAttendanceToday() {
-  return useQuery({ queryKey: ['hr', 'today'], queryFn: () => tasksApi.get<AttendanceToday>('/attendance/today/') });
+export function useAttendanceToday(enabled = true) {
+  return useQuery({ queryKey: ['hr', 'today'], queryFn: () => tasksApi.get<AttendanceToday>('/attendance/today/'), enabled });
 }
 
 export interface MarkInput {

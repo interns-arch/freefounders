@@ -2053,3 +2053,90 @@ later SOC 2 / ISO 27001 for big customers, enterprise SSO (SAML) and audit-log e
 4. **Redis/Valkey** from step 2 (replacing §14's "no Redis" for scale).
 5. **Invoices**: our own GST invoices from the Platform (recommended: full control) or Razorpay's invoices.
 6. **Prices** (§9), minimum seats, annual discount, and the legal entity + GST state that sells.
+
+---
+
+## 21. Step 1 built for testing: Notion-style sign-up, onboarding and billing with a fake payment gateway (2026-10-14)
+
+Founder: "implement the whole Notion login and onboarding type architecture so I can test with a fake payment gateway and
+the complete process; after I test it we can make changes or execute it." This builds §20 step 1 locally. The §20.12
+decisions are not taken yet, so the recommended answers are used and everything that is a business choice is data
+(plans table, env), easy to change after testing:
+
+| §20.12 decision | Used for testing |
+|---|---|
+| 1 Free plan | Yes: **Free**, up to 3 users (founder, 2026-10-14), Tasks app (Tasks + Attendance); no Assets |
+| 2 One account, many companies | Yes: `accounts` + a company switcher |
+| 3 Sign-in for new users | Mobile number or email + one-time code (OTP) + password; OTP sender is **fake** (code shown on screen and in the Platform log in dev) |
+| 4 Redis | Not needed yet |
+| 5 Invoices | Our own GST invoices (CGST+SGST in the seller's state, else IGST), numbered per financial year |
+| 6 Prices | §9: Tasks ₹99, Assets ₹79, Suite ₹149 per user per month; yearly = 10 × monthly (2 months free); paid plans min 5 seats; trial 14 days of Suite, no card; seller state `SELLER_STATE` (default Maharashtra), GSTIN `SELLER_GSTIN` |
+
+### 21.1 What exists after this step
+- **Accounts** (global person: email and/or mobile, password, staff flag) and **memberships** (= a `people` row with
+  `account_id` in each company). Admin-made logins (username / employee ID, §13) keep working unchanged.
+- **Sign-up** `/signup`: email or mobile → code → name + password → company (name, team size, industry, state, apps) →
+  "Setting up your company…" (company + owner + apps provisioned) → Home with a **Getting started** checklist.
+- **Sign-in**: an account with several companies chooses one; **company switcher** in the account menu; **New company**.
+- **Invites**: links per company (role(s) and apps chosen, expiry, max uses, revocable) from Admin → People;
+  `/join/<token>` signs in or signs up, then joins. Forgot password by code.
+- **Billing** (owner, or "Manage billing"): plans, monthly/yearly, seats, GST details, checkout through the **gateway
+  interface** (`FakeGateway` now; `RazorpayGateway` later, same webhooks and states), invoices (printable, GST),
+  change seats (increase pro-rated onto the next invoice), cancel at period end / resume.
+- **Fake gateway** `/billing/pay/<session>` ("FakePay · test mode"): amount with GST, UPI/Card/NetBanking look,
+  **Pay**, **Fail**, **Cancel**. Its result reaches the Platform as a signed webhook, exactly as Razorpay's would.
+- **Subscription states** `trialing → active → past_due (7 days) → read_only → suspended`, plus `cancelled` (until the
+  period ends, then Free if it fits, else read_only). Read-only: everyone can look and export, nobody can change
+  anything (Platform, Tasks and Assets refuse writes with 402 from a token claim). Suspended: only the owner can sign
+  in, straight to Billing. Banners show trial days left, failed payment, read-only.
+- **Dev tools** (only with `BILLING_DEV_TOOLS=1`, on in `npm run dev`): on the Billing page, *advance the billing clock*
+  N days (per company) and *simulate the next renewal* succeeding or failing, so a month or a failed payment can be
+  tested in a minute.
+- **Owner console** `/console` (FreeFounders staff accounts only): totals (MRR, trials, past due, companies), companies
+  with plan, state, seats, MRR; extend a trial, change plan/seats (complimentary), suspend/reactivate.
+- Existing companies (demo/CarTrends, test companies) get the plan **Complimentary** (active, no billing) so nothing
+  changes for them.
+
+### 21.2 API (Platform, under `/api/platform`; the web uses only these)
+Public:
+- `POST signup/start {identifier}` → `{otpId, channel: 'email'|'sms', devCode?}` (devCode only when `OTP_DEV_ECHO=1`)
+- `POST signup/verify {otpId, code}` → `{signupToken, accountExists}` (token proves the identifier for 30 min)
+- `POST signup/complete {signupToken, fullName, password, company: {name, teamSize, industry, state, apps}}` → the
+  sign-in response (tokens) + `companyId`. An existing account must give its password.
+- `POST auth/login` also accepts an account's email/mobile; several companies → `{chooseCompany: [{companyId, name,
+  code, role}], ticket}`, then `POST auth/login {ticket, companyId}` → tokens.
+- `POST auth/forgot {identifier}` → `{otpId, devCode?}`; `POST auth/reset {otpId, code, newPassword}`
+- `GET invites/:token` → `{companyName, roles, apps, expiresAt, valid}`; `POST billing/webhook/:gateway`
+Signed in:
+- `GET auth/companies` → `[{companyId, name, code, role, current}]`; `POST auth/switch {companyId}` → tokens;
+  `POST companies {name, teamSize, industry, state, apps}` → tokens for the new company
+- `POST invites/:token/accept` (signed-in account) or `POST invites/:token/accept {signupToken, fullName, password}`
+  (new account) → tokens for that company
+- Manage people: `GET invites`, `POST invites {roleIds, apps, expiresInDays, maxUses}` → `{id, token, url}`,
+  `DELETE invites/:id`
+- Billing (owner / `platform.billing.manage`): `GET billing` → `{plan, interval, state, trialEndsAt,
+  currentPeriodEnd, cancelAtPeriodEnd, seats: {used, paid, limit}, nextCharge: {date, lines, subtotal, tax, total} |
+  null, profile, devTools, now}`; `GET billing/plans`; `PUT billing/profile {legalName, gstin, state, address,
+  email}`; `POST billing/checkout {plan, interval, seats}` → `{sessionId, checkoutUrl}`; `GET billing/checkout/:id`
+  → `{plan, interval, seats, lines, subtotal, cgst, sgst, igst, total, companyName, status}`;
+  `POST billing/fake/:id/complete {outcome: 'success'|'failure'|'cancel'}`; `POST billing/seats {seats}`;
+  `POST billing/cancel`; `POST billing/resume`; `GET billing/invoices`; `GET billing/invoices/:id` (all fields of a
+  GST tax invoice); dev: `POST billing/dev/advance {days}`, `POST billing/dev/renew {outcome}`
+- Staff: `GET console/summary`, `GET console/companies`, `POST console/companies/:id/trial {days}`,
+  `POST console/companies/:id/plan {plan, seats}`, `POST console/companies/:id/status {status}`
+- `GET auth/me` adds `account: {id, email, mobile, isStaff} | null` and `billing: {plan, state, trialEndsAt,
+  readOnly, daysLeft} | null`. Access tokens carry `ro: true` while read-only.
+Amounts are integers in paise. Errors: 402 for plan/seat/read-only limits with a message for the person.
+
+### 21.3 Tables (Platform, migration 0009+)
+`accounts`, `otp_codes` (hash, target, purpose, expiry, attempts), `people.account_id`, `invites`, `plans`,
+`subscriptions` (company, plan, interval, state, seats, trial_ends_at, current_period_start/end, cancel_at_period_end,
+clock_offset_days for dev), `checkout_sessions`, `invoices` + `invoice_lines` (number per financial year, seller and
+buyer GST details, CGST/SGST/IGST), `payments`, `billing_events` (gateway event id unique: idempotent),
+`billing_profiles`, `seat_changes` (pro-rata add-ons for the next invoice).
+
+**Status 2026-10-14:** built and tested locally. Platform 105, Tasks 849, Assets 91, core 9, smoke 10/10, e2e 61/61 (new
+`e2e/web-signup-billing.spec.ts`: sign up → checklist → invite + join → Suite via FakePay → GST invoice → past due →
+read-only 402 → pay again). Free = 3 users; new-account password minimum 6 (same as admin-made logins). Sign-up
+provisioning takes ~12 s locally (Tasks schema ~10 s): the §20 schema pool will remove that wait. Not yet: real OTP
+(SMS/WhatsApp/email), Razorpay, CAPTCHA, invoice email/PDF file, daily seat snapshots.

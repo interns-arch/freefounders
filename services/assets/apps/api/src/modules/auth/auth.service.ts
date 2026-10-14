@@ -122,6 +122,7 @@ export class AuthService {
         sessionId: sessions.id,
         lastSeenAt: sessions.lastSeenAt,
         fixedExpiry: sessions.fixedExpiry,
+        readOnly: sessions.readOnly,
         userId: users.id,
         name: users.name,
         email: users.email,
@@ -151,6 +152,7 @@ export class AuthService {
         employeeId: row.employeeId,
         roleName: row.roleName,
         permissions: new Set(row.permissions as Permission[]),
+        ...(row.readOnly ? { readOnly: true } : {}),
       },
     };
   }
@@ -182,7 +184,8 @@ export class AuthService {
       .where(and(eq(users.id, localId), eq(users.platformPersonId, String(claims.sub)), eq(users.isActive, true)))
       .limit(1);
     if (!row) return null;
-    return { actor: { ...row, permissions: new Set(row.permissions as Permission[]) }, expiresAt: new Date((claims.exp ?? 0) * 1000) };
+    const actor: Actor = { ...row, permissions: new Set(row.permissions as Permission[]), ...(claims.ro === true ? { readOnly: true } : {}) };
+    return { actor, expiresAt: new Date((claims.exp ?? 0) * 1000) };
   }
 
   /**
@@ -200,6 +203,7 @@ export class AuthService {
       userId: found.actor.userId!,
       expiresAt,
       fixedExpiry: true,
+      readOnly: found.actor.readOnly === true,
       ip: meta.ip ?? null,
       userAgent: meta.userAgent?.slice(0, 300) ?? null,
     });

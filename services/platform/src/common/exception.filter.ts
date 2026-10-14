@@ -10,6 +10,9 @@ const UNIQUE_MESSAGES: Record<string, string> = {
   people_email_uq: 'Another person already uses this email.',
   people_company_code_uq: 'Another person already has this employee ID.',
   logins_username_uq: 'This username is already taken.',
+  people_company_email_uq: 'Another person in this company already uses this email.',
+  accounts_email_uq: 'An account with this email already exists.',
+  accounts_mobile_uq: 'An account with this mobile number already exists.',
 };
 
 function pgError(err: unknown): PgError | null {

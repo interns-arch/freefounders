@@ -17,6 +17,20 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 402 = a plan, seat or read-only limit (PLAN.md §21.2). Every such answer, from any screen, reaches these listeners
+ * (the web app shows its message as a toast), as well as the screen that asked.
+ */
+const paymentListeners = new Set<(err: ApiError) => void>();
+export function onPaymentRequired(listener: (err: ApiError) => void): () => void {
+  paymentListeners.add(listener);
+  return () => paymentListeners.delete(listener);
+}
+function told(err: ApiError): ApiError {
+  if (err.status === 402) paymentListeners.forEach((l) => l(err));
+  return err;
+}
+
 export type Query = Record<string, string | number | boolean | null | undefined | ReadonlyArray<string | number>>;
 
 /** "Something went wrong" text for any error, for screens. */
@@ -113,7 +127,7 @@ export function createHttp(base: string): Http {
         data = text;
       }
     }
-    if (!res.ok) throw normalise(res.status, res.statusText, data);
+    if (!res.ok) throw told(normalise(res.status, res.statusText, data));
     return data as T;
   }
 
@@ -126,7 +140,7 @@ export function createHttp(base: string): Http {
     upload: (path, form, method = 'POST') => json(method, path, form),
     async blob(path, query) {
       const res = await send('GET', path, undefined, query, true);
-      if (!res.ok) throw normalise(res.status, res.statusText, null);
+      if (!res.ok) throw told(normalise(res.status, res.statusText, null));
       return res.blob();
     },
   };

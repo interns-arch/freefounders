@@ -1,8 +1,8 @@
-import { createQueryClient } from '@freefounders/core';
+import { createQueryClient, onPaymentRequired } from '@freefounders/core';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { RouterProvider } from 'react-router';
-import { Toaster } from 'sonner';
+import { toast, Toaster } from 'sonner';
 import { ConfirmProvider } from '@/components/common/confirm';
 import { TooltipProvider } from '@/components/ui/primitives';
 import { installQueryPersistence } from './query-persist';
@@ -42,7 +42,22 @@ function AppToaster() {
   );
 }
 
+/**
+ * 402 = a plan, seat or read-only limit (PLAN.md §21.2): whatever screen asked, its message shows as one toast (the
+ * same id, so a burst of refused requests shows once).
+ */
+function usePaymentRequiredToast() {
+  useEffect(
+    () =>
+      onPaymentRequired((err) => {
+        toast.error(err.message || 'Your plan does not allow this.', { id: 'payment-required' });
+      }),
+    [],
+  );
+}
+
 export function App() {
+  usePaymentRequiredToast();
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={300}>

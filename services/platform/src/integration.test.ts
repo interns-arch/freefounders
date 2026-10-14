@@ -532,7 +532,7 @@ describe('role builder (Phase 3)', () => {
     assert.equal(byCode.ff_super_admin.system, true);
     assert.equal(byCode.ff_admin.system, false, 'only the Owner role is locked (§19.19)');
     const perms = (code: string) => byCode[code].grants.map((g: { permission: string; scope: string }) => `${g.permission}@${g.scope}`).sort();
-    assert.deepEqual(perms('ff_super_admin'), ['company.settings@', 'people.delete@', 'people.exit@', 'people.manage@', 'people.passwords@', 'roles.manage@', 'tasks.assign@', 'tasks.delete_admin_work@', 'tasks.view@company'], 'the Owner role has every permission, the Admin workspace too');
+    assert.deepEqual(perms('ff_super_admin'), ['billing.manage@', 'company.settings@', 'people.delete@', 'people.exit@', 'people.manage@', 'people.passwords@', 'roles.manage@', 'tasks.assign@', 'tasks.delete_admin_work@', 'tasks.view@company'], 'the Owner role has every permission, the Admin workspace too');
     assert.deepEqual(perms('ff_admin'), ['tasks.assign@', 'tasks.view@company'], 'Super Admin-only powers are not in Admin');
     assert.deepEqual(perms('warehouse'), ['tasks.view@team'], 'unknown permissions are dropped');
     Object.assign(roleIds, { super: byCode.ff_super_admin.id, admin: byCode.ff_admin.id, warehouse: byCode.warehouse.id });
@@ -555,7 +555,7 @@ describe('role builder (Phase 3)', () => {
     assert.equal(cat.body[0].app, 'tasks');
     assert.equal(cat.body[0].permissions.length, 3);
     assert.equal(cat.body.at(-1).app, 'platform', 'the Admin workspace is the last "app" in the role builder');
-    assert.equal(cat.body.at(-1).permissions.length, 6);
+    assert.equal(cat.body.at(-1).permissions.length, 7);
     const created = await call('POST', '/people', { token: admin.token, body: { fullName: 'Rita Roles', email: 'rita@acme.test', login: { username: 'rita', password: PASSWORD } } });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     ids.rita = created.body.person.id;
@@ -701,7 +701,7 @@ describe('every feature is a permission (§19.19)', () => {
   test('the owner is never locked out: everything without any role, and the Owner role cannot be edited', async () => {
     const owner = await login('olivia');
     const me = await call('GET', '/auth/me', { token: owner.token });
-    assert.deepEqual(me.body.permissions, ['company.settings', 'people.delete', 'people.exit', 'people.manage', 'people.passwords', 'roles.manage']);
+    assert.deepEqual(me.body.permissions, ['billing.manage', 'company.settings', 'people.delete', 'people.exit', 'people.manage', 'people.passwords', 'roles.manage']);
     const list = await call('GET', '/roles', { token: owner.token });
     const superRole = list.body.find((r: { code: string }) => r.code === 'ff_super_admin');
     assert.equal((await call('PATCH', `/roles/${superRole.id}`, { token: owner.token, body: { grants: [] } })).status, 403);

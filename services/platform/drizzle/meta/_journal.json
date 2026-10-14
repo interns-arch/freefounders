@@ -64,6 +64,13 @@
       "when": 1791960000000,
       "tag": "0008_remove_forms_and_ideas",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792000000000,
+      "tag": "0009_signup_billing",
+      "breakpoints": true
     }
   ]
 }

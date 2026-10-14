@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { type AuthedRequest, type Caller, CurrentCaller, Public, ZodPipe } from '../common/http';
+import { type AuthedRequest, type Caller, CurrentCaller, Public, ReadOnlyOk, ZodPipe } from '../common/http';
 import { KeysService } from '../keys/keys.service';
 import { AuthService, type Issued, REFRESH_TTL_MS } from './auth.service';
 
@@ -14,18 +14,37 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Enter your password').max(200),
   client: z.enum(['web', 'mobile']).default('web'),
 });
+/** Second step of an account sign-in with several companies (PLAN.md §21.2). */
+const ticketSchema = z.object({
+  ticket: z.string().min(20).max(200),
+  companyId: z.string().uuid('Choose a company'),
+  client: z.enum(['web', 'mobile']).default('web'),
+});
+const switchSchema = z.object({ companyId: z.string().uuid('Choose a company'), client: z.enum(['web', 'mobile']).default('web') });
 const refreshSchema = z.object({ refreshToken: z.string().max(200).optional() });
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z.string().min(6, 'Use at least 6 characters').max(200),
 });
 
-function cookieOptions() {
+export function cookieOptions() {
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
     secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE !== 'false',
     path: COOKIE_PATH,
+  };
+}
+
+/** Web gets the refresh token as an httpOnly cookie; mobile gets it in the body for secure storage. */
+export function respondTokens(res: Response, issued: Issued, client: 'web' | 'mobile') {
+  if (client === 'web' && issued.refreshToken) {
+    res.cookie(REFRESH_COOKIE, issued.refreshToken, { ...cookieOptions(), maxAge: REFRESH_TTL_MS });
+  }
+  return {
+    accessToken: issued.accessToken,
+    expiresIn: issued.expiresIn,
+    ...(client === 'mobile' ? { refreshToken: issued.refreshToken } : {}),
   };
 }
 
@@ -36,24 +55,43 @@ export class AuthController {
     private readonly keys: KeysService,
   ) {}
 
-  /** Web gets the refresh token as an httpOnly cookie; mobile gets it in the body for secure storage. */
   private respond(res: Response, issued: Issued, client: 'web' | 'mobile') {
-    if (client === 'web' && issued.refreshToken) {
-      res.cookie(REFRESH_COOKIE, issued.refreshToken, { ...cookieOptions(), maxAge: REFRESH_TTL_MS });
-    }
-    return {
-      accessToken: issued.accessToken,
-      expiresIn: issued.expiresIn,
-      ...(client === 'mobile' ? { refreshToken: issued.refreshToken } : {}),
-    };
+    return respondTokens(res, issued, client);
   }
 
+  /**
+   * `{login, password}`: username, email or employee ID of an admin-made login, or an account's email / mobile. An
+   * account in several companies gets `{chooseCompany, ticket}`, then sends `{ticket, companyId}` (PLAN.md §21.2).
+   */
   @Public()
   @Post('auth/login')
   @HttpCode(200)
-  async login(@Body(new ZodPipe(loginSchema)) body: z.infer<typeof loginSchema>, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
-    const issued = await this.auth.login(body.login, body.password, { ip: req.ip, userAgent: req.headers['user-agent'], client: body.client });
-    return { ...this.respond(res, issued, body.client), mustChangePassword: issued.mustChangePassword };
+  async login(@Body() raw: unknown, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
+    const meta = (client: 'web' | 'mobile') => ({ ip: req.ip, userAgent: req.headers['user-agent'], client });
+    if (raw && typeof raw === 'object' && 'ticket' in raw) {
+      const body = new ZodPipe(ticketSchema).transform(raw);
+      const issued = await this.auth.loginWithTicket(body.ticket, body.companyId, meta(body.client));
+      return { ...this.respond(res, issued, body.client), mustChangePassword: false };
+    }
+    const body = new ZodPipe(loginSchema).transform(raw);
+    const result = await this.auth.login(body.login, body.password, meta(body.client));
+    if ('chooseCompany' in result) return result;
+    return { ...this.respond(res, result, body.client), mustChangePassword: result.mustChangePassword };
+  }
+
+  /** The companies of the caller's account (just the current one for an admin-made login). */
+  @Get('auth/companies')
+  companies(@CurrentCaller() caller: Caller) {
+    return this.auth.companiesOf(caller);
+  }
+
+  /** Company switcher: tokens for the same account in another company; this session ends. */
+  @ReadOnlyOk()
+  @Post('auth/switch')
+  @HttpCode(200)
+  async switch(@CurrentCaller() caller: Caller, @Body(new ZodPipe(switchSchema)) body: z.infer<typeof switchSchema>, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
+    const issued = await this.auth.switchCompany(caller, body.companyId, { ip: req.ip, userAgent: req.headers['user-agent'], client: body.client });
+    return { ...this.respond(res, issued, body.client), mustChangePassword: false };
   }
 
   @Public()
@@ -81,6 +119,7 @@ export class AuthController {
   }
 
   /** "Sign out everywhere": ends every session of the caller, this one included (e.g. after losing a phone). */
+  @ReadOnlyOk()
   @Post('auth/logout-all')
   @HttpCode(200)
   async logoutAll(@CurrentCaller() caller: Caller, @Res({ passthrough: true }) res: Response) {
@@ -94,6 +133,7 @@ export class AuthController {
     return this.auth.me(caller);
   }
 
+  @ReadOnlyOk()
   @Post('auth/change-password')
   @HttpCode(200)
   async changePassword(@CurrentCaller() caller: Caller, @Body(new ZodPipe(changePasswordSchema)) body: z.infer<typeof changePasswordSchema>) {

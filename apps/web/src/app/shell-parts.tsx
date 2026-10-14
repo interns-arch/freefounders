@@ -1,5 +1,6 @@
 import { type Access, useMarkNotificationsRead, useNotifications, useSignOut } from '@freefounders/core';
-import { Bell, CheckCheck, ChevronDown, Feather, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
+import { Bell, CheckCheck, ChevronDown, Feather, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
+import { CompanyMenuItems } from '@/features/account/switcher';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -192,7 +193,7 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
           <ChevronDown className="hidden size-4 shrink-0 text-muted-foreground lg:block" aria-hidden />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent align="end" className="max-h-[80dvh] w-64 overflow-y-auto">
         <DropdownMenuLabel className="leading-tight">
           <span className="block truncate font-semibold">{name}</span>
           <span className="block truncate text-xs font-normal text-muted-foreground">
@@ -201,6 +202,7 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <CompanyMenuItems access={access} />
         <DropdownMenuItem onSelect={() => theme.toggle()}>
           {theme.dark ? <Sun className="size-4" /> : <Moon className="size-4" />} {theme.dark ? 'Light mode' : 'Dark mode'}
         </DropdownMenuItem>
@@ -223,6 +225,11 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         {onShortcuts && (
           <DropdownMenuItem onSelect={onShortcuts} className="max-lg:hidden">
             <Keyboard className="size-4" /> Keyboard shortcuts
+          </DropdownMenuItem>
+        )}
+        {access.platform?.account?.isStaff && (
+          <DropdownMenuItem onSelect={() => navigate('/console')}>
+            <Gauge className="size-4" /> Owner console
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onSelect={() => navigate('/account')}>

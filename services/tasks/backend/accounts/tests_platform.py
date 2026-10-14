@@ -24,10 +24,12 @@ OTHER_KEY, _ = make_key("k1")  # same kid, different key: a forgery
 JWKS = json.dumps({"keys": [JWK]})
 
 
-def token(sub, apps, *, key=KEY, aud=AUD, iss=ISS, ttl=900, kid="k1"):
+def token(sub, apps, *, key=KEY, aud=AUD, iss=ISS, ttl=900, kid="k1", ro=False):
     now = int(time.time())
     claims = {"sub": str(sub), "cid": str(uuid.uuid4()), "apps": apps, "role": "member",
               "iss": iss, "aud": aud, "iat": now, "exp": now + ttl}
+    if ro:
+        claims["ro"] = True
     return jwt.encode(claims, key, algorithm="EdDSA", headers={"kid": kid})
 
 
@@ -68,6 +70,19 @@ class PlatformTokenTests(TestCase):
         self.u.is_active = False
         self.u.save()
         self.assertEqual(self.me(token(self.person, {"tasks": str(self.u.pk)})).status_code, 401)
+
+    def test_read_only_subscription_refuses_writes_with_402(self):
+        """PLAN.md §21: a token with ro=true can read, but every write is refused with 402."""
+        tok = token(self.person, {"tasks": str(self.u.pk)}, ro=True)
+        self.assertEqual(self.me(tok).status_code, 200)
+        for method in ("post", "put", "patch", "delete"):
+            with self.subTest(method):
+                res = getattr(self.client, method)("/api/auth/me", {}, format="json")
+                self.assertEqual(res.status_code, 402)
+                self.assertIn("read-only", res.data["detail"])
+        # Without the claim the same write is not refused for that reason.
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token(self.person, {'tasks': str(self.u.pk)})}")
+        self.assertNotEqual(self.client.post("/api/auth/me", {}, format="json").status_code, 402)
 
     def test_app_login_still_works_alongside(self):
         res = self.client.post("/api/auth/login", {"username": "mia", "password": "pass@12345"})

@@ -23,6 +23,10 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
  */
 export const Needs = (...permissions: PlatformPermission[]) => SetMetadata(NEEDS, permissions);
 
+export const READ_ONLY_OK = 'ff:read-only-ok';
+/** A write that still works while the company is read-only (billing, sign-out, switching company, own password). */
+export const ReadOnlyOk = () => SetMetadata(READ_ONLY_OK, true);
+
 /** Who is calling, taken from a verified access token. */
 export interface Caller {
   personId: string;
@@ -31,6 +35,8 @@ export interface Caller {
   role: PlatformRole;
   apps: Partial<Record<AppKey, string>>;
   sessionFamily?: string;
+  /** The company's subscription is read-only (PLAN.md §21): the token carries `ro: true` and the apps refuse writes. */
+  readOnly?: boolean;
   /** Admin permissions, filled in by the guard on routes that need one. */
   permissions?: Set<PlatformPermission>;
 }

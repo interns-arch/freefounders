@@ -10,7 +10,8 @@ import { useAssetsDashboard } from '@freefounders/core/assets';
 import { nearestOffice, useHrConfig, useLeaveBalances, useOfficeLocations, usePendingCorrections, usePendingLeaves } from '@freefounders/core/hr';
 import { useMyTaskTiles, useWaitingCounts } from '@freefounders/core/tasks';
 import { ADMIN_SCREENS } from '@/features/admin/nav';
-import { ArrowRight, Camera, Fingerprint, LogIn, LogOut, MapPin, ScanLine, Settings2, ShieldCheck, Users } from '@/components/icons';
+import { GettingStarted, showsChecklist } from '@/features/account/checklist';
+import { ArrowRight, Camera, CreditCard, Fingerprint, LogIn, LogOut, MapPin, ScanLine, Settings2, ShieldCheck, Users } from '@/components/icons';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
@@ -123,6 +124,8 @@ export function HomePage() {
           You don’t have access to any app yet. {access.isAdmin ? 'Give yourself a role under People & access.' : 'Ask your company admin for access.'}
         </p>
       )}
+
+      {showsChecklist(access) && <GettingStarted access={access} welcome={params.has('welcome')} />}
 
       {cards.includes('attendance') && <AttendanceCard index={1} onOpen={(to = '/attendance') => open(to)} />}
 
@@ -486,13 +489,15 @@ function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
     { name: 'People & access', blurb: 'People, roles, passwords', to: '/people', icon: Users, show: ADMIN_SCREENS.people },
     { name: 'Roles', blurb: 'Permissions and duties', to: '/roles', icon: ShieldCheck, show: ADMIN_SCREENS.roles },
     { name: 'Settings', blurb: 'Company, modules, departments', to: '/settings', icon: Settings2, show: ADMIN_SCREENS.settings },
+    // Only where billing is in use (self-serve companies), so installs without it keep their three shortcuts.
+    { name: 'Billing', blurb: 'Plan, users, invoices', to: '/billing', icon: CreditCard, show: (a: typeof access) => !!a.billing && ADMIN_SCREENS.billing(a) },
   ].filter((x) => x.show(access));
   return (
     <section aria-labelledby="admin-title">
       <h2 id="admin-title" className="mb-3 text-base font-semibold tracking-tight">
         Admin
       </h2>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={cn('grid gap-3', items.length > 3 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3')}>
         {items.map((x) => (
           <button
             key={x.to}

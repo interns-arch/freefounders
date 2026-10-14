@@ -1,10 +1,13 @@
-import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { type CanActivate, type ExecutionContext, ForbiddenException, HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Permission } from '@eam/shared';
 import { parseSessionCookie } from '../../common/company.middleware';
 import { type AuthedRequest, IS_PUBLIC, PERMISSIONS_KEY } from '../../common/http';
 import { AuthService, SESSION_COOKIE } from './auth.service';
 import { bearerToken, platformEnabled } from './platform-token';
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+export const READ_ONLY_MESSAGE = "Your company's subscription is read-only. The owner can renew it in Billing.";
 
 /** Global guard: resolves the session cookie into an Actor and enforces @RequirePermissions. */
 @Injectable()
@@ -35,6 +38,10 @@ export class AuthGuard implements CanActivate {
     const targets = [ctx.getHandler(), ctx.getClass()];
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
     if (!req.actor) throw new UnauthorizedException('Please sign in');
+    // FreeFounders Platform: a read-only subscription (token claim `ro`, carried into the session) can look, not change.
+    if (req.actor.readOnly && !SAFE_METHODS.has(req.method)) {
+      throw new HttpException({ statusCode: 402, message: READ_ONLY_MESSAGE }, 402);
+    }
 
     const required = this.reflector.getAllAndOverride<Permission[]>(PERMISSIONS_KEY, targets);
     if (required?.length && !required.some((p) => req.actor!.permissions.has(p))) {

@@ -23,6 +23,17 @@ LEEWAY_SECONDS = 30
 
 _clients: dict[str, jwt.PyJWKClient] = {}
 
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+READ_ONLY_MESSAGE = "Your company's subscription is read-only. The owner can renew it in Billing."
+
+
+class ReadOnlySubscription(exceptions.APIException):
+    """The company's subscription is read-only (PLAN.md §21): the Platform token carries `ro: true`."""
+
+    status_code = 402
+    default_detail = READ_ONLY_MESSAGE
+    default_code = "read_only"
+
 
 def enabled() -> bool:
     return bool(getattr(settings, "PLATFORM_JWKS", "") or getattr(settings, "PLATFORM_JWKS_URL", ""))
@@ -103,6 +114,9 @@ class PlatformJWTAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed("Invalid sign-in token", code="token_invalid")
         if not user.is_active:
             raise exceptions.AuthenticationFailed("User is inactive", code="user_inactive")
+        # Read-only subscription: everyone can look and export, nobody can change anything.
+        if claims.get("ro") is True and request.method not in SAFE_METHODS:
+            raise ReadOnlySubscription()
         return user, claims
 
     def authenticate_header(self, request):

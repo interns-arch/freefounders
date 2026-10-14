@@ -172,6 +172,22 @@ export class CompanyService {
     await this.dbs.db.update(companies).set({ modules: next }).where(eq(companies.id, companyId));
   }
 
+  /** An app added later (plan upgrade, PLAN.md §21): its launch defaults, unless the company already chose its modules. */
+  async applyLaunchDefaultsFor(companyId: string, apps: AppKey[]) {
+    const c = await this.row(companyId);
+    const next: ModuleSwitches = structuredClone(c.modules ?? {});
+    for (const app of apps) {
+      if (!internalUrl(app) || next[app]) continue;
+      try {
+        const cat = await this.provisioner.modules(app, companyId);
+        next[app] = Object.fromEntries(cat.modules.map((m) => [m.key, m.default]));
+      } catch (err) {
+        this.log.warn(`Module defaults from ${app}: ${(err as Error).message}`);
+      }
+    }
+    await this.dbs.db.update(companies).set({ modules: next }).where(eq(companies.id, companyId));
+  }
+
   /**
    * Sends the profile to every connected app. Never throws: failures are reported and logged; `npm run company -- sync`
    * sends it again. An app ahead of the Platform (e.g. a restored backup) makes us move past its version and resend once.

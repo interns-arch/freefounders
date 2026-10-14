@@ -10,7 +10,7 @@ import type { AppCatalogue } from '../provision/provision.client';
  */
 export const PLATFORM_APP = 'platform';
 
-export const PLATFORM_PERMISSIONS = ['people.manage', 'people.passwords', 'people.exit', 'people.delete', 'roles.manage', 'company.settings'] as const;
+export const PLATFORM_PERMISSIONS = ['people.manage', 'people.passwords', 'people.exit', 'people.delete', 'roles.manage', 'company.settings', 'billing.manage'] as const;
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[number];
 
 /** Who may open People & access: any people power, or giving roles to people. */
@@ -27,6 +27,7 @@ export const PLATFORM_CATALOGUE: AppCatalogue = {
     { key: 'people.delete', label: 'Delete people permanently', group: 'People', scopes: null, description: 'Erase a person and hand over or remove their work. Cannot be undone.' },
     { key: 'roles.manage', label: 'Manage roles', group: 'Roles & company', scopes: null, description: 'Create, edit and archive roles and give them to people, with only the permissions and level they have themselves (the Owner: everything).' },
     { key: 'company.settings', label: 'Company settings', group: 'Roles & company', scopes: null, description: 'Company name, colour, logo, departments and which modules are on.' },
+    { key: 'billing.manage', label: 'Manage billing', group: 'Roles & company', scopes: null, description: 'Plan, seats, payments, GST details and invoices (PLAN.md §21). The owner always has it.' },
   ],
 };
 

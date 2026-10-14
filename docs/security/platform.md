@@ -142,3 +142,29 @@ change), reaches Tasks but not Assets".
 
 Results (2026-10-13): Platform `npm run typecheck && npm test` → **78 / 78**; core tests 5 / 5; `npm run web:build` clean;
 `npm run smoke` → 10 / 10; e2e `web-admin.spec.ts` + `single-login.spec.ts` → 16 / 16.
+
+## 7. Sign-up, accounts, invites and billing (PLAN.md §21, 2026-10-14)
+
+New Platform endpoints (all under `/api/platform`) and how each is protected. Tests: `services/platform/src/signup-billing.test.ts`.
+
+| Endpoint | Who | Protection |
+|---|---|---|
+| `POST signup/start`, `POST auth/forgot` | public | identifier validated (email, or Indian mobile → `+91…`); 6-digit code, only `sha256(otpId:code)` stored, 10 min; per identifier ≤ 5 codes / 15 min and ≥ 30 s apart, per IP ≤ `OTP_IP_LIMIT` (20) / 15 min, all in Postgres (exact across processes). `forgot` answers the same shape for unknown identifiers (no enumeration). `devCode` only with `OTP_DEV_ECHO=1` and never when `NODE_ENV=production`. Codes go to the Platform log (`FakeOtpSender`) until a real sender exists. |
+| `POST signup/verify`, `POST auth/reset` | public | one try claimed atomically before comparing (≤ 5 per code, parallel guesses included), constant-time compare, used once. `verify` gives a 32-byte sign-up token (sha256 stored, 30 min, used once). An email that already signs in with an admin-made login cannot become an account (409, only after the code proved the email): no take-over of a company login. `reset` ends every session of the account. |
+| `POST signup/complete`, `POST companies` | public with sign-up token / signed-in account | an existing account must give its password (same lockout as sign-in, checked outside the transaction so failures count); new passwords ≥ 8 characters, argon2id only; ≤ 5 new companies per account per day; company code generated (`CODE_RE`); provisioning = `company -- create` steps (`CompanySetupService`). |
+| `POST auth/login` (account), `{ticket, companyId}` | public | account lockout = admin-made logins (5 tries / 15 min, atomic claim; per-IP limit; same messages). Several companies: a 32-byte choose-company ticket (sha256 stored, 5 min, used once, bound to the account). Suspended companies: owners only. |
+| `GET auth/companies`, `POST auth/switch` | signed in | only the caller's own account's active memberships; the old session family is revoked on switch / new company. |
+| `POST/GET/DELETE invites` | `people.manage` | roles must pass R1 (`assertCanGiveRoles`: only what the caller holds, Super Admin owner-only), apps ⊆ the company's apps; token 32 random bytes, sha256 stored; expiry 1–90 days, max uses, revocable. |
+| `GET invites/:token`, `POST invites/:token/accept` | public (+ optional Bearer, re-checked as a live session) | 404 unknown, 410 expired/revoked/used up; invite row locked while a use is counted; seat check (402); read-only company (402); an account already in the company just signs in; a person the admin made with the same email (no account) is linked, one linked to another account → 409. |
+| `billing/*` | owner or `billing.manage` (new Admin permission) | company taken from the token only; checkout/invoice ids must belong to the caller's company (404). Allowed while read-only/suspended so the owner can pay. |
+| `POST billing/webhook/:gateway` | public, no CSRF header | HMAC-SHA256 over the raw body (`FAKE_GATEWAY_SECRET`; Razorpay: its webhook secret), constant-time compare; stored once per (gateway, event id) — a repeated delivery is ignored; amount must match the checkout; only an `open` checkout is settled. |
+| `billing/dev/*` | owner + `BILLING_DEV_TOOLS=1` | 404 otherwise, and always off when `NODE_ENV=production`. |
+| `console/*` | `accounts.is_staff` | 403 for everyone else (checked in the database on every call). Staff are marked with `npm run company -- staff --email <e>`. |
+
+Read-only (`read_only`, `suspended`): the Platform guard refuses every write with **402** except billing, `auth/logout(-all)`,
+`auth/switch`, `auth/change-password`, `POST companies` (`@ReadOnlyOk`); access tokens carry `ro: true` and Tasks
+(`accounts/platform_auth.py`) and Assets (guard; the claim is stored on the exchanged cookie session, `sessions.read_only`) refuse
+non-GET/HEAD/OPTIONS with 402 — only when Platform sign-in is on. Suspended: non-owners get 402 at sign-in and 401 on refresh /
+any Platform route. The billing clock (`BillingService.runAll`) runs under a Postgres advisory lock (one process at a time).
+Remaining: OTP and invite emails/SMS are not sent (fake sender); per-IP limits on OTP are per database (fine); CAPTCHA after
+suspicious attempts and a disposable-email block (§20.5) are not built.
