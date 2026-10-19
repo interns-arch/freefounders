@@ -2,6 +2,13 @@
 // HR settings, approvals. Found by role/label/text only; every person and setting made here is cleaned up.
 import { expect, type APIRequestContext, type Browser, type Page, test } from '@playwright/test';
 
+/** The company may ask "Are you wearing the uniform?" before a check-in (HR setting, PLAN.md uniform check): answer Yes. */
+async function answerUniform(page: Page) {
+  const yes = page.getByRole('button', { name: /Yes, I.m wearing it/ });
+  await yes.waitFor({ timeout: 2000 }).then(() => yes.click()).catch(() => {});
+}
+
+
 const OWNER = { login: process.env.FF_OWNER ?? 'owner', password: process.env.FF_OWNER_PASSWORD ?? 'Demo@1234' };
 const XRW = { 'x-requested-with': 'XMLHttpRequest' };
 const shot = (page: Page, name: string) => page.screenshot({ path: `screenshots/${name}.png`, fullPage: true });
@@ -14,7 +21,7 @@ async function token(request: APIRequestContext, login = OWNER.login, password =
 }
 
 async function signIn(page: Page, login: string, password: string) {
-  await page.getByLabel('Email, username or employee ID').fill(login);
+  await page.getByLabel('Email, mobile, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'));
@@ -71,7 +78,7 @@ test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, r
     await page.goto('/tasks/hr');
     await expect(page.getByRole('heading', { name: 'Leave & Attendance' })).toBeVisible();
     await expect(page.getByText('A photo is taken at every check-in and check-out.')).toBeVisible();
-    await page.getByRole('button', { name: 'Check in' }).click();
+    await page.getByRole('button', { name: 'Check in' }).click(); await answerUniform(page);
     const camera = page.getByRole('dialog', { name: 'Check in' });
     await expect(camera).toBeVisible();
     await expect(camera.getByText(/A photo is saved with your attendance/)).toBeVisible();
@@ -111,7 +118,7 @@ test('punch in and out from Home (PLAN.md §19.3, §19.14); old /tasks/hr links 
     await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     const card = page.getByRole('region', { name: 'Attendance & Shifts' });
     await expect(card.getByText('Not checked in')).toBeVisible();
-    await card.getByRole('button', { name: 'Punch in' }).click();
+    await card.getByRole('button', { name: 'Punch in' }).click(); await answerUniform(page);
     await expect(card.getByText('Checked in ✅')).toBeVisible();
     await expect(card.getByRole('button', { name: 'Punch out' })).toBeVisible();
     await shot(page, 'web-portal-punched-in');

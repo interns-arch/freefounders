@@ -40,6 +40,16 @@ export function errorMessage(err: unknown): string {
   return 'Something went wrong';
 }
 
+/**
+ * Seconds until a throttled request may be tried again (429 with `retryAfterSeconds`, e.g. "ask for a new code"), or
+ * null when the error is not that.
+ */
+export function retryAfterSeconds(err: unknown): number | null {
+  if (!(err instanceof ApiError) || err.status !== 429) return null;
+  const n = Number((err.data as { retryAfterSeconds?: unknown } | undefined)?.retryAfterSeconds);
+  return Number.isFinite(n) && n > 0 ? Math.ceil(n) : null;
+}
+
 /** NestJS: {message, errors}. DRF: {detail} or {field: ["msg"]} or {field: "msg"}. */
 function normalise(status: number, statusText: string, data: unknown): ApiError {
   if (data && typeof data === 'object' && !Array.isArray(data)) {

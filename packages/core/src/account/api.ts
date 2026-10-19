@@ -28,11 +28,12 @@ export const accountApi = {
   signupVerify: (otpId: string, code: string) => platformApi.post<SignupVerified>('/signup/verify', { otpId, code }),
   signupComplete: (body: SignupCompleteInput) => platformApi.post<SignupComplete>('/signup/complete', { ...body, ...session.clientHint() }),
   forgot: (identifier: string) => platformApi.post<OtpSent>('/auth/forgot', { identifier }),
+  resetVerify: (otpId: string, code: string) => platformApi.post<{ ok: boolean }>('/auth/reset/verify', { otpId, code }),
   reset: (body: { otpId: string; code: string; newPassword: string }) => platformApi.post<{ ok?: boolean }>('/auth/reset', body),
 
   companies: () => platformApi.get<AccountCompany[]>('/auth/companies'),
   switchCompany: (companyId: string) => platformApi.post<SignInTokens>('/auth/switch', { companyId, ...session.clientHint() }),
-  createCompany: (body: CompanyInput) => platformApi.post<SignInTokens & { companyId?: string }>('/companies', { ...body, ...session.clientHint() }),
+  createCompany: (body: CompanyInput) => platformApi.post<SignInTokens & { companyId?: string; setupIncomplete?: boolean }>('/companies', { ...body, ...session.clientHint() }),
 
   invitePreview: (token: string) => platformApi.get<InvitePreview>(`/invites/${encodeURIComponent(token)}`),
   acceptInvite: (token: string, asNew?: AcceptAsNew) =>
@@ -76,6 +77,10 @@ export function useSignupComplete() {
 }
 export function useForgotPassword() {
   return useMutation({ mutationFn: (identifier: string) => accountApi.forgot(identifier) });
+}
+/** Checks a reset code on its own step (a wrong one counts as a try); the code stays usable for the reset. */
+export function useResetVerify() {
+  return useMutation({ mutationFn: ({ otpId, code }: { otpId: string; code: string }) => accountApi.resetVerify(otpId, code) });
 }
 export function useResetPassword() {
   return useMutation({ mutationFn: accountApi.reset });

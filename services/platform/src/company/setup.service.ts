@@ -147,6 +147,14 @@ export class CompanySetupService {
     if (!c) throw new Error('No such company');
     const owners = await db.select({ id: people.id }).from(people).where(and(eq(people.companyId, companyId), eq(people.platformRole, 'owner')));
     if (!owners.length) throw new Error('The company has no owner: nothing to keep');
+    // Without the apps' addresses the people would go here but every record of theirs would stay in Tasks / Assets.
+    const unreachable = this.connected(c.enabledApps).filter((a) => !internalUrl(a));
+    if (unreachable.length) {
+      throw new Error(
+        `${unreachable.map((a) => `${a.toUpperCase()}_INTERNAL_URL`).join(' and ')} not set: the apps could not delete the people's records. ` +
+          'Run it with the internal addresses of the apps (e.g. TASKS_INTERNAL_URL=http://127.0.0.1:8000/api/internal ASSETS_INTERNAL_URL=http://127.0.0.1:3000/api/internal).',
+      );
+    }
     const staff = keepStaff
       ? (
           await db

@@ -39,6 +39,8 @@ export interface SignupCompleteInput {
 
 export interface SignupComplete extends SignInTokens {
   companyId: string;
+  /** The company exists and the person is signed in, but an app could not be set up yet (retried by the server). */
+  setupIncomplete?: boolean;
 }
 
 /** GET auth/companies: every company this account belongs to. */
@@ -60,6 +62,9 @@ export interface InvitePreview {
   apps: AppKey[];
   expiresAt: string | null;
   valid: boolean;
+  /** Why the link no longer works, with the server's message for the person. */
+  reason?: 'expired' | 'revoked' | 'used_up';
+  message?: string;
 }
 
 /** GET invites (people managers). */
@@ -128,11 +133,12 @@ export const INDUSTRIES = [
 /** The name of a role on an invite, whatever shape the server sent. */
 export const inviteRoleName = (r: InviteRole) => (typeof r === 'string' ? r : r.name);
 
-/** "email" or "mobile", from what was typed (Indian mobiles: 10 digits, optional +91 / 0; or any +country number). */
+/** "email" or "mobile", from what was typed (Indian mobiles: 10 digits, optional +91 / 91 / 0). */
 export function identifierKind(value: string): 'email' | 'mobile' | null {
   const v = value.trim();
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email';
   const digits = v.replace(/[\s()-]/g, '');
-  if (/^(\+?91|0)?[6-9]\d{9}$/.test(digits) || /^\+\d{8,15}$/.test(digits)) return 'mobile';
+  // Indian mobiles only (the server accepts no other numbers yet).
+  if (/^(\+?91|0)?[6-9]\d{9}$/.test(digits)) return 'mobile';
   return null;
 }

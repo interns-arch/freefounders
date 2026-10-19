@@ -176,7 +176,8 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
   const theme = useTheme();
   const lite = useLite();
   const name = access.platform?.person.fullName ?? access.claims?.name ?? '';
-  const role = access.tasks.me?.role_display ?? access.assets.me?.role.name ?? (access.isAdmin ? 'Admin' : 'Member');
+  // The owner is a mark, not a role in the list (PLAN.md §19.28): say Owner rather than the Admin role they also hold.
+  const role = access.platform?.person.role === 'owner' ? 'Owner' : (access.tasks.me?.role_display ?? access.assets.me?.role.name ?? (access.isAdmin ? 'Admin' : 'Member'));
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

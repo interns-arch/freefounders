@@ -245,7 +245,9 @@ describe('sign-up (PLAN.md §21)', () => {
     process.env.OTP_IP_LIMIT = '3';
     try {
       const statuses: number[] = [];
-      for (const n of [1, 2, 3, 4, 5]) statuses.push((await call('POST', '/signup/start', { body: { identifier: `ip${n}-${randomUUID().slice(0, 4)}@limit.test` } })).status);
+      // A real network address (the dev echo mode does not limit this machine's own loopback address).
+      const headers = { 'x-forwarded-for': '203.0.113.9' };
+      for (const n of [1, 2, 3, 4, 5]) statuses.push((await call('POST', '/signup/start', { headers, body: { identifier: `ip${n}-${randomUUID().slice(0, 4)}@limit.test` } })).status);
       assert.ok(statuses.includes(429), `per-IP limit: ${statuses}`);
     } finally {
       process.env.OTP_IP_LIMIT = '0';
@@ -411,6 +413,7 @@ describe('invites (PLAN.md §21.2)', () => {
     assert.equal(decodeJwt(res.body.accessToken).cid, ids.company);
     const used = await call('GET', `/invites/${ids.token}`);
     assert.equal(used.body.valid, false, 'max 2 uses reached');
+    assert.equal(used.body.reason, 'used_up');
     assert.equal((await call('GET', '/invites', { token: owner })).body[0].status, 'used_up');
   });
 
@@ -419,11 +422,18 @@ describe('invites (PLAN.md §21.2)', () => {
     const expired = await mk();
     await dbs.db.update(invites).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(invites.id, expired.id));
     const t1 = await verified('late@invite.test');
-    assert.equal((await call('POST', `/invites/${expired.token}/accept`, { body: { signupToken: t1.signupToken, fullName: 'Late', password: PASSWORD } })).status, 410);
+    const lateRes = await call('POST', `/invites/${expired.token}/accept`, { body: { signupToken: t1.signupToken, fullName: 'Late', password: PASSWORD } });
+    assert.equal(lateRes.status, 410);
+    assert.match(lateRes.body.message, /has expired/);
+    assert.equal((await call('GET', `/invites/${expired.token}`)).body.reason, 'expired');
     const revoked = await mk();
     assert.equal((await call('DELETE', `/invites/${revoked.id}`, { token: owner })).status, 200);
-    assert.equal((await call('GET', `/invites/${revoked.token}`)).body.valid, false);
-    assert.equal((await call('POST', `/invites/${revoked.token}/accept`, { body: { signupToken: t1.signupToken, fullName: 'Late', password: PASSWORD } })).status, 410);
+    const revokedInfo = (await call('GET', `/invites/${revoked.token}`)).body;
+    assert.deepEqual([revokedInfo.valid, revokedInfo.reason], [false, 'revoked']);
+    assert.match(revokedInfo.message, /switched off/);
+    const revokedRes = await call('POST', `/invites/${revoked.token}/accept`, { body: { signupToken: t1.signupToken, fullName: 'Late', password: PASSWORD } });
+    assert.equal(revokedRes.status, 410);
+    assert.match(revokedRes.body.message, /switched off/);
   });
 
   test('no free seat: 402 with the owner hint (Free plan: 3 people)', async () => {
@@ -433,7 +443,7 @@ describe('invites (PLAN.md §21.2)', () => {
     const t = await verified('fourth@invite.test');
     const res = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Fourth', password: PASSWORD } });
     assert.equal(res.status, 402);
-    assert.equal(res.body.message, 'All 3 seats are in use. Ask the owner to add seats in Billing.');
+    assert.equal(res.body.message, 'The Free plan is for up to 3 users and all 3 are in use. The owner can upgrade in Billing to add more people.');
     // The same limit when an admin gives someone their first app.
     const p = await call('POST', '/people', { token: owner, body: { fullName: 'No Seat' } });
     assert.equal((await call('PUT', `/people/${p.body.person.id}/apps/tasks`, { token: owner, body: {} })).status, 402);
@@ -673,7 +683,7 @@ describe('the billing clock (PLAN.md §21.1)', () => {
     const p = await call('POST', '/people', { token: out.accessToken, body: { fullName: 'Seventh' } });
     const grant = await call('PUT', `/people/${p.body.person.id}/apps/tasks`, { token: out.accessToken, body: {} });
     assert.equal(grant.status, 402);
-    assert.equal(grant.body.message, 'All 6 seats are in use. Ask the owner to add seats in Billing.');
+    assert.equal(grant.body.message, 'All 6 paid seats are in use. The owner can add seats in Billing.');
   });
 
   test('GST and invoice numbers: CGST+SGST in the seller state, IGST elsewhere; one series per financial year', async () => {
@@ -738,5 +748,73 @@ describe('owner console (staff only)', () => {
     assert.equal(susp.body.state, 'suspended');
     assert.equal((await call('POST', `/console/companies/${out.companyId}/status`, { token: staff.accessToken, body: { status: 'active' } })).body.state, 'active');
     assert.equal((await call('POST', `/console/companies/${randomUUID()}/status`, { token: staff.accessToken, body: { status: 'active' } })).status, 404);
+  });
+});
+
+describe('forgot password and codes (quality pass 2026-10-19)', () => {
+  const old = (target: string) => dbs.db.update(otpCodes).set({ createdAt: new Date(Date.now() - 60_000) }).where(eq(otpCodes.target, target));
+
+  test('reset/verify checks the code without using it up: wrong codes count, the right one still resets', async () => {
+    await signup('resetverify@co.test', { name: 'Reset Verify Co' });
+    await old('resetverify@co.test');
+    const f = await call('POST', '/auth/forgot', { body: { identifier: 'ResetVerify@co.test' } });
+    assert.equal(f.status, 200);
+    assert.equal(f.body.channel, 'email');
+    const wrongCode = f.body.devCode === '000000' ? '111111' : '000000';
+    const wrong = await call('POST', '/auth/reset/verify', { body: { otpId: f.body.otpId, code: wrongCode } });
+    assert.equal(wrong.status, 400);
+    assert.match(wrong.body.message, /Wrong code\. 4 tries left/);
+    for (let i = 0; i < 3; i++) assert.equal((await call('POST', '/auth/reset/verify', { body: { otpId: f.body.otpId, code: f.body.devCode } })).status, 200, 'the right code gives its try back');
+    const again = await call('POST', '/auth/reset/verify', { body: { otpId: f.body.otpId, code: wrongCode } });
+    assert.match(again.body.message, /3 tries left/, 'only wrong codes count');
+    const reset = await call('POST', '/auth/reset', { body: { otpId: f.body.otpId, code: f.body.devCode, newPassword: 'Fresh@Pass77' } });
+    assert.equal(reset.status, 200, JSON.stringify(reset.body));
+    assert.equal((await login('resetverify@co.test', 'Fresh@Pass77')).status, 200);
+    assert.equal((await call('POST', '/auth/reset/verify', { body: { otpId: f.body.otpId, code: f.body.devCode } })).status, 400, 'used up by the reset');
+    const expired = await call('POST', '/auth/reset/verify', { body: { otpId: randomUUID(), code: '123456' } });
+    assert.match(expired.body.message, /expired/);
+  });
+
+  test('resend too soon: 429 with retryAfterSeconds and the seconds in the message (sign-up and forgot share it)', async () => {
+    const first = await call('POST', '/signup/start', { body: { identifier: 'resend@wait.test' } });
+    assert.equal(first.status, 200);
+    const soon = await call('POST', '/auth/forgot', { body: { identifier: 'resend@wait.test' } });
+    assert.equal(soon.status, 429);
+    assert.ok(soon.body.retryAfterSeconds >= 1 && soon.body.retryAfterSeconds <= 30, JSON.stringify(soon.body));
+    assert.match(soon.body.message, /You can ask for a new one in \d+ seconds/);
+    const again = await call('POST', '/signup/start', { body: { identifier: 'resend@wait.test' } });
+    assert.equal(again.status, 429);
+    assert.ok(again.body.retryAfterSeconds >= 1);
+  });
+
+  test('forgot with a username, or with the email of an admin-made login: told to ask the admin; unknown email: same answer, then "no account"', async () => {
+    const name = await call('POST', '/auth/forgot', { body: { identifier: 'ravi.k' } });
+    assert.equal(name.status, 400);
+    assert.match(name.body.message, /reset by your company admin/);
+    const [co] = await dbs.db.insert(companies).values({ name: 'Admin Login Co', code: 'ADMINLOGINRESET', enabledApps: [] }).returning();
+    const [p] = await dbs.db.insert(people).values({ companyId: co.id, fullName: 'Ada Admin-made', email: 'ada@adminmade.test' }).returning();
+    await dbs.db.execute(sql`insert into platform.logins (person_id, password_hash) values (${p.id}, ${await hashPassword(PASSWORD)})`);
+    const legacy = await call('POST', '/auth/forgot', { body: { identifier: 'ada@adminmade.test' } });
+    const unknown = await call('POST', '/auth/forgot', { body: { identifier: 'ghost@nowhere.test' } });
+    assert.deepEqual([legacy.status, unknown.status], [200, 200]);
+    assert.deepEqual(Object.keys(legacy.body).sort(), Object.keys(unknown.body).sort(), 'no enumeration before the code');
+    const a = await call('POST', '/auth/reset/verify', { body: { otpId: legacy.body.otpId, code: legacy.body.devCode } });
+    assert.equal(a.status, 400);
+    assert.match(a.body.message, /only your admin can reset/);
+    const u = await call('POST', '/auth/reset/verify', { body: { otpId: unknown.body.otpId, code: unknown.body.devCode } });
+    assert.match(u.body.message, /no FreeFounders account/);
+  });
+
+  test('an existing account signs up a second company without a name; a new account must give one', async () => {
+    await signup('noname@co.test', { name: 'Noname One' });
+    const v = await verified('noname@co.test');
+    assert.equal(v.accountExists, true);
+    const ok = await call('POST', '/signup/complete', { body: { signupToken: v.signupToken, fullName: '', password: PASSWORD, company: { name: 'Noname Two', apps: ['tasks'] } } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.setupIncomplete, false);
+    const n = await verified('fresh-noname@co.test');
+    const missing = await call('POST', '/signup/complete', { body: { signupToken: n.signupToken, password: PASSWORD, company: { name: 'Fresh Co', apps: ['tasks'] } } });
+    assert.equal(missing.status, 400);
+    assert.equal(missing.body.message, 'Enter your name');
   });
 });

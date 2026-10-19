@@ -73,7 +73,7 @@ async function buySuite(page: Page) {
 
 test('sign-in page links to sign-up and forgot password', async ({ page }) => {
   await page.goto('/login');
-  await expect(page.getByLabel('Email, username or employee ID')).toBeVisible();
+  await expect(page.getByLabel('Email, mobile, username or employee ID')).toBeVisible();
   await page.getByRole('link', { name: 'Start free' }).click();
   await expect(page).toHaveURL(/\/signup$/);
   await expect(page.getByRole('heading', { name: 'Start free' })).toBeVisible();

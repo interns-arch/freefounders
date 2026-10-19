@@ -1370,7 +1370,7 @@ describe('delete a person permanently (§19.12)', () => {
 
 describe('security hardening (docs/security/platform.md)', () => {
   const LOCKED = 'Too many failed attempts. Try again in a few minutes.';
-  const WRONG = 'Wrong email / username / employee ID or password';
+  const WRONG = 'The email, mobile number, username or password is not right. Check them and try again.';
   const throttle = () => app.get(Throttle);
   const addPerson = async (companyId: string, fullName: string, username: string, platformRole = 'member') => {
     const [p] = await dbs.db.insert(people).values({ companyId, fullName, platformRole }).returning();

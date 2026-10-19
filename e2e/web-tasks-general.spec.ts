@@ -15,7 +15,7 @@ async function token(request: APIRequestContext, login = OWNER.login, password =
 
 async function signIn(page: Page, path: string) {
   await page.goto(path);
-  await page.getByLabel('Email, username or employee ID').fill(OWNER.login);
+  await page.getByLabel('Email, mobile, username or employee ID').fill(OWNER.login);
   await page.getByLabel('Password').fill(OWNER.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   // The chooser (several apps) or the screen itself: go to the screen.

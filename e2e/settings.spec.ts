@@ -7,7 +7,7 @@ const XRW = { 'x-requested-with': 'XMLHttpRequest' };
 const shot = (page: Page, name: string) => page.screenshot({ path: `screenshots/${name}.png`, fullPage: true });
 
 async function signIn(page: Page, login = OWNER.login, password = OWNER.password) {
-  await page.getByLabel('Email, username or employee ID').fill(login);
+  await page.getByLabel('Email, mobile, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }

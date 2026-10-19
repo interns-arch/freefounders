@@ -5,6 +5,13 @@
 // on (PLAN.md §19.18), and that downloads go to the app instead of the browser. Settings are restored afterwards.
 import { expect, type APIRequestContext, type Browser, type Page, test } from '@playwright/test';
 
+/** The company may ask "Are you wearing the uniform?" before a check-in (HR setting, PLAN.md uniform check): answer Yes. */
+async function answerUniform(page: Page) {
+  const yes = page.getByRole('button', { name: /Yes, I.m wearing it/ });
+  await yes.waitFor({ timeout: 2000 }).then(() => yes.click()).catch(() => {});
+}
+
+
 const OWNER = { login: process.env.FF_OWNER ?? 'owner', password: process.env.FF_OWNER_PASSWORD ?? 'Demo@1234' };
 const XRW = { 'x-requested-with': 'XMLHttpRequest' };
 const auth = (t: string) => ({ ...XRW, authorization: `Bearer ${t}` });
@@ -17,7 +24,7 @@ async function token(request: APIRequestContext, login = OWNER.login, password =
 }
 
 async function signIn(page: Page, login: string, password: string) {
-  await page.getByLabel('Email, username or employee ID').fill(login);
+  await page.getByLabel('Email, mobile, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'));
@@ -107,7 +114,7 @@ test('in the app: punch with the app camera (photo stored); face check cannot be
     await expect(page).toHaveURL(/\/attendance/); // phones land on Attendance
     await expect(page.getByText('A photo is taken at every check-in and check-out.')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Check in' }).click();
+    await page.getByRole('button', { name: 'Check in' }).click(); await answerUniform(page);
     await expect(page.getByText('Checked in ✅')).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0); // no browser camera dialog
     const log = await shellLog(page);
@@ -175,7 +182,7 @@ test('location blocked → an Allow button: the app opens its Settings; the brow
     await page.goto('/');
     await signIn(page, person.login, person.password);
     await expect(page).toHaveURL(/\/attendance/);
-    await page.getByRole('button', { name: 'Check in' }).click();
+    await page.getByRole('button', { name: 'Check in' }).click(); await answerUniform(page);
     await expect(page.getByText('Location is blocked for this app.')).toBeVisible();
     await page.getByRole('button', { name: 'Open settings to allow location' }).click();
     await expect.poll(async () => (await shellLog(page)).some((m) => m.type === 'open-settings')).toBe(true);
@@ -186,7 +193,7 @@ test('location blocked → an Allow button: the app opens its Settings; the brow
     const wp = await web.newPage();
     await wp.goto('/');
     await signIn(wp, person.login, person.password);
-    await wp.getByRole('button', { name: 'Check in' }).click();
+    await wp.getByRole('button', { name: 'Check in' }).click(); await answerUniform(wp);
     await expect(wp.getByText(/Your browser is blocking location for this site/)).toBeVisible();
     await expect(wp.getByRole('button', { name: 'Allow location' })).toBeVisible();
     await web.grantPermissions(['geolocation']);

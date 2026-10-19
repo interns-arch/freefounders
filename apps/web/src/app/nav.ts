@@ -25,7 +25,7 @@ export function workspaceOf(pathname: string): Workspace | null {
   if (pathname === '/attendance' || pathname.startsWith('/attendance/')) return 'attendance';
   if (pathname === '/tasks' || pathname.startsWith('/tasks/')) return 'tasks';
   if (pathname === '/assets' || pathname.startsWith('/assets/')) return 'assets';
-  if (['/people', '/roles', '/settings'].some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'admin';
+  if (['/people', '/roles', '/settings', '/billing'].some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'admin';
   return null;
 }
 

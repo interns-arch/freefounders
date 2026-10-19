@@ -367,11 +367,16 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
 
 // ─── GST details ────────────────────────────────────────────────────────────
 
-const EMPTY_PROFILE: BillingProfile = { legalName: '', gstin: '', state: '', address: '', email: '' };
-
 function GstDetails({ profile }: { profile: BillingProfile | null }) {
   const save = useSaveBillingProfile();
-  const [v, setV] = useState<BillingProfile>(() => ({ ...EMPTY_PROFILE, ...(profile ?? {}), gstin: profile?.gstin ?? '' }));
+  // Every field as text: a profile made from a sign-up by mobile number has no email (null), which broke Save.
+  const [v, setV] = useState<BillingProfile>(() => ({
+    legalName: profile?.legalName ?? '',
+    gstin: profile?.gstin ?? '',
+    state: profile?.state ?? '',
+    address: profile?.address ?? '',
+    email: profile?.email ?? '',
+  }));
   const [errors, setErrors] = useState<Partial<Record<keyof BillingProfile, string>>>({});
   const set = (k: keyof BillingProfile, value: string) => {
     setV((x) => ({ ...x, [k]: value }));

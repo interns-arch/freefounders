@@ -3,14 +3,15 @@
  * just its password) → the company → "Setting up your company…" → Home with the Getting started checklist.
  * One question per screen, a progress bar and a back button; nothing typed is lost going back.
  */
-import { errorMessage } from '@freefounders/core';
+import { ApiError, errorMessage } from '@freefounders/core';
 import { type CompanyInput, identifierKind, type OtpSent, useSignupComplete, useSignupStart, useSignupVerify } from '@freefounders/core/account';
 import { PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { CompanyForm, EMPTY_COMPANY, SetupScreen } from './company-form';
-import { AuthFrame, BackButton, CodeField, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField } from './parts';
+import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer } from './parts';
 
 type Step = 'identifier' | 'code' | 'profile' | 'company' | 'setup';
 const ORDER: Step[] = ['identifier', 'code', 'profile', 'company'];
@@ -20,7 +21,7 @@ export function SignupPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>('identifier');
   const [identifier, setIdentifier] = useState('');
-  const [otp, setOtp] = useState<OtpSent | null>(null);
+  const [otp, setOtp] = useState<(OtpSent & { for: string }) | null>(null);
   const [code, setCode] = useState('');
   const [token, setToken] = useState<{ signupToken: string; accountExists: boolean } | null>(null);
   const [fullName, setFullName] = useState('');
@@ -31,6 +32,7 @@ export function SignupPage() {
   const start = useSignupStart();
   const verify = useSignupVerify();
   const complete = useSignupComplete();
+  const timer = useCodeTimer();
 
   const back = () => {
     setFieldError(null);
@@ -38,11 +40,16 @@ export function SignupPage() {
   };
 
   const sendCode = async () => {
-    const res = await start.mutateAsync(identifier.trim()).catch(() => null);
-    if (!res) return;
-    setOtp(res);
-    setCode('');
-    setStep('code');
+    try {
+      const res = await start.mutateAsync(identifier.trim());
+      timer.sent();
+      setOtp({ ...res, for: identifier.trim() });
+      setCode('');
+      verify.reset();
+      setStep('code');
+    } catch (err) {
+      timer.throttled(err);
+    }
   };
 
   const submitIdentifier = (e: FormEvent) => {
@@ -52,6 +59,9 @@ export function SignupPage() {
       return;
     }
     setFieldError(null);
+    // Back from the code step with the same email / mobile: the code already sent still works.
+    if (otp && otp.for === identifier.trim() && !token) return setStep('code');
+    if (token && otp?.for === identifier.trim()) return setStep('profile');
     void sendCode();
   };
 
@@ -90,7 +100,10 @@ export function SignupPage() {
     setStep('setup');
     complete.reset();
     try {
-      await complete.mutateAsync({ signupToken: token!.signupToken, fullName: fullName.trim(), password, company: c });
+      const res = await complete.mutateAsync({ signupToken: token!.signupToken, fullName: fullName.trim(), password, company: c });
+      if (res.setupIncomplete) {
+        toast.warning('Your company is created, but part of the app set-up has not finished. It finishes by itself in a few minutes; if an app does not open, sign out and in again later.', { duration: 15_000 });
+      }
       navigate('/?home=1&welcome=1', { replace: true });
     } catch {
       /* shown on the setup screen */
@@ -98,7 +111,7 @@ export function SignupPage() {
   };
 
   if (step === 'setup') {
-    return <SetupScreen companyName={company.name} error={complete.isError ? errorMessage(complete.error) : null} onRetry={() => setStep(isPasswordError(complete.error) ? 'profile' : 'company')} />;
+    return <SetupScreen companyName={company.name} apps={company.apps} error={complete.isError ? errorMessage(complete.error) : null} onRetry={() => setStep(isPasswordError(complete.error) ? 'profile' : 'company')} />;
   }
 
   const n = ORDER.indexOf(step) + 1;
@@ -126,6 +139,7 @@ export function SignupPage() {
             onChange={(e) => {
               setIdentifier(e.target.value);
               if (fieldError) setFieldError(null);
+              start.reset();
             }}
             autoComplete="username"
             autoCapitalize="none"
@@ -133,7 +147,8 @@ export function SignupPage() {
             autoFocus
             error={fieldError}
           />
-          <FormError>{start.isError ? errorMessage(start.error) : null}</FormError>
+          {start.isError && <CodeWait left={timer.left} />}
+          <FormError>{codeError(start.error, start.isError)}</FormError>
           <Button type="submit" size="lg" className="h-11 w-full" loading={start.isPending}>
             Continue
           </Button>
@@ -143,14 +158,19 @@ export function SignupPage() {
 
       {step === 'code' && otp && (
         <form onSubmit={submitCode} noValidate className="space-y-4">
-          <StepTitle title="Check your code">{sentTo(identifier.trim(), otp.channel)}</StepTitle>
+          <StepTitle title="Check your code">{sentTo(otp.for, otp.channel)}</StepTitle>
           <DevCodeNote code={otp.devCode} />
-          <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null))} error={fieldError} />
-          <FormError>{verify.isError ? errorMessage(verify.error) : start.isError ? errorMessage(start.error) : null}</FormError>
+          <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null), verify.reset())} error={fieldError} />
+          <FormError>{codeError(verify.error, verify.isError) ?? codeError(start.error, start.isError)}</FormError>
+          {verify.error instanceof ApiError && verify.error.status === 409 && (
+            <Button asChild variant="outline" className="h-11 w-full">
+              <Link to="/login">Go to sign in</Link>
+            </Button>
+          )}
           <Button type="submit" size="lg" className="h-11 w-full" loading={verify.isPending}>
             Continue
           </Button>
-          <ResendCode onResend={() => void sendCode()} busy={start.isPending} resetKey={otp.otpId} />
+          <ResendCode onResend={() => void sendCode()} busy={start.isPending} left={timer.left} />
         </form>
       )}
 

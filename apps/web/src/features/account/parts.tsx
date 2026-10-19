@@ -3,9 +3,10 @@
  * frame like Notion's, one question per screen, a progress bar, a back button, the one-time-code field and its
  * "Test mode" note.
  */
+import { errorMessage, retryAfterSeconds } from '@freefounders/core';
 import { type PasswordAbout, PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
 import { AlertCircle, ArrowLeft, Eye, EyeOff, Info } from '@/components/icons';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { WeakPasswordNote } from '@/components/common/weak-password-note';
 import { Button } from '@/components/ui/button';
@@ -206,20 +207,64 @@ export function DevCodeNote({ code }: { code?: string | null }) {
   );
 }
 
-/** "Resend code" after a countdown (30 s). */
-export function ResendCode({ onResend, busy, resetKey }: { onResend: () => void; busy?: boolean; resetKey: unknown }) {
-  const [left, setLeft] = useState(30);
-  useEffect(() => setLeft(30), [resetKey]);
+/** Seconds between two codes for one email / mobile (the server's gap; a 429 says exactly how long is left). */
+const RESEND_GAP_S = 30;
+
+/** Whole seconds left until `until` (ms), ticking every second; 0 once it has passed. */
+function useSecondsLeft(until: number) {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (left <= 0) return;
-    const t = setTimeout(() => setLeft((s) => s - 1), 1000);
-    return () => clearTimeout(t);
-  }, [left]);
-  const id = useId();
+    if (until <= Date.now()) return;
+    setNow(Date.now());
+    const t = setInterval(() => {
+      setNow(Date.now());
+      if (Date.now() >= until) clearInterval(t);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [until]);
+  return Math.max(0, Math.ceil((until - now) / 1000));
+}
+
+/**
+ * When a new one-time code may be asked for: 30 s after a code was sent, or as long as the server says when it
+ * refuses one (429 `retryAfterSeconds`). `throttled(err)` is true for that refusal, so the page shows the countdown
+ * instead of the server's message.
+ */
+export function useCodeTimer() {
+  const [until, setUntil] = useState(0);
+  const left = useSecondsLeft(until);
+  return {
+    left,
+    sent: () => setUntil(Date.now() + RESEND_GAP_S * 1000),
+    throttled: (err: unknown) => {
+      const s = retryAfterSeconds(err);
+      if (s) setUntil(Date.now() + s * 1000);
+      return s !== null;
+    },
+  };
+}
+
+/** "You can ask for a new code in 24 s." (live, polite: read when it appears, not every second). */
+export function CodeWait({ left }: { left: number }) {
+  if (left <= 0) return null;
   return (
-    <p className="text-center text-sm text-muted-foreground" id={id}>
+    <p role="status" className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2 text-sm">
+      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+      <span>
+        A code was sent a moment ago. You can ask for a new code in <span className="font-semibold tabular-nums">{left} s</span>.
+      </span>
+    </p>
+  );
+}
+
+/** "Resend code" once the wait is over; until then a live countdown. */
+export function ResendCode({ onResend, busy, left }: { onResend: () => void; busy?: boolean; left: number }) {
+  return (
+    <p className="text-center text-sm text-muted-foreground">
       {left > 0 ? (
-        <span aria-live="off">Didn’t get it? You can resend in {left} s.</span>
+        <span>
+          Didn’t get it? You can ask for a new code in <span className="tabular-nums">{left} s</span>.
+        </span>
       ) : (
         <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={onResend} loading={busy}>
           Resend code
@@ -227,6 +272,12 @@ export function ResendCode({ onResend, busy, resetKey }: { onResend: () => void;
       )}
     </p>
   );
+}
+
+/** The server's error, except a "wait before a new code" refusal (shown as the countdown instead). */
+export function codeError(err: unknown, active: boolean): string | null {
+  if (!active || retryAfterSeconds(err) !== null) return null;
+  return errorMessage(err);
 }
 
 /** Where the code went: "We sent a 6-digit code to a@b.com". */

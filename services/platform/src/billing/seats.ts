@@ -50,7 +50,13 @@ export function seatLimit(sub: SubscriptionRow, plan: PlanRow): number | null {
   return sub.seats;
 }
 
-export const seatsFullMessage = (limit: number) => `All ${limit} seats are in use. Ask the owner to add seats in Billing.`;
+/** Plain words for "no free seat": what the plan allows and what to do (the owner, or "Manage billing", acts in Billing). */
+export const seatsFullMessage = (limit: number, plan?: Pick<PlanRow, 'priceMonthly' | 'name'>, state?: string) =>
+  state === 'trialing'
+    ? `The free trial is for up to ${limit} users and all are in use. The owner can choose a plan in Billing to add more.`
+    : plan && plan.priceMonthly === 0
+      ? `The ${plan.name} plan is for up to ${limit} users and all ${limit} are in use. The owner can upgrade in Billing to add more people.`
+      : `All ${limit} paid seats are in use. The owner can add seats in Billing.`;
 
 /**
  * Before a person gets their first app: is there a free seat? (Someone who already has an app, or is switched off,
@@ -74,7 +80,7 @@ export async function assertNewSeat(dbs: DbService, companyId: string) {
   if (isReadOnly(sub.state)) throw paymentRequired(READ_ONLY_MESSAGE);
   const limit = seatLimit(sub, plan);
   if (limit === null) return;
-  if ((await seatsUsed(dbs, companyId)) + 1 > limit) throw paymentRequired(seatsFullMessage(limit));
+  if ((await seatsUsed(dbs, companyId)) + 1 > limit) throw paymentRequired(seatsFullMessage(limit, plan, sub.state));
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000;

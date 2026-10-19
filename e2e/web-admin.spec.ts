@@ -17,7 +17,7 @@ async function token(request: APIRequestContext, login = OWNER.login, password =
 /** Opens `path` signed in (the sign-in page sends us back there). */
 async function openSignedIn(page: Page, path: string, login = OWNER.login, password = OWNER.password) {
   await page.goto(path);
-  await page.getByLabel('Email, username or employee ID').fill(login);
+  await page.getByLabel('Email, mobile, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
@@ -350,7 +350,7 @@ test('People: reset with a typed password (shown once), they sign in with it, th
       const them = await ctx.newPage();
       await openSignedIn(them, '/', login, chosen);
       await expect(them).toHaveURL((url) => url.pathname === '/');
-      await expect(them.getByLabel('Email, username or employee ID')).toHaveCount(0);
+      await expect(them.getByLabel('Email, mobile, username or employee ID')).toHaveCount(0);
       await expect(them.getByRole('heading', { name: 'Choose a new password' })).toHaveCount(0);
     } finally {
       await ctx.close();

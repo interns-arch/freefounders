@@ -8,7 +8,7 @@ const OWNER = { login: process.env.FF_OWNER ?? 'owner', password: process.env.FF
 const shot = (page: Page, name: string) => page.screenshot({ path: `screenshots/${name}.png`, fullPage: true });
 
 async function signIn(page: Page) {
-  await page.getByLabel('Email, username or employee ID').fill(OWNER.login);
+  await page.getByLabel('Email, mobile, username or employee ID').fill(OWNER.login);
   await page.getByLabel('Password').fill(OWNER.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
@@ -135,7 +135,7 @@ test('a second company sees none of the first company\'s tasks or people', async
 
   // In the browser, as the second company.
   await page.goto('/?choose');
-  await page.getByLabel('Email, username or employee ID').fill(BETA.email);
+  await page.getByLabel('Email, mobile, username or employee ID').fill(BETA.email);
   await page.getByLabel('Password').fill(BETA.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: /People & access/ }).click();

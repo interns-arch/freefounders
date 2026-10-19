@@ -5,7 +5,7 @@ import { respondTokens } from '../auth/auth.controller';
 import { AuthService } from '../auth/auth.service';
 import { type AuthedRequest, type Caller, CurrentCaller, Needs, Public, ReadOnlyOk, uuidParam, ZodPipe } from '../common/http';
 import { acceptSchema, inviteSchema, InvitesService } from '../invites/invites.service';
-import { AccountsService, companySchema, completeSchema, forgotSchema, resetSchema, startSchema, verifySchema } from './accounts.service';
+import { AccountsService, companySchema, completeSchema, forgotSchema, resetSchema, resetVerifySchema, startSchema, verifySchema } from './accounts.service';
 
 const newCompanySchema = companySchema.extend({ client: z.enum(['web', 'mobile']).default('web') });
 const meta = (req: AuthedRequest, client: 'web' | 'mobile' = 'web') => ({ ip: req.ip, userAgent: req.headers['user-agent'], client });
@@ -34,7 +34,7 @@ export class AccountsController {
   @HttpCode(200)
   async complete(@Body(new ZodPipe(completeSchema)) body: z.infer<typeof completeSchema>, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
     const out = await this.accounts.signupComplete(body, meta(req, body.client));
-    return { ...respondTokens(res, out, body.client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs };
+    return { ...respondTokens(res, out, body.client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs, setupIncomplete: out.setupIncomplete };
   }
 
   @Public()
@@ -42,6 +42,14 @@ export class AccountsController {
   @HttpCode(200)
   forgot(@Body(new ZodPipe(forgotSchema)) body: z.infer<typeof forgotSchema>, @Req() req: AuthedRequest) {
     return this.accounts.forgot(body.identifier, req.ip);
+  }
+
+  /** Checks a reset code before the new password is asked for (the code stays usable for auth/reset). */
+  @Public()
+  @Post('auth/reset/verify')
+  @HttpCode(200)
+  resetVerify(@Body(new ZodPipe(resetVerifySchema)) body: z.infer<typeof resetVerifySchema>) {
+    return this.accounts.resetVerify(body.otpId, body.code);
   }
 
   @Public()
@@ -58,7 +66,7 @@ export class AccountsController {
   async createCompany(@CurrentCaller() caller: Caller, @Body(new ZodPipe(newCompanySchema)) body: z.infer<typeof newCompanySchema>, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
     const { client, ...input } = body;
     const out = await this.accounts.createCompany(caller, input, meta(req, client));
-    return { ...respondTokens(res, out, client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs };
+    return { ...respondTokens(res, out, client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs, setupIncomplete: out.setupIncomplete };
   }
 }
 

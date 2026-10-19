@@ -3,6 +3,7 @@ import { errorMessage } from '@freefounders/core';
 import { type CompanyInput, useCreateCompany } from '@freefounders/core/account';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { CompanyForm, EMPTY_COMPANY, SetupScreen } from './company-form';
 import { AuthFrame, BackButton, StepTitle } from './parts';
 
@@ -17,14 +18,17 @@ export function NewCompanyPage() {
     setSetup(true);
     create.reset();
     try {
-      await create.mutateAsync(c);
+      const res = await create.mutateAsync(c);
+      if (res.setupIncomplete) {
+        toast.warning('Your company is created, but part of the app set-up has not finished. It finishes by itself in a few minutes; if an app does not open, sign out and in again later.', { duration: 15_000 });
+      }
       navigate('/?home=1&welcome=1', { replace: true });
     } catch {
       /* shown on the setup screen */
     }
   };
 
-  if (setup) return <SetupScreen companyName={company.name} error={create.isError ? errorMessage(create.error) : null} onRetry={() => setSetup(false)} />;
+  if (setup) return <SetupScreen companyName={company.name} apps={company.apps} error={create.isError ? errorMessage(create.error) : null} onRetry={() => setSetup(false)} />;
   return (
     <AuthFrame>
       <BackButton onClick={() => navigate(-1)} />

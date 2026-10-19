@@ -29,12 +29,14 @@ export const companySchema = z.object({
 });
 export const completeSchema = z.object({
   signupToken: z.string().min(20).max(200),
-  fullName: z.string().trim().min(1, 'Enter your name').max(120),
+  /** Not needed when the identifier already has an account (its name is kept). */
+  fullName: z.string().trim().max(120).default(''),
   password: z.string().min(1, 'Enter a password').max(200),
   company: companySchema,
   client: z.enum(['web', 'mobile']).default('web'),
 });
 export const forgotSchema = z.object({ identifier: identifierSchema });
+export const resetVerifySchema = verifySchema;
 export const resetSchema = z.object({ otpId: z.string().uuid('Ask for a new code'), code: z.string().trim().regex(/^[0-9]{6}$/, 'Enter the 6-digit code'), newPassword: newPasswordSchema });
 export type CompanyInput = z.infer<typeof companySchema>;
 
@@ -42,6 +44,14 @@ export type AccountRow = typeof accounts.$inferSelect;
 
 const expired = () => new BadRequestException({ message: 'Your sign-up has expired. Start again.', errors: { signupToken: 'Expired' } });
 const invalidIdentifier = () => badRequest('Enter a valid email or a 10-digit Indian mobile number', { identifier: 'Enter a valid email or mobile number' });
+/** Forgot password with something that is not an email or mobile number: a username or employee ID made by an admin. */
+const adminResets = () =>
+  badRequest('Usernames and employee IDs are reset by your company admin. Ask them to reset your password, or enter the email or mobile number of your FreeFounders account.', {
+    identifier: 'Enter the email or mobile number of your account',
+  });
+const askAdmin = () =>
+  badRequest('This email signs in with a login your company admin made, so only your admin can reset its password. Ask them to reset it.', { code: 'Admin login' });
+const noAccount = () => badRequest('There is no FreeFounders account with this email or mobile number. Check it, or sign up instead.', { code: 'No account' });
 
 /**
  * Accounts (PLAN.md §21): sign-up by one-time code, forgot password, and new companies for an account. Sign-in with an
@@ -110,7 +120,7 @@ export class AccountsService {
    * Step 1 of using a sign-up token (outside any transaction, so a wrong password still counts towards the lockout when `LOGIN_MAX_FAILED` is on):
    * the identifier it proves, and the existing account, whose password must be right. A new account's password is checked.
    */
-  async checkSignup(signupToken: string, password: string, ip?: string): Promise<{ id: Identifier; existing?: AccountRow }> {
+  async checkSignup(signupToken: string, password: string, ip?: string, fullName?: string): Promise<{ id: Identifier; existing?: AccountRow }> {
     const ticket = await this.tickets.peek(signupToken, 'signup');
     const id = ticket?.target ? normaliseIdentifier(ticket.target) : null;
     if (!ticket || !id) throw expired();
@@ -119,6 +129,7 @@ export class AccountsService {
       await this.auth.verifyAccountPassword(existing, password, `ip:${ip ?? 'unknown'}`);
       return { id, existing };
     }
+    if (!fullName?.trim()) throw badRequest('Enter your name', { fullName: 'Enter your name' });
     const pw = newPasswordSchema.safeParse(password);
     if (!pw.success) throw badRequest(pw.error.issues[0].message, { password: pw.error.issues[0].message });
     await this.assertNotCompanyLogin(id);
@@ -138,7 +149,7 @@ export class AccountsService {
 
   /** POST signup/complete: account + company + owner + 14-day Suite trial, set up in the apps, signed in. */
   async signupComplete(input: z.infer<typeof completeSchema>, meta: Meta) {
-    const checked = await this.checkSignup(input.signupToken, input.password, meta.ip);
+    const checked = await this.checkSignup(input.signupToken, input.password, meta.ip, input.fullName);
     if (checked.existing) await this.assertCompanyQuota(checked.existing.id);
     const { account, ids } = await this.dbs.tx(async () => {
       const account = await this.takeSignup(input.signupToken, checked, input.fullName, input.password);
@@ -183,18 +194,46 @@ export class AccountsService {
     return { companyId: company.id, ownerId: owner.id, company };
   }
 
-  /** Same steps as `npm run company -- create` (apps, launch modules, roles: the owner gets the apps, profile, people). */
-  private async provisionAndSignIn(account: AccountRow, ids: { companyId: string; ownerId: string; company: typeof companies.$inferSelect }, meta: Meta): Promise<Issued & { companyId: string; provisionMs: number }> {
+  /**
+   * Same steps as `npm run company -- create` (apps, launch modules, roles: the owner gets the apps, profile, people).
+   * If an app cannot be reached the person is still signed in (`setupIncomplete`), and the set-up is retried in the
+   * background (every step can be repeated safely; `npm run company -- sync` also finishes it).
+   */
+  private async provisionAndSignIn(
+    account: AccountRow,
+    ids: { companyId: string; ownerId: string; company: typeof companies.$inferSelect },
+    meta: Meta,
+  ): Promise<Issued & { companyId: string; provisionMs: number; setupIncomplete: boolean }> {
     const started = Date.now();
+    let setupIncomplete = false;
     try {
       await this.setup.provisionNew(ids.company, (line) => this.log.log(line.trim()));
     } catch (err) {
-      // The company exists; `npm run company -- sync` finishes it. The owner can still sign in.
+      setupIncomplete = true;
       this.log.error(`Setting up ${ids.company.code} in the apps: ${(err as Error).message}`);
+      this.retrySetup(ids.company);
     }
     const provisionMs = Date.now() - started;
-    this.log.log(`Company ${ids.company.code} for account ${account.id} set up in ${provisionMs} ms`);
-    return { ...(await this.auth.issueFor(ids.ownerId, meta)), companyId: ids.companyId, provisionMs };
+    this.log.log(`Company ${ids.company.code} for account ${account.id} set up in ${provisionMs} ms${setupIncomplete ? ' (not finished: retrying)' : ''}`);
+    return { ...(await this.auth.issueFor(ids.ownerId, meta)), companyId: ids.companyId, provisionMs, setupIncomplete };
+  }
+
+  /** Tries the app set-up again after 30 s, 2 min and 10 min (only in this process; `company -- sync` is the fallback). */
+  private retrySetup(company: typeof companies.$inferSelect, delays = [30_000, 120_000, 600_000]) {
+    if (!delays.length) {
+      this.log.error(`Company ${company.code}: app set-up still failing. Run: npm run company -- sync --code ${company.code}`);
+      return;
+    }
+    const t = setTimeout(() => {
+      this.setup
+        .provisionNew(company, (line) => this.log.log(line.trim()))
+        .then(() => this.log.log(`Company ${company.code}: app set-up finished on retry`))
+        .catch((err) => {
+          this.log.warn(`Company ${company.code}: app set-up retry failed: ${(err as Error).message}`);
+          this.retrySetup(company, delays.slice(1));
+        });
+    }, delays[0]);
+    t.unref?.();
   }
 
   // ─── forgot password ────────────────────────────────────────────────────
@@ -202,15 +241,41 @@ export class AccountsService {
   /** Always the same answer, whether an account exists or not (no account enumeration). */
   async forgot(identifier: string, ip?: string) {
     const id = normaliseIdentifier(identifier);
-    if (!id) throw invalidIdentifier();
-    const { otpId, devCode } = await this.otp.start(id, 'reset', ip);
-    return { otpId, ...(devCode ? { devCode } : {}) };
+    if (!id) throw identifier.includes('@') || /^[+0-9 ()-]+$/.test(identifier.trim()) ? invalidIdentifier() : adminResets();
+    const { otpId, channel, devCode } = await this.otp.start(id, 'reset', ip);
+    return { otpId, channel, ...(devCode ? { devCode } : {}) };
+  }
+
+  /**
+   * The account a reset code was sent to. The code proves the email / mobile, so only now does the answer say that there
+   * is no account, or that the email belongs to an admin-made login (whose password only the company admin resets).
+   */
+  private async accountForReset(target: string): Promise<AccountRow> {
+    const id = normaliseIdentifier(target)!;
+    const account = await this.findAccount(id);
+    if (account) return account;
+    if (id.kind === 'email') {
+      const [legacy] = await this.dbs.db
+        .select({ id: people.id })
+        .from(people)
+        .innerJoin(logins, eq(logins.personId, people.id))
+        .where(and(sql`lower(${people.email}) = ${id.value}`, isNull(people.accountId)))
+        .limit(1);
+      if (legacy) throw askAdmin();
+    }
+    throw noAccount();
+  }
+
+  /** POST auth/reset/verify: checks the code on its own step (a wrong one counts as a try); the code stays usable for reset. */
+  async resetVerify(otpId: string, code: string) {
+    const { target } = await this.otp.verify(otpId, code, 'reset', { consume: false });
+    await this.accountForReset(target);
+    return { ok: true };
   }
 
   async reset(otpId: string, code: string, newPassword: string) {
     const { target } = await this.otp.verify(otpId, code, 'reset');
-    const account = await this.findAccount(normaliseIdentifier(target)!);
-    if (!account) throw badRequest('There is no account with this email or mobile number. Sign up instead.', { code: 'No account' });
+    const account = await this.accountForReset(target);
     await this.dbs.db
       .update(accounts)
       .set({ passwordHash: await hashPassword(newPassword), failedLogins: 0, lockedUntil: null, passwordChangedAt: new Date(), updatedAt: new Date() })

@@ -41,7 +41,10 @@ export class FakeOtpSender implements OtpSender {
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 const codeHash = (otpId: string, code: string) => sha256(`${otpId}:${code}`);
-const tooMany = (message: string) => new HttpException({ statusCode: 429, message }, 429);
+/** 429 with the seconds until a new code can be asked for (the web shows a live countdown). */
+const tooMany = (message: string, retryAfterSeconds: number) =>
+  new HttpException({ statusCode: 429, message, retryAfterSeconds: Math.max(1, Math.ceil(retryAfterSeconds)) }, 429);
+const waitText = (s: number) => (s <= 90 ? `${Math.max(1, Math.ceil(s))} seconds` : `${Math.ceil(s / 60)} minutes`);
 
 @Injectable()
 export class OtpService {
@@ -55,16 +58,31 @@ export class OtpService {
     const db = this.dbs.db;
     const since = new Date(Date.now() - WINDOW_MS);
     const [byTarget] = await db
-      .select({ n: sql<number>`count(*)::int`, last: sql<Date | null>`max(${otpCodes.createdAt})` })
+      .select({ n: sql<number>`count(*)::int`, first: sql<Date | null>`min(${otpCodes.createdAt})`, last: sql<Date | null>`max(${otpCodes.createdAt})` })
       .from(otpCodes)
       .where(and(eq(otpCodes.target, target.value), gt(otpCodes.createdAt, since)));
-    if ((byTarget?.n ?? 0) >= PER_TARGET) throw tooMany('Too many codes asked for. Try again in a few minutes.');
+    if ((byTarget?.n ?? 0) >= PER_TARGET) {
+      const wait = byTarget?.first ? (new Date(byTarget.first).getTime() + WINDOW_MS - Date.now()) / 1000 : WINDOW_MS / 1000;
+      throw tooMany(`Too many codes asked for. You can ask for a new one in ${waitText(wait)}.`, wait);
+    }
     const last = byTarget?.last ? new Date(byTarget.last) : null;
-    if (last && Date.now() - last.getTime() < RESEND_GAP_MS) throw tooMany('Wait a few seconds before asking for a new code.');
+    if (last && Date.now() - last.getTime() < RESEND_GAP_MS) {
+      const wait = (last.getTime() + RESEND_GAP_MS - Date.now()) / 1000;
+      throw tooMany(`A code was just sent. You can ask for a new one in ${waitText(wait)}.`, wait);
+    }
     const limit = ipLimit();
-    if (limit && ip) {
-      const [byIp] = await db.select({ n: sql<number>`count(*)::int` }).from(otpCodes).where(and(eq(otpCodes.ip, ip), gt(otpCodes.createdAt, since)));
-      if ((byIp?.n ?? 0) >= limit) throw tooMany('Too many codes asked for from your network. Try again in a few minutes.');
+    // Dev only (OTP_DEV_ECHO=1, never in production): everything typed on this machine reaches the Platform from the
+    // same loopback address through the dev gateway, so the per-network guard would stop the browser tests.
+    const devLoopback = otpDevEcho() && !!ip && /^(::1|127\.|::ffff:127\.)/.test(ip);
+    if (limit && ip && !devLoopback) {
+      const [byIp] = await db
+        .select({ n: sql<number>`count(*)::int`, first: sql<Date | null>`min(${otpCodes.createdAt})` })
+        .from(otpCodes)
+        .where(and(eq(otpCodes.ip, ip), gt(otpCodes.createdAt, since)));
+      if ((byIp?.n ?? 0) >= limit) {
+        const wait = byIp?.first ? (new Date(byIp.first).getTime() + WINDOW_MS - Date.now()) / 1000 : WINDOW_MS / 1000;
+        throw tooMany(`Too many codes asked for from your network. Try again in ${waitText(wait)}.`, wait);
+      }
     }
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const id = randomUUID();
@@ -75,9 +93,10 @@ export class OtpService {
 
   /**
    * Checks a code. One try is claimed atomically before comparing, so parallel guesses cannot exceed 5. A right code
-   * is used up. Returns the identifier the code was sent to.
+   * is used up, unless `consume: false` (forgot password checks the code on its own step, then sends it again with the
+   * new password): then the right code gives its try back. Returns the identifier the code was sent to.
    */
-  async verify(otpId: string, code: string, purpose: OtpPurpose): Promise<{ target: string; channel: string }> {
+  async verify(otpId: string, code: string, purpose: OtpPurpose, opts: { consume?: boolean } = {}): Promise<{ target: string; channel: string }> {
     const db = this.dbs.db;
     if (!/^[0-9a-f-]{36}$/i.test(otpId)) throw new BadRequestException({ message: 'This code has expired. Ask for a new one.', errors: { code: 'Expired' } });
     const [claim] = await db
@@ -91,6 +110,10 @@ export class OtpService {
     if (want.length !== got.length || !timingSafeEqual(want, got)) {
       const left = OTP_MAX_ATTEMPTS - claim.attempts;
       throw new BadRequestException({ message: left > 0 ? `Wrong code. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Wrong code. Ask for a new one.', errors: { code: 'Wrong code' } });
+    }
+    if (opts.consume === false) {
+      await db.update(otpCodes).set({ attempts: sql`greatest(${otpCodes.attempts} - 1, 0)` }).where(eq(otpCodes.id, claim.id));
+      return { target: claim.target, channel: claim.channel };
     }
     const [used] = await db.update(otpCodes).set({ usedAt: new Date() }).where(and(eq(otpCodes.id, claim.id), isNull(otpCodes.usedAt))).returning({ id: otpCodes.id });
     if (!used) throw new BadRequestException({ message: 'This code was already used. Ask for a new one.', errors: { code: 'Used' } });

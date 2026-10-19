@@ -12,7 +12,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/utils';
-import { AuthFrame, BackButton, CodeField, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField } from './parts';
+import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer } from './parts';
 
 type Step = 'choose' | 'identifier' | 'code' | 'profile';
 
@@ -27,12 +27,13 @@ export function JoinPage() {
   const verify = useSignupVerify();
   const [step, setStep] = useState<Step>('choose');
   const [identifier, setIdentifier] = useState('');
-  const [otp, setOtp] = useState<OtpSent | null>(null);
+  const [otp, setOtp] = useState<(OtpSent & { for: string }) | null>(null);
   const [code, setCode] = useState('');
   const [verified, setVerified] = useState<{ signupToken: string; accountExists: boolean } | null>(null);
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const timer = useCodeTimer();
 
   // A refresh cookie may still sign this browser in.
   useEffect(() => {
@@ -48,9 +49,11 @@ export function JoinPage() {
       <AuthFrame>
         <div className="space-y-4 rounded-xl border bg-card p-6 shadow-card" role="alert">
           <Link2 className="size-8 text-muted-foreground" aria-hidden />
-          <h1 className="text-2xl font-bold tracking-tight">This invite link doesn’t work</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {invite?.reason === 'expired' ? 'This invite link has expired' : invite?.reason === 'revoked' ? 'This invite link was switched off' : invite?.reason === 'used_up' ? 'This invite link is used up' : 'This invite link doesn’t work'}
+          </h1>
           <p className="text-[15px] text-muted-foreground">
-            {preview.isError && !/not found|404/i.test(errorMessage(preview.error)) ? errorMessage(preview.error) : 'It has expired, was switched off, or has been used up.'} Ask the person who sent it for a new link.
+            {invite?.message ?? (preview.isError ? errorMessage(preview.error) : 'It has expired, was switched off, or has been used up. Ask the person who sent it for a new link.')}
           </p>
           <Button asChild variant="outline" className="w-full">
             <Link to="/login">Go to sign in</Link>
@@ -70,11 +73,16 @@ export function JoinPage() {
   };
 
   const send = async () => {
-    const res = await start.mutateAsync(identifier.trim()).catch(() => null);
-    if (!res) return;
-    setOtp(res);
-    setCode('');
-    setStep('code');
+    try {
+      const res = await start.mutateAsync(identifier.trim());
+      timer.sent();
+      setOtp({ ...res, for: identifier.trim() });
+      setCode('');
+      verify.reset();
+      setStep('code');
+    } catch (err) {
+      timer.throttled(err);
+    }
   };
 
   const roles = invite.roles.map(inviteRoleName).filter(Boolean);
@@ -147,12 +155,24 @@ export function JoinPage() {
             e.preventDefault();
             if (!identifierKind(identifier)) return setFieldError('Enter your email or 10-digit mobile number.');
             setFieldError(null);
+            if (otp && otp.for === identifier.trim()) return setStep(verified ? 'profile' : 'code');
             void send();
           }}
         >
           <StepTitle title="Your email or mobile">We’ll send a 6-digit code to check it’s you.</StepTitle>
-          <TextField id="join-identifier" label="Email or mobile number" value={identifier} onChange={(e) => (setIdentifier(e.target.value), setFieldError(null))} autoComplete="username" autoCapitalize="none" autoFocus error={fieldError} />
-          <FormError>{start.isError ? errorMessage(start.error) : null}</FormError>
+          <TextField
+            id="join-identifier"
+            label="Email or mobile number"
+            value={identifier}
+            onChange={(e) => (setIdentifier(e.target.value), setFieldError(null), start.reset(), setOtp(null), setVerified(null))}
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoFocus
+            error={fieldError}
+          />
+          {start.isError && <CodeWait left={timer.left} />}
+          <FormError>{codeError(start.error, start.isError)}</FormError>
           <Button type="submit" size="lg" className="h-11 w-full" loading={start.isPending}>
             Continue
           </Button>
@@ -174,14 +194,19 @@ export function JoinPage() {
             setStep('profile');
           }}
         >
-          <StepTitle title="Check your code">{sentTo(identifier.trim(), otp.channel)}</StepTitle>
+          <StepTitle title="Check your code">{sentTo(otp.for, otp.channel)}</StepTitle>
           <DevCodeNote code={otp.devCode} />
-          <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null))} error={fieldError} />
-          <FormError>{verify.isError ? errorMessage(verify.error) : null}</FormError>
+          <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null), verify.reset())} error={fieldError} />
+          <FormError>{codeError(verify.error, verify.isError) ?? codeError(start.error, start.isError)}</FormError>
+          {verify.isError && /sign in with it/i.test(errorMessage(verify.error)) && (
+            <Button asChild variant="outline" className="h-11 w-full">
+              <Link to={`/login?next=${encodeURIComponent(`/join/${token}`)}`}>Go to sign in</Link>
+            </Button>
+          )}
           <Button type="submit" size="lg" className="h-11 w-full" loading={verify.isPending}>
             Continue
           </Button>
-          <ResendCode onResend={() => void send()} busy={start.isPending} resetKey={otp.otpId} />
+          <ResendCode onResend={() => void send()} busy={start.isPending} left={timer.left} />
         </form>
       )}
 
@@ -201,6 +226,11 @@ export function JoinPage() {
             <>
               <StepTitle title="Welcome back">{identifier.trim()} already has an account. Enter its password to join.</StepTitle>
               <PasswordField id="join-password" value={password} onChange={setPassword} newPassword={false} autoFocus error={fieldError === 'password' ? 'Enter your password.' : null} />
+              <p className="text-sm">
+                <Link to="/forgot" className="font-semibold text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              </p>
             </>
           ) : (
             <>

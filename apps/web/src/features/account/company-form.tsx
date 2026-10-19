@@ -171,16 +171,30 @@ export function CompanyForm({
   );
 }
 
-const SETUP_STEPS = ['Creating your company', 'Setting up Attendance and Tasks', 'Adding roles: Owner, Admin, Manager, Member', 'Preparing shifts, leave types and holidays', 'Almost ready'];
+/** What is being prepared, for the apps chosen (PLAN.md §19.28: two built-in roles). */
+function setupSteps(apps: string[]) {
+  return [
+    'Creating your company',
+    ...(apps.includes('tasks') ? ['Setting up Attendance and Tasks'] : []),
+    ...(apps.includes('assets') ? ['Setting up Assets'] : []),
+    'Adding the roles Admin and Member',
+    ...(apps.includes('tasks') ? ['Preparing shifts, leave types and holidays'] : []),
+    'Almost ready',
+  ];
+}
 
-/** Full screen while the company is being provisioned (can take several seconds). */
-export function SetupScreen({ companyName, error, onRetry }: { companyName: string; error?: string | null; onRetry?: () => void }) {
+/** Full screen while the company is being provisioned (often 10–15 seconds; after 20 s a "still working" line). */
+export function SetupScreen({ companyName, apps = ['tasks', 'assets'], error, onRetry }: { companyName: string; apps?: string[]; error?: string | null; onRetry?: () => void }) {
+  const steps = setupSteps(apps);
   const [i, setI] = useState(0);
+  const [slow, setSlow] = useState(false);
   useEffect(() => {
     if (error) return;
-    const t = setInterval(() => setI((n) => Math.min(n + 1, SETUP_STEPS.length - 1)), 1400);
-    return () => clearInterval(t);
-  }, [error]);
+    const t = setInterval(() => setI((n) => Math.min(n + 1, steps.length - 1)), 2000);
+    const s = setTimeout(() => setSlow(true), 20_000);
+    return () => (clearInterval(t), clearTimeout(s));
+  }, [error, steps.length]);
+  const SETUP_STEPS = steps;
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background px-4">
       <div className="w-full max-w-[420px]" aria-live="polite" aria-busy={!error}>
@@ -195,6 +209,7 @@ export function SetupScreen({ companyName, error, onRetry }: { companyName: stri
             )}
           </div>
         ) : (
+          <>
           <ol className="mt-6 space-y-3">
             {SETUP_STEPS.map((s, n) => (
               <li key={s} className={cn('flex items-center gap-3 text-[15px]', n > i && 'text-muted-foreground', n === i && 'font-semibold')}>
@@ -212,6 +227,10 @@ export function SetupScreen({ companyName, error, onRetry }: { companyName: stri
               </li>
             ))}
           </ol>
+          <p className="mt-6 text-sm text-muted-foreground">
+            {slow ? 'Still working: this can take up to a minute. Please keep this page open.' : 'This takes a few seconds. Please keep this page open.'}
+          </p>
+          </>
         )}
       </div>
     </div>

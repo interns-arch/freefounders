@@ -26,10 +26,18 @@ export const acceptSchema = z.object({
 });
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
-const gone = () => new HttpException({ statusCode: 410, message: 'This invite link has expired or was switched off. Ask for a new one.' }, 410);
-
 type InviteRow = typeof invites.$inferSelect;
-const isValid = (i: InviteRow) => !i.revokedAt && i.expiresAt > new Date() && (i.maxUses === null || i.uses < i.maxUses);
+type Unusable = 'revoked' | 'expired' | 'used_up';
+/** Why a link no longer works (null = it works). */
+const unusable = (i: InviteRow): Unusable | null =>
+  i.revokedAt ? 'revoked' : i.expiresAt <= new Date() ? 'expired' : i.maxUses !== null && i.uses >= i.maxUses ? 'used_up' : null;
+const isValid = (i: InviteRow) => !unusable(i);
+export const GONE_MESSAGES: Record<Unusable, string> = {
+  expired: 'This invite link has expired. Ask the person who sent it for a new link.',
+  revoked: 'This invite link was switched off by the company. Ask the person who sent it for a new link.',
+  used_up: 'This invite link has already been used by as many people as it allows. Ask the person who sent it for a new link.',
+};
+const gone = (i: InviteRow) => new HttpException({ statusCode: 410, message: GONE_MESSAGES[unusable(i) ?? 'expired'], reason: unusable(i) ?? 'expired' }, 410);
 
 /**
  * Invite links (PLAN.md §21.2): roles and apps chosen by someone who manages people (only what they hold, R1), an
@@ -54,7 +62,7 @@ export class InvitesService {
   async create(caller: Caller, input: z.infer<typeof inviteSchema>, origin: string) {
     const roleRows = await this.rolesSvc.assertCanGiveRoles(caller, input.roleIds);
     const [c] = await this.dbs.db.select({ apps: companies.enabledApps }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
-    for (const app of input.apps) if (!c?.apps.includes(app)) throw badRequest(`Your plan does not include ${app}`, { apps: `Not in your plan: ${app}` });
+    for (const app of input.apps) if (!c?.apps.includes(app)) throw badRequest(`Your plan does not include ${app === 'tasks' ? 'Tasks' : 'Assets'}. Untick it, or change the plan in Billing.`, { apps: `Not in your plan: ${app}` });
     const token = randomBytes(32).toString('base64url');
     const [row] = await this.dbs.db
       .insert(invites)
@@ -91,7 +99,7 @@ export class InvitesService {
       maxUses: i.maxUses,
       uses: i.uses,
       revoked: !!i.revokedAt,
-      status: i.revokedAt ? 'revoked' : i.expiresAt <= new Date() ? 'expired' : i.maxUses !== null && i.uses >= i.maxUses ? 'used_up' : 'active',
+      status: unusable(i) ?? 'active',
       createdBy: createdByName,
       createdAt: i.createdAt,
     }));
@@ -113,10 +121,11 @@ export class InvitesService {
   /** GET invites/:token (public): what the joiner sees before joining. */
   async info(token: string) {
     const i = await this.byToken(token);
-    if (!i) throw new NotFoundException('Invite not found');
+    if (!i) throw new NotFoundException('This invite link is not complete or does not exist. Check you copied all of it, or ask for a new link.');
     const [c] = await this.dbs.db.select({ name: companies.name }).from(companies).where(eq(companies.id, i.companyId)).limit(1);
     const names = i.roleIds.length ? await this.dbs.db.select({ name: roles.name }).from(roles).where(and(inArray(roles.id, i.roleIds), eq(roles.archived, false))) : [];
-    return { companyName: c?.name ?? '', roles: names.map((n) => n.name), apps: i.apps, expiresAt: i.expiresAt, valid: isValid(i) };
+    const reason = unusable(i);
+    return { companyName: c?.name ?? '', roles: names.map((n) => n.name), apps: i.apps, expiresAt: i.expiresAt, valid: !reason, ...(reason ? { reason, message: GONE_MESSAGES[reason] } : {}) };
   }
 
   /** The apps a person joining gets: the invite's own, and those the invite's roles reach, in the company's plan. */
@@ -133,15 +142,14 @@ export class InvitesService {
    */
   async accept(token: string, caller: Caller | undefined, body: z.infer<typeof acceptSchema>, meta: Meta) {
     const invite = await this.byToken(token);
-    if (!invite) throw new NotFoundException('Invite not found');
-    if (!isValid(invite)) throw gone();
+    if (!invite) throw new NotFoundException('This invite link is not complete or does not exist. Check you copied all of it, or ask for a new link.');
+    if (!isValid(invite)) throw gone(invite);
 
     let account: AccountRow | undefined;
     let checked: Awaited<ReturnType<AccountsService['checkSignup']>> | undefined;
     if (body.signupToken) {
       if (!body.password) throw badRequest('Enter your password', { password: 'Required' });
-      checked = await this.accounts.checkSignup(body.signupToken, body.password, meta.ip);
-      if (!checked.existing && !body.fullName) throw badRequest('Enter your name', { fullName: 'Required' });
+      checked = await this.accounts.checkSignup(body.signupToken, body.password, meta.ip, body.fullName);
       account = checked.existing;
     } else {
       if (!caller) throw new HttpException({ statusCode: 401, message: 'Please sign in' }, 401);
@@ -166,7 +174,7 @@ export class InvitesService {
 
     const personId = await this.dbs.tx(async (tx) => {
       const [locked] = await tx.select().from(invites).where(eq(invites.id, invite.id)).for('update').limit(1);
-      if (!locked || !isValid(locked)) throw gone();
+      if (!locked || !isValid(locked)) throw gone(locked ?? invite);
       if (!account) account = await this.accounts.takeSignup(body.signupToken!, checked!, body.fullName!, body.password!);
       else if (checked) await this.accounts.takeSignup(body.signupToken!, checked, '', '');
       await tx.update(invites).set({ uses: sql`${invites.uses} + 1` }).where(eq(invites.id, invite.id));

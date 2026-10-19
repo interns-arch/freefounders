@@ -81,6 +81,9 @@ async function main() {
       if (process.env.NODE_ENV === 'production' || !['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
         throw new Error('reset is for local test data only (the database must be on localhost)');
       }
+      // Local only: the apps of `npm run dev` unless other addresses are given (they must delete the people's records too).
+      process.env.TASKS_INTERNAL_URL ||= 'http://127.0.0.1:8000/api/internal';
+      process.env.ASSETS_INTERNAL_URL ||= 'http://127.0.0.1:3000/api/internal';
       const [c] = await dbs.db.select().from(companies).where(eq(companies.code, code)).limit(1);
       if (!c) throw new Error(`No company with code ${code}`);
       console.log(`${c.name} (${c.code}): reset to the owner only`);

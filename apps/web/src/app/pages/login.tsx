@@ -1,10 +1,10 @@
 import { type ChooseCompany, errorMessage, session, useSignIn } from '@freefounders/core';
-import { useSignInWithTicket } from '@freefounders/core/account';
-import { ArrowRight, Building2, CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from '@/components/icons';
+import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from '@/components/icons';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
+import { ChooseCompanyCard } from '@/features/account/choose-company';
 import { Logo } from '../shell-parts';
 import { safeNext } from '../session-guard';
 
@@ -19,7 +19,6 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const signIn = useSignIn();
-  const withTicket = useSignInWithTicket();
   // An account in several companies picks one (PLAN.md §21.2).
   const [choose, setChoose] = useState<ChooseCompany | null>(null);
   const [login, setLogin] = useState('');
@@ -86,43 +85,7 @@ export function LoginPage() {
             <Logo />
           </div>
           {choose ? (
-            <section className="space-y-4 rounded-xl border bg-card p-5 shadow-card sm:p-7" aria-labelledby="choose-title">
-              <h1 id="choose-title" className="text-2xl font-bold tracking-tight">
-                Choose a company
-              </h1>
-              <p className="text-sm text-muted-foreground">Your account works in more than one company. Which one do you want to open?</p>
-              <ul className="space-y-2">
-                {choose.chooseCompany.map((c) => (
-                  <li key={c.companyId}>
-                    <button
-                      type="button"
-                      disabled={withTicket.isPending}
-                      onClick={() =>
-                        withTicket.mutate({ ticket: choose.ticket, companyId: c.companyId }, { onSuccess: () => navigate(next ?? '/', { replace: true }) })
-                      }
-                      className="flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-md border bg-card px-3 py-2 text-left transition outline-none hover:border-primary/40 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-60"
-                    >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary" aria-hidden>
-                        <Building2 className="size-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-semibold">{c.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground capitalize">{c.role}</span>
-                      </span>
-                      <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {withTicket.isError && (
-                <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
-                  {errorMessage(withTicket.error)}
-                </p>
-              )}
-              <Button variant="ghost" className="w-full" onClick={() => (setChoose(null), withTicket.reset())}>
-                Back
-              </Button>
-            </section>
+            <ChooseCompanyCard choose={choose} onDone={() => navigate(next ?? '/', { replace: true })} onBack={() => setChoose(null)} />
           ) : (
           <form onSubmit={submit} noValidate className="space-y-5 rounded-xl border bg-card p-5 shadow-card sm:p-7" aria-labelledby="signin-title">
             <h1 id="signin-title" className="text-2xl font-bold tracking-tight">
@@ -130,7 +93,7 @@ export function LoginPage() {
             </h1>
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="login">Email, username or employee ID</Label>
+                <Label htmlFor="login">Email, mobile, username or employee ID</Label>
                 <Input
                   id="login"
                   ref={loginRef}
@@ -149,7 +112,7 @@ export function LoginPage() {
                 />
                 {missing.login && (
                   <p id="login-error" role="alert" className="text-[13px] font-medium text-destructive">
-                    Enter your email, username or employee ID.
+                    Enter your email, mobile number, username or employee ID.
                   </p>
                 )}
               </div>

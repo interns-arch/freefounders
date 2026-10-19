@@ -21,7 +21,7 @@ const ROTATION_GRACE_MS = 60 * 1000;
 const LOCK_MS = 15 * 60 * 1000;
 /** An account with several companies picks one within this time (PLAN.md §21.2). */
 const CHOOSE_TTL_MS = 5 * 60 * 1000;
-const WRONG = 'Wrong email / username / employee ID or password';
+const WRONG = 'The email, mobile number, username or password is not right. Check them and try again.';
 const LOCKED = 'Too many failed attempts. Try again in a few minutes.';
 /** Rotated or revoked refresh rows are kept this long (reuse of a copied token is detected while its row exists). */
 const SESSION_HISTORY_DAYS = 30;

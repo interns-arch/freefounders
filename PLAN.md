@@ -2207,7 +2207,9 @@ Public:
   sign-in response (tokens) + `companyId`. An existing account must give its password.
 - `POST auth/login` also accepts an account's email/mobile; several companies → `{chooseCompany: [{companyId, name,
   code, role}], ticket}`, then `POST auth/login {ticket, companyId}` → tokens.
-- `POST auth/forgot {identifier}` → `{otpId, devCode?}`; `POST auth/reset {otpId, code, newPassword}`
+- `POST auth/forgot {identifier}` → `{otpId, channel, devCode?}`; `POST auth/reset/verify {otpId, code}` → `{ok}` (checks
+  the code without using it up; a wrong one counts as a try); `POST auth/reset {otpId, code, newPassword}`
+- A code asked for too soon: 429 `{message, retryAfterSeconds}` (sign-up and forgot share the per-identifier limits)
 - `GET invites/:token` → `{companyName, roles, apps, expiresAt, valid}`; `POST billing/webhook/:gateway`
 Signed in:
 - `GET auth/companies` → `[{companyId, name, code, role, current}]`; `POST auth/switch {companyId}` → tokens;
@@ -2242,3 +2244,44 @@ buyer GST details, CGST/SGST/IGST), `payments`, `billing_events` (gateway event 
 read-only 402 → pay again). Free = 3 users; new-account password minimum 6 (same as admin-made logins). Sign-up
 provisioning takes ~12 s locally (Tasks schema ~10 s): the §20 schema pool will remove that wait. Not yet: real OTP
 (SMS/WhatsApp/email), Razorpay, CAPTCHA, invoice email/PDF file, daily seat snapshots.
+
+**Status / fixes 2026-10-19 (quality pass after the founder's failed reset):** the founder's reset code was never
+created (the resend throttle answered "Wait a few seconds…", easy to miss), and step 2 moved on without checking the code.
+- Forgot password: the code is checked on its own step (`POST auth/reset/verify`; the server's message on a wrong or
+  expired code, "Ask for a new code" when it is used up); after "Password changed" the person is signed in at once with the
+  new password (choose-company step for several companies; a plain "Sign in" button if that fails). A username / employee
+  ID is told its admin resets it; the email of an admin-made login is told (after the code) to ask its admin; an unknown
+  email gets the same answer until the code, then "no FreeFounders account… sign up instead".
+- Resend: the server returns `retryAfterSeconds` with every "too soon / too many" 429 and says the time in its message;
+  sign-up, forgot and join show a live "You can ask for a new code in 24 s" instead of the vague line, and the resend
+  link counts down from what the server said. Going Back and Continue with the same email / mobile reuses the code
+  already sent (no needless 429). A resend error on the code step was invisible on /forgot: now shown.
+- Sign-up with an existing account (password only) failed with "Enter your name" after the company step: the name is only
+  required for a new account now (sign-up and invites).
+- Billing → GST details could not be saved by an account made with a mobile number (its billing email was null and Save
+  crashed silently): fixed.
+- Invite links say why they do not work (expired / switched off / used up, `GET invites/:token` → `reason`, `message`;
+  410 with the same text); a mistyped link says so; the "not in your plan" message names the app.
+- Seat limit messages by plan: Free ("The Free plan is for up to 3 users… upgrade in Billing"), trial, paid seats.
+- Sign-in: the field says "Email, mobile, username or employee ID"; wrong password: "The email, mobile number, username
+  or password is not right. Check them and try again." The choose-company step is one shared component (sign-in and
+  reset) and says when its 5-minute choice has timed out.
+- "Setting up…" lists only the chosen apps and Admin + Member (not the old Owner/Manager roles), and after 20 s says it
+  can take up to a minute. If an app cannot be set up the person is still signed in with a warning
+  (`setupIncomplete: true`) and the Platform retries the set-up after 30 s, 2 min and 10 min (`company -- sync` remains
+  the fallback).
+- The account menu shows "Owner" for the owner (not the Admin role they also hold); /billing shows "Admin" in the header.
+- Dev only: with `OTP_DEV_ECHO=1` codes asked for from this machine's loopback address are not counted per network (all
+  browser tests come through the dev gateway from one address); production keeps `OTP_IP_LIMIT`.
+- Tests: Platform +4 (reset/verify, retryAfterSeconds, admin-made / unknown / username forgot, existing account without a
+  name) and invite reasons; new `e2e/web-account-flows.spec.ts` (11: mobile sign-up with wrong code / Back / countdown /
+  Tasks only, the same mobile → 2nd company, sign-in by mobile → choose → switch and back → reload → sign out, forgot →
+  signed in, unknown email + live wait, admin-made email 409 path, switched-off / used-up invites, billing FakePay
+  fail / cancel / yearly / seats / cancel→resume / GST with IGST, owner console suspend → reactivate, 390 + 320 px).
+- `company -- reset` deleted the Platform people but left their records in Tasks / Assets when run without the apps'
+  addresses (the documented `npm --prefix services/platform run company -- reset …` sets none): it now uses the
+  `npm run dev` addresses by default and refuses to run if an app of the company has no address. The 28 Tasks users and
+  19 Assets users left behind by such a run were removed.
+- The punch-in e2e tests answer the uniform question when the company asks it (DEMO has "Ask and record" on).
+- Results: Platform 112 pass, core 9, web rules + typecheck + build clean, smoke 10/10, e2e 74: full run 69 pass + the 5
+  punch tests (uniform dialog) pass after that fix (8/8 for web-app-shell + web-hr); DEMO reset to the owner afterwards.
