@@ -78,6 +78,13 @@
       "when": 1792405584746,
       "tag": "0010_two_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792406000000,
+      "tag": "0011_no_signin_lockout",
+      "breakpoints": true
     }
   ]
 }

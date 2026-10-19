@@ -9,7 +9,7 @@ import { createRemoteJWKSet, decodeJwt, decodeProtectedHeader as decodeJwtHeader
 import { pbkdf2Sync } from 'node:crypto';
 import { AuthService, hashPassword } from './auth/auth.service';
 import { redact } from './common/exception.filter';
-import { Throttle } from './auth/throttle';
+import { ipLimit, maxFailedLogins, Throttle } from './auth/throttle';
 import { KeysService } from './keys/keys.service';
 import { TokensService } from './keys/tokens.service';
 import { seed } from './seed';
@@ -249,13 +249,18 @@ describe('login', () => {
     await login('mia');
   });
 
-  test('locks after 5 wrong passwords, even with the right one', async () => {
-    for (let i = 0; i < 5; i++) await call('POST', '/auth/login', { body: { login: 'sam@other.test', password: 'wrong-password' } });
-    const res = await call('POST', '/auth/login', { body: { login: 'sam@other.test', password: PASSWORD } });
-    assert.equal(res.status, 401);
-    assert.match(res.body.message, /Too many/);
-    await dbs.db.update(logins).set({ failedLogins: 0, lockedUntil: null }).where(eq(logins.personId, ids.otherShared));
+  test('no lockout (founder, 2026-10-19): 10 wrong passwords, then the right one signs in', async () => {
+    for (let i = 0; i < 10; i++) {
+      const res = await call('POST', '/auth/login', { body: { login: 'sam@other.test', password: 'wrong-password' } });
+      assert.equal(res.status, 401);
+      assert.doesNotMatch(res.body.message, /Too many/);
+    }
+    const [row] = await dbs.db.select().from(logins).where(eq(logins.personId, ids.otherShared));
+    assert.equal(row.failedLogins, 10, 'still counted, for information');
+    assert.equal(row.lockedUntil, null, 'never locked');
     await login('sam@other.test');
+    const [later] = await dbs.db.select().from(logins).where(eq(logins.personId, ids.otherShared));
+    assert.equal(later.failedLogins, 0);
   });
 
   test('mobile gets the refresh token in the body instead of a cookie', async () => {
@@ -1373,38 +1378,62 @@ describe('security hardening (docs/security/platform.md)', () => {
     return p.id;
   };
 
+  /** The old lockout, turned back on with `LOGIN_MAX_FAILED` (off by default: founder decision 2026-10-19). */
+  const withLockout = async (max: string, fn: () => Promise<void>) => {
+    process.env.LOGIN_MAX_FAILED = max;
+    try {
+      await fn();
+    } finally {
+      delete process.env.LOGIN_MAX_FAILED;
+    }
+  };
+
   after(() => throttle().reset());
 
-  test('parallel wrong passwords cannot get past the 5-try lockout; a lock that ran out starts over', async () => {
-    throttle().reset();
-    const id = await addPerson(ids.acme, 'Rex Racer', 'sec_rex');
-    const answers = await Promise.all(Array.from({ length: 20 }, () => call('POST', '/auth/login', { body: { login: 'sec_rex', password: 'wrong-pass' } })));
-    const checked = answers.filter((a) => a.body.message === WRONG).length;
-    assert.ok(checked <= 5, `at most 5 passwords were checked, not ${checked}`);
-    assert.ok(answers.every((a) => a.status === 401 && (a.body.message === WRONG || a.body.message === LOCKED)));
-    const right = await call('POST', '/auth/login', { body: { login: 'sec_rex', password: PASSWORD } });
-    assert.equal(right.status, 401);
-    assert.equal(right.body.message, LOCKED, 'locked, even with the right password');
-    const [row] = await dbs.db.select().from(logins).where(eq(logins.personId, id));
-    assert.equal(row.failedLogins, 5);
-    assert.ok(row.lockedUntil && row.lockedUntil > new Date());
-    await dbs.db.update(logins).set({ lockedUntil: new Date(Date.now() - 1000) }).where(eq(logins.personId, id));
-    await login('sec_rex');
-    const [later] = await dbs.db.select().from(logins).where(eq(logins.personId, id));
-    assert.equal(later.failedLogins, 0);
-    throttle().reset();
-  });
+  test('LOGIN_MAX_FAILED=3: parallel wrong passwords cannot get past the lockout; a lock that ran out starts over', () =>
+    withLockout('3', async () => {
+      throttle().reset();
+      const id = await addPerson(ids.acme, 'Rex Racer', 'sec_rex');
+      const answers = await Promise.all(Array.from({ length: 20 }, () => call('POST', '/auth/login', { body: { login: 'sec_rex', password: 'wrong-pass' } })));
+      const checked = answers.filter((a) => a.body.message === WRONG).length;
+      assert.ok(checked <= 3, `at most 3 passwords were checked, not ${checked}`);
+      assert.ok(answers.every((a) => a.status === 401 && (a.body.message === WRONG || a.body.message === LOCKED)));
+      const right = await call('POST', '/auth/login', { body: { login: 'sec_rex', password: PASSWORD } });
+      assert.equal(right.status, 401);
+      assert.equal(right.body.message, LOCKED, 'locked, even with the right password');
+      const [row] = await dbs.db.select().from(logins).where(eq(logins.personId, id));
+      assert.equal(row.failedLogins, 3);
+      assert.ok(row.lockedUntil && row.lockedUntil > new Date());
+      await dbs.db.update(logins).set({ lockedUntil: new Date(Date.now() - 1000) }).where(eq(logins.personId, id));
+      await login('sec_rex');
+      const [later] = await dbs.db.select().from(logins).where(eq(logins.personId, id));
+      assert.equal(later.failedLogins, 0);
+      throttle().reset();
+    }));
 
-  test('a name that matches nobody answers exactly like a real account, "too many" included', async () => {
+  test('LOGIN_MAX_FAILED=3: a name that matches nobody answers exactly like a real account, "too many" included', () =>
+    withLockout('3', async () => {
+      throttle().reset();
+      const answers: Res[] = [];
+      for (let i = 0; i < 4; i++) answers.push(await call('POST', '/auth/login', { body: { login: 'nobody-at-all', password: 'wrong-pass' } }));
+      assert.deepEqual(
+        answers.slice(0, 3).map((a) => a.body.message),
+        Array(3).fill(WRONG),
+      );
+      assert.equal(answers[3].status, 401);
+      assert.equal(answers[3].body.message, LOCKED);
+      throttle().reset();
+    }));
+
+  test('by default a name that matches nobody never answers "too many", like a real account', async () => {
     throttle().reset();
-    const answers: Res[] = [];
-    for (let i = 0; i < 6; i++) answers.push(await call('POST', '/auth/login', { body: { login: 'nobody-at-all', password: 'wrong-pass' } }));
-    assert.deepEqual(
-      answers.slice(0, 5).map((a) => a.body.message),
-      Array(5).fill(WRONG),
-    );
-    assert.equal(answers[5].status, 401);
-    assert.equal(answers[5].body.message, LOCKED);
+    assert.equal(maxFailedLogins(), 0, 'no lockout by default');
+    assert.equal(ipLimit(), 1000, 'bot guard: 1000 failed sign-ins per network per 15 minutes');
+    for (let i = 0; i < 10; i++) {
+      const res = await call('POST', '/auth/login', { body: { login: 'nobody-at-all', password: 'wrong-pass' } });
+      assert.equal(res.status, 401);
+      assert.equal(res.body.message, WRONG);
+    }
     throttle().reset();
   });
 
@@ -1417,7 +1446,7 @@ describe('security hardening (docs/security/platform.md)', () => {
       }
       const next = await call('POST', '/auth/login', { body: { login: 'mia', password: PASSWORD } });
       assert.equal(next.status, 429);
-      assert.match(next.body.message, /Too many sign-in attempts/);
+      assert.equal(next.body.message, 'Too many sign-in attempts from this network. Wait a few minutes.');
     } finally {
       delete process.env.LOGIN_IP_LIMIT;
       throttle().reset();
@@ -1425,16 +1454,17 @@ describe('security hardening (docs/security/platform.md)', () => {
     await login('mia');
   });
 
-  test('change password: a stolen access token cannot be used to guess the current password', async () => {
-    throttle().reset();
-    const mia = await login('mia');
-    for (let i = 0; i < 5; i++) {
-      assert.equal((await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: `guess-${i}`, newPassword: 'Another@123' } })).status, 400);
-    }
-    const blocked = await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: PASSWORD, newPassword: 'Another@123' } });
-    assert.equal(blocked.status, 429, 'refused even with the right password');
-    throttle().reset();
-  });
+  test('LOGIN_MAX_FAILED=3, change password: a stolen access token cannot be used to guess the current password', () =>
+    withLockout('3', async () => {
+      throttle().reset();
+      const mia = await login('mia');
+      for (let i = 0; i < 3; i++) {
+        assert.equal((await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: `guess-${i}`, newPassword: 'Another@123' } })).status, 400);
+      }
+      const blocked = await call('POST', '/auth/change-password', { token: mia.token, body: { currentPassword: PASSWORD, newPassword: 'Another@123' } });
+      assert.equal(blocked.status, 429, 'refused even with the right password');
+      throttle().reset();
+    }));
 
   test('sign out, "sign out everywhere" and a password reset end Platform access at once, not after 15 minutes', async () => {
     const a = await login('mia');

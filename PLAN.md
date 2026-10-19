@@ -1857,6 +1857,7 @@ Founder answers to the open items of §19.21 (details, rules and test names in `
 - Not chosen now: one-time setup link, authenticator OTP, "sign out everywhere" screen. Live-server checklist (S3,
   enforced CSP, fixed app server address) comes with the AWS phase.
 - Platform migration 0008 removes the old forms/ideas grants (§19.23).
+- No sign-in lockout (founder, 2026-10-19): unlimited tries; only a per-network bot guard (1000 / 15 min); `LOGIN_MAX_FAILED` turns the lock back on.
 
 ### 19.25 Colours: indigo + emerald (light), graphite + lime (dark); phone layout (2026-10-13)
 Founder: "use graphite and lime for dark mode and [indigo + emerald] for light mode"; "every company can set its colour of

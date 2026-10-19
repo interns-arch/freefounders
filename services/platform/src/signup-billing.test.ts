@@ -326,12 +326,27 @@ describe('accounts in several companies (PLAN.md §21)', () => {
     await dbs.db.update(accounts).set({ passwordHash: await hashPassword(PASSWORD) }).where(eq(accounts.email, 'multi@co.test'));
   });
 
-  test('account lockout: 5 wrong passwords lock it, like admin-made logins', async () => {
+  test('no account lockout (founder, 2026-10-19): 10 wrong passwords, then the right one signs in', async () => {
     await signup('lock@co.test', { name: 'Lock Co' });
-    for (let i = 0; i < 5; i++) assert.equal((await login('lock@co.test', 'Wrong@pass1')).status, 401);
-    const locked = await login('lock@co.test');
-    assert.equal(locked.status, 401);
-    assert.match(locked.body.message, /Too many failed attempts/);
+    for (let i = 0; i < 10; i++) {
+      const res = await login('lock@co.test', 'Wrong@pass1');
+      assert.equal(res.status, 401);
+      assert.doesNotMatch(res.body.message, /Too many/);
+    }
+    assert.equal((await login('lock@co.test')).status, 200);
+  });
+
+  test('LOGIN_MAX_FAILED=3: the old account lockout still works', async () => {
+    await signup('lock3@co.test', { name: 'Lock Three Co' });
+    process.env.LOGIN_MAX_FAILED = '3';
+    try {
+      for (let i = 0; i < 3; i++) assert.equal((await login('lock3@co.test', 'Wrong@pass1')).status, 401);
+      const locked = await login('lock3@co.test');
+      assert.equal(locked.status, 401);
+      assert.match(locked.body.message, /Too many failed attempts/);
+    } finally {
+      delete process.env.LOGIN_MAX_FAILED;
+    }
   });
 
   test('change password for an account: one password for all its companies', async () => {

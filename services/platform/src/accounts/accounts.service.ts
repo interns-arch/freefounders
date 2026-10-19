@@ -107,7 +107,7 @@ export class AccountsService {
   }
 
   /**
-   * Step 1 of using a sign-up token (outside any transaction, so a wrong password still counts towards the lockout):
+   * Step 1 of using a sign-up token (outside any transaction, so a wrong password still counts towards the lockout when `LOGIN_MAX_FAILED` is on):
    * the identifier it proves, and the existing account, whose password must be right. A new account's password is checked.
    */
   async checkSignup(signupToken: string, password: string, ip?: string): Promise<{ id: Identifier; existing?: AccountRow }> {

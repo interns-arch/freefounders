@@ -11,13 +11,13 @@ import { TicketsService } from '../accounts/otp.service';
 import { billingSummary, isReadOnly, paymentRequired, SUSPENDED_MESSAGE } from '../billing/seats';
 import { heldAccess, platformPermissionsOf } from '../roles/platform-permissions';
 import { ACCESS_TTL_SECONDS, TokensService } from '../keys/tokens.service';
-import { ipLimit, NAME_LIMIT, Throttle } from './throttle';
+import { IP_LIMIT_MESSAGE, ipLimit, maxFailedLogins, Throttle } from './throttle';
 
 /** "Stay signed in": a refresh session lives until it goes unused this long (founder decision: 1 year). */
 export const REFRESH_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 /** Two tabs refreshing at once both present the same token; the slower one is not treated as theft. */
 const ROTATION_GRACE_MS = 60 * 1000;
-const MAX_FAILED_LOGINS = 5;
+/** Lock period when `LOGIN_MAX_FAILED` > 0 (off by default: founder decision 2026-10-19, unlimited tries). */
 const LOCK_MS = 15 * 60 * 1000;
 /** An account with several companies picks one within this time (PLAN.md §21.2). */
 const CHOOSE_TTL_MS = 5 * 60 * 1000;
@@ -156,9 +156,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   async login(input: string, password: string, meta: Meta): Promise<(Issued & { mustChangePassword: boolean }) | ChooseCompany> {
     const db = this.dbs.db;
     const ipKey = `ip:${meta.ip ?? 'unknown'}`;
-    if (this.throttle.blocked(ipKey, ipLimit())) {
-      throw new HttpException('Too many sign-in attempts from your network. Try again in a few minutes.', 429);
-    }
+    if (this.throttle.blocked(ipKey, ipLimit())) throw new HttpException(IP_LIMIT_MESSAGE, 429);
     // An account's email or mobile number (PLAN.md §21) comes first; everything else is an admin-made login as before.
     const ident = normaliseIdentifier(input);
     if (ident) {
@@ -172,41 +170,54 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     const found = await this.findLogin(input);
 
     if (!found || found.person.status !== 'active' || found.companyStatus !== 'active') {
-      // No usable account: same work and same answers (incl. "too many" after 5 tries) as a real one, so nobody can tell.
+      // No usable account: same work and same answers as a real one (incl. "too many" when the lockout is on), so nobody can tell.
       await verifyPassword(await this.dummyHash, password);
       this.throttle.fail(ipKey);
-      const nameKey = `name:${input.trim().toLowerCase()}`;
-      if (this.throttle.blocked(nameKey, NAME_LIMIT)) throw new UnauthorizedException(LOCKED);
-      this.throttle.fail(nameKey);
+      const max = maxFailedLogins();
+      if (max > 0) {
+        const nameKey = `name:${input.trim().toLowerCase()}`;
+        if (this.throttle.blocked(nameKey, max)) throw new UnauthorizedException(LOCKED);
+        this.throttle.fail(nameKey);
+      }
       throw new UnauthorizedException(WRONG);
     }
     const { login, person } = found;
+    const max = maxFailedLogins();
 
-    // Claim one attempt atomically BEFORE checking the password, so parallel guesses cannot get past the limit: at most
-    // MAX_FAILED_LOGINS checks per lock period, however many requests arrive at once. A lock that has run out starts over.
-    const [claim] = await db
-      .update(logins)
-      .set({
-        failedLogins: sql`case when ${logins.lockedUntil} is not null and ${logins.lockedUntil} <= now() then 1 else ${logins.failedLogins} + 1 end`,
-        lockedUntil: sql`case when ${logins.lockedUntil} <= now() then null else ${logins.lockedUntil} end`,
-      })
-      .where(
-        and(
-          eq(logins.personId, person.id),
-          or(and(isNull(logins.lockedUntil), lt(logins.failedLogins, MAX_FAILED_LOGINS)), lte(logins.lockedUntil, sql`now()`)),
-        ),
-      )
-      .returning({ failed: logins.failedLogins });
-    if (!claim) {
-      this.throttle.fail(ipKey);
-      throw new UnauthorizedException(LOCKED);
-    }
-    if (!(await verifyPassword(login.passwordHash, password))) {
-      this.throttle.fail(ipKey);
-      if (claim.failed >= MAX_FAILED_LOGINS) {
-        await db.update(logins).set({ lockedUntil: new Date(Date.now() + LOCK_MS) }).where(eq(logins.personId, person.id));
+    if (!max) {
+      // No lockout (default): unlimited tries. Wrong passwords are still counted, for information only.
+      if (!(await verifyPassword(login.passwordHash, password))) {
+        this.throttle.fail(ipKey);
+        await db.update(logins).set({ failedLogins: sql`${logins.failedLogins} + 1` }).where(eq(logins.personId, person.id));
+        throw new UnauthorizedException(WRONG);
       }
-      throw new UnauthorizedException(WRONG);
+    } else {
+      // Claim one attempt atomically BEFORE checking the password, so parallel guesses cannot get past the limit: at most
+      // `max` checks per lock period, however many requests arrive at once. A lock that has run out starts over.
+      const [claim] = await db
+        .update(logins)
+        .set({
+          failedLogins: sql`case when ${logins.lockedUntil} is not null and ${logins.lockedUntil} <= now() then 1 else ${logins.failedLogins} + 1 end`,
+          lockedUntil: sql`case when ${logins.lockedUntil} <= now() then null else ${logins.lockedUntil} end`,
+        })
+        .where(
+          and(
+            eq(logins.personId, person.id),
+            or(and(isNull(logins.lockedUntil), lt(logins.failedLogins, max)), lte(logins.lockedUntil, sql`now()`)),
+          ),
+        )
+        .returning({ failed: logins.failedLogins });
+      if (!claim) {
+        this.throttle.fail(ipKey);
+        throw new UnauthorizedException(LOCKED);
+      }
+      if (!(await verifyPassword(login.passwordHash, password))) {
+        this.throttle.fail(ipKey);
+        if (claim.failed >= max) {
+          await db.update(logins).set({ lockedUntil: new Date(Date.now() + LOCK_MS) }).where(eq(logins.personId, person.id));
+        }
+        throw new UnauthorizedException(WRONG);
+      }
     }
 
     // A password imported from Tasks (Django PBKDF2) is upgraded to argon2id now that we know it.
@@ -231,8 +242,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Sign-in with an account (PLAN.md §21): the same lockout as admin-made logins (5 tries per 15 minutes, claimed
-   * atomically before the password is checked), then one company → tokens, several → a choice with a 5-minute ticket.
+   * Sign-in with an account (PLAN.md §21): the same password rules as admin-made logins (no lockout unless
+   * `LOGIN_MAX_FAILED` is set), then one company → tokens, several → a choice with a 5-minute ticket.
    */
   private async loginAccount(account: typeof accounts.$inferSelect, password: string, meta: Meta, ipKey: string): Promise<(Issued & { mustChangePassword: boolean }) | ChooseCompany> {
     await this.verifyAccountPassword(account, password, ipKey);
@@ -248,19 +259,30 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * An account's password, with the lockout of admin-made logins (one try claimed atomically first; 5 wrong → 15
-   * minutes) and the per-IP limit. Used by sign-in, and by sign-up / invites when the account already exists.
+   * An account's password, with the per-IP bot guard. Unlimited tries by default; with `LOGIN_MAX_FAILED` > 0 the
+   * lockout of admin-made logins (one try claimed atomically first; that many wrong → 15 minutes).
+   * Used by sign-in, and by sign-up / invites when the account already exists.
    */
   async verifyAccountPassword(account: typeof accounts.$inferSelect, password: string, ipKey: string) {
-    if (this.throttle.blocked(ipKey, ipLimit())) throw new HttpException('Too many sign-in attempts from your network. Try again in a few minutes.', 429);
+    if (this.throttle.blocked(ipKey, ipLimit())) throw new HttpException(IP_LIMIT_MESSAGE, 429);
     const db = this.dbs.db;
+    const max = maxFailedLogins();
+    if (!max) {
+      if (!(await verifyPassword(account.passwordHash, password))) {
+        this.throttle.fail(ipKey);
+        await db.update(accounts).set({ failedLogins: sql`${accounts.failedLogins} + 1` }).where(eq(accounts.id, account.id));
+        throw new UnauthorizedException(WRONG);
+      }
+      await db.update(accounts).set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(accounts.id, account.id));
+      return;
+    }
     const [claim] = await db
       .update(accounts)
       .set({
         failedLogins: sql`case when ${accounts.lockedUntil} is not null and ${accounts.lockedUntil} <= now() then 1 else ${accounts.failedLogins} + 1 end`,
         lockedUntil: sql`case when ${accounts.lockedUntil} <= now() then null else ${accounts.lockedUntil} end`,
       })
-      .where(and(eq(accounts.id, account.id), or(and(isNull(accounts.lockedUntil), lt(accounts.failedLogins, MAX_FAILED_LOGINS)), lte(accounts.lockedUntil, sql`now()`))))
+      .where(and(eq(accounts.id, account.id), or(and(isNull(accounts.lockedUntil), lt(accounts.failedLogins, max)), lte(accounts.lockedUntil, sql`now()`))))
       .returning({ failed: accounts.failedLogins });
     if (!claim) {
       this.throttle.fail(ipKey);
@@ -268,7 +290,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     }
     if (!(await verifyPassword(account.passwordHash, password))) {
       this.throttle.fail(ipKey);
-      if (claim.failed >= MAX_FAILED_LOGINS) await db.update(accounts).set({ lockedUntil: new Date(Date.now() + LOCK_MS) }).where(eq(accounts.id, account.id));
+      if (claim.failed >= max) await db.update(accounts).set({ lockedUntil: new Date(Date.now() + LOCK_MS) }).where(eq(accounts.id, account.id));
       throw new UnauthorizedException(WRONG);
     }
     await db.update(accounts).set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(accounts.id, account.id));
@@ -498,9 +520,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
   async changePassword(caller: Caller, currentPassword: string, newPassword: string) {
     const db = this.dbs.db;
-    // A stolen access token must not become a way to guess the current password (and then take the account over).
+    // With `LOGIN_MAX_FAILED` > 0 a stolen access token cannot be used to guess the current password quickly. Off by
+    // default (founder decision 2026-10-19: unlimited tries), like the sign-in lockout.
     const key = `pw:${caller.personId}`;
-    if (this.throttle.blocked(key, MAX_FAILED_LOGINS)) throw new HttpException('Too many wrong passwords. Try again in a few minutes.', 429);
+    if (this.throttle.blocked(key, maxFailedLogins())) throw new HttpException('Too many wrong passwords. Try again in a few minutes.', 429);
     const [person] = await db.select({ accountId: people.accountId }).from(people).where(eq(people.id, caller.personId)).limit(1);
     if (person?.accountId) return this.changeAccountPassword(caller, person.accountId, currentPassword, newPassword, key);
     const [login] = await db.select().from(logins).where(eq(logins.personId, caller.personId)).limit(1);
