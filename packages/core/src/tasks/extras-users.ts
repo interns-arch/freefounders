@@ -91,7 +91,8 @@ export interface ManagedUserInput {
   email: string;
   first_name: string;
   last_name: string;
-  role: string;
+  /** Not sent by the web app: roles come from the Platform (PLAN.md §19.28). */
+  role?: string;
   whatsapp_phone: string;
   password?: string;
 }

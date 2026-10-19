@@ -1,24 +1,28 @@
 import { ApiError, type AppKey, errorMessage, usePlatformMe } from '@freefounders/core';
 import {
   APP_NAMES,
+  ADMIN_ROLE,
   type AppInfo,
   type DeleteOptions,
   type ExitResult,
+  GRANT_APP_NAMES,
+  MEMBER_ROLE,
   type Person,
   type PlatformRole,
   PLATFORM_ROLE_LABELS,
   type Role,
   roleApps,
   roleLimits,
-  SUPER_ADMIN_ROLE,
   PLATFORM_PASSWORD_MIN,
   useCompanySettings,
   useCreatePerson,
   useDeletePerson,
   useDepartments,
   usePeople,
+  usePersonAccess,
   useResetLogin,
   useRoleCatalogue,
+  useSetPersonLevel,
   useSetPersonRoles,
   useStartExit,
   useUpdatePerson,
@@ -36,6 +40,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { AppChip, ErrorNote, Pill } from './parts';
+import { RoleEditor } from './role-editor';
 
 // ─── Add / edit a person ──────────────────────────────────────────────────
 
@@ -79,6 +84,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
   const [error, setError] = useState('');
   const create = useCreatePerson();
   const update = useUpdatePerson();
+  const setLevel = useSetPersonLevel();
   // People directory (PLAN.md §17.1): the company's departments, and who this person can report to.
   const depts = useDepartments();
   const everyone = usePeople('');
@@ -111,7 +117,15 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
     } else {
       create.mutate(
         { ...fields, ...(f.withLogin ? { login: { username: f.username || undefined, password: f.password || undefined } } : {}) },
-        { onSuccess: (res) => onCreated({ person: res.person, username: f.username || null, generatedPassword: res.generatedPassword }), onError: fail },
+        {
+          onSuccess: (res) => {
+            const done = () => onCreated({ person: res.person, username: f.username || null, generatedPassword: res.generatedPassword });
+            // Everyone starts with a built-in role (PLAN.md §19.28): Admin is given by the API, Member here.
+            if (f.platformRole !== 'member') return done();
+            setLevel.mutate({ id: res.person.id, level: 'member' }, { onSettled: done, onError: (err) => toast.error(`Added, but not given Member: ${errorMessage(err)}`) });
+          },
+          onError: fail,
+        },
       );
     }
   };
@@ -127,9 +141,9 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
       title={person ? `Edit ${person.fullName}` : 'Add person'}
       description={person ? undefined : 'They can sign in with their email, employee ID or username.'}
       onSubmit={submit}
-      submitting={create.isPending || update.isPending}
+      submitting={create.isPending || update.isPending || setLevel.isPending}
       errors={errors}
-      errorLabels={{ fullName: 'Full name', email: 'Email', employeeCode: 'Employee ID', mobile: 'Mobile', platformRole: 'Access level', departmentId: 'Department', designation: 'Designation', reportsTo: 'Reports to', joinDate: 'Joining date', 'login.username': 'Username', 'login.password': 'Password' }}
+      errorLabels={{ fullName: 'Full name', email: 'Email', employeeCode: 'Employee ID', mobile: 'Mobile', platformRole: 'Role', departmentId: 'Department', designation: 'Designation', reportsTo: 'Reports to', joinDate: 'Joining date', 'login.username': 'Username', 'login.password': 'Password' }}
     >
       <FormSection title="Who they are">
         <Field label="Full name" required htmlFor="pf-name" error={errors.fullName}>
@@ -145,7 +159,12 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
           <Field label="Mobile" htmlFor="pf-mobile" error={errors.mobile}>
             <Input id="pf-mobile" name="mobile" value={f.mobile} onChange={set('mobile')} inputMode="tel" />
           </Field>
-          <Field label="Access level" htmlFor="pf-level" error={errors.platformRole} hint={levelLocked ? undefined : 'Admins can manage people, roles and settings.'}>
+          <Field
+            label="Role"
+            htmlFor="pf-level"
+            error={errors.platformRole}
+            hint={levelLocked ? undefined : 'Admin: everything except billing. Member: their own tasks, attendance, leave and requests. Fine-tune in Access.'}
+          >
             <NativeSelect id="pf-level" name="platformRole" value={f.platformRole} onChange={set('platformRole')} disabled={levelLocked}>
               {levelOptions.map((l) => (
                 <option key={l} value={l}>
@@ -223,30 +242,51 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
   );
 }
 
-// ─── Change roles ─────────────────────────────────────────────────────────
+// ─── Access: roles, Make Admin / Make Member, extra access and responsibilities ───
 
+/**
+ * A person's access (PLAN.md §19.28): their roles (Admin or Member, plus any made in the role builder) with a one-click
+ * "Make Admin" / "Make Member", their own extra permissions and responsibilities (the same picker as the role editor),
+ * and what all of it adds up to. The owner can always do everything.
+ */
 export function PersonRolesDialog({
   person,
   roles,
   apps,
   myRole,
+  myId,
   onClose,
 }: {
   person: Person;
   roles: Role[];
   apps: AppInfo[];
   myRole: PlatformRole;
+  myId?: string;
   onClose: () => void;
 }) {
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(person.roleIds));
   const [error, setError] = useState('');
+  const [editingExtra, setEditingExtra] = useState(false);
   const save = useSetPersonRoles();
+  const setLevel = useSetPersonLevel();
+  const access = usePersonAccess(person.id);
+  const catalogue = useRoleCatalogue();
   // Only what I have myself, at no higher level (the owner: everything; the Platform checks the same, R1).
-  const limits = roleLimits(usePlatformMe().data, useRoleCatalogue().data);
+  const limits = roleLimits(usePlatformMe().data, catalogue.data);
   const inPlan = new Set(apps.map((a) => a.app));
   // The apps the roles open (the Admin workspace is not an app to open).
   const reach = [...new Set(roles.filter((r) => chosen.has(r.id)).flatMap((r) => roleApps(r)))].filter((a): a is (typeof apps)[number]['app'] => (inPlan as Set<string>).has(a));
   const first = person.fullName.split(' ')[0];
+  const admin = roles.find((r) => r.code === ADMIN_ROLE);
+  const member = roles.find((r) => r.code === MEMBER_ROLE);
+  const isOwner = person.platformRole === 'owner';
+  const isAdmin = !!admin && person.roleIds.includes(admin.id);
+  const self = person.id === myId;
+  // Admin is Admin-level: only owners and admins (who hold it) give it; nobody but the owner changes an owner.
+  const adminProblem = isOwner && myRole !== 'owner' ? 'Only an owner can change an owner' : admin && !isAdmin ? limits.roleProblem(admin, 'give') : null;
+  const memberProblem = isOwner && myRole !== 'owner' ? 'Only an owner can change an owner' : self && myRole !== 'owner' ? 'You cannot take away your own Admin role' : null;
+  const extraCount = (access.data?.adds.length ?? 0) + (access.data?.extra.duties.length ?? 0);
+  const busy = save.isPending || setLevel.isPending;
 
   const toggle = (id: string) =>
     setChosen((prev) => {
@@ -255,20 +295,52 @@ export function PersonRolesDialog({
       else next.add(id);
       return next;
     });
+  const quick = (level: 'admin' | 'member') => {
+    setError('');
+    setLevel.mutate({ id: person.id, level }, { onSuccess: onClose, onError: (err) => setError(errorMessage(err)) });
+  };
+
+  if (editingExtra && access.data && catalogue.data) {
+    return <RoleEditor role={null} catalogue={catalogue.data} limits={limits} personal={{ name: person.fullName, access: access.data }} onClose={() => setEditingExtra(false)} />;
+  }
+
+  const byApp = (grants: { app: string }[]) =>
+    Object.entries(grants.reduce<Record<string, number>>((acc, g) => ({ ...acc, [g.app]: (acc[g.app] ?? 0) + 1 }), {}))
+      .map(([app, n]) => `${GRANT_APP_NAMES[app as keyof typeof GRANT_APP_NAMES] ?? app} ${n}`)
+      .join(' · ');
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Roles of {person.fullName}</DialogTitle>
-          <DialogDescription>Pick one or more roles. Their permissions add up; the widest scope wins.</DialogDescription>
+          <DialogDescription>
+            {isOwner ? `${first} is an owner: full access in every app, always. ` : ''}Pick one or more roles; their permissions add up and the widest scope wins.
+          </DialogDescription>
         </DialogHeader>
-        <ul className="max-h-[50vh] divide-y overflow-y-auto rounded-lg border scrollbar-thin">
+        {member && admin && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" disabled={busy || isAdmin || !!adminProblem} title={adminProblem ?? undefined} onClick={() => quick('admin')}>
+              Make Admin
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || (!isAdmin && person.roleIds.includes(member.id)) || !!memberProblem}
+              title={memberProblem ?? undefined}
+              onClick={() => quick('member')}
+            >
+              Make Member
+            </Button>
+            <span className="text-xs text-muted-foreground">Admin replaces Member (and the other way round); other roles stay.</span>
+          </div>
+        )}
+        <ul className="max-h-[40vh] divide-y overflow-y-auto rounded-lg border scrollbar-thin">
           {roles.map((r) => {
-            // Only an owner gives or takes Super Admin; anyone else gives only roles within their own powers (taking one away is fine).
+            // Anyone but the owner gives only roles within their own powers (taking one away is fine).
             const held = person.roleIds.includes(r.id);
             const problem = held ? null : limits.roleProblem(r, 'give');
-            const lockedForMe = (r.code === SUPER_ADMIN_ROLE && myRole !== 'owner') || !!problem;
+            const lockedForMe = !!problem || (isOwner && myRole !== 'owner');
             const id = `role-pick-${r.id}`;
             return (
               <li key={r.id} className={cn('flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40', chosen.has(r.id) && 'bg-accent/40')}>
@@ -281,7 +353,7 @@ export function PersonRolesDialog({
                     </span>
                   )}
                 </Label>
-                {r.system && <Pill tone="admin">Locked</Pill>}
+                {r.system && <Pill tone="admin">Built in</Pill>}
                 <span className="flex gap-1">
                   {roleApps(r).map((a) => (
                     <AppChip key={a} app={a} />
@@ -291,9 +363,42 @@ export function PersonRolesDialog({
             );
           })}
         </ul>
+        <section aria-label="Extra access and responsibilities" className="space-y-2 rounded-lg border p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-bold">Extra access and responsibilities</h3>
+              <p className="text-xs text-muted-foreground">
+                {access.isLoading
+                  ? 'Loading…'
+                  : extraCount
+                    ? `${access.data?.adds.length ?? 0} extra permission(s) and ${access.data?.extra.duties.length ?? 0} responsibilit${access.data?.extra.duties.length === 1 ? 'y' : 'ies'} for ${first} only.`
+                    : `Nothing extra: ${first} has exactly what their roles give.`}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!access.data || !catalogue.data || (isOwner && myRole !== 'owner') || (self && myRole !== 'owner')}
+              title={self && myRole !== 'owner' ? 'You cannot give yourself extra access' : undefined}
+              onClick={() => setEditingExtra(true)}
+            >
+              {extraCount ? 'Edit extra access' : 'Add extra access'}
+            </Button>
+          </div>
+          {access.data && (
+            <p className="text-xs text-muted-foreground" aria-label="Effective access">
+              <span className="font-semibold text-foreground">From roles:</span> {access.data.owner ? 'everything (owner)' : byApp(access.data.fromRoles) || 'nothing'}
+              {access.data.adds.length > 0 && (
+                <>
+                  {' · '}
+                  <span className="font-semibold text-foreground">Extra:</span> {byApp(access.data.adds)}
+                </>
+              )}
+            </p>
+          )}
+        </section>
         <p className={cn('rounded-md border px-3 py-2 text-xs', reach.length ? 'border-success/25 bg-success/8 text-success' : 'border-warning/30 bg-warning/8 text-warning')}>
-          {reach.length ? `${first} will be able to open: ${reach.map((a) => APP_NAMES[a]).join(', ')}.` : `${first} will not be able to open any app.`} Losing an app signs them
-          out.
+          {reach.length ? `${first} will be able to open: ${reach.map((a) => APP_NAMES[a]).join(', ')}.` : `${first} will not be able to open any app.`} Losing an app signs them out.
         </p>
         <ErrorNote>{error}</ErrorNote>
         <DialogFooter>
@@ -302,6 +407,7 @@ export function PersonRolesDialog({
           </Button>
           <Button
             loading={save.isPending}
+            disabled={busy}
             onClick={() => {
               setError('');
               save.mutate({ id: person.id, roleIds: [...chosen] }, { onSuccess: onClose, onError: (err) => setError(errorMessage(err)) });

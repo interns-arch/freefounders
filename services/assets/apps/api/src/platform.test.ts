@@ -5,7 +5,7 @@ import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import type { INestApplication } from '@nestjs/common';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, isNull, sql } from 'drizzle-orm';
 import { exportJWK, SignJWT } from 'jose';
 import { type Permission, SYSTEM_ROLES } from '@eam/shared';
 import { DbService } from './db/db.service';
@@ -327,6 +327,9 @@ describe('roles from the FreeFounders role builder', () => {
     const [mgr] = await dbs.root.select().from(roles).where(eq(roles.id, ids.managerRole));
     assert.equal(mgr.platformRoleId, managerId);
     assert.deepEqual([...mgr.permissions].sort(), ['asset:view', 'request:approve']);
+    // This app's own starter roles are not used under the Platform (PLAN.md §19.28): archived on a full push.
+    const own = await dbs.root.select().from(roles).where(isNull(roles.platformRoleId));
+    assert.ok(own.length > 0 && own.every((r) => r.archived), JSON.stringify(own.map((r) => [r.name, r.archived])));
     const exported = await call('GET', '/internal/access', await service());
     assert.equal(exported.body.version, 20);
     assert.ok(exported.body.roles.some((r: { name: string }) => r.name === 'Manager'));

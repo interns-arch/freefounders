@@ -91,7 +91,8 @@ test('admins manage people', async ({ page }) => {
   await page.getByRole('button', { name: /People & access/ }).click();
   await expect(page.getByRole('heading', { name: 'People & access' })).toBeVisible();
   await expect(page.getByRole('row', { name: /Demo Owner/ })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Roles of Demo Owner' })).toContainText('Super Admin');
+  // The owner holds the built-in Admin role; Owner is a mark on the person, not a listed role (PLAN.md §19.28).
+  await expect(page.getByRole('cell', { name: 'Roles of Demo Owner' })).toContainText('Admin');
   await expect(page.getByRole('cell', { name: 'Apps of Demo Owner' })).toContainText('Tasks');
   await shot(page, '5-people');
   await page.getByRole('button', { name: 'Add person' }).click();
@@ -155,7 +156,10 @@ test('admins build a role and give it to someone; it reaches Tasks', async ({ pa
   await signIn(page);
   await page.getByRole('button', { name: /^Roles/ }).click();
   await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible();
-  await expect(page.getByRole('row', { name: /Super Admin.*Locked/ })).toBeVisible();
+  // Two built-in roles, editable but not deletable (PLAN.md §19.28).
+  await expect(page.getByRole('row', { name: /^Admin.*Built in/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /^Member.*Built in/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Super Admin/ })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'New role' }).click();
   const editor = page.getByRole('dialog', { name: 'New role' });

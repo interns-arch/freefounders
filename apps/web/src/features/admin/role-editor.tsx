@@ -10,11 +10,13 @@ import {
   type GrantApp,
   LEVEL_HINTS,
   LEVEL_LABELS,
+  type PersonAccess,
   type Role,
   type RoleLimits,
   type Scope,
   SCOPE_LABELS,
   useSaveRole,
+  useSetPersonalAccess,
   WEEKDAYS,
 } from '@freefounders/core/admin';
 import { ChevronDown, Plus, Trash2 } from '@/components/icons';
@@ -36,11 +38,12 @@ const matches = (p: CataloguePermission, term: string) =>
   !term || `${p.label} ${p.description ?? ''} ${p.group} ${p.key}`.toLowerCase().includes(term);
 
 /**
- * New role / Edit <role> / view the locked Owner role (PLAN.md §15, §19.19): name, level (with what it really does),
- * every permission of every app grouped like the menus (search, select all / clear per app and per group, a line
- * under each permission, a scope next to the scoped ones), and duties. A new role starts blank or as a copy of another.
- * Someone who is not the owner can tick only what they have themselves, at no wider scope or higher level (R1): the
- * rest is shown disabled with the reason. `lockedReason`: a role beyond them, shown read-only.
+ * New role / Edit <role> (PLAN.md §15, §19.19, §19.28): name, level (with what it really does), every permission of
+ * every app grouped like the menus (search, select all / clear per app and per group, a line under each permission, a
+ * scope next to the scoped ones), and duties. A new role starts blank or as a copy of another. The built-in Admin and
+ * Member keep their name and level. Someone who is not the owner can tick only what they have themselves, at no wider
+ * scope or higher level (R1): the rest is shown disabled with the reason. `lockedReason`: a role beyond them, shown
+ * read-only. `personal`: the same picker for one person's extra access and own duties (no name or level).
  */
 export function RoleEditor({
   role,
@@ -48,6 +51,7 @@ export function RoleEditor({
   roles = [],
   limits,
   lockedReason,
+  personal,
   onClose,
 }: {
   role: Role | null;
@@ -55,15 +59,18 @@ export function RoleEditor({
   roles?: Role[];
   limits: RoleLimits;
   lockedReason?: string | null;
+  /** Extra access for one person: their name and current access (PLAN.md §19.28). */
+  personal?: { name: string; access: PersonAccess };
   onClose: () => void;
 }) {
-  const locked = !!role?.system || !!lockedReason;
+  const locked = !!lockedReason;
+  const builtIn = !!role?.system;
   const [name, setName] = useState(role?.name ?? '');
   const [nameError, setNameError] = useState('');
   const [description, setDescription] = useState(role?.description ?? '');
   const [level, setLevel] = useState(role?.level ?? 1);
-  const [grants, setGrants] = useState<Map<string, Grant>>(() => new Map((role?.grants ?? []).map((g) => [key(g), g])));
-  const [duties, setDuties] = useState<Duty[]>(() => role?.duties ?? []);
+  const [grants, setGrants] = useState<Map<string, Grant>>(() => new Map((personal?.access.extra.grants ?? role?.grants ?? []).map((g) => [key(g), g])));
+  const [duties, setDuties] = useState<Duty[]>(() => personal?.access.extra.duties ?? role?.duties ?? []);
   const [copiedFrom, setCopiedFrom] = useState('');
   const [copyNote, setCopyNote] = useState('');
   const [search, setSearch] = useState('');
@@ -71,6 +78,9 @@ export function RoleEditor({
   const [error, setError] = useState('');
   const nameRef = useRef<HTMLInputElement>(null);
   const save = useSaveRole();
+  const savePersonal = useSetPersonalAccess();
+  const saving = save.isPending || savePersonal.isPending;
+  const fromRoles = useMemo(() => new Map((personal?.access.fromRoles ?? []).map((g) => [key(g), g])), [personal]);
   const term = search.trim().toLowerCase();
 
   const apps = useMemo(
@@ -137,7 +147,7 @@ export function RoleEditor({
       if (scope !== g.scope) left++;
       kept.set(key(g), { ...g, scope });
     }
-    const wanted = from.system ? 3 : from.level;
+    const wanted = from.level;
     const allowed = [3, 2, 1].find((l) => l <= wanted && limits.levelAllowed(l, 'edit')) ?? 1;
     setGrants(kept);
     setLevel(allowed);
@@ -147,6 +157,15 @@ export function RoleEditor({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (locked) return;
+    const cleanDuties = duties.map((d) => ({ ...d, steps: d.steps.map((st) => st.trim()).filter(Boolean) }));
+    if (personal) {
+      setError('');
+      savePersonal.mutate(
+        { id: personal.access.personId, grants: [...grants.values()].filter((g) => known.has(key(g))), duties: cleanDuties },
+        { onSuccess: onClose, onError: (err) => setError(errorMessage(err)) },
+      );
+      return;
+    }
     if (!name.trim()) {
       setNameError('Give the role a name');
       nameRef.current?.focus();
@@ -161,33 +180,35 @@ export function RoleEditor({
         level,
         // Only what the apps offer today (an old, retired permission is dropped when the role is saved).
         grants: [...grants.values()].filter((g) => known.has(key(g))),
-        duties: duties.map((d) => ({ ...d, steps: d.steps.map((st) => st.trim()).filter(Boolean) })),
+        duties: cleanDuties,
       },
       { onSuccess: onClose, onError: (err) => setError(errorMessage(err)) },
     );
   };
 
   const total = grants.size;
-  const copyable = roles.filter((r) => !r.archived && (limits.unlimited || !r.system));
+  const copyable = roles.filter((r) => !r.archived);
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent size="xl">
         <form className="flex h-full min-h-0 flex-col" onSubmit={submit} noValidate>
           <SheetHeader>
-            <SheetTitle>{role ? (locked ? role.name : `Edit ${role.name}`) : 'New role'}</SheetTitle>
+            <SheetTitle>{personal ? `Extra access for ${personal.name}` : role ? (locked ? role.name : `Edit ${role.name}`) : 'New role'}</SheetTitle>
             <SheetDescription>
-              {lockedReason
-                ? `${lockedReason}. You can look but not change it.`
-                : locked
-                  ? `${role?.description ?? ''} ${limits.unlimited ? 'Duplicate it to make an editable copy.' : 'Only the owner can copy it.'}`
-                  : limits.unlimited
-                    ? 'Tick what this role may do, and how far each permission reaches. Nothing is ticked until you choose.'
-                    : 'Tick what this role may do, and how far each permission reaches. You can give only what you have yourself.'}
+              {personal
+                ? `On top of their roles, for ${personal.name} only: tick extra permissions and add duties of their own. ${limits.unlimited ? '' : 'You can give only what you have yourself.'}`
+                : lockedReason
+                  ? `${lockedReason}. You can look but not change it.`
+                  : builtIn
+                    ? `${role?.name} is built in: change what it can do and its duties; it keeps its name and cannot be deleted.`
+                    : limits.unlimited
+                      ? 'Tick what this role may do, and how far each permission reaches. Nothing is ticked until you choose.'
+                      : 'Tick what this role may do, and how far each permission reaches. You can give only what you have yourself.'}
             </SheetDescription>
           </SheetHeader>
           <SheetBody className="space-y-6">
-            {!role && copyable.length > 0 && (
+            {!role && !personal && copyable.length > 0 && (
               <Field label="Start from" htmlFor="role-copy" hint={copyNote || "Copies that role's permissions and level; change anything before saving."}>
                 <NativeSelect id="role-copy" value={copiedFrom} onChange={(e) => copyFrom(e.target.value)}>
                   <option value="">Blank: nothing ticked</option>
@@ -199,6 +220,14 @@ export function RoleEditor({
                 </NativeSelect>
               </Field>
             )}
+            {personal && (
+              <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                {personal.access.owner
+                  ? `${personal.name} is an owner: they can already do everything.`
+                  : `Their roles already give ${personal.access.fromRoles.length} permission${personal.access.fromRoles.length === 1 ? '' : 's'} (marked “From their roles” below).`}
+              </p>
+            )}
+            {!personal && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Name" htmlFor="role-name" error={nameError}>
                 <Input
@@ -209,13 +238,13 @@ export function RoleEditor({
                     setName(e.target.value);
                     if (e.target.value.trim()) setNameError('');
                   }}
-                  disabled={locked}
+                  disabled={locked || builtIn}
                   maxLength={80}
                   aria-required
                 />
               </Field>
               <Field label="Level" htmlFor="role-level" hint={LEVEL_HINTS[level]}>
-                <NativeSelect id="role-level" value={level} onChange={(e) => setLevel(Number(e.target.value))} disabled={locked}>
+                <NativeSelect id="role-level" value={level} onChange={(e) => setLevel(Number(e.target.value))} disabled={locked || builtIn}>
                   {[1, 2, 3].map((l) => {
                     const off = l !== level && !limits.levelAllowed(l, 'edit');
                     return (
@@ -231,6 +260,7 @@ export function RoleEditor({
                 <Input id="role-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={locked} maxLength={300} />
               </Field>
             </div>
+            )}
 
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -317,6 +347,7 @@ export function RoleEditor({
                                       grant={grants.get(key({ app: app.app, permission: p.key }))}
                                       locked={locked}
                                       limits={limits}
+                                      inherited={fromRoles.get(key({ app: app.app, permission: p.key }))}
                                       onToggle={() => toggle(app.app, p)}
                                       onScope={(s) => setScope(app.app, p.key, s)}
                                     />
@@ -338,7 +369,7 @@ export function RoleEditor({
               </p>
             </div>
 
-            {!locked && <DutiesEditor duties={duties} onChange={setDuties} />}
+            {!locked && <DutiesEditor duties={duties} onChange={setDuties} personal={!!personal} />}
             <ErrorNote>{error}</ErrorNote>
           </SheetBody>
           <SheetFooter className="sticky bottom-0 z-10 bg-card">
@@ -351,8 +382,8 @@ export function RoleEditor({
               {locked ? 'Close' : 'Cancel'}
             </Button>
             {!locked && (
-              <Button type="submit" loading={save.isPending}>
-                Save role
+              <Button type="submit" loading={saving}>
+                {personal ? 'Save extra access' : 'Save role'}
               </Button>
             )}
           </SheetFooter>
@@ -370,6 +401,7 @@ function PermissionRow({
   grant,
   locked,
   limits,
+  inherited,
   onToggle,
   onScope,
 }: {
@@ -379,6 +411,8 @@ function PermissionRow({
   grant: Grant | undefined;
   locked: boolean;
   limits: RoleLimits;
+  /** Personal access: what their roles already give for this permission. */
+  inherited?: Grant;
   onToggle: () => void;
   onScope: (s: Scope) => void;
 }) {
@@ -402,6 +436,9 @@ function PermissionRow({
             <span id={`${id}-why`} className="block text-xs font-medium text-warning">
               {problem}
             </span>
+          )}
+          {inherited && (
+            <span className="block text-xs font-medium text-success">From their roles{inherited.scope ? ` (${SCOPE_LABELS[inherited.scope as Scope] ?? inherited.scope})` : ''}</span>
           )}
         </label>
       </span>
@@ -431,14 +468,18 @@ function PermissionRow({
 }
 
 /** What this role is responsible for: each duty becomes a task for everyone holding the role (PLAN.md §17.3). */
-function DutiesEditor({ duties, onChange }: { duties: Duty[]; onChange: (d: Duty[]) => void }) {
+function DutiesEditor({ duties, onChange, personal = false }: { duties: Duty[]; onChange: (d: Duty[]) => void; personal?: boolean }) {
   const update = (i: number, patch: Partial<Duty>) => onChange(duties.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   return (
     <section aria-label="Duties" className="space-y-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-bold">Duties</h3>
-          <p className="text-xs text-muted-foreground">Each duty becomes a task in Tasks for everyone with this role, at the time you choose. Steps become its checklist.</p>
+          <h3 className="text-sm font-bold">{personal ? 'Responsibilities' : 'Duties'}</h3>
+          <p className="text-xs text-muted-foreground">
+            {personal
+              ? 'Each one becomes a task in Tasks for this person only, at the time you choose. Steps become its checklist.'
+              : 'Each duty becomes a task in Tasks for everyone with this role, at the time you choose. Steps become its checklist.'}
+          </p>
         </div>
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>

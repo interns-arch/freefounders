@@ -163,10 +163,12 @@ class ProvisionTests(TestCase):
         res = self.provision(username=None, email="nina@elsewhere.com", appRole="emperor")
         u = User.objects.get(pk=res.data["userId"])
         self.assertEqual(u.username, "nina-2")
-        self.assertEqual(u.role, Role.SALES_EXECUTIVE)
+        self.assertEqual(u.role, Role.MEMBER)
 
-    def test_company_owners_and_admins_become_super_admins_when_no_role_is_chosen(self):
-        for platform_role, expected in (("owner", Role.SUPER_ADMIN), ("admin", Role.SUPER_ADMIN), ("member", Role.SALES_EXECUTIVE)):
+    def test_without_a_chosen_role_everyone_gets_the_neutral_role(self):
+        # PLAN.md §19.28: what someone can do comes from the Platform's roles (Admin / Member / Owner), never from a
+        # role name here; the field is only the neutral Member.
+        for platform_role, expected in (("owner", Role.MEMBER), ("admin", Role.MEMBER), ("member", Role.MEMBER)):
             with self.subTest(platform_role):
                 res = self.provision(username=None, email=f"{platform_role}@pr.test", platformRole=platform_role)
                 self.assertEqual(User.objects.get(pk=res.data["userId"]).role, expected)

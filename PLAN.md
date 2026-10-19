@@ -1899,6 +1899,91 @@ the admin should have the option that at the time of punch-in it should ask for 
   stays empty. Shown on Daily attendance (a "Uniform" column Yes / No when the company asks or anyone answered), My
   attendance day detail, and the daily report (a "Uniform" column under the same rule).
 
+### 19.28 Two built-in roles (Admin, Member) + per-person access (2026-10-19)
+Founder: "there should be predefined only 2 roles, Member and Admin … in a specific role we can modify their access, so if I
+want to make any member an admin in future I can do that; I can manually assign the access, roles and responsibilities
+that I want to give to any user." And: "by default the roles and people list should be empty except the owner, so anyone
+can create roles and responsibilities on their own" (the demo company is cleared too).
+
+**Roles (Platform, the only role builder)**
+- Every company has exactly two built-in roles, **Admin** (`ff_admin`, level 3) and **Member** (`ff_member`, level 1):
+  permissions, scopes and duties are edited like any role (R1: Admin-level, so only the owner edits Admin); they keep their
+  name and level and cannot be archived; Duplicate makes an ordinary copy. Roles made in the role builder work as before.
+- Removed everywhere: Super Admin as a role, Tasks' 20 template roles (Sales, Purchase, Accounts, IT, Developer,
+  Warehouse, Rider, Housekeeping, Security, Legal, HR Manager/Executive, the managers…), the Assets starter roles brought into
+  the role builder (Admin/IT / Asset Manager/HR/Leadership/Manager/Employee "(Assets)"), and the "Copy from" entries for them.
+  A new company (sign-up, `company -- create`, an import) gets Admin + Member only (`RolesService.importFromApps`), and
+  only the owner in People.
+- Starting permissions (real catalogue keys; a key the company's apps lack is skipped):
+  - **Admin** = every permission of every app at its widest scope (Company where scoped) except the Owner-only ones
+    (`tasks.delete_admin_work`, `insights:leadership`) and `billing.manage`: Tasks 46 + Assets 23 + Admin workspace 6.
+  - **Member** = Tasks `tasks.view` @Own, `notifications.view`, `attendance.punch`, `attendance.self`, `leave.self`,
+    `holidays.view`, `payroll.self`, `notices.view`, `links.view`; Assets `request:create`, `ticket:create` (everyone
+    always sees their own assets/requests in Assets, §15.3). No `tasks.assign`: a Member gives tasks only to themselves.
+- **Owner** is a mark on the person (`platform_role = owner`, company creator), not a role in the list: full access,
+  cannot be removed, demoted or switched off by others (unchanged rules). The apps get it as a hidden role
+  `ff_owner` "Owner (all access)" (`roles.kind = 'owner'`): every permission of every app, new ones included, held by
+  exactly the owners (re-synced on every push). So Tasks' `is_owner` (= holds `tasks.delete_admin_work`), Assets'
+  leadership page and R1 "the owner may give everything" work unchanged. Owners also hold Admin (sign-up gives Admin +
+  the Owner mark); taking Admin away from an owner changes nothing (the Owner role stays). The old Super Admin row became
+  the Owner role (migration `0010_two_roles`), so Tasks/Assets keep their link to it.
+- **Access level follows the Admin role**: for non-owners `platform_role` is `admin` exactly when they hold Admin
+  (`RolesService.syncLevels`). "Make Admin" / "Make Member" (`PUT /people/:id/level {level}`) swap Admin and Member and keep
+  other roles; the Role / access level field on People does the same. Admin workspace permissions now come from roles only
+  (owner: all); a company not yet in the role builder gives its admins everything but billing. Billing stays with the
+  owner unless a role is given `billing.manage`.
+
+**Per-person access (People → person → Change roles)**
+- (a) roles as before, plus **Make Admin / Make Member**; (b) **Extra access**: individual permissions with scope on top
+  of the roles, edited with the role editor's picker (shows "From their roles" next to what they already have); (c)
+  **Responsibilities**: duties (same model and editor as role duties, §17.3) for this person only. (b)+(c) live in a
+  hidden personal role (`roles.kind = 'personal'`, `person_id`, code `ff_person_<id>`): never listed, never given to
+  anyone else, created on first use, deleted when emptied; pushed and checked by Tasks/Assets like any role (Tasks says
+  "New responsibility: …" for its once-duties). R1: only what the caller holds; members (with Manage roles) act on members
+  only; only an owner changes an owner; nobody but the owner gives themselves extra access. The dialog shows "From roles:
+  Tasks n · Assets n · Admin n · Extra: …"; People shows "+ extra access".
+- API: `GET /people/:id/access` → `{roleIds, owner, fromRoles, extra: {grants, duties}, adds}`;
+  `PUT /people/:id/access/personal {grants, duties}`; `PUT /people/:id/level`. New people added on People get Member;
+  invite links default to Member (Admin selectable); an invite without a role gives Member.
+
+**Apps**
+- Tasks: the neutral `Role.MEMBER` ("member", migration `accounts 0023`) is the role field of every Platform user
+  (provision, and every push); behaviour comes only from the pushed roles' permissions. A full push archives this
+  schema's own built-in roles (`platform_role_id` null), so a user without Platform roles gets nothing from a role name.
+  The role list (`/api/roles/`) and `role`/`role_display` show the Platform roles (hidden ones excluded); "My team" no
+  longer edits a role and decides "manager" by level, not by the Sales Manager name. Standalone installs (flags off) keep
+  their 20 roles exactly as before (CLAUDE.md rule).
+- Assets: a full push archives its own starter roles; the separate Assets "Roles & permissions" page is gone
+  (`/assets/settings/roles` → Admin → Roles).
+
+**Existing companies (dev data, 2026-10-19)**: `companies.roles_model` (1 = old) — converted once by
+`RolesService.ensureUpgraded` (run by `company -- sync`): template roles archived; holders of an Admin-level template (or
+Super Admin, or access level admin) → Admin, other holders → Member; roles made in the role builder kept. Result: 11
+companies, 20–26 template roles archived each; DEMO 57 → Member, 1 → Admin (before its reset); REHEARSAL 2 → Admin,
+13 → Member; the others 1–2 → Admin. Then **DEMO reset to the owner only**: `npm --prefix services/platform run company
+-- reset --code DEMO --keep-owner` (local databases only; refused elsewhere): 596 people deleted with all their records
+through the apps' "delete everything" path, 34 unlinked Tasks users (old "Deleted user" rows) deleted
+(`DELETE /api/internal/unlinked-people`), 7 other roles archived, Admin/Member back to defaults, invites removed; the dev
+staff account keeps its DEMO membership without roles or apps (owner console). Smoke and e2e add people to DEMO again: rerun the reset afterwards (done once more after the test runs: 27 people). Company settings, departments, the asset
+catalogue, assets (back in stock), leave types, locations and HR rules stay.
+
+**CarTrends import**: `scripts/import-company.mjs` marks only Tasks Super Admin / Admin as admins (an Assets-only
+"Admin" no longer becomes a company admin); the next `company -- sync [--code X]` gives Admin to admins/owner and Member
+to everyone else **plus a personal role with exactly what their old app roles gave beyond Member** (nobody loses access).
+Rehearsal (`npm run rehearse-import`, now also runs that sync and checks it): 2 Admin, 13 Member, 11 with extra access.
+Note: Member includes Assets requests/tickets, so Tasks-only people also open Assets after the sync (seats count them).
+
+**Checks**
+| Check | Result |
+|---|---|
+| Platform | 106 pass (new/changed: Admin + Member only with their defaults, built-ins not deletable/renamable, Make Admin / Make Member and the access level, personal extra access + duty pushed and R1-limited, Owner role hidden and never locked out, conversion of the Owner role) |
+| Tasks (SQLite) | 858 pass, 21 skipped (new `TwoBuiltInRolesTests`: local roles archived and role names mean nothing, Member + personal extra access, owner through the Owner role, a personal duty becomes that person's task) |
+| Tasks tenancy (Postgres) | 32 pass |
+| Assets | 91 pass (push archives its own starter roles) |
+| Web | rules + typecheck + build clean |
+| Smoke | 10 / 10 (member now gets a role made in the role builder) |
+| e2e | 63 / 63: full run 60 pass; the 2 web-hr failures (test helpers picked "any level-1 Tasks role", now the built-in Member; same fix in 4 other specs) and 1 Settings module-switch flake pass when rerun (15 / 15 for the touched specs). New: `web-admin` "People: Make Admin / Make Member, and extra access + a responsibility for one person" |
+
 ---
 
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)
@@ -2062,8 +2147,10 @@ later SOC 2 / ISO 27001 for big customers, enterprise SSO (SAML) and audit-log e
 ### 20.12 Founder decisions
 1. **Free plan?** Notion grew with one. Proposal: free for up to 5 users, Attendance only; or trial only.
 2. **One account in many companies** (switcher): recommended yes. It changes sign-in (mobile/email are global; an
-   employee ID needs the company code).
-3. **Sign-in for new users**: mobile OTP + password (recommended), plus Google sign-in and email.
+   employee ID needs the company code). **Approved by the founder on 2026-10-19** ("proceed with this login id and
+   multiple user plan").
+3. **Sign-in for new users**: mobile OTP + password (recommended), plus Google sign-in and email. **Approved by the
+   founder on 2026-10-19** (mobile/email + code, as built in §21). Free plan: up to 3 users (§21).
 4. **Redis/Valkey** from step 2 (replacing §14's "no Redis" for scale).
 5. **Invoices**: our own GST invoices from the Platform (recommended: full control) or Razorpay's invoices.
 6. **Prices** (§9), minimum seats, annual discount, and the legal entity + GST state that sells.

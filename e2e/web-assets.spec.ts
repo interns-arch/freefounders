@@ -82,7 +82,7 @@ test('every Assets screen opens under /assets with its menu', async ({ page }) =
     ['/assets/settings/departments', 'Departments'],
     ['/assets/settings/vendors', 'Vendors'],
     ['/assets/settings/users', 'Users'],
-    ['/assets/settings/roles', 'Roles & permissions'],
+    ['/assets/settings/roles', 'Roles'], // one role builder: Admin → Roles (PLAN.md §19.28)
   ];
   for (const [path, heading] of screens) {
     await page.goto(path);

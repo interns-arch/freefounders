@@ -94,10 +94,9 @@ def provision(request):
                 )
             user = match
         if user is None:
-            role = data.get("appRole") if data.get("appRole") in Role.values else None
-            if role is None:
-                # No role chosen: the company's FreeFounders owners/admins run Tasks too.
-                role = Role.SUPER_ADMIN if data.get("platformRole") in ("owner", "admin") else Role.SALES_EXECUTIVE
+            # The person's real access comes with the Platform's roles right after (PLAN.md §19.28): the role field is
+            # only the neutral Member, unless an old Platform still names one of the standalone roles.
+            role = data.get("appRole") if data.get("appRole") in Role.values else Role.MEMBER
             first, _, last = full_name.partition(" ")
             user = User(
                 username=_free_username(username, email.split("@")[0] if email else "", code, full_name.replace(" ", ".").lower()),
@@ -106,7 +105,9 @@ def provision(request):
                 email=email,
                 whatsapp_phone=re.sub(r"[^\d+]", "", _clean(data.get("mobile")))[:20],
                 role=role,
-                department=ROLE_DEFAULT_DEPARTMENT.get(role, Department.SALES),
+                # Until the People directory sends theirs: management for owners/admins, else sales (as before).
+                department=ROLE_DEFAULT_DEPARTMENT.get(role) or (
+                    Department.MANAGEMENT if data.get("platformRole") in ("owner", "admin") else Department.SALES),
             )
             # Signs in through the Platform only; no local password.
             user.set_unusable_password()
@@ -346,6 +347,9 @@ def _import_access(data):
                 "archived": bool(r.get("archived")),
                 "is_system": bool(r.get("system")),
             }
+            # The Platform may change a role's code (the old Super Admin became the hidden Owner role, PLAN.md §19.28).
+            if role.pk is not None and role.code != code and not AccessRole.objects.filter(code=code).exclude(pk=role.pk).exists():
+                fields["code"] = code
             if role.pk is None or any(getattr(role, k) != v for k, v in fields.items()):
                 for k, v in fields.items():
                     setattr(role, k, v)
@@ -376,9 +380,12 @@ def _import_access(data):
         for role_id, permission in drop_grants:
             AccessGrant.objects.filter(role_id=role_id, permission=permission).delete()
         AccessGrant.objects.bulk_create(new_grants)
-        # Platform roles that are no longer sent were deleted there: archive (history keeps their name).
+        # Platform roles that are no longer sent were deleted there: archive (history keeps their name). This app's own
+        # built-in roles (a standalone install's 20 roles, seeded in every company schema) are not used under the
+        # Platform, whose roles are the only ones (PLAN.md §19.28): archived too.
         if data.get("complete", True):
             AccessRole.objects.filter(platform_role_id__isnull=False, archived=False).exclude(platform_role_id__in=ids).update(archived=True)
+            AccessRole.objects.filter(platform_role_id__isnull=True, archived=False).update(archived=True)
 
         person_ids = [str(p.get("personId")) for p in people if p.get("personId")]
         users = {str(u.platform_person_id): u for u in User.objects.filter(platform_person_id__in=person_ids)}
@@ -396,10 +403,9 @@ def _import_access(data):
             have_ids = held.get(user.pk, set())
             drop_links += [(user.pk, rid) for rid in have_ids - want_ids]
             add_links += [UserAccessRole(user=user, role_id=rid) for rid in want_ids - have_ids]
-            # The primary role shown in the app follows the first built-in role, if there is one.
-            builtin = next((r.code for r in wanted_roles if r.code in Role.values), None)
-            if builtin and user.role != builtin:
-                user.role = builtin
+            # The role field is neutral under the Platform: access comes from the roles above, never from a role name.
+            if user.role != Role.MEMBER:
+                user.role = Role.MEMBER
                 user.save(update_fields=["role", "is_staff"])
         for user_id, role_id in drop_links:
             UserAccessRole.objects.filter(user_id=user_id, role_id=role_id).delete()
@@ -429,3 +435,12 @@ def delete_person(request, person_id):
         return Response(run(pid, parse_options(request.data)))
     except HandOverError as exc:  # raised before anything changed
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["DELETE"])
+@authentication_classes([ServiceTokenAuthentication])
+@permission_classes([IsPlatformService])
+def delete_unlinked_people(request):
+    """Every user not linked to a Platform person, with all their records (`company -- reset`, test companies only)."""
+    from .people_delete import delete_unlinked
+    return Response(delete_unlinked())

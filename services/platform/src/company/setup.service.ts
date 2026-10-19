@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, ne, notInArray } from 'drizzle-orm';
 import { DbService } from '../db/db.service';
-import { type AppKey, APPS, companies, logins, people, personApps } from '../db/schema';
+import { accounts, type AppKey, APPS, companies, invites, logins, people, personApps, personRoles, refreshSessions, roles } from '../db/schema';
 import { DirectoryService } from '../people/directory.service';
 import { internalUrl, ProvisionClient } from '../provision/provision.client';
-import { RolesService } from '../roles/roles.service';
+import { ADMIN, MEMBER, RolesService } from '../roles/roles.service';
 import { CompanyService } from './company.service';
 
 /** Same rule as `npm run company -- create --code`. */
@@ -131,6 +131,86 @@ export class CompanySetupService {
     if (!APPS.some((a) => internalUrl(a))) return;
     const res = await this.company.push(companyId);
     say(`  ✔ profile: sent to ${Object.entries(res).map(([a, r]) => `${a} (${r})`).join(', ') || 'no app'}`);
+  }
+
+  /**
+   * `company -- reset --code X --keep-owner` (PLAN.md §19.28), for local test companies only: everyone but the owner(s)
+   * is deleted with every record of theirs in every app (the same "delete everything" path as Admin → People →
+   * Delete), Tasks' users that belong to no person go too, every role but Admin and Member is archived, and Admin and
+   * Member start again from their default permissions. With `keepStaff`, FreeFounders staff accounts keep their
+   * membership (no roles, no apps) so they can still open the owner console. Company settings, departments, asset
+   * catalogue, leave types, locations and HR rules stay.
+   */
+  async resetToOwner(companyId: string, { keepStaff = true } = {}, say: Say = () => {}) {
+    const db = this.dbs.db;
+    const [c] = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+    if (!c) throw new Error('No such company');
+    const owners = await db.select({ id: people.id }).from(people).where(and(eq(people.companyId, companyId), eq(people.platformRole, 'owner')));
+    if (!owners.length) throw new Error('The company has no owner: nothing to keep');
+    const staff = keepStaff
+      ? (
+          await db
+            .select({ id: people.id })
+            .from(people)
+            .innerJoin(accounts, eq(accounts.id, people.accountId))
+            .where(and(eq(people.companyId, companyId), eq(accounts.isStaff, true), ne(people.platformRole, 'owner')))
+        ).map((p) => p.id)
+      : [];
+    const keep = [...owners.map((o) => o.id), ...staff];
+    const others = await db.select({ id: people.id, fullName: people.fullName }).from(people).where(and(eq(people.companyId, companyId), notInArray(people.id, keep)));
+    const apps = this.connected(c.enabledApps).filter((a) => internalUrl(a));
+    say(`  • ${others.length} people to delete (keeping ${owners.length} owner(s)${staff.length ? ` and ${staff.length} staff account(s)` : ''})`);
+    const failed: string[] = [];
+    let n = 0;
+    for (const p of others) {
+      // Off first, so nothing new is written about them while the apps delete.
+      await db.update(people).set({ status: 'inactive', updatedAt: new Date() }).where(eq(people.id, p.id));
+      let ok = true;
+      for (const app of apps) {
+        try {
+          await this.provisioner.deletePerson(app, companyId, p.id);
+        } catch (err) {
+          ok = false;
+          failed.push(`${p.fullName} in ${app}: ${(err as Error).message}`);
+        }
+      }
+      if (!ok) continue;
+      await db.transaction(async (tx) => {
+        await tx.update(people).set({ reportsTo: null }).where(eq(people.reportsTo, p.id));
+        await tx.delete(logins).where(eq(logins.personId, p.id));
+        await tx.delete(refreshSessions).where(eq(refreshSessions.personId, p.id));
+        await tx.delete(personRoles).where(eq(personRoles.personId, p.id));
+        await tx.delete(personApps).where(eq(personApps.personId, p.id));
+        await tx.delete(people).where(eq(people.id, p.id));
+      });
+      if (++n % 50 === 0) say(`  • ${n} deleted…`);
+    }
+    say(`  ✔ ${n} people deleted${failed.length ? `; ${failed.length} failed (kept, switched off):` : ''}`);
+    for (const f of failed.slice(0, 20)) say(`    ✖ ${f}`);
+    if (apps.includes('tasks')) {
+      const res = await this.provisioner.deleteUnlinked(companyId);
+      say(`  ✔ tasks: ${res.deleted} user(s) not linked to anyone deleted`);
+    }
+    // Staff kept: a membership without roles or apps (the owner console needs only the account).
+    for (const id of staff) {
+      await db.delete(personApps).where(eq(personApps.personId, id));
+      await db.delete(personRoles).where(eq(personRoles.personId, id));
+      await db.update(people).set({ platformRole: 'member', reportsTo: null, updatedAt: new Date() }).where(eq(people.id, id));
+    }
+    await db.update(people).set({ reportsTo: null }).where(eq(people.companyId, companyId));
+    await db.delete(invites).where(eq(invites.companyId, companyId));
+    // Only Admin and Member, at their defaults; the hidden Owner role stays (personal roles go).
+    const archived = await db
+      .update(roles)
+      .set({ archived: true, updatedAt: new Date() })
+      .where(and(eq(roles.companyId, companyId), eq(roles.kind, 'role'), eq(roles.archived, false), notInArray(roles.code, [ADMIN.code, MEMBER.code])))
+      .returning({ id: roles.id });
+    if (archived.length) await db.delete(personRoles).where(inArray(personRoles.roleId, archived.map((r) => r.id)));
+    await db.delete(roles).where(and(eq(roles.companyId, companyId), eq(roles.kind, 'personal')));
+    await this.roles.resetBuiltIns(companyId);
+    await db.update(people).set({ status: 'active' }).where(and(eq(people.companyId, companyId), inArray(people.id, keep), ne(people.status, 'active')));
+    say(`  ✔ roles: ${archived.length} archived; Admin and Member back to their defaults`);
+    await this.sync(c, say);
   }
 
   /** `company -- sync` for one company. */

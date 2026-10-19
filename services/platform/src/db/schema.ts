@@ -7,9 +7,15 @@ export const platform = pgSchema('platform');
 export const APPS = ['tasks', 'assets'] as const;
 export type AppKey = (typeof APPS)[number];
 
-/** Phase 1 access levels; custom roles arrive in Phase 3. Owner = company Super Admin. */
+/**
+ * Access level of a person in their company. `owner`: full access everywhere (the hidden Owner role, PLAN.md §19.28),
+ * cannot be removed by others. `admin` / `member`: follows the built-in Admin role (held = admin).
+ */
 export const PLATFORM_ROLES = ['owner', 'admin', 'member'] as const;
 export type PlatformRole = (typeof PLATFORM_ROLES)[number];
+
+export const ROLE_KINDS = ['role', 'owner', 'personal'] as const;
+export type RoleKind = (typeof ROLE_KINDS)[number];
 
 export const PERSON_STATUSES = ['active', 'inactive'] as const;
 
@@ -57,6 +63,11 @@ export const companies = platform.table('companies', {
   peopleVersion: integer('people_version').notNull().default(0),
   /** Per app, the permission-catalogue version the company's roles are written in (missing = 1; PLAN.md §19.19). */
   accessUpgrades: jsonb('access_upgrades').$type<Record<string, number>>().notNull().default({}),
+  /**
+   * 2 = two built-in roles, Admin and Member, plus hidden Owner and personal roles (PLAN.md §19.28). 1 = an older company
+   * whose template roles are converted once (RolesService.ensureUpgraded). New companies start at 2.
+   */
+  rolesModel: integer('roles_model').notNull().default(2),
   ...timestamps,
 });
 
@@ -220,8 +231,14 @@ export const roles = platform.table(
     colour: text('colour'),
     /** 1 member, 2 manager, 3 admin. */
     level: integer('level').notNull().default(1),
-    /** The locked Owner role (Super Admin): every permission, always; cannot be edited or archived (§19.19). */
+    /** Built in (Admin, Member; and the hidden Owner role): cannot be archived or renamed (PLAN.md §19.28). */
     system: boolean('system').notNull().default(false),
+    /**
+     * `role`: an ordinary role, listed and given to people. `owner`: hidden, every permission, held by the owners only.
+     * `personal`: hidden, one person's extra access and responsibilities (`personId`), never given to anyone else.
+     */
+    kind: text('kind').$type<RoleKind>().notNull().default('role'),
+    personId: uuid('person_id').references((): AnyPgColumn => people.id, { onDelete: 'cascade' }),
     /** Responsibilities (Phase 5): recurring duties and joining checklist, pushed to Tasks with the role. */
     duties: jsonb('duties').$type<RoleDuty[]>().notNull().default([]),
     archived: boolean('archived').notNull().default(false),
@@ -230,6 +247,7 @@ export const roles = platform.table(
   (t) => [
     uniqueIndex('roles_company_code_uq').on(t.companyId, t.code),
     uniqueIndex('roles_company_name_uq').on(t.companyId, sql`lower(${t.name})`),
+    uniqueIndex('roles_person_uq').on(t.personId).where(sql`person_id is not null`),
   ],
 );
 

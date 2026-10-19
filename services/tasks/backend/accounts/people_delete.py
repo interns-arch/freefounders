@@ -264,6 +264,33 @@ def delete_person(person_id: uuid.UUID, options: dict | None = None) -> dict:
     return {"deleted": True, "anonymised": anonymised, "counts": counts, "handed_over": handed}
 
 
+def delete_unlinked() -> dict:
+    """Every user here who is not linked to a Platform person (old standalone users, "Deleted user" rows kept by an
+    earlier deletion), with every record of theirs, as delete_person does. For resetting a test company to just its
+    owner (`company -- reset`, PLAN.md §19.28); one transaction per user."""
+    User = get_user_model()
+    using = router.db_for_write(User)
+    deleted, counts = 0, {}
+    for pk in list(User.objects.filter(platform_person_id__isnull=True).values_list("pk", flat=True)):
+        files: list = []
+        with transaction.atomic(using=using):
+            user = User.objects.select_for_update().filter(pk=pk, platform_person_id__isnull=True).first()
+            if user is None:
+                continue
+            _delete_everything(user, using, counts, files)
+            deleted += 1
+
+            def remove_files(files=files):
+                for storage, fname in files:
+                    try:
+                        storage.delete(fname)
+                    except Exception:  # noqa: BLE001 -- a missing file must not fail the reset
+                        pass
+
+            transaction.on_commit(remove_files, using=using)
+    return {"deleted": deleted, "counts": counts}
+
+
 def _hand_over_tasks(Task, user, to, name) -> int:
     TaskActivity = apps.get_model("crm", "TaskActivity")
     open_tasks = list(Task.objects.filter(assigned_to=user).exclude(status=TASK_DONE))

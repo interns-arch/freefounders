@@ -1,5 +1,5 @@
 import type { Access } from '@freefounders/core';
-import { Activity, Boxes, Briefcase, CardSim, ClipboardList, GitCompareArrows, LayoutDashboard, LifeBuoy, LineChart, ListOrdered, LogOut, QrCode, ScanLine, Shapes, ShieldCheck, Truck, UserPlus, Users, UsersRound, Wrench } from '@/components/icons';
+import { Activity, Boxes, Briefcase, CardSim, ClipboardList, GitCompareArrows, LayoutDashboard, LifeBuoy, LineChart, ListOrdered, LogOut, QrCode, ScanLine, Shapes, Truck, UserPlus, Users, UsersRound, Wrench } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 
 // Same rules as the Assets app: IT hands out assets; staff (HR, managers, CEO) see people; plain employees see their own.
@@ -32,7 +32,6 @@ export const ASSETS_NAV: NavItem[] = [
   { label: 'Departments', to: '/assets/settings/departments', icon: Briefcase, group: 'Settings', show: (a) => a.assets.can('org:manage') },
   { label: 'Vendors', to: '/assets/settings/vendors', icon: Truck, group: 'Settings', show: (a) => a.assets.can('org:manage') },
   { label: 'Users', to: '/assets/settings/users', icon: UsersRound, group: 'Settings', show: (a) => a.assets.can('user:manage') },
-  { label: 'Roles & permissions', to: '/assets/settings/roles', icon: ShieldCheck, group: 'Settings', show: (a) => a.assets.can('user:manage') },
 ];
 
 /** Keyboard shortcuts (G then …) for the Assets screens. */

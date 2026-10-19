@@ -4,7 +4,7 @@
  */
 import { errorMessage, type AppKey } from '@freefounders/core';
 import { inviteRoleName, type Invite, useCreateInvite, useInvites, useRevokeInvite } from '@freefounders/core/account';
-import { APP_NAMES, usePlatformApps, useRoles } from '@freefounders/core/admin';
+import { APP_NAMES, MEMBER_ROLE, usePlatformApps, useRoles } from '@freefounders/core/admin';
 import { Copy, Link2, MessageCircle, Trash2 } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
@@ -41,14 +41,17 @@ export function InvitesDialog({ open, onClose, companyName }: { open: boolean; o
   const create = useCreateInvite();
   const revoke = useRevokeInvite();
   const confirm = useConfirm();
-  const [roleIds, setRoleIds] = useState<string[]>([]);
+  // null = not chosen yet: Member (PLAN.md §19.28); Admin and any other role can be ticked instead or as well.
+  const [picked, setRoleIds] = useState<string[] | null>(null);
   const [chosenApps, setChosenApps] = useState<AppKey[] | null>(null);
   const [days, setDays] = useState('7');
   const [maxUses, setMaxUses] = useState('');
   const [made, setMade] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const usable = (roles.data ?? []).filter((r) => !r.archived && r.code !== 'owner');
+  const usable = (roles.data ?? []).filter((r) => !r.archived);
+  const memberId = usable.find((r) => r.code === MEMBER_ROLE)?.id;
+  const roleIds = picked ?? (memberId ? [memberId] : []);
   const appList = (apps.data ?? []).map((a) => a.app);
   const selectedApps = chosenApps ?? appList;
 
@@ -106,7 +109,7 @@ export function InvitesDialog({ open, onClose, companyName }: { open: boolean; o
               <div className="grid gap-1.5 sm:grid-cols-2">
                 {usable.map((r) => (
                   <label key={r.id} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:border-primary/40">
-                    <Checkbox checked={roleIds.includes(r.id)} onCheckedChange={(c) => setRoleIds((x) => (c === true ? [...x, r.id] : x.filter((y) => y !== r.id)))} aria-label={r.name} />
+                    <Checkbox checked={roleIds.includes(r.id)} onCheckedChange={(c) => setRoleIds(c === true ? [...roleIds, r.id] : roleIds.filter((y) => y !== r.id))} aria-label={r.name} />
                     <span className="truncate">{r.name}</span>
                   </label>
                 ))}

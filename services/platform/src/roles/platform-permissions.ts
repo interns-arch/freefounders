@@ -1,12 +1,12 @@
 import { and, eq, max } from 'drizzle-orm';
 import type { DbService } from '../db/db.service';
-import { personRoles, type PlatformRole, roleGrants, roles } from '../db/schema';
+import { people, personRoles, type PlatformRole, roleGrants, roles } from '../db/schema';
 import type { AppCatalogue } from '../provision/provision.client';
 
 /**
  * The Admin workspace as permissions (PLAN.md §19.19): the role builder shows them as a third "app", Admin. An owner
- * always has every one (a company can never lock itself out); the `admin` access level keeps them all as before; a
- * member gets exactly the ones their roles grant.
+ * always has every one (a company can never lock itself out); everyone else gets exactly the ones their roles grant
+ * (the built-in Admin role starts with all of them but billing, PLAN.md §19.28).
  */
 export const PLATFORM_APP = 'platform';
 
@@ -27,13 +27,24 @@ export const PLATFORM_CATALOGUE: AppCatalogue = {
     { key: 'people.delete', label: 'Delete people permanently', group: 'People', scopes: null, description: 'Erase a person and hand over or remove their work. Cannot be undone.' },
     { key: 'roles.manage', label: 'Manage roles', group: 'Roles & company', scopes: null, description: 'Create, edit and archive roles and give them to people, with only the permissions and level they have themselves (the Owner: everything).' },
     { key: 'company.settings', label: 'Company settings', group: 'Roles & company', scopes: null, description: 'Company name, colour, logo, departments and which modules are on.' },
-    { key: 'billing.manage', label: 'Manage billing', group: 'Roles & company', scopes: null, description: 'Plan, seats, payments, GST details and invoices (PLAN.md §21). The owner always has it.' },
+    { key: 'billing.manage', label: 'Manage billing', group: 'Roles & company', scopes: null, description: 'Plan, seats, payments, GST details and invoices (PLAN.md §21). The owner always has it; Admin does not by default.' },
   ],
 };
 
 /** The Admin permissions a person has right now (read from the database, so a change counts at once). */
 export async function platformPermissionsOf(dbs: DbService, personId: string, role: PlatformRole | string): Promise<Set<PlatformPermission>> {
-  if (role === 'owner' || role === 'admin') return new Set(PLATFORM_PERMISSIONS);
+  if (role === 'owner') return new Set(PLATFORM_PERMISSIONS);
+  if (role === 'admin') {
+    // An admin's Admin permissions come from the built-in Admin role (and any other role). A company that has no roles
+    // yet (never synced with the role builder) gives its admins what Admin starts with: everything but billing.
+    const [hasAdminRole] = await dbs.db
+      .select({ id: roles.id })
+      .from(people)
+      .innerJoin(roles, and(eq(roles.companyId, people.companyId), eq(roles.code, 'ff_admin')))
+      .where(eq(people.id, personId))
+      .limit(1);
+    if (!hasAdminRole) return new Set(PLATFORM_PERMISSIONS.filter((p) => p !== 'billing.manage'));
+  }
   const rows = await dbs.db
     .selectDistinct({ permission: roleGrants.permission })
     .from(personRoles)
@@ -45,7 +56,8 @@ export async function platformPermissionsOf(dbs: DbService, personId: string, ro
 
 /**
  * Everything a person holds through their roles (docs/security/platform.md R1): each app permission with every scope a
- * role gives it, the Admin permissions (all of them for owners and admins), and their highest role level (at least 1).
+ * role gives it (their hidden Owner and personal roles included), the Admin permissions (all of them for owners), and
+ * their highest role level (at least 1).
  * Someone with Manage roles may give only what is in here; the owner is never limited by it.
  */
 export async function heldAccess(dbs: DbService, personId: string, role: PlatformRole | string): Promise<{ level: number; grants: Array<{ app: string; permission: string; scope: string }> }> {

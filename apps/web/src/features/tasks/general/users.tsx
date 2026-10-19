@@ -105,7 +105,8 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
 
 function Directory() {
   const access = useAccess();
-  const isManager = access.tasks.me?.role === 'sales_manager';
+  // A Manager-level role (no role names, PLAN.md §19.28): the API lists their direct reports.
+  const isManager = access.tasks.me?.level === 2;
   const q = useTeamDirectory();
   const roles = useTaskRoleOptions().data ?? [];
   const peopleIds = useTaskPeopleIds();
@@ -346,7 +347,7 @@ function ManageTeam() {
         </Card>
       )}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-w-xl">{editing && <EditUser user={editing} roles={roles} onClose={() => setEditing(null)} />}</DialogContent>
+        <DialogContent className="max-w-xl">{editing && <EditUser user={editing} onClose={() => setEditing(null)} />}</DialogContent>
       </Dialog>
       <Dialog open={!!purging} onOpenChange={(o) => !o && setPurging(null)}>
         <DialogContent className="max-w-md">{purging && <PurgeUser user={purging} onClose={() => setPurging(null)} />}</DialogContent>
@@ -355,9 +356,10 @@ function ManageTeam() {
   );
 }
 
-function EditUser({ user, roles, onClose }: { user: ManagedUser; roles: Array<{ value: string; label: string }>; onClose: () => void }) {
+function EditUser({ user, onClose }: { user: ManagedUser; onClose: () => void }) {
   const save = useUpdateManagedUser();
-  const [f, setF] = useState({ email: user.email, first_name: user.first_name, last_name: user.last_name, role: user.role, whatsapp_phone: user.whatsapp_phone, password: '' });
+  // The role is not edited here: roles are given in Admin → People & access (PLAN.md §19.28).
+  const [f, setF] = useState({ email: user.email, first_name: user.first_name, last_name: user.last_name, whatsapp_phone: user.whatsapp_phone, password: '' });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -389,14 +391,9 @@ function EditUser({ user, roles, onClose }: { user: ManagedUser; roles: Array<{ 
           <Input id="u-last" value={f.last_name} onChange={set('last_name')} />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="u-role">Role *</Label>
-          <NativeSelect id="u-role" value={f.role} onChange={set('role')}>
-            {roles.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </NativeSelect>
+          <Label htmlFor="u-role">Role</Label>
+          <Input id="u-role" value={user.role_display} disabled />
+          <p className="text-xs text-muted-foreground">Roles are given in People &amp; access.</p>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="u-phone">WhatsApp / Mobile</Label>

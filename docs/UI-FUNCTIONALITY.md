@@ -339,7 +339,7 @@ only once and is never stored where anyone can read it." · "Done".
 
 #### Roles of {name} (dialog)
 "Pick one or more roles. Their permissions add up; the widest scope wins." · every role as a checkbox (current ones ticked),
-"Locked" badge for system roles, app chips. The Super Admin role can only be given or taken by an owner. Live summary:
+"Built in" badge on Admin and Member, app chips; "Make Admin" / "Make Member" buttons; "Extra access and responsibilities" (the role editor's picker for this person only, PLAN.md §19.28) with "From roles … · Extra …". Live summary:
 "{First name} will be able to open: Tasks, Assets." / "… will not be able to open any app." + "Losing an app signs them
 out." · "Cancel", "Save roles".
 
@@ -354,8 +354,8 @@ out." · "Cancel", "Save roles".
 > **Update 2026-10-12 (PLAN.md §19.19): every feature is a permission.** The role editor lists every feature of Tasks
 > (incl. Attendance, Leads, Notices, Mistakes & SOPs, Links, HR administration), Assets and the **Admin**
 > workspace (a third "app": "Manage people", "Reset passwords", "Start exits", "Delete people permanently", "Manage roles",
-> "Company settings"), each with a one-line description. Only the **Super Admin** (Owner) role is locked; "Admin" and every
-> other role can be edited and archived. Menus and buttons follow the permissions: e.g. a role with only "Live attendance"
+> "Company settings"), each with a one-line description. Admin and Member are built in (edited, never archived or renamed; PLAN.md §19.28); the Owner is a mark on the person
+> (everything), not a role; every other role can be edited and archived. Menus and buttons follow the permissions: e.g. a role with only "Live attendance"
 > and "See notices" shows Attendance → Today + Live attendance and Tasks → Home, Tasks, Groups, Notices, My team. Admin →
 > People & access / Roles / Settings each need their own Admin permission (owners and admins have all); a page you may not
 > open sends you to the Admin page you may open, or `/`.
@@ -363,8 +363,8 @@ out." · "Cancel", "Save roles".
 ### Roles
 - **URL** `/roles`. **Purpose**: what each role can do in every app; a person can hold several roles.
 - **Header**: "Roles"; "What each role can do in every app, the Admin workspace included. A person can have several roles;
-  their permissions add up. Only the Owner role (Super Admin) is locked."; action "New role".
-- **Columns**: "Role" (name, "Locked" badge only on Super Admin, description or "{n} permission(s)") · "Level" ("Member" / "Manager" / "Admin") ·
+  their permissions add up. … Admin and Member are built in …"; action "New role".
+- **Columns**: "Role" (name, "Built in" badge on Admin and Member, description or "{n} permission(s)") · "Level" ("Member" / "Manager" / "Admin") ·
   "Apps" (hidden on phones; chips or "None") · "People" (holders) · actions: "Edit" (or "View" for locked roles) ·
   "Duplicate" (no confirmation) · "Archive" (not locked; confirm `Archive "{name}"?`, "{n} people lose it (and any app only it
   gave them).").

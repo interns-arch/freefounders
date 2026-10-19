@@ -164,7 +164,7 @@ describe('sign-up (PLAN.md §21)', () => {
     assert.ok(Math.abs(s.trialEndsAt!.getTime() - Date.now() - 14 * 86400_000) < 60_000);
     const [profile] = await dbs.db.select().from(billingProfiles).where(eq(billingProfiles.companyId, out.companyId));
     assert.equal(profile.state, 'Karnataka');
-    // Same steps as `company -- create`: set up in Tasks, roles imported, the owner gets Tasks through Super Admin.
+    // Same steps as `company -- create`: set up in Tasks, Admin and Member made, the owner gets Tasks (Admin + the Owner role).
     assert.ok(appCalls.some((x) => x.app === 'tasks' && x.path === '/companies' && x.body.code === 'BRIGHTTRADERSPVT'));
     assert.ok(appCalls.some((x) => x.app === 'tasks' && x.path === '/provision' && x.cid === out.companyId));
     assert.ok(!appCalls.some((x) => x.app === 'assets'), 'only the chosen apps');
@@ -175,6 +175,12 @@ describe('sign-up (PLAN.md §21)', () => {
     assert.equal(me.body.account.isStaff, false);
     assert.deepEqual({ ...me.body.billing, trialEndsAt: undefined }, { plan: 'suite', state: 'trialing', trialEndsAt: undefined, readOnly: false, daysLeft: 14 });
     assert.deepEqual(me.body.apps.map((a: { app: string }) => a.app), ['tasks']);
+    // A new company has exactly the two built-in roles; the owner holds Admin (and the hidden Owner role) (PLAN.md §19.28).
+    const roleList = await call('GET', '/roles', { token: out.accessToken });
+    assert.deepEqual(roleList.body.map((r: { code: string }) => r.code).sort(), ['ff_admin', 'ff_member']);
+    const ppl = await call('GET', '/people', { token: out.accessToken });
+    assert.equal(ppl.body.length, 1, 'only the owner in People');
+    assert.deepEqual(ppl.body[0].roleIds, [roleList.body.find((r: { code: string }) => r.code === 'ff_admin').id]);
     // The account signs in by email (one company: straight in).
     const again = await login('ASHA@bright.test');
     assert.equal(again.status, 200);
@@ -467,7 +473,7 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
     const view = await call('GET', '/billing', { token: owner });
     assert.equal(view.body.plan, 'tasks');
     assert.equal(view.body.state, 'active');
-    assert.deepEqual(view.body.seats, { used: 1, paid: 5, limit: 5, nextPeriod: null }, 'the member has no app: no seat');
+    assert.deepEqual(view.body.seats, { used: 2, paid: 5, limit: 5, nextPeriod: null }, 'the member joined as Member (an invite without a role, PLAN.md §19.28): a seat');
     assert.equal(view.body.nextCharge.total, 58410);
     assert.deepEqual((await company(ids.company)).enabledApps, ['tasks'], 'Assets is off on the Tasks plan (nothing deleted)');
     const list = await call('GET', '/billing/invoices', { token: owner });

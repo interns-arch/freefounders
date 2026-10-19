@@ -32,6 +32,10 @@ class Role(models.TextChoices):
     LEGAL = "legal", "Legal"
     HR_EXECUTIVE = "hr_executive", "HR Executive"
     HR_MANAGER = "hr_manager", "HR Manager"
+    # Neutral value for users whose roles come from the FreeFounders Platform (PLAN.md §19.28): only Admin and Member
+    # are built in there, and what someone can do comes from the roles' permissions, never from this field. No
+    # built-in role here, no capabilities of its own.
+    MEMBER = "member", "Member"
 
 
 class Department(models.TextChoices):

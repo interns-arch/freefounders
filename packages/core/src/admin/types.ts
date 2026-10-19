@@ -31,7 +31,10 @@ export interface Person {
   status: 'active' | 'inactive';
   login: { username: string | null; lastLoginAt: string | null; locked: boolean } | null;
   apps: AppKey[];
+  /** Their listed roles (Admin, Member, roles made in the role builder). */
   roleIds: string[];
+  /** They have extra access or duties of their own (PLAN.md §19.28). */
+  extraAccess?: boolean;
   departmentId: string | null;
   designation: string | null;
   reportsTo: string | null;
@@ -205,8 +208,28 @@ export function roleApps(role: Pick<Role, 'grants'>): GrantApp[] {
   return [...new Set(role.grants.map((g) => g.app))];
 }
 
-/** Only an owner gives or takes Super Admin, the locked Owner role (every permission, always). */
-export const SUPER_ADMIN_ROLE = 'ff_super_admin';
+/**
+ * The two built-in roles (PLAN.md §19.28): edited like any role, never deleted or renamed. "Make Admin" / "Make Member"
+ * swap one for the other. The Owner is a mark on the person (full access), not a role in the list.
+ */
+export const ADMIN_ROLE = 'ff_admin';
+export const MEMBER_ROLE = 'ff_member';
+
+/** A person's access (GET /people/:id/access): roles, what they give together, and their own extra access and duties. */
+export interface PersonAccess {
+  personId: string;
+  owner: boolean;
+  roleIds: string[];
+  fromRoles: Grant[];
+  extra: { grants: Grant[]; duties: Duty[] };
+  /** The extra permissions their roles do not already give. */
+  adds: Grant[];
+}
+
+export interface PersonalAccessInput {
+  grants: Grant[];
+  duties: Duty[];
+}
 
 // ─── Settings Center (Phase 4) ────────────────────────────────────────────
 

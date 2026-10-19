@@ -2,8 +2,11 @@
 //   npm run company -- list
 //   npm run company -- create --name "Acme Pvt Ltd" --code ACME --owner-name "Asha Rao" --owner-email asha@acme.in
 //                              [--owner-login asha] [--owner-password ...] [--apps tasks,assets]
-//   npm run company -- sync    set up every active company in each app it has, and re-link people who
-//                              already have an app (safe to repeat)
+//   npm run company -- sync [--code X]   set up every active company (or one) in each app it has, and re-link
+//                              people who already have an app (safe to repeat)
+//   npm run company -- reset --code DEMO --keep-owner [--no-staff]
+//                              LOCAL TEST DATA ONLY: delete everyone but the owner(s) and their records in every app,
+//                              archive every role but Admin and Member (back to defaults). Refused on a non-local database.
 //   npm run company -- staff --email someone@freefounders.in [--off]
 //                              mark an account (made by sign-up) as FreeFounders staff: it opens the owner console
 // In multi-company mode each app keeps a company's data in its own schema; `create` and `sync` ask the apps
@@ -19,6 +22,7 @@ import { hashPassword } from './auth/auth.service';
 import { DbService } from './db/db.service';
 import { accounts, APPS, companies, logins, people, subscriptions } from './db/schema';
 import { CODE_RE, CompanySetupService } from './company/setup.service';
+import { RolesService } from './roles/roles.service';
 
 function args(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -37,6 +41,7 @@ async function main() {
   const ctx = await NestFactory.createApplicationContext(AppModule, { logger: ['error'] });
   const dbs = ctx.get(DbService);
   const setup = ctx.get(CompanySetupService);
+  const roles = ctx.get(RolesService);
   const say = (line: string) => console.log(line);
   try {
     if (command === 'list') {
@@ -57,11 +62,29 @@ async function main() {
     }
 
     if (command === 'sync') {
-      const rows = await dbs.db.select().from(companies).where(eq(companies.status, 'active')).orderBy(asc(companies.createdAt));
+      const only = opts.code?.trim().toUpperCase();
+      const rows = (await dbs.db.select().from(companies).where(eq(companies.status, 'active')).orderBy(asc(companies.createdAt))).filter((c) => !only || c.code === only);
+      if (only && !rows.length) throw new Error(`No active company with code ${only}`);
       for (const c of rows) {
         console.log(`${c.name} (${c.code})`);
         await setup.sync(c, say);
+        const conv = roles.conversions.get(c.id);
+        if (conv) console.log(`  ✔ two built-in roles (PLAN.md §19.28): ${conv.archived.length} template role(s) archived; ${conv.admin} → Admin, ${conv.member} → Member${conv.extra ? `, ${conv.extra} with extra access` : ''}`);
       }
+      return;
+    }
+
+    if (command === 'reset') {
+      const code = opts.code?.trim().toUpperCase();
+      if (!code || opts['keep-owner'] !== 'true') throw new Error('reset needs --code <CODE> --keep-owner (everyone else is deleted)');
+      const host = new URL(process.env.DATABASE_URL ?? 'postgres://localhost/ff_platform').hostname;
+      if (process.env.NODE_ENV === 'production' || !['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
+        throw new Error('reset is for local test data only (the database must be on localhost)');
+      }
+      const [c] = await dbs.db.select().from(companies).where(eq(companies.code, code)).limit(1);
+      if (!c) throw new Error(`No company with code ${code}`);
+      console.log(`${c.name} (${c.code}): reset to the owner only`);
+      await setup.resetToOwner(c.id, { keepStaff: opts['no-staff'] !== 'true' }, say);
       return;
     }
 

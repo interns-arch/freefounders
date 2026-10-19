@@ -326,6 +326,29 @@ def role_codes(user) -> list[str]:
     return codes
 
 
+# Platform roles that are never shown as someone's role (PLAN.md §19.28): the hidden Owner role and personal roles
+# (a person's own extra access and duties). They count for permissions like any role.
+HIDDEN_ROLE_PREFIXES = ("ff_owner", "ff_person_")
+
+
+def is_listed_code(code: str) -> bool:
+    return not str(code).startswith(HIDDEN_ROLE_PREFIXES)
+
+
+def listed_roles(user) -> list:
+    """The Platform roles shown as this user's role(s): Admin-level first, then by name; [] for a standalone user."""
+    if not getattr(user, "pk", None):
+        return []
+    from .models import UserAccessRole
+
+    if "access_roles" in getattr(user, "_prefetched_objects_cache", {}):
+        rows = [ar.role for ar in user.access_roles.all()]
+    else:
+        rows = [ar.role for ar in UserAccessRole.objects.filter(user_id=user.pk).select_related("role")]
+    rows = [r for r in rows if not r.archived and is_listed_code(r.code)]
+    return sorted(rows, key=lambda r: (-r.level, r.name.lower()))
+
+
 def capabilities(user) -> set[str]:
     from .permissions import ROLE_CAPABILITIES
 

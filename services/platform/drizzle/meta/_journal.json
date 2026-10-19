@@ -71,6 +71,13 @@
       "when": 1792000000000,
       "tag": "0009_signup_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792405584746,
+      "tag": "0010_two_roles",
+      "breakpoints": true
     }
   ]
 }

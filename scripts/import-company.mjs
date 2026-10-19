@@ -11,6 +11,9 @@
 //   2. copies every table, keeping ids (values pass through as text, so dates, JSON and photos are exact),
 //   3. creates the company, its people, their logins (Tasks password hashes keep working; argon2id from the
 //      first sign-in) and their app links in the Platform, and links the app users to those people.
+// Roles: the next `company sync` gives the company Admin and Member only (PLAN.md §19.28) and maps each person from
+// their old app roles: Tasks Super Admin / Admin → Admin; anyone else → Member + a personal role ("extra access")
+// with exactly what their old roles gave beyond Member (RolesService.importFromApps).
 // It refuses to run when the company code or its schemas already exist. On failure before step 3 it removes
 // the schemas it created, so the run can be repeated.
 //
@@ -231,7 +234,10 @@ function personOf({ tasks: t, assets: a }) {
     platformRole:
       OWNER_EMAIL && (lower(t?.email) === OWNER_EMAIL || lower(a?.email) === OWNER_EMAIL)
         ? 'owner'
-        : ['super_admin', 'admin'].includes(t?.role) || a?.role === 'Admin'
+        : // Admin-like in Tasks (the old Super Admin / Admin) → the built-in Admin role on the next `company sync`
+          // (PLAN.md §19.28). Everyone else, an Assets-only "Admin" included, becomes Member plus a personal role with
+          // whatever their old app roles gave beyond Member, so nobody loses access and nobody gains Tasks admin.
+          ['super_admin', 'admin'].includes(t?.role)
           ? 'admin'
           : 'member',
   };

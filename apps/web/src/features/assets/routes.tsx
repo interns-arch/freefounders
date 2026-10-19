@@ -26,7 +26,6 @@ const ActivityPage = lazy(() => import('./activity/activity-page'));
 const CatalogPage = lazy(() => import('./catalog/catalog-page'));
 const OrgPage = lazy(() => import('./org/org-page'));
 const UsersPage = lazy(() => import('./admin/users-page'));
-const RolesPage = lazy(() => import('./admin/roles-page'));
 const SimsPage = lazy(() => import('./sims/sims-page'));
 const ReconciliationPage = lazy(() => import('./reconciliation/reconciliation-page'));
 const ReconRunPage = lazy(() => import('./reconciliation/run-page'));
@@ -90,7 +89,8 @@ export const assetsRoutes: RouteObject[] = [
       { path: 'settings/departments', element: <OrgPage kind="department" /> },
       { path: 'settings/vendors', element: <OrgPage kind="vendor" /> },
       { path: 'settings/users', element: <UsersPage /> },
-      { path: 'settings/roles', element: <RolesPage /> },
+      // Roles live in Admin → Roles (one role builder, PLAN.md §15 / §19.28).
+      { path: 'settings/roles', element: <Navigate to="/roles" replace /> },
     ],
   },
 ];

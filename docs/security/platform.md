@@ -122,6 +122,12 @@ higher levels, filters "Copy from", opens roles beyond them read-only ("View"), 
 dialog on People disables roles they cannot give. Tests: Platform `Manage roles gives only what you have: permissions, scopes,
 level; never Admin-level or Super Admin (R1)` (+ `granting Tasks provisions…` now checks the unknown app role is owner-only);
 e2e `web-admin.spec.ts` `Manage roles without being the owner: only what you have yourself can be ticked… (R1)`.
+Since PLAN.md §19.28 (2026-10-19): there is no Super Admin role; the owner's powers come from the hidden Owner role
+(`kind = owner`, never listed or given) and the owner mark. Admin and Member are built in (not archivable, name and level
+fixed; Admin is Admin-level, so only the owner edits it, and only owners/admins can give it). Admins' Admin permissions
+come from their roles (the Admin role: all but `billing.manage`). Per-person extra access (`PUT /people/:id/access/personal`)
+follows the same rule: only what the caller holds, members on members only, owners only by owners, never for oneself
+unless owner. Tests: Platform `extra access and responsibilities for one person…`, `Make Admin / Make Member…`, the R1 test.
 
 **R3: weak passwords are warned about, never blocked.** Minimum stays 6 (server unchanged). `passwordWeakness` /
 `weakPasswordWarning` (`packages/core/src/admin/password-strength.ts`, pure, ~4 KB: ~400 common passwords and the words they are

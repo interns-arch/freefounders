@@ -60,7 +60,7 @@ test('uniform question at check-in: Cancel stops the punch, "No" is saved and sh
     expect(created.status()).toBe(201);
     personId = (await created.json()).person.id as string;
     const roles = (await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ id: string; level: number; system: boolean; grants: Array<{ app: string }> }>;
-    const member = roles.find((r) => !r.system && r.level === 1 && r.grants.some((g) => g.app === 'tasks'))!;
+    const member = roles.find((r) => (r as { code?: string }).code === 'ff_member')!; // the built-in Member (PLAN.md §19.28)
     expect((await request.put(`/api/platform/people/${personId}/roles`, { headers: auth(owner), data: { roleIds: [member.id] } })).ok()).toBeTruthy();
     const first = await token(request, login, temp);
     expect((await request.post('/api/platform/auth/change-password', { headers: auth(first), data: { currentPassword: temp, newPassword: password } })).ok()).toBeTruthy();

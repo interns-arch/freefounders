@@ -37,8 +37,13 @@ const step = (s) => console.log(`\n── ${s}`);
 // ── 0. remove the previous rehearsal
 step('Removing the previous rehearsal');
 const old = await sql(`${PG_TASKS}/ff_platform`, 'select id from platform.companies where code = $1', [CODE]);
+// Every Platform table that belongs to a company (roles, people, departments, billing…), in any order: a few passes
+// get past the foreign keys between them.
+const owned = (await sql(`${PG_TASKS}/ff_platform`, "select table_name from information_schema.columns where table_schema = 'platform' and column_name = 'company_id' and table_name <> 'companies'")).map((r) => r.table_name);
 for (const { id } of old) {
-  await sql(`${PG_TASKS}/ff_platform`, 'delete from platform.people where company_id = $1', [id]);
+  for (let pass = 0; pass < 5; pass++) {
+    for (const t of owned) await sql(`${PG_TASKS}/ff_platform`, `delete from platform."${t}" where company_id = $1`, [id]).catch(() => {});
+  }
   await sql(`${PG_TASKS}/ff_platform`, 'delete from platform.companies where id = $1', [id]);
 }
 await sql(`${PG_TASKS}/ff_tasks`, `drop schema if exists ${SCHEMA} cascade`);
@@ -108,6 +113,13 @@ assert.equal(after0[0].n, 0, 'the dry run must not write anything');
 step('Import');
 run(process.execPath, [importer, ...args, '--apply']);
 
+// ── 2b. roles: the company gets Admin and Member only; people are mapped from their old app roles (PLAN.md §19.28)
+step('Roles: Admin and Member, people mapped from their old roles');
+run(process.execPath, ['dist/companies.js', 'sync', '--code', CODE], {
+  cwd: path.join(ROOT, 'services/platform'),
+  env: { ...process.env, DATABASE_URL: `${PG_TASKS}/ff_platform`, TASKS_INTERNAL_URL: 'http://127.0.0.1:8000/api/internal', ASSETS_INTERNAL_URL: 'http://127.0.0.1:3000/api/internal', FF_CLI: 'true' },
+});
+
 // ── 3. verify through the gateway, like a browser
 step('Checking the result through the gateway');
 async function call(method, p, { body, token, cookie } = {}) {
@@ -152,6 +164,17 @@ const assetsList = await call('GET', '/assets/api/assets?pageSize=1', { cookie }
 assert.equal(assetsList.status, 200, JSON.stringify(assetsList.body));
 assert.equal(assetsList.body.total, before.assets, 'every asset came across');
 console.log(`  ✔ Aditi (in both apps) is the owner, opens Tasks and Assets, and sees all ${before.assets} assets`);
+
+const roleList = await call('GET', '/api/platform/roles', { token: aditi });
+assert.deepEqual(roleList.body.map((r) => r.code).sort(), ['ff_admin', 'ff_member'], 'only the two built-in roles');
+const byCode = Object.fromEntries(roleList.body.map((r) => [r.code, r.id]));
+const peopleList = (await call('GET', '/api/platform/people', { token: aditi })).body;
+const rahulPerson = peopleList.find((p) => p.login?.username === 'rahul');
+assert.deepEqual(rahulPerson.roleIds, [byCode.ff_member], 'a Sales person becomes a Member');
+assert.equal(rahulPerson.extraAccess, true, 'with what Sales gave beyond Member as extra access');
+assert.deepEqual(peopleList.find((p) => p.email === 'admin@cartrend.test').roleIds, [byCode.ff_admin], 'the old Admin (the owner) holds Admin');
+const others = peopleList.filter((p) => p.roleIds.length);
+console.log(`  ✔ roles: Admin + Member only; ${others.filter((p) => p.roleIds.includes(byCode.ff_admin)).length} Admin, ${others.filter((p) => p.roleIds.includes(byCode.ff_member)).length} Member (${peopleList.filter((p) => p.extraAccess).length} with extra access)`);
 
 // An Assets-only person keeps their Assets password.
 const assetsOnly = await sql(LEGACY.assets, "select email from users where email is not null and email <> 'admin@cartrend.test' and is_active order by created_at limit 1");

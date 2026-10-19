@@ -40,8 +40,15 @@ test('People & access: list, search, add with department / manager / join date, 
   const name = `E2E Web Person ${s}`;
   const deptName = `E2E Web Dept ${s}`;
   const dept = await (await request.post('/api/platform/departments', { headers: auth(owner), data: { name: deptName } })).json();
-  const roles = (await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ id: string; name: string; system: boolean; level: number; grants: Array<{ app: string }> }>;
-  const memberRole = roles.find((r) => !r.system && r.level === 1 && r.grants.some((g) => g.app === 'tasks'))!;
+  const roles = (await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ id: string; code: string; name: string; system: boolean; level: number; grants: Array<{ app: string }> }>;
+  const builtInMember = roles.find((r) => r.code === 'ff_member')!;
+  // A role of the test's own (the company starts with Admin and Member only, PLAN.md §19.28).
+  const memberRole = (await (
+    await request.post('/api/platform/roles', {
+      headers: auth(owner),
+      data: { name: `E2E Tasks role ${s}`, level: 1, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'own' }] },
+    })
+  ).json()) as { id: string; name: string };
   let personId: string | undefined;
 
   try {
@@ -79,6 +86,7 @@ test('People & access: list, search, add with department / manager / join date, 
     expect(created.departmentId).toBe(dept.id);
     expect(created.reportsTo).toBe(me.person.id);
     expect(created.joinDate).toBe('2026-09-01');
+    expect(created.roleIds, 'a new person starts as Member').toEqual([builtInMember.id]);
 
     // Edit: designation and joining date.
     await row.getByRole('button', { name: 'Edit' }).click();
@@ -124,6 +132,7 @@ test('People & access: list, search, add with department / manager / join date, 
   } finally {
     if (personId) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
     await request.patch(`/api/platform/departments/${dept.id}`, { headers: auth(owner), data: { active: false } });
+    await request.delete(`/api/platform/roles/${memberRole.id}`, { headers: auth(owner) });
   }
 });
 
@@ -500,7 +509,7 @@ test('Roles: any role from blank — only Live attendance and Notices; they see 
 
     // Copy from another role ticks its permissions; Blank clears them.
     const seeTasks = editor.getByRole('checkbox', { name: 'Tasks: See tasks', exact: true });
-    await editor.getByLabel('Start from').selectOption({ label: 'Copy from Rider' });
+    await editor.getByLabel('Start from').selectOption({ label: 'Copy from Member' });
     await expect(seeTasks).toBeChecked();
     await expect(editor.getByRole('checkbox', { name: 'Tasks: Punch in and out', exact: true })).toBeChecked();
     await editor.getByLabel('Start from').selectOption({ label: 'Blank: nothing ticked' });
@@ -616,9 +625,11 @@ test('Manage roles without being the owner: only what you have yourself can be t
     await openSignedIn(page, '/roles', who.login, who.password);
     await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible();
 
-    // Super Admin and the Admin-level role: look only.
-    await expect(page.getByRole('button', { name: 'Duplicate Super Admin', exact: true })).toBeDisabled();
+    // The built-in Admin (Admin level) and Member (permissions they lack): look only; neither can be archived.
+    await expect(page.getByRole('button', { name: 'Duplicate Admin', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'View Admin', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Archive Admin', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Archive Member', exact: true })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'New role' }).click();
     const editor = page.getByRole('dialog', { name: 'New role' });
@@ -649,5 +660,71 @@ test('Manage roles without being the owner: only what you have yourself can be t
   } finally {
     if (personId) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
     await request.delete(`/api/platform/roles/${roleId}`, { headers: auth(owner) });
+  }
+});
+
+// ─── §19.28: two built-in roles, Admin and Member, plus per-person access ────────────────────────────────────────────
+
+test('People: Make Admin / Make Member, and extra access + a responsibility for one person', async ({ page, request }) => {
+  const owner = await token(request);
+  const s = stamp();
+  const roles = (await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ id: string; code: string }>;
+  const id = (code: string) => roles.find((r) => r.code === code)!.id;
+  const who = await personWithRoles(request, owner, `${s}x`, [id('ff_member')]);
+  const name = `E2E Perm ${s}x`;
+  try {
+    await openSignedIn(page, '/people');
+    await page.getByLabel('Search people').fill(name);
+    const row = page.getByRole('row', { name: new RegExp(name) });
+    const rolesCell = page.getByLabel(`Roles of ${name}`);
+    await expect(rolesCell.getByText('Member', { exact: true })).toBeVisible();
+
+    // Make Admin: Admin replaces Member, and the access level follows.
+    await row.getByRole('button', { name: 'Change roles' }).click();
+    let dialog = page.getByRole('dialog', { name: `Roles of ${name}` });
+    await dialog.getByRole('button', { name: 'Make Admin' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(rolesCell.getByText('Admin', { exact: true })).toBeVisible();
+    await expect(row.getByText('Admin', { exact: true }).first()).toBeVisible();
+
+    // …and back to Member.
+    await row.getByRole('button', { name: 'Change roles' }).click();
+    dialog = page.getByRole('dialog', { name: `Roles of ${name}` });
+    await dialog.getByRole('button', { name: 'Make Member' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(rolesCell.getByText('Member', { exact: true })).toBeVisible();
+
+    // Extra access for this person only: the role editor's picker, plus a responsibility.
+    await row.getByRole('button', { name: 'Change roles' }).click();
+    dialog = page.getByRole('dialog', { name: `Roles of ${name}` });
+    await expect(dialog.getByText(/Nothing extra/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Add extra access' }).click();
+    const sheet = page.getByRole('dialog', { name: `Extra access for ${name}` });
+    await expect(sheet.getByText('From their roles').first()).toBeVisible();
+    await sheet.getByLabel('Search permissions').fill('give tasks');
+    await sheet.getByRole('checkbox', { name: 'Tasks: Give tasks to others', exact: true }).click();
+    await sheet.getByLabel('Search permissions').fill('');
+    await sheet.getByRole('button', { name: 'Add duty' }).click();
+    await sheet.getByLabel('Duty 1 title').fill(`E2E stock count ${s}`);
+    await sheet.getByRole('button', { name: 'Save extra access' }).click();
+    await expect(sheet).toBeHidden();
+    dialog = page.getByRole('dialog', { name: `Roles of ${name}` });
+    await expect(dialog.getByText(/1 extra permission\(s\) and 1 responsibility/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(rolesCell.getByText('+ extra access')).toBeVisible();
+
+    // The API and Tasks agree: they may now give tasks to others; the personal role is never a listed role.
+    const access = await (await request.get(`/api/platform/people/${who.personId}/access`, { headers: auth(owner) })).json();
+    expect(access.adds).toEqual([{ app: 'tasks', permission: 'tasks.assign', scope: '' }]);
+    expect(access.extra.duties[0].title).toBe(`E2E stock count ${s}`);
+    const theirs = await token(request, who.login, who.password);
+    const tasksMe = await (await request.get('/tasks/api/auth/me', { headers: auth(theirs) })).json();
+    expect(tasksMe.capabilities).toContain('tasks.assign');
+    expect(tasksMe.role_display).toBe('Member');
+    const listed = (await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ code: string }>;
+    expect(listed.some((r) => r.code.startsWith('ff_person_'))).toBe(false);
+  } finally {
+    await request.put(`/api/platform/people/${who.personId}/access/personal`, { headers: auth(owner), data: { grants: [], duties: [] } });
+    await request.patch(`/api/platform/people/${who.personId}`, { headers: auth(owner), data: { status: 'inactive' } });
   }
 });

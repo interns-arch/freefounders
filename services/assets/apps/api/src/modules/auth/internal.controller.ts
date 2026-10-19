@@ -3,7 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import type { Response } from 'express';
 import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
-import { and, asc, eq, isNotNull, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { ADMIN_PERMISSIONS, ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSIONS } from '@eam/shared';
 import { z } from 'zod';
 import { type Actor, SYSTEM_ACTOR } from '../../common/actor';
@@ -243,6 +243,10 @@ export class InternalController {
           .update(roles)
           .set({ archived: true, updatedAt: new Date() })
           .where(and(isNotNull(roles.platformRoleId), keep.length ? notInArray(roles.platformRoleId, keep) : sql`true`));
+        // This app's own starter roles (Admin, IT / Asset Manager, HR, Leadership, Manager, Employee) are not used under
+        // the Platform, whose roles are the only ones (PLAN.md §19.28): archived. A login keeps one as its required
+        // primary role, but its permissions come from the Platform's roles (user_roles).
+        await db.update(roles).set({ archived: true, updatedAt: new Date() }).where(and(isNull(roles.platformRoleId), eq(roles.archived, false)));
       }
       const missingPeople: string[] = [];
       for (const p of input.people) {

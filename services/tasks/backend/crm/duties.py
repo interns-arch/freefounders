@@ -75,7 +75,10 @@ def create_duty_tasks(today=None) -> int:
                 DutyRun.objects.create(duty=duty, user=user, period=key, task=task)
             created += 1
             if duty.frequency == "once":
-                notify(user, "task_assigned", f"New for your role ({duty.role.name}): {duty.title}",
+                # A personal role (PLAN.md §19.28) is the person's own responsibilities, not a role they were given.
+                personal = duty.role.code.startswith("ff_person_")
+                notify(user, "task_assigned",
+                       f"New responsibility: {duty.title}" if personal else f"New for your role ({duty.role.name}): {duty.title}",
                        duty.description or "", link=f"/tasks/{task.pk}", link_label="Open the task")
     return created
 

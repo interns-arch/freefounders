@@ -148,13 +148,18 @@ export class PeopleService {
           .select({ personId: personRoles.personId, roleId: personRoles.roleId })
           .from(personRoles)
           .innerJoin(roles, eq(roles.id, personRoles.roleId))
-          .where(and(eq(roles.companyId, caller.companyId), eq(roles.archived, false)))
+          .where(and(eq(roles.companyId, caller.companyId), eq(roles.archived, false), eq(roles.kind, 'role')))
+      : [];
+    // Who has extra access or own duties of their own (a hidden personal role, PLAN.md §19.28).
+    const personal = rows.length
+      ? await db.select({ personId: roles.personId }).from(roles).where(and(eq(roles.companyId, caller.companyId), eq(roles.kind, 'personal')))
       : [];
     return rows.map((r) => ({
       ...this.view(r.person),
       login: r.hasLogin ? { username: r.username, lastLoginAt: r.lastLoginAt, locked: !!r.lockedUntil && r.lockedUntil > new Date() } : null,
       apps: grants.filter((g) => g.personId === r.person.id).map((g) => g.app),
       roleIds: held.filter((h) => h.personId === r.person.id).map((h) => h.roleId),
+      extraAccess: personal.some((x) => x.personId === r.person.id),
     }));
   }
 
@@ -240,7 +245,8 @@ export class PeopleService {
           email: input.email ?? null,
           employeeCode: input.employeeCode ?? null,
           mobile: input.mobile ?? null,
-          platformRole: input.platformRole ?? 'member',
+          // admin follows the Admin role (given below, PLAN.md §19.28); owner is a mark of its own.
+          platformRole: input.platformRole === 'owner' ? 'owner' : 'member',
           departmentId: input.departmentId ?? null,
           designation: input.designation ?? null,
           reportsTo: input.reportsTo ?? null,
@@ -257,7 +263,22 @@ export class PeopleService {
       }
       return { person: this.view(p), generatedPassword };
     });
+    if (input.platformRole === 'admin') {
+      try {
+        await this.rolesSvc.setLevel(caller, created.person.id, 'admin');
+      } catch (err) {
+        // Nothing half-made: without the Admin role (e.g. no free seat) the person is not added.
+        await this.dbs.db.delete(logins).where(eq(logins.personId, created.person.id));
+        await this.dbs.db.delete(people).where(eq(people.id, created.person.id));
+        throw err;
+      }
+      return { ...created, person: { ...created.person, platformRole: 'admin' } };
+    }
     return created;
+  }
+
+  private get rolesSvc() {
+    return this.moduleRef.get(RolesService, { strict: false });
   }
 
   async update(caller: Caller, id: string, input: PersonUpdate) {
@@ -278,6 +299,9 @@ export class PeopleService {
       if (hasApp) await assertNewSeat(this.dbs, caller.companyId);
     }
 
+    // Admin / Member is the built-in role (PLAN.md §19.28): changing the level gives or takes the Admin role.
+    const level = input.platformRole && input.platformRole !== current.platformRole ? input.platformRole : undefined;
+    if (level && level !== 'owner' && current.platformRole !== 'owner') await this.rolesSvc.setLevel(caller, id, level);
     const [p] = await this.dbs.db
       .update(people)
       .set({
@@ -285,7 +309,7 @@ export class PeopleService {
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.employeeCode !== undefined ? { employeeCode: input.employeeCode } : {}),
         ...(input.mobile !== undefined ? { mobile: input.mobile } : {}),
-        ...(input.platformRole ? { platformRole: input.platformRole } : {}),
+        ...(level && (level === 'owner' || current.platformRole === 'owner') ? { platformRole: level } : {}),
         ...(input.status ? { status: input.status } : {}),
         ...(input.departmentId !== undefined ? { departmentId: input.departmentId } : {}),
         ...(input.designation !== undefined ? { designation: input.designation } : {}),
@@ -296,6 +320,11 @@ export class PeopleService {
       .where(eq(people.id, id))
       .returning();
     if (input.status === 'inactive') await this.auth.revokeAll(id);
+    if (level && (level === 'owner' || current.platformRole === 'owner')) {
+      // An owner made or unmade: the Owner role follows; a former owner keeps (or gets) the role of their new level.
+      if (level !== 'owner') await this.rolesSvc.setLevel({ ...caller, role: 'owner' }, id, level);
+      else await this.rolesSvc.push(caller.companyId);
+    }
     // Department, manager, active/inactive reach the apps (deactivated people are switched off there too).
     const sync = await this.directory.push(caller.companyId);
     return { ...this.view(p), sync };

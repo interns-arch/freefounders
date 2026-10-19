@@ -16,6 +16,8 @@ import type {
   LoginReset,
   NewPerson,
   Person,
+  PersonAccess,
+  PersonalAccessInput,
   PersonFields,
   ResetLoginInput,
   Role,
@@ -26,6 +28,7 @@ import type {
 export const adminKeys = {
   all: ['admin'] as const,
   people: (search = '') => ['admin', 'people', search] as const,
+  personAccess: (id: string) => ['admin', 'person-access', id] as const,
   roles: ['admin', 'roles'] as const,
   catalogue: ['admin', 'roles-catalogue'] as const,
   apps: ['admin', 'apps'] as const,
@@ -42,6 +45,10 @@ export const adminApi = {
   resetLogin: (id: string, body: ResetLoginInput = {}) => platformApi.put<LoginReset>(`/people/${id}/login`, body),
   deletePerson: (id: string, confirm: string, options?: DeleteOptions) => platformApi.del<DeletedPerson>(`/people/${id}`, options ? { confirm, options } : { confirm }),
   setPersonRoles: (id: string, roleIds: string[]) => platformApi.put<unknown>(`/people/${id}/roles`, { roleIds }),
+  /** "Make Admin" / "Make Member" (PLAN.md §19.28). */
+  setPersonLevel: (id: string, level: 'admin' | 'member') => platformApi.put<unknown>(`/people/${id}/level`, { level }),
+  personAccess: (id: string) => platformApi.get<PersonAccess>(`/people/${id}/access`),
+  setPersonalAccess: (id: string, body: PersonalAccessInput) => platformApi.put<PersonAccess>(`/people/${id}/access/personal`, body),
   startExit: (id: string, body: { lastWorkingDate: string; reason: string | null }) => platformApi.post<ExitResult>(`/people/${id}/exit`, body),
   apps: () => platformApi.get<AppInfo[]>('/apps'),
 
@@ -128,6 +135,19 @@ export function useDeletePerson() {
 export function useSetPersonRoles() {
   const invalidate = useInvalidateRoles();
   return useMutation({ mutationFn: ({ id, roleIds }: { id: string; roleIds: string[] }) => adminApi.setPersonRoles(id, roleIds), onSuccess: invalidate });
+}
+export function useSetPersonLevel() {
+  const invalidate = useInvalidateRoles();
+  return useMutation({ mutationFn: ({ id, level }: { id: string; level: 'admin' | 'member' }) => adminApi.setPersonLevel(id, level), onSuccess: invalidate });
+}
+/** A person's roles, what those give, and their own extra access and duties (PLAN.md §19.28). */
+export function usePersonAccess(id: string | undefined) {
+  return useQuery({ queryKey: adminKeys.personAccess(id ?? ''), queryFn: () => adminApi.personAccess(id!), enabled: !!id });
+}
+/** Extra access (permissions + scope on top of their roles) and their own duties; empty both to remove them. */
+export function useSetPersonalAccess() {
+  const invalidate = useInvalidateRoles();
+  return useMutation({ mutationFn: ({ id, ...body }: PersonalAccessInput & { id: string }) => adminApi.setPersonalAccess(id, body), onSuccess: invalidate });
 }
 /** Start someone's exit (PLAN.md §17.4): Assets lists the assets to recover, Tasks makes the exit checklist. */
 export function useStartExit() {

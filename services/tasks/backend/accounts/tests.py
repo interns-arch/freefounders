@@ -247,7 +247,8 @@ class RoleWiringTests(TestCase):
 
     def test_every_role_has_capabilities(self):
         from .permissions import ROLE_CAPABILITIES
-        missing = [r.value for r in Role if r not in ROLE_CAPABILITIES]
+        # Member is the neutral value under the Platform (PLAN.md §19.28), not a standalone role.
+        missing = [r.value for r in Role if r not in ROLE_CAPABILITIES and r != Role.MEMBER]
         self.assertEqual(missing, [],
                          f"roles with no entry in ROLE_CAPABILITIES: {missing}")
 
@@ -265,7 +266,7 @@ class RoleWiringTests(TestCase):
 
     def test_every_role_has_a_default_department(self):
         from .models import ROLE_DEFAULT_DEPARTMENT
-        missing = [r.value for r in Role if r not in ROLE_DEFAULT_DEPARTMENT]
+        missing = [r.value for r in Role if r not in ROLE_DEFAULT_DEPARTMENT and r != Role.MEMBER]
         self.assertEqual(missing, [],
                          f"roles with no default department: {missing}")
 
@@ -314,7 +315,8 @@ class RolesEndpointTests(TestCase):
 
     def test_every_role_the_backend_accepts_is_offered(self):
         served = {r["value"] for r in self.client.get("/api/roles/").data}
-        self.assertEqual(served, {value for value, _ in Role.choices})
+        # Standalone: the 20 roles; Member is only the neutral value of Platform users (PLAN.md §19.28).
+        self.assertEqual(served, {value for value, _ in Role.choices if value != Role.MEMBER})
 
     def test_the_roles_added_on_03_sep_are_there(self):
         served = {r["value"] for r in self.client.get("/api/roles/").data}

@@ -36,6 +36,17 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["date_joined", "last_login"]
 
+    def to_representation(self, obj):
+        data = super().to_representation(obj)
+        # Under the Platform the role is the Platform's (Admin, Member or one made in the role builder; PLAN.md §19.28),
+        # never the neutral role field.
+        from .access import listed_roles
+        shown = listed_roles(obj)
+        if shown:
+            data["role"] = shown[0].code
+            data["role_display"] = ", ".join(r.name for r in shown)
+        return data
+
     def get_reporting_manager_name(self, obj):
         m = obj.reporting_manager
         return (m.get_full_name() or m.username) if m else None

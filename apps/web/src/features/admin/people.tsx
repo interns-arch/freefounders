@@ -135,7 +135,8 @@ export function PeoplePage() {
                   {r.name}
                 </Pill>
               ))}
-              {p.roleIds.length === 0 && <span className="text-xs text-muted-foreground">No role</span>}
+              {p.extraAccess && <Pill tone="info">+ extra access</Pill>}
+              {p.roleIds.length === 0 && !p.extraAccess && <span className="text-xs text-muted-foreground">No role</span>}
             </div>
             {can('roles.manage') && (
               <Button variant="outline" size="xs" onClick={() => setOpen({ kind: 'roles', person: p })} disabled={p.status === 'inactive' || !roles.data}>
@@ -277,7 +278,7 @@ export function PeoplePage() {
         }
       />
       {open?.kind === 'roles' && roles.data && (
-        <PersonRolesDialog person={open.person} roles={roles.data} apps={apps.data ?? []} myRole={me?.person.role ?? 'member'} onClose={() => setOpen(null)} />
+        <PersonRolesDialog person={open.person} roles={roles.data} apps={apps.data ?? []} myRole={me?.person.role ?? 'member'} myId={me?.person.id} onClose={() => setOpen(null)} />
       )}
       {open?.kind === 'exit' && <ExitDialog person={open.person} onClose={() => setOpen(null)} />}
       {open?.kind === 'reset' && <ResetPasswordDialog key={open.person.id} person={open.person} onClose={() => setOpen(null)} />}

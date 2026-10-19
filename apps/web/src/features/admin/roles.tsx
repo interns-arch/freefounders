@@ -37,7 +37,7 @@ export function RolesPage() {
           <div className="min-w-0">
             <p className="flex flex-wrap items-center gap-1.5 font-semibold">
               {r.name}
-              {r.system && <Pill tone="admin">Locked</Pill>}
+              {r.system && <Pill tone="admin">Built in</Pill>}
             </p>
             <p className="text-xs text-muted-foreground">
               {r.description || (
@@ -70,7 +70,7 @@ export function RolesPage() {
       header: <span className="sr-only">Actions</span>,
       cell: (r) => {
         const problem = limits.roleProblem(r, 'edit');
-        const view = r.system || !!problem;
+        const view = !!problem;
         return (
           <div className="flex items-center justify-end gap-1 whitespace-nowrap">
             <Button variant="outline" size="xs" onClick={() => setEditing(r)} disabled={!catalogue.data} aria-label={`${view ? 'View' : 'Edit'} ${r.name}`}>
@@ -89,7 +89,7 @@ export function RolesPage() {
             >
               Duplicate
             </Button>
-            {!view && (
+            {!view && !r.system && (
               <Button
                 variant="ghost"
                 size="xs"
@@ -119,7 +119,7 @@ export function RolesPage() {
     <div className="space-y-4">
       <PageHeader
         title="Roles"
-        description="What each role can do in every app, the Admin workspace included. A person can have several roles; their permissions add up. Only the Owner role (Super Admin) is locked."
+        description="What each role can do in every app, the Admin workspace included. Admin and Member are built in: change what they can do, but they cannot be deleted. A person can have several roles; their permissions add up. The owner can always do everything."
         actions={
           <Button variant="cta" onClick={() => setEditing('new')} disabled={!catalogue.data}>
             <Plus /> New role
@@ -145,7 +145,7 @@ export function RolesPage() {
           catalogue={catalogue.data}
           roles={roles.data ?? []}
           limits={limits}
-          lockedReason={editingRole && !editingRole.system ? limits.roleProblem(editingRole, 'edit') : null}
+          lockedReason={editingRole ? limits.roleProblem(editingRole, 'edit') : null}
           onClose={() => setEditing(null)}
         />
       )}

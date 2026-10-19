@@ -54,7 +54,6 @@ export function roleLimits(me: PlatformMe | undefined, catalogue: AppCatalogue[]
     levelAllowed,
     roleProblem(role, purpose) {
       if (unlimited) return null;
-      if (role.system) return 'Only the owner can give or copy Super Admin';
       if (purpose === 'edit' && role.level >= 3) return 'Admin-level: only the owner can change it';
       if (role.level > level) return `${LEVEL_LABELS[role.level] ?? role.level} level, above your own (${LEVEL_LABELS[level] ?? level})`;
       const superOnly = (g: Role['grants'][number]) => !!catalogue.find((c) => c.app === g.app)?.permissions.find((p) => p.key === g.permission)?.superAdminOnly;

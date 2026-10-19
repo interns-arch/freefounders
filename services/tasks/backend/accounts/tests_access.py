@@ -28,8 +28,11 @@ class AccessTestCase(TestCase):
 
 class SeededRolesTests(AccessTestCase):
     def test_every_built_in_role_is_seeded_with_exactly_its_old_capabilities(self):
-        self.assertEqual(AccessRole.objects.filter(code__in=Role.values).count(), len(Role.values))
-        for value, _label in Role.choices:
+        # Member is the neutral value of Platform users (PLAN.md §19.28): no built-in role of its own.
+        standalone = [v for v in Role.values if v != Role.MEMBER]
+        self.assertEqual(AccessRole.objects.filter(code__in=standalone).count(), len(standalone))
+        self.assertFalse(AccessRole.objects.filter(code=Role.MEMBER).exists())
+        for value in standalone:
             with self.subTest(value):
                 u = User(username=f"x-{value}", role=value)
                 self.assertEqual(set(capabilities_for(u)), set(ROLE_CAPABILITIES[value]))

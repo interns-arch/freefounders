@@ -2,7 +2,7 @@ import { ModuleRef } from '@nestjs/core';
 import { DirectoryService } from '../people/directory.service';
 import { FlowsService } from '../people/flows.service';
 import { ConflictException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, notInArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
@@ -14,15 +14,61 @@ import { heldAccess, PLATFORM_APP, PLATFORM_CATALOGUE } from './platform-permiss
 import { assertSeatFor } from '../billing/seats';
 
 /**
- * The two roles every company starts with. Their codes are new, so they never collide with an app's own roles.
- * Only Super Admin (the Owner role) is locked: it always has every permission, new ones included (PLAN.md §19.19).
+ * Two built-in roles per company (PLAN.md §19.28): Admin and Member. Both are edited like any role (permissions, scopes,
+ * duties) but keep their name and level and cannot be archived. The Owner is a mark on the person (`platform_role`
+ * owner), carried to the apps by a hidden role that holds every permission (new ones included). A person's extra access
+ * and own duties live in a hidden personal role. Neither hidden kind is listed or given like a role.
  */
-export const SUPER_ADMIN = {
-  code: 'ff_super_admin',
-  name: 'Super Admin',
-  description: 'Everything in every app, always (new permissions included). Cannot be edited, so the company can never lock itself out.',
+export const OWNER_ROLE = {
+  code: 'ff_owner',
+  name: 'Owner (all access)',
+  description: 'Hidden: every permission in every app, always. Held by the company owner(s) only.',
 };
-export const ADMIN = { code: 'ff_admin', name: 'Admin', description: 'Starts with everything except the Owner-only powers. Edit it like any role.' };
+export const ADMIN = {
+  code: 'ff_admin',
+  name: 'Admin',
+  description: 'Built in: every permission in every app at Company scope, except billing and the Owner-only powers. Edit what it can do; it cannot be deleted.',
+};
+export const MEMBER = {
+  code: 'ff_member',
+  name: 'Member',
+  description: 'Built in: their own tasks, attendance, leave and salary slip, notices and links, asset requests and tickets. Edit what it can do; it cannot be deleted.',
+};
+/** The built-in codes: an app or a test may look for them. */
+export const BUILT_IN_CODES = [ADMIN.code, MEMBER.code] as const;
+export const personalCode = (personId: string) => `ff_person_${personId.replace(/-/g, '')}`;
+
+/** What the Member role starts with (real catalogue keys; a permission the company's apps lack is skipped). */
+export const MEMBER_DEFAULTS: Record<string, Array<[string, string]>> = {
+  tasks: [
+    ['tasks.view', 'own'],
+    ['notifications.view', ''],
+    ['attendance.punch', ''],
+    ['attendance.self', ''],
+    ['leave.self', ''],
+    ['holidays.view', ''],
+    ['payroll.self', ''],
+    ['notices.view', ''],
+    ['links.view', ''],
+  ],
+  assets: [
+    ['request:create', ''],
+    ['ticket:create', ''],
+  ],
+};
+/** Not in the Admin role by default (besides every Owner-only permission): billing stays with the owner. */
+const NOT_FOR_ADMIN = new Set(['platform:billing.manage']);
+
+/**
+ * The template roles of the old model (removed by §19.28): Tasks' 20 built-in roles (codes = Tasks' role values) and the
+ * Assets roles brought in as `assets:<name>`. A role made in the role builder has another code and is kept.
+ */
+export const TEMPLATE_CODES = new Set([
+  'super_admin', 'admin', 'sales_manager', 'sales_executive', 'purchase_manager', 'purchase', 'accounts_manager', 'accounts',
+  'it_lead', 'it_team', 'developer_manager', 'developer', 'warehouse_manager', 'warehouse', 'rider', 'housekeeping', 'security',
+  'legal', 'hr_executive', 'hr_manager',
+]);
+export const isTemplateCode = (code: string) => TEMPLATE_CODES.has(code) || code.startsWith('assets:');
 
 /** Apps a role can have permissions in: the company's apps, plus the Admin workspace itself. */
 export const GRANT_APPS = [...APPS, PLATFORM_APP] as const;
@@ -77,6 +123,7 @@ export const roleUpdateSchema = z.object({
   duties: z.array(dutySchema).max(50).optional(),
 });
 export const personRolesSchema = z.object({ roleIds: z.array(z.string().uuid()).max(50) });
+export const personalAccessSchema = z.object({ grants: z.array(grantSchema).max(500).default([]), duties: z.array(dutySchema).max(50).default([]) });
 export type RoleInput = z.infer<typeof roleInputSchema>;
 
 type Grant = { app: GrantApp; permission: string; scope: string };
@@ -86,6 +133,7 @@ const CATALOGUE_TTL_MS = 10 * 60_000;
 /** What a person with Manage roles who is not the owner may give (docs/security/platform.md R1). */
 type Powers = { level: number; held: Map<string, Set<string>> };
 type RoleRow = typeof roles.$inferSelect;
+type Tx = Parameters<Parameters<DbService['db']['transaction']>[0]>[0];
 const LEVEL_NAMES: Record<number, string> = { 1: 'Member', 2: 'Manager', 3: 'Admin' };
 const APP_NAMES: Record<string, string> = { tasks: 'Tasks', assets: 'Assets', [PLATFORM_APP]: 'Admin' };
 const levelRole = (level: number) => `${level >= 3 ? 'an' : 'a'} ${LEVEL_NAMES[level] ?? level}-level role`;
@@ -210,26 +258,201 @@ export class RolesService {
           await tx.update(companies).set({ accessUpgrades: applied }).where(eq(companies.id, companyId));
           this.log.log(`Roles of company ${companyId} upgraded to ${todo.map((a) => `${a.app} v${a.version}`).join(', ')}`);
         }
-        // The Owner role: every permission at its widest scope, whatever the apps offer today.
-        const [owner] = await tx.select({ id: roles.id }).from(roles).where(and(eq(roles.companyId, companyId), eq(roles.code, SUPER_ADMIN.code))).limit(1);
-        if (owner) {
-          const want = this.systemGrants(cat, true);
-          const have = await tx.select().from(roleGrants).where(eq(roleGrants.roleId, owner.id));
-          const same = want.length === have.length && want.every((w) => have.some((h) => h.app === w.app && h.permission === w.permission && h.scope === w.scope));
-          if (!same) {
-            await tx.delete(roleGrants).where(eq(roleGrants.roleId, owner.id));
-            if (want.length) await tx.insert(roleGrants).values(want.map((g) => ({ roleId: owner.id, ...g })));
-          }
+        // Two built-in roles (PLAN.md §19.28): an older company is converted once; every company keeps Admin, Member
+        // and the hidden Owner role (every permission, held by exactly the owners).
+        let changed: string[] = [];
+        const [m] = await tx.select({ model: companies.rolesModel }).from(companies).where(eq(companies.id, companyId)).limit(1);
+        const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(roles).where(eq(roles.companyId, companyId));
+        if (n > 0) {
+          if ((m?.model ?? 2) < 2) changed = await this.convert(tx, companyId, cat);
+          await this.ensureBuiltIns(tx, companyId, cat);
         }
-        return applied;
+        return { applied, changed };
       });
-      return Object.fromEntries(cat.map((a) => [a.app, done[a.app] ?? 1]));
+      // People whose roles changed in the conversion get the apps their new roles reach (nobody loses one here).
+      for (const personId of done.changed) {
+        try {
+          await this.applyApps(companyId, personId, { close: false });
+        } catch (err) {
+          this.log.warn(`Opening apps for ${personId}: ${(err as Error).message}`);
+        }
+      }
+      return Object.fromEntries(cat.map((a) => [a.app, done.applied[a.app] ?? 1]));
     } catch (err) {
       this.log.warn(`Role catalogue check skipped for company ${companyId}: ${(err as Error).message}`);
       const [c] = await db.select({ upgrades: companies.accessUpgrades }).from(companies).where(eq(companies.id, companyId)).limit(1);
       return { ...(c?.upgrades ?? {}) };
     }
   }
+
+  // ─── the two built-in roles, the Owner role, personal roles (PLAN.md §19.28) ─────
+
+  /** Every permission at its widest scope, except the Owner-only ones and billing. */
+  adminGrants(cat: Catalogue[]): Grant[] {
+    return this.systemGrants(cat, false).filter((g) => !NOT_FOR_ADMIN.has(`${g.app}:${g.permission}`));
+  }
+
+  /** MEMBER_DEFAULTS, limited to what the company's apps offer. */
+  memberGrants(cat: Catalogue[]): Grant[] {
+    const out: Grant[] = [];
+    for (const [app, list] of Object.entries(MEMBER_DEFAULTS)) {
+      const c = cat.find((x) => x.app === app);
+      if (!c) continue;
+      for (const [permission, scope] of list) {
+        const p = c.permissions.find((x) => x.key === permission);
+        if (!p) continue;
+        out.push({ app: c.app, permission, scope: p.scopes ? (p.scopes.includes(scope) ? scope : p.scopes[0]) : '' });
+      }
+    }
+    return out;
+  }
+
+  private scopeRank(cat: Catalogue[], g: Grant) {
+    return cat.find((c) => c.app === g.app)?.permissions.find((p) => p.key === g.permission)?.scopes?.indexOf(g.scope) ?? -1;
+  }
+
+  /** The grants in `extra` that `base` does not already give (or gives at a narrower scope). */
+  beyond(cat: Catalogue[], extra: Grant[], base: Grant[]): Grant[] {
+    return extra.filter((g) => {
+      const b = base.find((x) => x.app === g.app && x.permission === g.permission);
+      return !b || this.scopeRank(cat, g) > this.scopeRank(cat, b);
+    });
+  }
+
+  /** Several grant lists as one: each permission once, at the widest scope any of them gives. */
+  union(cat: Catalogue[], lists: Grant[][]): Grant[] {
+    const out = new Map<string, Grant>();
+    for (const g of lists.flat()) {
+      const k = `${g.app}:${g.permission}`;
+      const have = out.get(k);
+      if (!have || this.scopeRank(cat, g) > this.scopeRank(cat, have)) out.set(k, g);
+    }
+    return [...out.values()];
+  }
+
+  private async setGrants(tx: Tx, roleId: string, grants: Grant[]) {
+    await tx.delete(roleGrants).where(eq(roleGrants.roleId, roleId));
+    if (grants.length) await tx.insert(roleGrants).values(grants.map((g) => ({ roleId, app: g.app, permission: g.permission, scope: g.scope })));
+  }
+
+  /** A built-in name taken by a role someone made: that role is renamed "<name> (custom)" so the built-in can have it. */
+  private async freeBuiltInName(tx: Tx, companyId: string, name: string, exceptCode: string) {
+    await tx
+      .update(roles)
+      .set({ name: sql`${roles.name} || ' (custom)'`, updatedAt: new Date() })
+      .where(and(eq(roles.companyId, companyId), sql`lower(${roles.name}) = lower(${name})`, sql`${roles.code} <> ${exceptCode}`));
+  }
+
+  /**
+   * Admin, Member and the hidden Owner role exist (created with their starting permissions when missing); the Owner role
+   * always has every permission and is held by exactly the company's owners. Returns the three role ids.
+   */
+  async ensureBuiltIns(tx: Tx, companyId: string, cat: Catalogue[]) {
+    const find = async (code: string) => (await tx.select().from(roles).where(and(eq(roles.companyId, companyId), eq(roles.code, code))).limit(1))[0];
+    const make = async (v: { code: string; name: string; description: string }, level: number, kind: 'role' | 'owner', grants: Grant[]) => {
+      await this.freeBuiltInName(tx, companyId, v.name, v.code);
+      const [r] = await tx.insert(roles).values({ companyId, code: v.code, name: v.name, description: v.description, level, system: true, kind }).returning();
+      await this.setGrants(tx, r.id, grants);
+      return r;
+    };
+    const admin = (await find(ADMIN.code)) ?? (await make(ADMIN, 3, 'role', this.adminGrants(cat)));
+    const member = (await find(MEMBER.code)) ?? (await make(MEMBER, 1, 'role', this.memberGrants(cat)));
+    const owner = (await find(OWNER_ROLE.code)) ?? (await make(OWNER_ROLE, 3, 'owner', this.systemGrants(cat, true)));
+    // The Owner role: every permission at its widest scope, whatever the apps offer today.
+    const want = this.systemGrants(cat, true);
+    const have = await tx.select().from(roleGrants).where(eq(roleGrants.roleId, owner.id));
+    const same = want.length === have.length && want.every((w) => have.some((h) => h.app === w.app && h.permission === w.permission && h.scope === w.scope));
+    if (!same) await this.setGrants(tx, owner.id, want);
+    // Held by the owners, and only by them.
+    const owners = (await tx.select({ id: people.id }).from(people).where(and(eq(people.companyId, companyId), eq(people.platformRole, 'owner')))).map((p) => p.id);
+    await tx.delete(personRoles).where(and(eq(personRoles.roleId, owner.id), owners.length ? notInArray(personRoles.personId, owners) : sql`true`));
+    if (owners.length) await tx.insert(personRoles).values(owners.map((personId) => ({ personId, roleId: owner.id }))).onConflictDoNothing();
+    // Built-ins stay built in (an older copy of Admin was an ordinary role).
+    if (!admin.system || admin.level !== 3 || admin.kind !== 'role' || admin.archived) {
+      await tx.update(roles).set({ system: true, level: 3, kind: 'role', archived: false, updatedAt: new Date() }).where(eq(roles.id, admin.id));
+    }
+    if (!member.system || member.level !== 1 || member.kind !== 'role' || member.archived) {
+      await tx.update(roles).set({ system: true, level: 1, kind: 'role', archived: false, updatedAt: new Date() }).where(eq(roles.id, member.id));
+    }
+    return { adminId: admin.id, memberId: member.id, ownerId: owner.id };
+  }
+
+  /** Non-owners hold the Admin role exactly when their access level is admin (PLAN.md §19.28). */
+  async syncLevels(tx: Tx, companyId: string, personIds: string[]) {
+    if (!personIds.length) return;
+    const holdsAdmin = sql`exists (select 1 from ${personRoles} pr join ${roles} r on r.id = pr.role_id
+      where pr.person_id = ${people.id} and r.code = ${ADMIN.code} and r.company_id = ${people.companyId} and not r.archived)`;
+    await tx
+      .update(people)
+      .set({ platformRole: sql`case when ${holdsAdmin} then 'admin' else 'member' end`, updatedAt: new Date() })
+      .where(
+        and(
+          eq(people.companyId, companyId),
+          ne(people.platformRole, 'owner'),
+          inArray(people.id, personIds),
+          sql`${people.platformRole} <> case when ${holdsAdmin} then 'admin' else 'member' end`,
+        ),
+      );
+  }
+
+  /**
+   * One-time conversion of a company from the template roles (PLAN.md §19.28). The template roles (Tasks' 20 built-in
+   * roles, the Assets roles, the old Super Admin) are archived; their holders get Admin when the role was Admin-level,
+   * else Member. People whose access level is admin get Admin; owners get Admin and the Owner role. Roles made in the
+   * role builder stay as they are. Returns the people whose roles changed.
+   */
+  private async convert(tx: Tx, companyId: string, cat: Catalogue[]): Promise<string[]> {
+    const all = await tx.select().from(roles).where(eq(roles.companyId, companyId));
+    const ownerRole = all.find((r) => r.kind === 'owner' || r.code === 'ff_super_admin');
+    if (ownerRole && (ownerRole.kind !== 'owner' || ownerRole.code !== OWNER_ROLE.code)) {
+      await tx
+        .update(roles)
+        .set({ kind: 'owner', code: OWNER_ROLE.code, name: OWNER_ROLE.name, description: OWNER_ROLE.description, system: true, level: 3, archived: false, updatedAt: new Date() })
+        .where(eq(roles.id, ownerRole.id));
+    }
+    // Admin starts again from the full set (it was "everything but the Owner-only powers" already).
+    const oldAdmin = all.find((r) => r.code === ADMIN.code);
+    if (oldAdmin) {
+      await this.freeBuiltInName(tx, companyId, ADMIN.name, ADMIN.code);
+      await tx.update(roles).set({ name: ADMIN.name, description: ADMIN.description, system: true, level: 3, kind: 'role', archived: false, updatedAt: new Date() }).where(eq(roles.id, oldAdmin.id));
+      await this.setGrants(tx, oldAdmin.id, this.adminGrants(cat));
+    }
+    const { adminId, memberId } = await this.ensureBuiltIns(tx, companyId, cat);
+
+    const removed = all.filter((r) => r.kind === 'role' && !r.archived && isTemplateCode(r.code));
+    const removedIds = removed.map((r) => r.id);
+    const watched = [...removedIds, ...(ownerRole ? [ownerRole.id] : [])];
+    const held = watched.length ? await tx.select().from(personRoles).where(inArray(personRoles.roleId, watched)) : [];
+    const everyone = await tx.select({ id: people.id, platformRole: people.platformRole }).from(people).where(eq(people.companyId, companyId));
+    const give = new Map<string, string>(); // person -> Admin or Member
+    for (const p of everyone) {
+      const mine = held.filter((h) => h.personId === p.id);
+      const wasAdmin = mine.some((h) => h.roleId === ownerRole?.id || (removed.find((r) => r.id === h.roleId)?.level ?? 1) >= 3);
+      if (p.platformRole === 'owner' || p.platformRole === 'admin' || wasAdmin) give.set(p.id, adminId);
+      else if (mine.length) give.set(p.id, memberId);
+    }
+    if (removedIds.length) {
+      await tx.update(roles).set({ archived: true, updatedAt: new Date() }).where(inArray(roles.id, removedIds));
+      await tx.delete(personRoles).where(inArray(personRoles.roleId, removedIds));
+    }
+    const changed = new Set<string>(held.map((h) => h.personId));
+    for (const [personId, roleId] of give) {
+      await tx.insert(personRoles).values({ personId, roleId }).onConflictDoNothing();
+      changed.add(personId);
+    }
+    await tx.update(companies).set({ rolesModel: 2 }).where(eq(companies.id, companyId));
+    // ensureBuiltIns again: the owners hold the Owner role, and the old Super Admin holders who are not owners no longer do.
+    await this.ensureBuiltIns(tx, companyId, cat);
+    await this.syncLevels(tx, companyId, [...changed]);
+    const admins = [...give.values()].filter((r) => r === adminId).length;
+    const members = [...give.values()].filter((r) => r === memberId).length;
+    this.log.log(`Roles of company ${companyId} converted to Admin + Member: ${removed.length} template role(s) archived; ${admins} → Admin, ${members} → Member`);
+    this.conversions.set(companyId, { archived: removed.map((r) => r.name), admin: admins, member: members });
+    return [...changed];
+  }
+
+  /** What a conversion did, per company (printed by `company -- sync`). */
+  readonly conversions = new Map<string, { archived: string[]; admin: number; member: number; extra?: number }>();
 
   private async validGrants(companyId: string, grants: Grant[]): Promise<Grant[]> {
     if (!grants.length) return [];
@@ -262,6 +485,7 @@ export class RolesService {
 
   // ─── roles ──────────────────────────────────────────────────────────────
 
+  /** The roles screen: Admin and Member first, then the roles made in the role builder. Hidden roles are never listed. */
   async list(caller: Caller, includeArchived = false) {
     await this.ensureUpgraded(caller.companyId);
     const db = this.dbs.db;
@@ -279,8 +503,8 @@ export class RolesService {
         people: sql<number>`(select count(*)::int from ${personRoles} pr join ${people} p on p.id = pr.person_id where pr.role_id = ${roles.id} and p.status = 'active')`,
       })
       .from(roles)
-      .where(and(eq(roles.companyId, caller.companyId), includeArchived ? sql`true` : eq(roles.archived, false)))
-      .orderBy(sql`${roles.system} desc`, asc(roles.name));
+      .where(and(eq(roles.companyId, caller.companyId), eq(roles.kind, 'role'), includeArchived ? sql`true` : eq(roles.archived, false)))
+      .orderBy(sql`${roles.system} desc`, sql`${roles.level} desc`, asc(roles.name));
     const grants = rows.length
       ? await db.select().from(roleGrants).where(inArray(roleGrants.roleId, rows.map((r) => r.id)))
       : [];
@@ -290,8 +514,9 @@ export class RolesService {
     }));
   }
 
+  /** A listed role (hidden Owner and personal roles are not edited, copied or archived here). */
   private async getRole(companyId: string, id: string) {
-    const [role] = await this.dbs.db.select().from(roles).where(and(eq(roles.id, id), eq(roles.companyId, companyId))).limit(1);
+    const [role] = await this.dbs.db.select().from(roles).where(and(eq(roles.id, id), eq(roles.companyId, companyId), eq(roles.kind, 'role'))).limit(1);
     if (!role) throw notFound('Role');
     return role;
   }
@@ -299,7 +524,8 @@ export class RolesService {
   private async freeCode(companyId: string, name: string): Promise<string> {
     const base = slug(name);
     for (let n = 1; ; n++) {
-      const code = n === 1 ? base : `${base}_${n}`;
+      // Never one of the old template codes: those mark roles to convert (PLAN.md §19.28).
+      const code = n === 1 && !isTemplateCode(base) && !base.startsWith('ff_') ? base : `${base}_${n}`;
       const [taken] = await this.dbs.db.select({ id: roles.id }).from(roles).where(and(eq(roles.companyId, companyId), eq(roles.code, code))).limit(1);
       if (!taken) return code;
     }
@@ -334,8 +560,13 @@ export class RolesService {
 
   async update(caller: Caller, id: string, input: Partial<RoleInput>) {
     const role = await this.getRole(caller.companyId, id);
-    if (role.system) throw new ForbiddenException(`${role.name} is locked: it always has every permission`);
     if (role.archived) throw badRequest('This role is archived');
+    if (role.system) {
+      // Admin and Member: what they can do and their duties change; their name and level stay (PLAN.md §19.28).
+      if (input.name !== undefined && input.name.trim().toLowerCase() !== role.name.toLowerCase()) throw badRequest(`${role.name} is built in: it keeps its name`, { name: 'Built-in roles keep their name' });
+      if (input.level !== undefined && input.level !== role.level) throw badRequest(`${role.name} is built in: its level stays ${LEVEL_NAMES[role.level]}`, { level: 'Built-in roles keep their level' });
+      input = { ...input, name: undefined, level: undefined };
+    }
     if (input.name) await this.assertNameFree(caller.companyId, input.name, id);
     const grants = input.grants ? await this.validGrants(caller.companyId, input.grants as Grant[]) : null;
     const powers = await this.powersOf(caller);
@@ -370,7 +601,6 @@ export class RolesService {
 
   async duplicate(caller: Caller, id: string) {
     const role = await this.getRole(caller.companyId, id);
-    if (role.system && caller.role !== 'owner') throw new ForbiddenException(`Only the owner can duplicate ${role.name}`);
     const grants = await this.dbs.db.select().from(roleGrants).where(eq(roleGrants.roleId, id));
     let name = `${role.name} (copy)`;
     for (let n = 2; ; n++) {
@@ -378,12 +608,16 @@ export class RolesService {
       if (!taken) break;
       name = `${role.name} (copy ${n})`;
     }
+    // The copy is an ordinary role (R1 applies: a copy of Admin is Admin-level, so only the owner makes one). Only what
+    // the apps offer today is copied (a permission an app no longer has is left out).
+    const cat = await this.catalogue(caller.companyId);
+    const offered = (g: { app: string; permission: string }) => !!cat.find((c) => c.app === g.app)?.permissions.some((p) => p.key === g.permission);
     return this.create(caller, {
       name,
-      description: role.description,
+      description: role.system ? null : role.description,
       colour: role.colour,
-      level: role.system ? 3 : role.level,
-      grants: grants.map(({ app, permission, scope }) => ({ app: app as AppKey, permission, scope })),
+      level: role.level,
+      grants: grants.filter(offered).map(({ app, permission, scope }) => ({ app: app as AppKey, permission, scope })),
       duties: (role.duties ?? []).map(({ id: _id, ...d }) => ({ ...d, steps: d.steps ?? [] })), // the copy's duties are its own
     });
   }
@@ -391,7 +625,7 @@ export class RolesService {
   /** Archives a role: nobody holds it any more (they lose apps it alone gave them); history keeps its name. */
   async archive(caller: Caller, id: string) {
     const role = await this.getRole(caller.companyId, id);
-    if (role.system) throw new ForbiddenException(`${role.name} is locked: the company always keeps it`);
+    if (role.system) throw new ForbiddenException(`${role.name} is built in: it cannot be deleted`);
     const powers = await this.powersOf(caller);
     if (powers) await this.assertCanTouch(caller, powers, role, 'archive');
     const holders = await this.holders(id);
@@ -496,7 +730,7 @@ export class RolesService {
     const [role] = await this.dbs.db
       .select()
       .from(roles)
-      .where(and(eq(roles.companyId, caller.companyId), eq(roles.code, code), eq(roles.archived, false)))
+      .where(and(eq(roles.companyId, caller.companyId), eq(roles.code, code), eq(roles.kind, 'role'), eq(roles.archived, false)))
       .limit(1);
     if (!role) throw new ForbiddenException(`Only the owner can choose "${appRole}" inside ${APP_NAMES[app] ?? app}: it is not a role in the role builder`);
     await this.assertCanGive(caller, [role]);
@@ -508,16 +742,33 @@ export class RolesService {
 
   // ─── people's roles ─────────────────────────────────────────────────────
 
-  async rolesOf(companyId: string, personIds: string[]): Promise<Map<string, string[]>> {
+  /**
+   * Each person's roles. `all`: the hidden Owner and personal roles too (what the apps get); otherwise only the roles
+   * shown and given in the role builder.
+   */
+  async rolesOf(companyId: string, personIds: string[], { all = false } = {}): Promise<Map<string, string[]>> {
     const out = new Map<string, string[]>();
     if (!personIds.length) return out;
     const rows = await this.dbs.db
       .select({ personId: personRoles.personId, roleId: personRoles.roleId })
       .from(personRoles)
       .innerJoin(roles, eq(roles.id, personRoles.roleId))
-      .where(and(inArray(personRoles.personId, personIds), eq(roles.companyId, companyId), eq(roles.archived, false)));
+      .where(and(inArray(personRoles.personId, personIds), eq(roles.companyId, companyId), eq(roles.archived, false), all ? sql`true` : eq(roles.kind, 'role')));
     for (const r of rows) out.set(r.personId, [...(out.get(r.personId) ?? []), r.roleId]);
     return out;
+  }
+
+  /** The built-in Admin and Member role ids (created first if this company has none yet). */
+  async builtInIds(companyId: string): Promise<{ adminId: string; memberId: string }> {
+    const rows = await this.dbs.db
+      .select({ id: roles.id, code: roles.code })
+      .from(roles)
+      .where(and(eq(roles.companyId, companyId), inArray(roles.code, [ADMIN.code, MEMBER.code])));
+    const adminId = rows.find((r) => r.code === ADMIN.code)?.id;
+    const memberId = rows.find((r) => r.code === MEMBER.code)?.id;
+    if (adminId && memberId) return { adminId, memberId };
+    const cat = await this.catalogue(companyId);
+    return this.dbs.db.transaction((tx) => this.ensureBuiltIns(tx, companyId, cat));
   }
 
   /** Gives a person exactly these roles; their apps follow (opened or closed), and the apps get the new roles. */
@@ -527,28 +778,44 @@ export class RolesService {
     if (!person) throw notFound('Person');
     // Same rule as People & access (PLAN.md §19.19): a member with Admin permissions acts on members only.
     if (caller.role === 'member' && person.platformRole !== 'member') throw new ForbiddenException('Only an owner or admin can change an admin’s roles');
+    if (person.platformRole === 'owner' && caller.role !== 'owner') throw new ForbiddenException('Only an owner can change an owner’s roles');
     const wanted = [...new Set(roleIds)];
     const found = wanted.length
-      ? await db.select().from(roles).where(and(inArray(roles.id, wanted), eq(roles.companyId, caller.companyId), eq(roles.archived, false)))
+      ? await db.select().from(roles).where(and(inArray(roles.id, wanted), eq(roles.companyId, caller.companyId), eq(roles.kind, 'role'), eq(roles.archived, false)))
       : [];
     if (found.length !== wanted.length) throw badRequest('Unknown or archived role');
     const current = (await this.rolesOf(caller.companyId, [personId])).get(personId) ?? [];
-    const superRole = (await db.select().from(roles).where(and(eq(roles.companyId, caller.companyId), eq(roles.code, SUPER_ADMIN.code))).limit(1))[0];
-    if (superRole && current.includes(superRole.id) !== wanted.includes(superRole.id) && caller.role !== 'owner') {
-      throw new ForbiddenException('Only an owner can give or take the Super Admin role');
+    const { adminId } = await this.builtInIds(caller.companyId);
+    if (personId === caller.personId && caller.role !== 'owner' && current.includes(adminId) && !wanted.includes(adminId)) {
+      throw badRequest('You cannot take away your own Admin role');
     }
     // Only what the caller has themselves, at no higher level (R1): nobody but the owner raises anyone's access, their own included.
     await this.assertCanGive(caller, found.filter((r) => !current.includes(r.id)));
     await this.assertSeatForRoles(caller.companyId, personId, wanted);
     await db.transaction(async (tx) => {
-      await tx.delete(personRoles).where(eq(personRoles.personId, personId));
+      // Only the listed roles are replaced: the hidden Owner and personal roles stay.
+      const listedRoles = tx.select({ id: roles.id }).from(roles).where(and(eq(roles.companyId, caller.companyId), eq(roles.kind, 'role')));
+      await tx.delete(personRoles).where(and(eq(personRoles.personId, personId), inArray(personRoles.roleId, listedRoles)));
       if (wanted.length) await tx.insert(personRoles).values(wanted.map((roleId) => ({ personId, roleId })));
+      await this.syncLevels(tx, caller.companyId, [personId]);
     });
     const apps = await this.applyApps(caller.companyId, personId);
     const sync = await this.push(caller.companyId);
     // A newly opened app needs the person's department and manager too.
     await this.moduleRef.get(DirectoryService, { strict: false }).push(caller.companyId);
     return { roleIds: wanted, apps, sync };
+  }
+
+  /**
+   * "Make Admin" / "Make Member" (and the access level on People): Admin replaces Member, Member replaces Admin; other
+   * roles stay. Same checks as giving roles.
+   */
+  async setLevel(caller: Caller, personId: string, level: 'admin' | 'member') {
+    const { adminId, memberId } = await this.builtInIds(caller.companyId);
+    const current = (await this.rolesOf(caller.companyId, [personId])).get(personId) ?? [];
+    const next = level === 'admin' ? [...current.filter((id) => id !== memberId), adminId] : [...current.filter((id) => id !== adminId)];
+    if (level === 'member' && !next.includes(memberId)) next.push(memberId);
+    return this.setPersonRoles(caller, personId, [...new Set(next)]);
   }
 
   /** Roles that would open a first app for someone without one take a seat (PLAN.md §21): 402 when none is free. */
@@ -564,25 +831,140 @@ export class RolesService {
   async assertCanGiveRoles(caller: Caller, roleIds: string[]) {
     const wanted = [...new Set(roleIds)];
     const found = wanted.length
-      ? await this.dbs.db.select().from(roles).where(and(inArray(roles.id, wanted), eq(roles.companyId, caller.companyId), eq(roles.archived, false)))
+      ? await this.dbs.db.select().from(roles).where(and(inArray(roles.id, wanted), eq(roles.companyId, caller.companyId), eq(roles.kind, 'role'), eq(roles.archived, false)))
       : [];
     if (found.length !== wanted.length) throw badRequest('Unknown or archived role', { roleIds: 'Unknown or archived role' });
-    if (found.some((r) => r.code === SUPER_ADMIN.code) && caller.role !== 'owner') throw new ForbiddenException('Only an owner can give or take the Super Admin role');
     await this.assertCanGive(caller, found);
     return found;
   }
 
   /**
    * Gives roles already checked when the invite was made (a person joining by an invite link): their apps open, the
-   * apps get the roles and the person's department. Never closes anything.
+   * apps get the roles and the person's department. No role on the invite: Member. Never closes anything.
    */
   async giveRolesFromInvite(companyId: string, personId: string, roleIds: string[]) {
-    const live = roleIds.length
-      ? await this.dbs.db.select({ id: roles.id }).from(roles).where(and(inArray(roles.id, roleIds), eq(roles.companyId, companyId), eq(roles.archived, false)))
+    let live = roleIds.length
+      ? await this.dbs.db.select({ id: roles.id }).from(roles).where(and(inArray(roles.id, roleIds), eq(roles.companyId, companyId), eq(roles.kind, 'role'), eq(roles.archived, false)))
       : [];
-    if (live.length) await this.dbs.db.insert(personRoles).values(live.map((r) => ({ personId, roleId: r.id }))).onConflictDoNothing();
+    if (!live.length) live = [{ id: (await this.builtInIds(companyId)).memberId }];
+    await this.dbs.db.transaction(async (tx) => {
+      await tx.insert(personRoles).values(live.map((r) => ({ personId, roleId: r.id }))).onConflictDoNothing();
+      await this.syncLevels(tx, companyId, [personId]);
+    });
     await this.applyApps(companyId, personId, { close: false });
     await this.push(companyId);
+  }
+
+  /** Admin and Member back to their starting permissions and no duties; the owners hold Admin (`company -- reset`). */
+  async resetBuiltIns(companyId: string) {
+    const cat = await this.catalogue(companyId);
+    await this.dbs.db.transaction(async (tx) => {
+      const { adminId, memberId } = await this.ensureBuiltIns(tx, companyId, cat);
+      await this.setGrants(tx, adminId, this.adminGrants(cat));
+      await this.setGrants(tx, memberId, this.memberGrants(cat));
+      await tx.update(roles).set({ duties: [], name: ADMIN.name, description: ADMIN.description, updatedAt: new Date() }).where(eq(roles.id, adminId));
+      await tx.update(roles).set({ duties: [], name: MEMBER.name, description: MEMBER.description, updatedAt: new Date() }).where(eq(roles.id, memberId));
+      const owners = await tx.select({ id: people.id }).from(people).where(and(eq(people.companyId, companyId), eq(people.platformRole, 'owner')));
+      if (owners.length) await tx.insert(personRoles).values(owners.map((o) => ({ personId: o.id, roleId: adminId }))).onConflictDoNothing();
+    });
+  }
+
+  // ─── a person's own extra access and responsibilities (PLAN.md §19.28) ──
+
+  private async personalRole(companyId: string, personId: string) {
+    return (await this.dbs.db.select().from(roles).where(and(eq(roles.companyId, companyId), eq(roles.kind, 'personal'), eq(roles.personId, personId))).limit(1))[0];
+  }
+
+  /**
+   * What a person can do and where it comes from: their roles (listed), what those give together, their own extra
+   * permissions and duties (the hidden personal role), and whether they are an owner (everything).
+   */
+  async personAccess(caller: Caller, personId: string) {
+    const [person] = await this.dbs.db.select().from(people).where(and(eq(people.id, personId), eq(people.companyId, caller.companyId))).limit(1);
+    if (!person) throw notFound('Person');
+    await this.ensureUpgraded(caller.companyId);
+    const cat = await this.catalogue(caller.companyId);
+    const roleIds = (await this.rolesOf(caller.companyId, [personId])).get(personId) ?? [];
+    const byRole = await this.grantsOf(roleIds);
+    const fromRoles = this.union(cat, roleIds.map((id) => byRole.get(id) ?? []));
+    const mine = await this.personalRole(caller.companyId, personId);
+    const extra = mine ? ((await this.grantsOf([mine.id])).get(mine.id) ?? []) : [];
+    return {
+      personId,
+      owner: person.platformRole === 'owner',
+      roleIds,
+      fromRoles,
+      extra: { grants: extra, duties: mine?.duties ?? [] },
+      /** Extra permissions that the roles do not already give (what the extra access really adds). */
+      adds: this.beyond(cat, extra, fromRoles),
+    };
+  }
+
+  /**
+   * Sets a person's extra access (permissions + scope on top of their roles) and their own duties. Kept in a hidden
+   * personal role, created on first use and deleted when emptied, so the apps check it like any role. R1: only what the
+   * caller holds; nobody but the owner gives themselves anything; owners' access is the owners' business.
+   */
+  async setPersonalAccess(caller: Caller, personId: string, input: z.infer<typeof personalAccessSchema>) {
+    const db = this.dbs.db;
+    const [person] = await db.select().from(people).where(and(eq(people.id, personId), eq(people.companyId, caller.companyId))).limit(1);
+    if (!person) throw notFound('Person');
+    if (caller.role === 'member' && person.platformRole !== 'member') throw new ForbiddenException('Only an owner or admin can change an admin’s access');
+    if (person.platformRole === 'owner' && caller.role !== 'owner') throw new ForbiddenException('Only an owner can change an owner’s access');
+    if (personId === caller.personId && caller.role !== 'owner') throw new ForbiddenException('You cannot give yourself extra access');
+    const grants = await this.validGrants(caller.companyId, input.grants as Grant[]);
+    const powers = await this.powersOf(caller);
+    const existing = await this.personalRole(caller.companyId, personId);
+    if (powers) {
+      const cat = await this.catalogue(caller.companyId);
+      // Both what they have now and what they will have must be within the caller's own powers.
+      const before = existing ? ((await this.grantsOf([existing.id])).get(existing.id) ?? []) : [];
+      const missing = this.lacking(powers, cat, [...grants, ...before]);
+      if (missing.length) throw new ForbiddenException(`You can only give permissions you have yourself. Not allowed: ${listed(missing)}`);
+    }
+    const duties = withIds(input.duties ?? []);
+    if (!grants.length && !duties.length) {
+      if (existing) {
+        await db.delete(roles).where(eq(roles.id, existing.id)); // person_roles and grants go with it
+        await this.applyApps(caller.companyId, personId);
+      }
+      const sync = await this.push(caller.companyId);
+      return { ...(await this.personAccess(caller, personId)), sync };
+    }
+    if (grants.length) await this.assertSeatForGrants(caller.companyId, personId, grants);
+    await db.transaction(async (tx) => {
+      let roleId = existing?.id;
+      if (!roleId) {
+        const [r] = await tx
+          .insert(roles)
+          .values({
+            companyId: caller.companyId,
+            code: personalCode(personId),
+            name: `Personal · ${person.fullName.slice(0, 60)} · ${personId.slice(0, 8)}`,
+            description: `${person.fullName}'s own extra access and responsibilities`,
+            level: 1,
+            kind: 'personal',
+            personId,
+            duties,
+          })
+          .returning({ id: roles.id });
+        roleId = r.id;
+        await tx.insert(personRoles).values({ personId, roleId }).onConflictDoNothing();
+      } else {
+        await tx.update(roles).set({ duties, updatedAt: new Date() }).where(eq(roles.id, roleId));
+      }
+      await this.setGrants(tx, roleId, grants);
+    });
+    await this.applyApps(caller.companyId, personId);
+    const sync = await this.push(caller.companyId);
+    await this.moduleRef.get(DirectoryService, { strict: false }).push(caller.companyId);
+    return { ...(await this.personAccess(caller, personId)), sync };
+  }
+
+  private async assertSeatForGrants(companyId: string, personId: string, grants: Grant[]) {
+    const enabled = await this.enabledApps(companyId);
+    if (!grants.some((g) => enabled.includes(g.app as AppKey) && internalUrl(g.app as AppKey))) return;
+    await assertSeatFor(this.dbs, companyId, personId);
   }
 
   /** After an app was added to the company (plan upgrade): everyone whose roles reach it gets it. Nobody loses one here. */
@@ -602,10 +984,11 @@ export class RolesService {
   }
 
   /**
-   * A person can open an app when one of their roles has a permission in it (and the company's plan includes it).
-   * Opens the apps they gained (the app finds or creates their user) and closes the ones they lost.
+   * A person can open an app when one of their roles (the hidden Owner and personal roles included) has a permission in
+   * it (and the company's plan includes it). Opens the apps they gained (the app finds or creates their user) and closes
+   * the ones they lost.
    */
-  private async applyApps(companyId: string, personId: string, { close = true } = {}): Promise<AppKey[]> {
+  async applyApps(companyId: string, personId: string, { close = true } = {}): Promise<AppKey[]> {
     const db = this.dbs.db;
     const enabled = await this.enabledApps(companyId);
     const fromRoles = await db
@@ -649,7 +1032,8 @@ export class RolesService {
 
   /**
    * Sends the company's full role set, and everyone's roles, to every connected app. Never throws: a failure is
-   * reported in the result and logged; `npm run company -- sync` sends everything again.
+   * reported in the result and logged; `npm run company -- sync` sends everything again. The hidden Owner and personal
+   * roles go too (codes `ff_owner`, `ff_person_<id>`), so the apps check them like any role.
    */
   async push(companyId: string, { retried = false } = {}): Promise<Record<string, string>> {
     const db = this.dbs.db;
@@ -671,6 +1055,7 @@ export class RolesService {
       colour: r.colour,
       level: r.level,
       system: r.system,
+      kind: r.kind,
       grants: grants.filter((g) => g.roleId === r.id).map(({ app, permission, scope }) => ({ app, permission, scope })),
       duties: r.duties ?? [],
     }));
@@ -678,7 +1063,7 @@ export class RolesService {
     for (const app of (c?.apps ?? []).filter((a): a is AppKey => (APPS as readonly string[]).includes(a))) {
       if (!internalUrl(app)) continue;
       const holders = await db.select({ personId: personApps.personId }).from(personApps).innerJoin(people, eq(people.id, personApps.personId)).where(and(eq(people.companyId, companyId), eq(personApps.app, app)));
-      const byPerson = await this.rolesOf(companyId, holders.map((h) => h.personId));
+      const byPerson = await this.rolesOf(companyId, holders.map((h) => h.personId), { all: true });
       try {
         const res = await this.provisioner.pushAccess(app, companyId, {
           version: c.version,
@@ -707,9 +1092,11 @@ export class RolesService {
   // ─── bringing a company into the role builder ───────────────────────────
 
   /**
-   * First time only (a company with no roles yet): the locked Super Admin and Admin roles, plus every role the apps
-   * already have, each kept to its own app so nobody's access changes. People keep the roles they had in each app;
-   * owners also get Super Admin. Returns false when the company already had roles.
+   * First time only (a company with no roles yet): Admin, Member and the hidden Owner role (PLAN.md §19.28). People the
+   * apps already know (an imported company, e.g. CarTrends) are mapped from their app roles: an Admin-level role (or
+   * the admin access level) → Admin; anything else → Member, plus a personal role with whatever their old roles gave
+   * beyond Member, so nobody loses access. Owners get Admin and the Owner role. Returns false when the company already
+   * had roles.
    */
   async importFromApps(companyId: string): Promise<boolean> {
     const db = this.dbs.db;
@@ -722,46 +1109,71 @@ export class RolesService {
     }
 
     await db.transaction(async (tx) => {
-      const used = new Set<string>([SUPER_ADMIN.name.toLowerCase(), ADMIN.name.toLowerCase()]);
       // The apps' roles are already in today's catalogues: nothing to upgrade later.
-      await tx.update(companies).set({ accessUpgrades: Object.fromEntries(cat.map((a) => [a.app, a.version ?? 1])) }).where(eq(companies.id, companyId));
-      const insertRole = async (v: { code: string; name: string; description?: string | null; level: number; system?: boolean }, grants: Grant[]) => {
-        const [r] = await tx.insert(roles).values({ companyId, code: v.code, name: v.name, description: v.description ?? null, level: v.level, system: v.system ?? false }).returning({ id: roles.id });
-        if (grants.length) await tx.insert(roleGrants).values(grants.map((g) => ({ roleId: r.id, ...g })));
-        return r.id;
-      };
-      const superId = await insertRole({ ...SUPER_ADMIN, level: 3, system: true }, this.systemGrants(cat, true));
-      // Admin starts with everything (but the Owner-only powers and the Admin workspace, which the admin access level
-      // gives) and is an ordinary role from then on.
-      await insertRole({ ...ADMIN, level: 3 }, this.systemGrants(cat, false).filter((g) => g.app !== PLATFORM_APP));
+      await tx.update(companies).set({ accessUpgrades: Object.fromEntries(cat.map((a) => [a.app, a.version ?? 1])), rolesModel: 2 }).where(eq(companies.id, companyId));
+      const { adminId, memberId } = await this.ensureBuiltIns(tx, companyId, cat);
+      const memberBase = this.memberGrants(cat);
 
-      const roleId = new Map<string, string>(); // `${app}:${local code}` -> platform role id
+      // What each person had in each app: the grants and level of their app roles there.
+      const had = new Map<string, { level: number; grants: Grant[][] }>();
       for (const { app, data } of appExports) {
-        const known = new Set(cat.find((c) => c.app === app)!.permissions.map((p) => p.key));
-        for (const r of data.roles.filter((x) => !x.archived)) {
-          // Tasks keeps its role names; other apps' roles say which app they are for. Clashes get the app's name.
-          let name = app === 'tasks' ? r.name : `${r.name} (${app === 'assets' ? 'Assets' : app})`;
-          if (used.has(name.toLowerCase())) name = `${r.name} (${app === 'tasks' ? 'Tasks' : 'Assets'})`;
-          used.add(name.toLowerCase());
-          const grants = r.grants.filter((g) => known.has(g.permission)).map((g) => ({ app, permission: g.permission, scope: g.scope ?? '' }));
-          roleId.set(`${app}:${r.code}`, await insertRole({ code: app === 'tasks' ? r.code : `${app}:${r.code}`, name, description: r.description, level: r.level ?? 1 }, grants));
-        }
-      }
-      // Each app finds its own copy again by code: Tasks by its role code, Assets by `assets:<original name>`.
-      const assigned = new Map<string, Set<string>>();
-      for (const { app, data } of appExports) {
+        const known = cat.find((c) => c.app === app)!;
+        const byCode = new Map(data.roles.filter((r) => !r.archived).map((r) => [r.code, r]));
         for (const p of data.people) {
           for (const code of p.roles) {
-            const id = roleId.get(`${app}:${code}`);
-            if (id) assigned.set(p.personId, (assigned.get(p.personId) ?? new Set()).add(id));
+            const r = byCode.get(code);
+            if (!r) continue;
+            const grants = r.grants
+              .filter((g) => known.permissions.some((x) => x.key === g.permission))
+              .map((g) => {
+                const perm = known.permissions.find((x) => x.key === g.permission)!;
+                const scope = g.scope ?? '';
+                return { app, permission: g.permission, scope: perm.scopes ? (perm.scopes.includes(scope) ? scope : (perm.legacyScope ?? perm.scopes[0])) : '' };
+              });
+            const cur = had.get(p.personId) ?? { level: 1, grants: [] };
+            cur.level = Math.max(cur.level, r.level ?? 1);
+            cur.grants.push(grants);
+            had.set(p.personId, cur);
           }
         }
       }
-      const owners = await tx.select({ id: people.id }).from(people).where(and(eq(people.companyId, companyId), eq(people.platformRole, 'owner')));
-      for (const o of owners) assigned.set(o.id, (assigned.get(o.id) ?? new Set()).add(superId));
-      const inCompany = new Set((await tx.select({ id: people.id }).from(people).where(eq(people.companyId, companyId))).map((p) => p.id));
-      const rows = [...assigned].filter(([personId]) => inCompany.has(personId)).flatMap(([personId, ids]) => [...ids].map((roleId) => ({ personId, roleId })));
-      if (rows.length) await tx.insert(personRoles).values(rows).onConflictDoNothing();
+      const everyone = await tx.select({ id: people.id, fullName: people.fullName, platformRole: people.platformRole }).from(people).where(eq(people.companyId, companyId));
+      const extras: Array<{ personId: string; fullName: string; grants: Grant[] }> = [];
+      let admins = 0;
+      let members = 0;
+      for (const p of everyone) {
+        const h = had.get(p.id);
+        const admin = p.platformRole === 'owner' || p.platformRole === 'admin' || (h?.level ?? 1) >= 3;
+        if (admin) {
+          await tx.insert(personRoles).values({ personId: p.id, roleId: adminId }).onConflictDoNothing();
+          admins++;
+          continue;
+        }
+        if (!h) continue; // not in any app yet: no role (they get one when someone gives them access)
+        await tx.insert(personRoles).values({ personId: p.id, roleId: memberId }).onConflictDoNothing();
+        members++;
+        const more = this.beyond(cat, this.union(cat, h.grants), memberBase);
+        if (more.length) extras.push({ personId: p.id, fullName: p.fullName, grants: more });
+      }
+      for (const e of extras) {
+        const [r] = await tx
+          .insert(roles)
+          .values({
+            companyId,
+            code: personalCode(e.personId),
+            name: `Personal · ${e.fullName.slice(0, 60)} · ${e.personId.slice(0, 8)}`,
+            description: `${e.fullName}'s own extra access (from their old app roles)`,
+            level: 1,
+            kind: 'personal',
+            personId: e.personId,
+          })
+          .returning({ id: roles.id });
+        await this.setGrants(tx, r.id, e.grants);
+        await tx.insert(personRoles).values({ personId: e.personId, roleId: r.id }).onConflictDoNothing();
+      }
+      await this.ensureBuiltIns(tx, companyId, cat); // owners hold the Owner role
+      await this.syncLevels(tx, companyId, everyone.map((p) => p.id));
+      this.conversions.set(companyId, { archived: [], admin: admins, member: members, extra: extras.length });
     });
     return true;
   }

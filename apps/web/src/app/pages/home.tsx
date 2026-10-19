@@ -104,7 +104,7 @@ export function HomePage() {
 
   const person = access.platform.person;
   const first = person.fullName.split(' ')[0];
-  const level = person.role === 'owner' ? 'Super Admin' : person.role === 'admin' ? 'Admin' : 'Member';
+  const level = person.role === 'owner' ? 'Owner' : person.role === 'admin' ? 'Admin' : 'Member';
   const open = (to: string) => navigate(to);
 
   return (

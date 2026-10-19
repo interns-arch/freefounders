@@ -116,8 +116,9 @@ await step('owner gives themselves Tasks and Assets (provisioned in both apps)',
 await step('the same login opens Tasks', async () => {
   const me = await owner.fetch('GET', '/tasks/api/auth/me', { token: await owner.token() });
   assert.equal(me.status, 200, JSON.stringify(me.body));
-  assert.equal(me.body.role, 'super_admin');
-  assert.ok(me.body.capabilities.length > 0);
+  // The owner holds the built-in Admin role (and the hidden Owner role): Tasks shows Admin (PLAN.md §19.28).
+  assert.equal(me.body.role, 'ff_admin');
+  assert.ok(me.body.capabilities.includes('tasks.delete_admin_work'), 'the Owner-only power comes with the owner');
   assert.equal((await owner.fetch('GET', '/tasks/api/tasks/', { token: await owner.token() })).status, 200);
 });
 
@@ -186,7 +187,8 @@ await step('a second company sees none of the first company\'s Tasks or Assets d
 const member = new Browser();
 let memberId;
 let memberPassword;
-await step('owner adds a member with a login and gives them Tasks only', async () => {
+let tasksOnlyRole;
+await step('owner adds a member with a login and gives them a Tasks-only role', async () => {
   const t = await owner.token();
   const created = await owner.fetch('POST', '/api/platform/people', {
     token: t,
@@ -195,10 +197,16 @@ await step('owner adds a member with a login and gives them Tasks only', async (
   assert.equal(created.status, 201, JSON.stringify(created.body));
   memberId = created.body.person.id;
   memberPassword = created.body.generatedPassword;
-  const roles = await owner.fetch('GET', '/api/platform/apps/tasks/roles', { token: t });
-  assert.ok(roles.body.some((r) => r.value === 'warehouse'), 'Tasks roles listed');
-  const grant = await owner.fetch('PUT', `/api/platform/people/${memberId}/apps/tasks`, { token: t, body: { appRole: 'warehouse' } });
+  // Roles are built in the role builder (Admin and Member are built in, PLAN.md §19.28); this one opens Tasks only.
+  const role = await owner.fetch('POST', '/api/platform/roles', {
+    token: t,
+    body: { name: `Smoke Tasks ${run}`, level: 1, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'own' }, { app: 'tasks', permission: 'attendance.punch' }] },
+  });
+  assert.equal(role.status, 201, JSON.stringify(role.body));
+  tasksOnlyRole = role.body;
+  const grant = await owner.fetch('PUT', `/api/platform/people/${memberId}/roles`, { token: t, body: { roleIds: [role.body.id] } });
   assert.equal(grant.status, 200, JSON.stringify(grant.body));
+  assert.deepEqual(grant.body.apps, ['tasks']);
 });
 
 await step('member signs in with the generated password (no forced change), reaches Tasks but not Assets', async () => {
@@ -214,7 +222,8 @@ await step('member signs in with the generated password (no forced change), reac
   assert.equal(changed.status, 200);
   const tasksMe = await member.fetch('GET', '/tasks/api/auth/me', { token: await member.token() });
   assert.equal(tasksMe.status, 200);
-  assert.equal(tasksMe.body.role, 'warehouse');
+  assert.equal(tasksMe.body.role, tasksOnlyRole.code, 'Tasks shows the Platform role');
+  assert.deepEqual(tasksMe.body.capabilities.sort(), ['attendance.punch', 'tasks.view_self'], 'exactly what the role gives');
   assert.equal((await member.fetch('POST', '/assets/api/auth/platform-session', { token: await member.token() })).status, 401);
   assert.equal((await member.fetch('GET', '/api/platform/people', { token: await member.token() })).status, 403, 'members cannot manage people');
 });

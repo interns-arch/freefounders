@@ -9,7 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .models import DepartmentOption, Role, User
-from .access import is_admin, is_super_admin, role_codes
+from .access import is_admin, is_super_admin, level, listed_roles
 from .permissions import HasCapability
 from .serializers import ChangePasswordSerializer, UserSerializer, UserWriteSerializer
 
@@ -61,11 +61,17 @@ def roles(request):
     backend left it missing from every form until somebody noticed. Reading it
     from here means a new role appears everywhere the moment it exists.
     """
-    from .access import role_level
+    from .access import is_listed_code, role_level
+    from .models import AccessRole
+    # Under the Platform: its roles (Admin, Member and the ones made in the role builder; PLAN.md §19.28).
+    synced = AccessRole.objects.filter(platform_role_id__isnull=False, archived=False).order_by("-level", "name")
+    synced = [r for r in synced if is_listed_code(r.code)]
+    if synced:
+        return Response([{"value": r.code, "label": r.name, "level": r.level, "is_manager": r.level >= 2} for r in synced])
     return Response([
         {"value": value, "label": label, "level": role_level(value),
          "is_manager": role_level(value) >= 2}
-        for value, label in Role.choices
+        for value, label in Role.choices if value != Role.MEMBER
     ])
 
 
@@ -107,10 +113,10 @@ def team_directory(request):
     Management actions stay in UserViewSet (users.manage)."""
     from .permissions import has_capability
     viewer = request.user
-    users = User.objects.filter(is_active=True).select_related("reporting_manager")
+    users = User.objects.filter(is_active=True).select_related("reporting_manager").prefetch_related("access_roles__role")
     if has_capability(viewer, "users.manage"):
         pass                                            # whole company
-    elif Role.SALES_MANAGER in role_codes(viewer) or users.filter(reporting_manager=viewer).exists():
+    elif level(viewer) == 2 or users.filter(reporting_manager=viewer).exists():
         users = users.filter(reporting_manager=viewer)  # direct reports only
     else:
         users = users.filter(department=viewer.department)
@@ -122,8 +128,8 @@ def team_directory(request):
             "username": u.username,
             "email": u.email,
             "mobile": u.whatsapp_phone,
-            "role": u.role,
-            "role_display": u.get_role_display(),
+            "role": shown[0].code if (shown := listed_roles(u)) else u.role,
+            "role_display": ", ".join(r.name for r in shown) or u.get_role_display(),
             "department_display": u.get_department_display(),
             "reports_to": (u.reporting_manager.get_full_name() or u.reporting_manager.username)
                           if u.reporting_manager else None,
@@ -158,7 +164,7 @@ def logout(request):
 class UserViewSet(viewsets.ModelViewSet):
     """User management for roles with `users.manage` (Admin, HR Manager).
     Deactivation instead of deletion keeps lead/task history intact."""
-    queryset = User.objects.all().order_by(Lower("first_name"), Lower("username"))
+    queryset = User.objects.all().prefetch_related("access_roles__role").order_by(Lower("first_name"), Lower("username"))
     permission_classes = [HasCapability.of("users.manage")]
 
     def _guard_role(self, requested_role, target=None):

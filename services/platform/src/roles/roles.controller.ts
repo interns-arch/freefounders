@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { type Caller, CurrentCaller, Needs, uuidParam, ZodPipe } from '../common/http';
 import { PEOPLE_SCREEN } from './platform-permissions';
-import { personRolesSchema, roleInputSchema, type RoleInput, RolesService, roleUpdateSchema } from './roles.service';
+import { personalAccessSchema, personRolesSchema, roleInputSchema, type RoleInput, RolesService, roleUpdateSchema } from './roles.service';
+import { z } from 'zod';
 
 /** The role builder (the Manage roles permission; PLAN.md §19.19). */
 @Needs('roles.manage')
@@ -42,6 +43,25 @@ export class RolesController {
   @HttpCode(200)
   archive(@CurrentCaller() caller: Caller, @Param('id') id: string) {
     return this.roles.archive(caller, uuidParam(id));
+  }
+
+  /** A person's access: their roles, what those give, and their own extra access and duties (PLAN.md §19.28). */
+  @Needs('roles.manage', ...PEOPLE_SCREEN)
+  @Get('people/:id/access')
+  personAccess(@CurrentCaller() caller: Caller, @Param('id') id: string) {
+    return this.roles.personAccess(caller, uuidParam(id));
+  }
+
+  /** Extra access (permissions + scope on top of the roles) and responsibilities for this person only. */
+  @Put('people/:id/access/personal')
+  setPersonalAccess(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(personalAccessSchema)) body: z.infer<typeof personalAccessSchema>) {
+    return this.roles.setPersonalAccess(caller, uuidParam(id), body);
+  }
+
+  /** "Make Admin" / "Make Member": Admin replaces Member or the other way round; other roles stay. */
+  @Put('people/:id/level')
+  setLevel(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(z.object({ level: z.enum(['admin', 'member']) }))) body: { level: 'admin' | 'member' }) {
+    return this.roles.setLevel(caller, uuidParam(id), body.level);
   }
 
   @Put('people/:id/roles')

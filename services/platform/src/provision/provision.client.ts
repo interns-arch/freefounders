@@ -151,6 +151,19 @@ export class ProvisionClient {
    * passed on as a 400 "<App>: …"; anything else other than a 200 (unreachable, 401, 409, 5xx) throws a 502
    * "<App> could not delete their data: …". Either way the caller stops before deleting anything in the Platform.
    */
+  /** Tasks only: deletes every user not linked to a Platform person, with their records (`company -- reset`). */
+  async deleteUnlinked(companyId: string): Promise<{ deleted: number }> {
+    const base = internalUrl('tasks');
+    if (!base) throw new BadGatewayException('Tasks is not connected (TASKS_INTERNAL_URL is not set)');
+    const res = await fetch(`${base}/unlinked-people`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${await this.tokens.signService('tasks', companyId)}`, 'x-requested-with': 'XMLHttpRequest' },
+      signal: AbortSignal.timeout(600_000),
+    });
+    if (!res.ok) throw new BadGatewayException(`Tasks could not delete its unlinked users: HTTP ${res.status}`);
+    return (await res.json()) as { deleted: number };
+  }
+
   async deletePerson(app: AppKey, companyId: string, personId: string, options?: Record<string, unknown>): Promise<AppDeleteResult> {
     const label = app === 'tasks' ? 'Tasks' : 'Assets';
     const fail = (reason: string) => new BadGatewayException(`${label} could not delete their data: ${reason}`);
