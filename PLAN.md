@@ -1885,6 +1885,20 @@ Founder: "use hugeicons for icon libraries, and everywhere I do not want these d
   icon buttons, progress bars, score rings; two chart legends keep small colour squares.
 - Checked: web build; e2e 59/59; 28 screenshots desktop/phone, light/dark.
 
+### 19.27 Uniform check at punch-in (2026-10-19)
+Founder: "at the time of punch in should give a pop up notification that wear the company shirt or company jersey, and
+the admin should have the option that at the time of punch-in it should ask for the company jersey".
+- Two per-company HR settings (`CompanySetting`, edited on HR settings → "Uniform at punch-in", `hr.settings`):
+  `UNIFORM_CHECK` = `off` (default, standalone too) | `remind` | `ask`, and `UNIFORM_MESSAGE` (≤ 200 chars; blank =
+  "Are you wearing the company shirt / jersey today?"). Both are in `/api/hr/config/` and `/api/attendance/today/`.
+- Before a check-in (Today and the Home card, also inside the phone app) a dialog with a shirt icon shows the message:
+  `remind` → "OK, punch in" / "Cancel"; `ask` → "Yes, I'm wearing it" / "No" / "Cancel". It closes before location and
+  the camera start. Check-out never asks. The punch is never blocked by "No".
+- `ask`: check-in needs `uniform: true|false` (400 "Answer whether you are wearing the company shirt / jersey to punch
+  in." without it); stored as `Attendance.uniform_ok` (nullable, migration hr 0007). Otherwise the field is ignored and
+  stays empty. Shown on Daily attendance (a "Uniform" column Yes / No when the company asks or anyone answered), My
+  attendance day detail, and the daily report (a "Uniform" column under the same rule).
+
 ---
 
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)

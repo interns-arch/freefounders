@@ -1510,6 +1510,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 | "Keep photos for (days)" | number | 1–3650 | 90 |
 | "Weekly off" | day toggles Mon–Sun (index 0 = Mon) | 0–6 | Sun |
 | "Check location at check-in (needs an office below)" | checkbox | — | off |
+| "Uniform at punch-in" (own card, "Save uniform check") | choice "Off" / "Reminder only" / "Ask and record" + "Message" (≤ 200 chars, blank = default) | — | off; "Are you wearing the company shirt / jersey today?" |
 | "Face check at check-in and check-out" | checkbox | — | off |
 | "First face capture becomes the person's face profile" | checkbox; disabled unless face check is on | — | on |
 
@@ -1557,6 +1558,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 ### 4.4 Attendance check-in flow (detail)
 
 1. **Starting state**: "Today" loads the company rules (geofence, face, self-enrol, enrolled, photo mode, work hours) and the `can_check_in` / `can_check_out` flags.
+1a. **Uniform check** (check-in only; PLAN.md §19.27): with "Reminder only" a dialog shows the company's message ("OK, punch in" / "Cancel"); with "Ask and record" it asks "Yes, I'm wearing it" / "No" / "Cancel". Either answer continues the check-in (the answer is saved as `uniform_ok` and shown on Daily attendance, My attendance and the daily report); Cancel stops it. The dialog closes before location and the camera (also the phone app's native camera) start. Check-out never asks; the punch is never blocked by a "No".
 2. **Is a camera step needed?** Yes when face check is ON, or when the photo mode is **optional or required**.
    - In **Optional** mode the camera opens and a photo is always taken; there is no "skip photo" option in this UI. The "A photo is taken…" info line shows only for Required.
    - With no camera step, tapping the button goes straight to step 4.

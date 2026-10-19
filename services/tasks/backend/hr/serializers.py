@@ -43,7 +43,8 @@ class AttendanceSerializer(serializers.ModelSerializer):
         fields = ["id", "user", "user_detail", "date", "check_in", "check_out",
                   "status", "status_display", "working_minutes", "is_late",
                   "is_early_checkout", "missing_checkout", "face_verified",
-                  "face_confidence", "location_name", "note", "has_check_in_photo", "has_check_out_photo"]
+                  "face_confidence", "location_name", "note", "has_check_in_photo", "has_check_out_photo",
+                  "uniform_ok"]
 
 
 class MarkSerializer(serializers.Serializer):
@@ -56,6 +57,8 @@ class MarkSerializer(serializers.Serializer):
         child=serializers.FloatField(), required=False, allow_null=True, max_length=512)
     # Punch photo as a data URL (JPEG ≤ 400 KB once decoded); kept only when the company asks for it.
     photo = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=600_000)
+    # Check-in only: "are you wearing the company shirt / jersey?" (needed when the company asks, PLAN.md §19.27).
+    uniform = serializers.BooleanField(required=False, allow_null=True)
 
 
 class CorrectionSerializer(serializers.ModelSerializer):

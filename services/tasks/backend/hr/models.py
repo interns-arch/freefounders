@@ -70,6 +70,8 @@ class Attendance(models.Model):
     # Photo taken at the punch (FreeFounders, PLAN.md §16.4); emptied after the retention period.
     check_in_photo = models.FileField(upload_to=attendance_photo_path, blank=True, default="")
     check_out_photo = models.FileField(upload_to=attendance_photo_path, blank=True, default="")
+    # Answer to the company's uniform question at check-in (PLAN.md §19.27); empty when it was not asked.
+    uniform_ok = models.BooleanField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

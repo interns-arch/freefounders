@@ -23,6 +23,9 @@ export interface HrSettingValues {
   photo_retention_days: number;
   leave_approval: 'department' | 'manager';
   approval_remind_hours: number;
+  /** Uniform check at punch-in (PLAN.md §19.27). */
+  uniform_check: 'off' | 'remind' | 'ask';
+  uniform_message: string;
 }
 
 export type HrSettings = { [K in keyof HrSettingValues]: HrSetting<HrSettingValues[K]> };

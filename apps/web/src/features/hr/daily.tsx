@@ -3,7 +3,7 @@
  * "Daily attendance" (any date). Tiles count and filter, search finds a name / phone / employee ID, HR marks a day by hand.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
-import { type ManualMarkStatus, type TeamDayRow, useManualMark, useTeamDay } from '@freefounders/core/hr';
+import { type ManualMarkStatus, type TeamDayRow, useHrConfig, useManualMark, useTeamDay } from '@freefounders/core/hr';
 import { CalendarCheck, CalendarOff, ChevronLeft, ChevronRight, Clock3, LogOut, Palmtree, Radio, RefreshCw, UserRoundX } from '@/components/icons';
 import { type ComponentType, type FormEvent, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Avatar, Card } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, OkNote, type Tone, fmtTime, todayLocal } from '../tasks/general/parts';
-import { AttendanceChip, PunchPhoto, hrs } from './parts';
+import { AttendanceChip, PunchPhoto, UniformChip, hrs } from './parts';
 
 type Filter = 'all' | 'in' | 'late' | 'missing' | 'leave' | 'off' | 'out';
 
@@ -79,6 +79,9 @@ export function TeamDayView({ live }: { live: boolean }) {
   const more = useShowMore(shown, { reset: [live, date, q, department, filter] });
   const isToday = date === today;
   const future = date > today;
+  // The Uniform column (PLAN.md §19.27): when the company asks at check-in, or someone answered that day.
+  const config = useHrConfig();
+  const showUniform = config.data?.uniform_check === 'ask' || rows.some((r) => r.uniform_ok != null);
   const setDate = (d: string) => {
     const next = new URLSearchParams(params);
     if (d === today) next.delete('date');
@@ -151,6 +154,9 @@ export function TeamDayView({ live }: { live: boolean }) {
       ),
     },
     { key: 'hours', header: 'Hours', className: 'whitespace-nowrap font-mono tabular-nums', cell: (r) => hrs(r.working_minutes) },
+    ...(showUniform
+      ? [{ key: 'uniform', header: 'Uniform', cell: (r: TeamDayRow) => (r.uniform_ok == null ? <span className="text-muted-foreground">—</span> : <UniformChip ok={r.uniform_ok} />) }]
+      : []),
     {
       key: 'actions',
       header: <span className="sr-only">Actions</span>,

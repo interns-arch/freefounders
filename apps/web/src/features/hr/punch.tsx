@@ -2,14 +2,16 @@
  * Check in / check out, shared by Attendance → Today and the Home card (PLAN.md §19.3). The steps run only when the
  * company switched them on: location (office geofence), then the camera (punch photo). The server decides. There is no
  * face matching (founder, 2026-10-12; PLAN.md §19.18). Inside the phone app (PLAN.md §19.17) the app's GPS and front
- * camera are used instead of the browser's.
+ * camera are used instead of the browser's. Before a check-in the company may show a uniform reminder or ask whether the
+ * company shirt / jersey is worn (PLAN.md §19.27); that dialog closes before location and camera start. Check-out never asks.
  */
 import { errorMessage } from '@freefounders/core';
 import { type AttendanceToday, useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AppRequestError, appRequest, isInApp, openAppSettings } from '@/lib/native-bridge';
 import { LocationBlockedError, currentPosition } from './device';
 import { SelfieCapture } from './selfie-capture';
+import { UniformPrompt } from './uniform-prompt';
 
 type Which = 'check_in' | 'check_out';
 
@@ -25,6 +27,9 @@ export function usePunch(onDone?: (which: Which) => void) {
   const [inApp] = useState(isInApp);
   /** Location was blocked on the last try: the punch to retry and whether only the phone's Settings can allow it. */
   const [blocked, setBlocked] = useState<{ which: Which; settings: boolean } | null>(null);
+  /** The uniform dialog is open (check-in only); the answer is kept for this check-in, also across a location retry. */
+  const [askUniform, setAskUniform] = useState(false);
+  const uniformAnswer = useRef<boolean | undefined>(undefined);
 
   const send = async (which: Which, photo?: string | null) => {
     setErr('');
@@ -45,8 +50,9 @@ export function usePunch(onDone?: (which: Which) => void) {
     }
     setLocating(false);
     if (pos.latitude != null && pos.longitude != null) setPosition({ latitude: pos.latitude, longitude: pos.longitude });
+    const uniform = which === 'check_in' && q.data?.uniform_check === 'ask' ? uniformAnswer.current : undefined;
     mark.mutate(
-      { which, ...pos, ...(photo ? { photo } : {}) },
+      { which, ...pos, ...(photo ? { photo } : {}), ...(uniform !== undefined ? { uniform } : {}) },
       {
         onSuccess: () => {
           setMsg(which === 'check_in' ? 'Checked in ✅' : 'Checked out ✅');
@@ -76,13 +82,38 @@ export function usePunch(onDone?: (which: Which) => void) {
   const data: AttendanceToday | undefined = q.data;
   // With punch photos switched on, the camera step comes first.
   const usesCamera = !!data && !!data.photo && data.photo !== 'off';
-  const markIt = (which: Which) => {
+  const proceed = (which: Which) => {
     if (inApp && data) return void appPunch(which, data);
     return usesCamera ? setCamFor(which) : void send(which);
   };
+  const uniformMode = data?.uniform_check && data.uniform_check !== 'off' ? data.uniform_check : null;
+  /** Check in / out. A check-in first shows the company's uniform dialog when it has one. */
+  const markIt = (which: Which) => {
+    if (which === 'check_in' && uniformMode) {
+      setErr('');
+      setMsg('');
+      setBlocked(null);
+      uniformAnswer.current = undefined;
+      return setAskUniform(true);
+    }
+    return proceed(which);
+  };
   const busy = mark.isPending || locating || appCamera;
 
-  const camera =
+  const uniformDialog = uniformMode ? (
+    <UniformPrompt
+      open={askUniform}
+      mode={uniformMode}
+      message={data?.uniform_message}
+      onCancel={() => setAskUniform(false)}
+      onAnswer={(wearing) => {
+        uniformAnswer.current = wearing;
+        proceed('check_in');
+      }}
+    />
+  ) : null;
+
+  const selfie =
     camFor && data ? (
       <SelfieCapture
         title={camFor === 'check_in' ? 'Check in' : 'Check out'}
@@ -95,12 +126,19 @@ export function usePunch(onDone?: (which: Which) => void) {
         }}
       />
     ) : null;
+  // Every dialog of the punch (uniform question, browser camera); the screens render it once.
+  const camera = (
+    <>
+      {uniformDialog}
+      {selfie}
+    </>
+  );
 
   /** A one-tap way out of a blocked permission, shown next to the error: ask again, or open the phone's Settings. */
   const fix = blocked
     ? blocked.settings
       ? { label: 'Open settings to allow location', run: () => void openAppSettings() }
-      : { label: 'Allow location', run: () => markIt(blocked.which) }
+      : { label: 'Allow location', run: () => proceed(blocked.which) }
     : null;
 
   return { query: q, data, usesCamera, markIt, busy, waitingForCamera: !!camFor || appCamera, msg, err, fix, camera, position };

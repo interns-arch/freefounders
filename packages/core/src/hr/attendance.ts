@@ -15,12 +15,18 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   not_checked_in: 'Not checked in',
 };
 export type PhotoMode = 'off' | 'optional' | 'required';
+/** Uniform question before a check-in (PLAN.md §19.27): off, a reminder only, or ask and save the answer. */
+export type UniformCheck = 'off' | 'remind' | 'ask';
+export const UNIFORM_MESSAGE_DEFAULT = 'Are you wearing the company shirt / jersey today?';
 
 export interface HrConfig {
   geofence_enabled: boolean;
   work_start: string;
   work_end: string;
   week_offs: number[];
+  /** Uniform check at punch-in and the message shown (PLAN.md §19.27). Older servers leave them out (= off). */
+  uniform_check?: UniformCheck;
+  uniform_message?: string;
   /** May approve leave/corrections (hr.approve, or a manager under the "manager first" rule). */
   can_approve: boolean;
   /** HR settings (hr.settings). */
@@ -47,6 +53,8 @@ export interface AttendanceRecord {
   missing_checkout: boolean;
   has_check_in_photo: boolean;
   has_check_out_photo: boolean;
+  /** Answer to the uniform question at check-in; null when it was not asked. */
+  uniform_ok?: boolean | null;
 }
 
 export interface AttendanceToday {
@@ -57,6 +65,8 @@ export interface AttendanceToday {
   work_start: string;
   work_end: string;
   photo: PhotoMode;
+  uniform_check?: UniformCheck;
+  uniform_message?: string;
 }
 
 /** GET /attendance/today/ */
@@ -69,6 +79,8 @@ export interface MarkInput {
   longitude?: number;
   /** JPEG data URL, when the company keeps a photo of every punch. */
   photo?: string;
+  /** Check-in only, when the company asks (uniform_check 'ask'): wearing the company shirt / jersey? */
+  uniform?: boolean;
 }
 
 /** POST /attendance/check_in/ or /attendance/check_out/ — every rule (geofence, photo) is decided by the server. No face check (§19.18). */
@@ -93,6 +105,7 @@ export interface AttendanceDay {
   attendance_id?: number | null;
   has_check_in_photo?: boolean;
   has_check_out_photo?: boolean;
+  uniform_ok?: boolean | null;
 }
 
 export interface AttendanceMonth {

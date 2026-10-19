@@ -151,6 +151,76 @@ class PunchPhotoTests(_Base):
         self.assertFalse(os.path.exists(path))
 
 
+class UniformCheckTests(_Base):
+    """Uniform question at punch-in (PLAN.md §19.27): off | remind | ask, answer stored on the day when asked."""
+
+    def set_mode(self, mode, message=None):
+        body = {"uniform_check": mode} | ({"uniform_message": message} if message is not None else {})
+        res = self.as_(self.hr).put("/api/hr/settings/", body, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        return res.json()
+
+    def test_off_by_default_and_shown_in_config(self):
+        cfg = self.as_(self.member).get("/api/hr/config/").json()
+        self.assertEqual(cfg["uniform_check"], "off")
+        self.assertEqual(cfg["uniform_message"], services.UNIFORM_MESSAGE_DEFAULT)
+        settings = self.as_(self.hr).get("/api/hr/settings/").json()
+        self.assertEqual(settings["uniform_check"]["value"], "off")
+        self.assertEqual(settings["uniform_check"]["choices"], ["off", "remind", "ask"])
+        res = self.as_(self.member).post("/api/attendance/check_in/", {"uniform": True}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertIsNone(res.json()["uniform_ok"], "the answer is ignored when the company does not ask")
+        header = self.as_(self.hr).get("/api/attendance/report/?type=daily&format=csv").content.decode("utf-8-sig").splitlines()[0]
+        self.assertNotIn("Uniform", header, "no Uniform column while nobody is asked")
+
+    def test_only_hr_administrators_change_it_and_values_are_checked(self):
+        self.assertEqual(self.as_(self.member).put("/api/hr/settings/", {"uniform_check": "ask"}, format="json").status_code, 403)
+        bad = self.as_(self.hr).put("/api/hr/settings/", {"uniform_check": "always", "uniform_message": "x" * 201}, format="json")
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(set(bad.json()), {"uniform_check", "uniform_message"})
+        saved = self.set_mode("remind", "  Wear the   jersey today  ")
+        self.assertEqual(saved["uniform_message"]["value"], "Wear the jersey today")
+        cfg = self.as_(self.member).get("/api/hr/config/").json()
+        self.assertEqual((cfg["uniform_check"], cfg["uniform_message"]), ("remind", "Wear the jersey today"))
+        self.assertEqual(self.as_(self.member).get("/api/attendance/today/").json()["uniform_check"], "remind")
+        self.set_mode("remind", "")  # blank goes back to the default text
+        self.assertEqual(self.as_(self.member).get("/api/hr/config/").json()["uniform_message"], services.UNIFORM_MESSAGE_DEFAULT)
+
+    def test_remind_ignores_the_answer(self):
+        self.set_mode("remind")
+        res = self.as_(self.member).post("/api/attendance/check_in/", {"uniform": False}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertIsNone(Attendance.objects.get(user=self.member).uniform_ok)
+
+    def test_ask_needs_an_answer(self):
+        self.set_mode("ask")
+        res = self.as_(self.member).post("/api/attendance/check_in/", {}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()["detail"], services.UNIFORM_MISSING)
+        self.assertFalse(Attendance.objects.filter(user=self.member).exists())
+
+    def test_ask_stores_the_answer_and_check_out_does_not_ask(self):
+        self.set_mode("ask")
+        res = self.as_(self.member).post("/api/attendance/check_in/", {"uniform": False}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertIs(res.json()["uniform_ok"], False)
+        out = self.as_(self.member).post("/api/attendance/check_out/", {}, format="json")
+        self.assertEqual(out.status_code, 201, out.content)
+        self.assertIs(out.json()["uniform_ok"], False)
+        self.as_(self.other).post("/api/attendance/check_in/", {"uniform": True}, format="json")
+        today = timezone.localdate()
+        month = self.as_(self.member).get(f"/api/attendance/monthly/?year={today.year}&month={today.month}").json()
+        self.assertIs(next(d for d in month["days"] if d["date"] == today.isoformat())["uniform_ok"], False)
+        rows = {r["user_id"]: r for r in self.as_(self.hr).get("/api/attendance/team_day/").json()["rows"]}
+        self.assertIs(rows[self.member.id]["uniform_ok"], False)
+        self.assertIs(rows[self.other.id]["uniform_ok"], True)
+        self.assertIsNone(rows[self.admin.id]["uniform_ok"])
+        csv = self.as_(self.hr).get("/api/attendance/report/?type=daily&format=csv").content.decode("utf-8-sig")
+        lines = csv.splitlines()
+        self.assertTrue(lines[0].rstrip().endswith("Uniform"))
+        self.assertTrue(any("mem" in line and line.rstrip().endswith("No") for line in lines[1:]), csv)
+
+
 class NotificationRuleTests(_Base):
     def test_only_admins_change_rules(self):
         self.assertEqual(self.as_(self.member).get("/api/notification-rules/").status_code, 403)

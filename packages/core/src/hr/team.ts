@@ -36,6 +36,8 @@ export interface TeamDayRow extends TeamPerson {
   missing_checkout: boolean;
   attendance_id: number | null;
   note: string;
+  /** Answer to the uniform question at check-in; null when it was not asked. */
+  uniform_ok?: boolean | null;
   has_check_in_photo: boolean;
   has_check_out_photo: boolean;
 }

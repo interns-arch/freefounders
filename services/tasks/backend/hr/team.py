@@ -185,7 +185,7 @@ def team_day(users, day: date) -> dict:
                 "working_minutes": rec.working_minutes,
                 "is_late": rec.is_late, "is_early_checkout": rec.is_early_checkout,
                 "missing_checkout": rec.missing_checkout,
-                "attendance_id": rec.id, "note": rec.note,
+                "attendance_id": rec.id, "note": rec.note, "uniform_ok": rec.uniform_ok,
                 "has_check_in_photo": bool(rec.check_in_photo),
                 "has_check_out_photo": bool(rec.check_out_photo),
             })
@@ -194,7 +194,7 @@ def team_day(users, day: date) -> dict:
                 "status": cal.status_without_record(day),
                 "check_in": None, "check_out": None, "working_minutes": 0,
                 "is_late": False, "is_early_checkout": False, "missing_checkout": False,
-                "attendance_id": None, "note": "",
+                "attendance_id": None, "note": "", "uniform_ok": None,
                 "has_check_in_photo": False, "has_check_out_photo": False,
             })
         rows.append(row)
@@ -274,6 +274,7 @@ def _hours(minutes) -> str:
 LABEL = {"present": "Present", "late": "Late", "half_day": "Half day", "absent": "Absent", "leave": "Leave",
          "holiday": "Holiday", "week_off": "Week off", "not_checked_in": "Not checked in"}
 LETTER = {"present": "P", "late": "P", "half_day": "H", "absent": "A", "leave": "L", "holiday": "HO", "week_off": "WO"}
+UNIFORM_LABEL = {True: "Yes", False: "No"}
 REPORT_TYPES = ("daily", "monthly_summary", "monthly_register", "late", "leave")
 
 
@@ -288,13 +289,17 @@ def build_report(kind, users, params):
     if kind == "daily":
         day = parse_day(params.get("date") or timezone.localdate().isoformat())
         data = team_day(users, day)
+        # The Uniform column (PLAN.md §19.27) only when the company asks, or someone answered that day.
+        uniform = services.cfg()["uniform_check"] == "ask" or any(r["uniform_ok"] is not None for r in data["rows"])
         rows = []
         for u, r in zip(users, data["rows"]):
             rows.append(_ident(u, names) + [u.whatsapp_phone, LABEL.get(r["status"], "") if r["status"] else "",
                                             _hm(r["check_in"]), _hm(r["check_out"]), _hours(r["working_minutes"]),
-                                            "Yes" if r["is_late"] else "", "Yes" if r["is_early_checkout"] else "", r["note"]])
+                                            "Yes" if r["is_late"] else "", "Yes" if r["is_early_checkout"] else "", r["note"]]
+                        + ([UNIFORM_LABEL.get(r["uniform_ok"], "")] if uniform else []))
         return (f"Daily attendance {_dmy(day)}", f"attendance-daily-{day.isoformat()}",
-                ident + ["Phone", "Status", "Check in", "Check out", "Hours", "Late", "Early out", "Note"], rows)
+                ident + ["Phone", "Status", "Check in", "Check out", "Hours", "Late", "Early out", "Note"]
+                + (["Uniform"] if uniform else []), rows)
 
     if kind in ("monthly_summary", "monthly_register"):
         year, month, first, last = parse_month(params)

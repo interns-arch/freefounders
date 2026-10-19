@@ -2,6 +2,7 @@
 import { ApiError, errorMessage } from '@freefounders/core';
 import {
   type HrSettingValues,
+  UNIFORM_MESSAGE_DEFAULT,
   useAddLeaveType,
   useAddOffice,
   useDeleteOffice,
@@ -10,11 +11,11 @@ import {
   useOfficeLocations,
   useSaveHrSettings,
 } from '@freefounders/core/hr';
-import { CalendarHeart, LocateFixed, MapPin, Settings2, X } from '@/components/icons';
+import { CalendarHeart, LocateFixed, MapPin, Settings2, Shirt, X } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input, Label, NativeSelect } from '@/components/ui/input';
+import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Checkbox, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, Panel } from '../tasks/general/parts';
@@ -26,6 +27,7 @@ export function HrSettingsTab() {
   return (
     <div className="max-w-3xl space-y-4">
       <AttendanceRules />
+      <UniformCheck />
       <Offices />
       <LeaveTypes />
     </div>
@@ -33,6 +35,7 @@ export function HrSettingsTab() {
 }
 
 type Form = { [K in keyof HrSettingValues]: HrSettingValues[K] | string };
+const UNIFORM_KEYS: string[] = ['uniform_check', 'uniform_message'];
 
 /** Working hours and attendance rules, saved for this company. */
 function AttendanceRules() {
@@ -56,7 +59,9 @@ function AttendanceRules() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');
-    save.mutate(form, {
+    // The uniform check has its own card and save (below); never resend it from here.
+    const rules = Object.fromEntries(Object.entries(form).filter(([k]) => !UNIFORM_KEYS.includes(k)));
+    save.mutate(rules, {
       onSuccess: (d) => {
         setMsg('Saved');
         setForm(Object.fromEntries(Object.entries(d ?? s).map(([k, v]) => [k, v.value])) as Form);
@@ -131,6 +136,90 @@ function AttendanceRules() {
         <div className="mt-4 flex items-center gap-3">
           <Button type="submit" loading={save.isPending}>
             {save.isPending ? 'Saving…' : 'Save rules'}
+          </Button>
+          {msg && (
+            <span className="text-sm text-success" role="status">
+              {msg}
+            </span>
+          )}
+        </div>
+      </Panel>
+    </form>
+  );
+}
+
+const UNIFORM_MODES: { value: HrSettingValues['uniform_check']; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'remind', label: 'Reminder only' },
+  { value: 'ask', label: 'Ask and record' },
+];
+
+/** Uniform at punch-in (PLAN.md §19.27): a reminder, or a Yes / No question saved with the attendance. Its own save. */
+function UniformCheck() {
+  const q = useHrSettings();
+  const save = useSaveHrSettings();
+  const [mode, setMode] = useState<HrSettingValues['uniform_check'] | null>(null);
+  const [message, setMessage] = useState('');
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    if (q.data?.uniform_check && mode === null) {
+      setMode(q.data.uniform_check.value);
+      setMessage(q.data.uniform_message?.value ?? '');
+    }
+  }, [q.data, mode]);
+
+  if (!q.data || mode === null) return q.error ? null : <Skeleton className="h-40" />;
+  const fieldErrors = save.error instanceof ApiError ? (save.error.errors ?? {}) : {};
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    save.mutate(
+      // The default text is saved as blank, so a later change of the default reaches this company too.
+      { uniform_check: mode, uniform_message: message.trim() === UNIFORM_MESSAGE_DEFAULT ? '' : message.trim() },
+      { onSuccess: () => setMsg('Saved') },
+    );
+  };
+
+  return (
+    <form onSubmit={submit} aria-label="Uniform at punch-in">
+      <Panel icon={Shirt} title="Uniform at punch-in" description="Reminder only shows the message before check-in. Ask and record saves the answer with the attendance; the punch is never blocked.">
+        <fieldset>
+          <legend className="mb-1.5 text-[13px] font-medium">Before check-in</legend>
+          <div className="grid grid-cols-3 gap-1.5 max-[360px]:grid-cols-1">
+            {UNIFORM_MODES.map((m) => (
+              <label
+                key={m.value}
+                className={cn(
+                  'flex min-h-10 cursor-pointer items-center justify-center rounded-md border bg-card px-2 text-center text-sm font-medium transition outline-none has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/40 hover:border-primary/40',
+                  mode === m.value && 'border-primary bg-primary/8 text-primary',
+                )}
+              >
+                <input type="radio" name="uniform-check" value={m.value} checked={mode === m.value} onChange={() => setMode(m.value)} className="sr-only" />
+                {m.label}
+              </label>
+            ))}
+          </div>
+          {fieldErrors.uniform_check && <p className="mt-1 text-xs text-destructive">{fieldErrors.uniform_check}</p>}
+        </fieldset>
+        {mode !== 'off' && (
+          <div className="mt-4 grid gap-1.5">
+            <Label htmlFor="hr-uniform-message">Message</Label>
+            <Textarea
+              id="hr-uniform-message"
+              rows={2}
+              maxLength={200}
+              placeholder={UNIFORM_MESSAGE_DEFAULT}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{message.length}/200 · blank uses the default text</p>
+            {fieldErrors.uniform_message && <p className="text-xs text-destructive">{fieldErrors.uniform_message}</p>}
+          </div>
+        )}
+        {save.error && !Object.keys(fieldErrors).length && <ErrorNote className="mt-3">{errorMessage(save.error)}</ErrorNote>}
+        <div className="mt-4 flex items-center gap-3">
+          <Button type="submit" loading={save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save uniform check'}
           </Button>
           {msg && (
             <span className="text-sm text-success" role="status">

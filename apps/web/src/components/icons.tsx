@@ -184,6 +184,7 @@
  *   ShieldAlert           SecurityWarningIcon
  *   ShieldCheck           SecurityCheckIcon
  *   ShieldOff             SecurityBlockIcon
+ *   Shirt                 TShirtIcon (uniform reminder at punch-in)
  *   SlidersHorizontal     FilterHorizontalIcon
  *   Smartphone            SmartPhone01Icon
  *   Sofa                  Sofa01Icon
@@ -405,6 +406,7 @@ import {
   Task01Icon,
   TaskDaily01Icon,
   TaskDone01Icon,
+  TShirtIcon,
   TextCheckIcon,
   ThumbsUpIcon,
   Tick02Icon,
@@ -628,6 +630,7 @@ export const Share2 = icon(Share08Icon, 'Share2');
 export const ShieldAlert = icon(SecurityWarningIcon, 'ShieldAlert');
 export const ShieldCheck = icon(SecurityCheckIcon, 'ShieldCheck');
 export const ShieldOff = icon(SecurityBlockIcon, 'ShieldOff');
+export const Shirt = icon(TShirtIcon, 'Shirt');
 export const SlidersHorizontal = icon(FilterHorizontalIcon, 'SlidersHorizontal');
 export const Smartphone = icon(SmartPhone01Icon, 'Smartphone');
 export const Sofa = icon(Sofa01Icon, 'Sofa');

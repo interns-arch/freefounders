@@ -48,11 +48,18 @@ def cfg():
         # Approvals (PLAN.md §17.2)
         "leave_approval": _env("APPROVAL_LEAVE", "department") if _env("APPROVAL_LEAVE", "department") in ("department", "manager") else "department",
         "approval_remind_hours": int(_env("APPROVAL_REMIND_HOURS", "24") or 0),
+        # Uniform check at punch-in (PLAN.md §19.27): off | remind (message only) | ask (answer saved on the day).
+        "uniform_check": _env("UNIFORM_CHECK", "off").lower() if _env("UNIFORM_CHECK", "off").lower() in UNIFORM_MODES else "off",
+        "uniform_message": (_env("UNIFORM_MESSAGE", "") or "").strip()[:UNIFORM_MESSAGE_MAX] or UNIFORM_MESSAGE_DEFAULT,
     }
 
 
 PHOTO_MODES = ("off", "optional", "required")
 PHOTO_MAX_BYTES = 400 * 1024
+UNIFORM_MODES = ("off", "remind", "ask")
+UNIFORM_MESSAGE_DEFAULT = "Are you wearing the company shirt / jersey today?"
+UNIFORM_MESSAGE_MAX = 200
+UNIFORM_MISSING = "Answer whether you are wearing the company shirt / jersey to punch in."
 
 # Settings an HR admin edits on the HR Settings screen. Each is stored per company
 # (CompanySetting); a blank value falls back to the server's environment variable.
@@ -69,6 +76,8 @@ EDITABLE = {
     "photo_retention_days": ("ATTENDANCE_PHOTO_RETENTION_DAYS", "int", (1, 3650)),
     "leave_approval": ("APPROVAL_LEAVE", "choice", ("department", "manager")),
     "approval_remind_hours": ("APPROVAL_REMIND_HOURS", "int", (0, 720)),
+    "uniform_check": ("UNIFORM_CHECK", "choice", UNIFORM_MODES),
+    "uniform_message": ("UNIFORM_MESSAGE", "text", UNIFORM_MESSAGE_MAX),
 }
 
 # Face check settings that no longer exist (PLAN.md §19.18). An older screen may still send them: "off" (or blank) is
@@ -112,6 +121,11 @@ def clean_setting(key, value) -> str:
         if any(d < 0 or d > 6 for d in out):
             raise ValueError("Days are 0 (Monday) to 6 (Sunday)")
         return ",".join(map(str, out)) or "none"
+    if kind == "text":
+        text = " ".join(str(value).split())
+        if len(text) > extra:
+            raise ValueError(f"At most {extra} characters")
+        return text
     if kind == "choice":
         if str(value) not in extra:
             raise ValueError(f"One of: {', '.join(extra)}")
@@ -231,8 +245,9 @@ def is_holiday(day: date) -> bool:
     return Holiday.objects.filter(date=day).exists()
 
 
-def check_in(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendance:
-    """`descriptor` (a face signature from an older client) is ignored: there is no face check."""
+def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None) -> Attendance:
+    """`descriptor` (a face signature from an older client) is ignored: there is no face check.
+    `uniform` (True/False) answers the company's uniform question; needed only when UNIFORM_CHECK is "ask"."""
     conf = cfg()
     today = timezone.localdate()
     existing = Attendance.objects.filter(user=user, date=today).first()
@@ -240,6 +255,9 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendanc
         raise HRError("You have already checked in today.")
     if existing and existing.status == AttendanceStatus.LEAVE:
         raise HRError("You are on approved leave today.")
+    asks_uniform = conf["uniform_check"] == "ask"
+    if asks_uniform and uniform is None:
+        raise HRError(UNIFORM_MISSING)
 
     office, _ = validate_location(lat, lng)
 
@@ -256,6 +274,7 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendanc
     record.status = AttendanceStatus.LATE if late else AttendanceStatus.PRESENT
     record.face_verified = False
     record.face_confidence = None
+    record.uniform_ok = bool(uniform) if asks_uniform else None
     _attach_photo(record, "check_in_photo", photo)
     record.save()
     return record
@@ -367,7 +386,7 @@ def monthly_report(user, year: int, month: int) -> dict:
                 "working_minutes": rec.working_minutes,
                 "is_late": rec.is_late, "is_early_checkout": rec.is_early_checkout,
                 "missing_checkout": rec.missing_checkout,
-                "attendance_id": rec.id,
+                "attendance_id": rec.id, "uniform_ok": rec.uniform_ok,
                 "has_check_in_photo": bool(rec.check_in_photo),
                 "has_check_out_photo": bool(rec.check_out_photo),
             }

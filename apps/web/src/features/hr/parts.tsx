@@ -47,6 +47,15 @@ export function AttendanceChip({ status, extra }: { status: AttendanceStatus; ex
   );
 }
 
+/** The answer to the uniform question at check-in (PLAN.md §19.27): Yes / No in a success / danger tint. */
+export function UniformChip({ ok }: { ok: boolean }) {
+  return (
+    <Chip tone={ok ? 'success' : 'danger'}>
+      {ok ? 'Yes' : 'No'}
+    </Chip>
+  );
+}
+
 /** "7h 30m" from minutes, or "—". */
 export const hrs = (m: number | null | undefined) => (m ? `${Math.floor(m / 60)}h ${m % 60}m` : '—');
 

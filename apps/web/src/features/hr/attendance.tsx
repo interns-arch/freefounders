@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, OkNote, Panel, Tile, fmtDay, fmtTime } from '../tasks/general/parts';
-import { AttendanceChip, PunchPhoto, STATUS_CELL, STATUS_TEXT, hrs } from './parts';
+import { AttendanceChip, PunchPhoto, STATUS_CELL, STATUS_TEXT, UniformChip, hrs } from './parts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -134,6 +134,14 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
               <dt className="font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Worked</dt>
               <dd className="mt-0.5 font-mono text-lg font-bold tabular-nums">{hrs(selected.working_minutes)}</dd>
             </div>
+            {selected.uniform_ok != null && (
+              <div className="flex items-center gap-3 sm:col-span-3">
+                <dt className="text-muted-foreground">Uniform</dt>
+                <dd>
+                  <UniformChip ok={selected.uniform_ok} />
+                </dd>
+              </div>
+            )}
             {(selected.is_late || selected.is_early_checkout || selected.missing_checkout) && (
               <div className="flex items-center gap-3 sm:col-span-3">
                 <dt className="text-muted-foreground">Flags</dt>

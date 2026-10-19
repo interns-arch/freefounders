@@ -136,6 +136,7 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             "face_enabled": False,  # no face check any more (PLAN.md §19.18); kept for older clients
             "work_start": conf["work_start"], "work_end": conf["work_end"],
             "photo": conf["photo"],
+            "uniform_check": conf["uniform_check"], "uniform_message": conf["uniform_message"],
         })
 
     @action(detail=True, methods=["get"], url_path=r"photo/(?P<which>in|out)")
@@ -156,8 +157,9 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         ser = MarkSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
+        extra = {"uniform": d.get("uniform")} if fn is services.check_in else {}  # check-out never asks
         try:
-            rec = fn(request.user, d.get("latitude"), d.get("longitude"), photo=d.get("photo"))
+            rec = fn(request.user, d.get("latitude"), d.get("longitude"), photo=d.get("photo"), **extra)
         except services.HRError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(AttendanceSerializer(rec).data, status=http.HTTP_201_CREATED)
@@ -542,6 +544,8 @@ def hr_config(request):
         "face_enabled": False,  # no face check any more (PLAN.md §19.18); kept for older clients
         "work_start": conf["work_start"], "work_end": conf["work_end"],
         "week_offs": conf["week_offs"],
+        # Uniform check at punch-in (PLAN.md §19.27): read by every employee's punch screen.
+        "uniform_check": conf["uniform_check"], "uniform_message": conf["uniform_message"],
         "can_approve": approvals.is_approver(request.user),
         "can_manage": can_manage_hr(request.user),
         # The managers' attendance screens this person may open: their permissions, plus their own team under the
