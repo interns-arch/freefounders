@@ -220,16 +220,31 @@ class NoticeViewSet(viewsets.ModelViewSet):
         reach = [u for u in people if (u.whatsapp_phone or "").strip()]
         return people, reach
 
+    @staticmethod
+    def _already_sent(notice):
+        """Who has had this notice pushed to them. Sends carry the notice id in
+        their link; older ones only its title."""
+        from django.db.models import Q
+        from notifications.models import Notification
+        return set(Notification.objects.filter(type="notice").filter(
+            Q(link=f"/notices?n={notice.pk}") | Q(title=f"Notice: {notice.title}"[:200])
+        ).values_list("user_id", flat=True))
+
     @action(detail=True, methods=["get", "post"])
     def send_whatsapp(self, request, pk=None):
         """Push a live notice to its audience on WhatsApp (plus the in-app
-        bell). GET previews who it would reach; POST sends, in the background
-        so a big audience cannot time the request out.
+        bell). GET previews who it would reach (and who has not had it yet);
+        POST sends, in the background so a big audience cannot time the
+        request out. POST {"only_missing": true} sends only to the people who
+        never got it (joined, reactivated or skipped since).
 
-        Uses the approved Meta template named by NOTICE_WHATSAPP_TEMPLATE
-        (default "company_notice"): {{1}} name, {{2}} title, {{3}} text.
-        Set it to blank to fall back to the generic send."""
-        import os
+        Uses the approved Meta template named by NOTICE_WHATSAPP_TEMPLATE,
+        default "notice_posted" (Utility): {{1}} name, {{2}} title -- a short
+        "a notice was posted, open the app". Meta files templates that carry
+        announcement text as MARKETING and withholds them from most Indian
+        numbers; the older "company_notice" ({{1}} name, {{2}} title, {{3}}
+        text) still works if named. Blank falls back to the generic send.
+        One person's failure is recorded for them and the rest still go."""
         from crm.task_views import _in_background
         if not self._is_manager():
             raise PermissionDenied("Your role does not include publishing notices.")
@@ -237,41 +252,55 @@ class NoticeViewSet(viewsets.ModelViewSet):
         if not notice:
             return Response(status=404)
         people, reach = self._audience(notice)
+        sent = self._already_sent(notice)
+        missing = [u for u in reach if u.pk not in sent]
         summary = {"audience": len(people), "with_whatsapp": len(reach),
                    "without_whatsapp": [u.get_full_name() or u.username
-                                        for u in people if u not in reach]}
+                                        for u in people if u not in reach],
+                   "missing": [u.get_full_name() or u.username for u in missing]}
         if request.method == "GET":
             return Response(summary)
         if not notice.is_live:
             raise ValidationError({"detail": "Publish the notice first, then send it."})
 
-        template = company_env("NOTICE_WHATSAPP_TEMPLATE", "company_notice").strip()
+        template = company_env("NOTICE_WHATSAPP_TEMPLATE", "notice_posted").strip()
         text = " ".join((notice.content or "").split())[:900] or notice.title
-        ids = [u.pk for u in reach]
+        only_missing = str((request.data or {}).get("only_missing", "")).lower() in ("1", "true")
+        ids = [u.pk for u in (missing if only_missing else reach)]
 
         def send():
+            import logging
+
             from notifications.channels import whatsapp
             from notifications.models import Notification
             from notifications.service import _remember_whatsapp
-            for u in User.objects.filter(pk__in=ids):
-                name = u.get_full_name() or u.username
-                tried = []
-                res = None
-                if template:
-                    res = whatsapp.send_template(u.whatsapp_phone, template, [name, notice.title, text])
-                    tried.append(res)
-                # Template not approved yet (or rejected): still try the plain
-                # send, which reaches anyone inside Meta's 24h window, or
-                # everyone if a general WHATSAPP_TEMPLATE_NAME is configured.
-                if not res or res.get("status") != "sent":
-                    res = whatsapp.send_text(u.whatsapp_phone,
-                                             f"Notice: {notice.title}"
-                                             f"{chr(10)}{notice.content or ''}".strip())
-                    tried.append(res)
-                _remember_whatsapp(u, res, template if len(tried) == 1 and template else "")
+            log = logging.getLogger(__name__)
+            for u in User.objects.filter(pk__in=ids).order_by("pk"):
+                # one bad number or hiccup must not stop everyone after it
+                try:
+                    name = u.get_full_name() or u.username
+                    tried = []
+                    res = None
+                    if template:
+                        params = ([name, notice.title, text] if template == "company_notice"
+                                  else [name, notice.title[:200]])
+                        res = whatsapp.send_template(u.whatsapp_phone, template, params)
+                        tried.append(res)
+                    # Template not approved yet (or rejected): still try the plain
+                    # send, which reaches anyone inside Meta's 24h window, or
+                    # everyone if a general WHATSAPP_TEMPLATE_NAME is configured.
+                    if not res or res.get("status") != "sent":
+                        res = whatsapp.send_text(u.whatsapp_phone,
+                                                 f"Notice: {notice.title}"
+                                                 f"{chr(10)}{notice.content or ''}".strip())
+                        tried.append(res)
+                    _remember_whatsapp(u, res, template if len(tried) == 1 and template else "")
+                except Exception as exc:  # noqa: BLE001
+                    log.exception("notice %s: WhatsApp to user %s failed", notice.pk, u.pk)
+                    tried = [{"channel": "whatsapp", "status": "error", "detail": str(exc)[:200]}]
                 Notification.objects.create(
                     user=u, type="notice", title=f"Notice: {notice.title}"[:200],
-                    body=notice.content or notice.title, link="/notices", channels=tried)
+                    body=notice.content or notice.title, link=f"/notices?n={notice.pk}", channels=tried)
         _in_background(send)
         return Response({"queued": len(ids), **summary}, status=status.HTTP_202_ACCEPTED)
 

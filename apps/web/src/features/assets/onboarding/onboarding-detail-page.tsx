@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { EnumBadge } from '@/components/common/badges';
 import { useConfirm } from '@/components/common/confirm';
 import { Field } from '@/components/common/form';
-import { ErrorState, PageLoader } from '@/components/common/page';
+import { ErrorState, PageLoader, BACK_LINK } from '@/components/common/page';
 import { PhotoPicker, uploadPhotos } from '@/features/assets/components/photos';
 import { Combobox, EntityPicker } from '@/features/assets/components/pickers';
 import { Timeline } from '@/features/assets/components/timeline';
@@ -124,20 +124,20 @@ export default function OnboardingDetailPage() {
 
   return (
     <div className="space-y-5">
-      <Button variant="ghost" size="xs" asChild>
-        <Link to={it ? '/assets/requests?view=joiners' : '/assets/onboarding'}>
-          <ArrowLeft /> {it ? 'New joiner requests' : 'New joiners'}
-        </Link>
-      </Button>
+      <Link to={it ? '/assets/requests?view=joiners' : '/assets/onboarding'} className={BACK_LINK}>
+        <ArrowLeft /> {it ? 'New joiner requests' : 'New joiners'}
+      </Link>
 
       <Card className="relative overflow-hidden">
         <CardContent className="relative flex flex-wrap items-start gap-4 pt-5">
           <Avatar name={o.employee.fullName} className="size-14 text-base ring-4 ring-app-attendance/15" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <Link to={`/assets/employees/${o.employee.id}`} className="text-xl font-semibold hover:text-primary hover:underline">
-                {o.employee.fullName}
-              </Link>
+              <h1 className="text-[22px] leading-tight font-bold tracking-tight break-words sm:text-[26px]">
+                <Link to={`/assets/employees/${o.employee.id}`} className="hover:text-primary hover:underline">
+                  {o.employee.fullName}
+                </Link>
+              </h1>
               <EnumBadge value={o.status} tones={ONBOARDING_TONE} labels={ONBOARDING_STATUS_LABELS} />
               {approved && o.ready && (
                 <Badge tone="green">

@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { PageHeader } from '@/components/common/page';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/overlays';
 import { cn } from '@/lib/utils';
+import { tabActiveClass, tabClass } from '@/components/common/controls';
 import { ActivitiesTab } from './activities-tab';
 import { DashboardTab } from './dashboard-tab';
 import { DeletedTab, RequestsTab, ReviewsTab } from './inbox-tabs';
@@ -14,7 +15,7 @@ import { PersonProfileSheet } from './person-profile';
 import { DisputesTab, ReportsTab, TimeTab } from './reports-tab';
 import { TaskDetailSheet } from './task-detail';
 import { TaskFormSheet } from './task-form';
-import { CountPill } from './task-bits';
+import { TabCount } from './task-bits';
 import { DirectoryTab, TemplatesTab } from './templates-tab';
 
 const BASE = '/tasks/tasks';
@@ -45,10 +46,10 @@ export function TaskWorkspacePage() {
   const hasTeam = isManager || people.length > 1;
   const [form, setForm] = useState<{ template: TaskTemplate | null } | null>(null);
 
-  // [value, label, count shown as a pill after the label]
+  // [value, label, red count after the label (my open tasks, work to accept, requests to decide)]
   const tabs: Tab[] = [
     ['dashboard', 'Dashboard'],
-    ['my', 'My Tasks'],
+    ['my', 'My Tasks', counts.mine],
     ...(hasTeam ? [['all', 'All Tasks'] as Tab] : []),
     ['delegated', 'Delegated'],
     ['subscribed', 'Subscribed'],
@@ -141,12 +142,12 @@ function TabBar({ tabs, area, href }: { tabs: Tab[]; area: string; href: (v: str
       to={href(v)}
       aria-current={area === v ? 'page' : undefined}
       className={cn(
-        '-mb-px inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-2.5 text-[13.5px] font-semibold whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none sm:px-3',
-        area === v && 'border-primary text-primary hover:text-primary',
+        tabClass,
+        area === v && tabActiveClass,
       )}
     >
       {l}
-      {!!count && count > 0 && <CountPill tone={v === 'reviews' ? 'danger' : 'primary'}>{count}</CountPill>}
+      <TabCount n={count} className="ml-1" />
     </Link>
   );
   const front = tabs.slice(0, PHONE_TABS);
@@ -159,25 +160,26 @@ function TabBar({ tabs, area, href }: { tabs: Tab[]; area: string; href: (v: str
       <nav aria-label="Task views" className="hidden flex-wrap gap-x-0.5 border-b md:flex">
         {tabs.map(([v, l, c]) => link(v, l, c))}
       </nav>
-      <nav aria-label="Task views" className="no-scrollbar flex gap-0.5 overflow-x-auto border-b md:hidden">
+      <nav aria-label="Task views" className="no-scrollbar -mx-4 flex gap-0.5 overflow-x-auto border-b px-4 md:hidden">
         {front.map(([v, l, c]) => link(v, l, c))}
         {rest.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger
               className={cn(
-                '-mb-px ml-auto inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 border-b-2 border-transparent px-2.5 text-[13.5px] font-semibold whitespace-nowrap text-muted-foreground outline-none',
-                restActive && 'border-primary text-primary',
+                tabClass,
+                'ml-auto',
+                restActive && tabActiveClass,
               )}
             >
               {restActive ? restActive[1] : 'More'}
-              {!restActive && restCount > 0 && <CountPill tone="danger">{restCount}</CountPill>}
+              {!restActive && <TabCount n={restCount} className="ml-1" />}
               <ChevronDown className="size-3.5" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {rest.map(([v, l, c]) => (
                 <DropdownMenuItem key={v} onSelect={() => navigate(href(v))} className={cn('justify-between', area === v && 'font-semibold text-primary')}>
                   {l}
-                  {!!c && c > 0 && <CountPill tone={v === 'reviews' ? 'danger' : 'primary'}>{c}</CountPill>}
+                  <TabCount n={c} />
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

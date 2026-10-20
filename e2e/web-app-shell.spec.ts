@@ -59,16 +59,16 @@ async function newPerson(request: APIRequestContext, owner: string) {
   };
 }
 
-type Logged = { type?: string; id?: string; title?: string; optional?: boolean; filename?: string; mime?: string; base64?: string };
+type Logged = { type?: string; id?: string; title?: string; optional?: boolean; filename?: string; mime?: string; base64?: string; lang?: string };
 
 /** A context that looks like the Android shell: phone size, the app marker and a fake native bridge. */
-async function shellContext(browser: Browser, opts: { locationBlocked?: boolean } = {}) {
+async function shellContext(browser: Browser, opts: { locationBlocked?: boolean; version?: string } = {}) {
   const ctx = await browser.newContext(PHONE);
-  await ctx.addInitScript((blocked: boolean) => {
+  await ctx.addInitScript(({ blocked, version }: { blocked: boolean; version: string }) => {
     const w = window as unknown as Record<string, unknown>;
     const log: unknown[] = [];
     w.__shellLog = log;
-    w.FreeFoundersApp = { platform: 'android', version: 'e2e', camera: 'granted' };
+    w.FreeFoundersApp = { platform: 'android', version, camera: 'granted' };
     const reply = (r: unknown) => setTimeout(() => document.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(r) })), 30);
     w.ReactNativeWebView = {
       postMessage(raw: string) {
@@ -91,10 +91,13 @@ async function shellContext(browser: Browser, opts: { locationBlocked?: boolean 
           return reply({ id: m.id, ok: true, data: c.toDataURL('image/jpeg', 0.6) });
         }
         if (m.type === 'download') return reply({ id: m.id, ok: true, data: { saved: true } });
+        // the phone's speech recogniser (app 1.1.0+), after Android's microphone pop-up
+        if (m.type === 'voice') return reply({ id: m.id, ok: true, data: { text: 'stock check karna hai kal 5 baje tak 30 minute' } });
+        if (m.type === 'voice-stop') return reply({ id: m.id, ok: true, data: { stopped: true } });
         return reply({ id: m.id, ok: false, error: `unknown ${m.type}` });
       },
     };
-  }, !!opts.locationBlocked);
+  }, { blocked: !!opts.locationBlocked, version: opts.version ?? 'e2e' });
   return ctx;
 }
 
@@ -205,4 +208,37 @@ test('location blocked → an Allow button: the app opens its Settings; the brow
     await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
     await person.remove();
   }
+});
+
+test('in the app: Voice draft listens with the phone (no browser microphone) and fills the task form', async ({ browser }) => {
+  const ctx = await shellContext(browser, { version: '1.1.0' });
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await signIn(page, OWNER.login, OWNER.password);
+  await page.goto('/tasks/tasks?tab=my');
+  await page.getByRole('button', { name: 'Add task' }).click();
+  const form = page.getByRole('dialog', { name: 'Add task' });
+  await form.getByRole('button', { name: 'Voice draft' }).click();
+  await expect(form.getByText(/^Heard: .stock check karna hai kal 5 baje tak 30 minute/)).toBeVisible();
+  await expect(form.getByRole('spinbutton', { name: /^Effort/ })).toHaveValue('30');
+  await expect.poll(async () => (await shellLog(page)).filter((m) => m.type === 'voice')).toEqual([expect.objectContaining({ type: 'voice', lang: 'en-IN' })]);
+  await ctx.close();
+});
+
+test('an app older than the server needs asks once to update; Later hides it for the session', async ({ browser }) => {
+  const ctx = await shellContext(browser, { version: '1.0.0' });
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await signIn(page, OWNER.login, OWNER.password);
+  const prompt = page.getByRole('dialog', { name: 'Update the app — one time' });
+  await expect(prompt).toBeVisible();
+  const link = prompt.getByRole('link', { name: 'Update now' });
+  await expect(link).toHaveAttribute('target', '_blank'); // a new window always leaves the app: the phone's browser downloads it
+  await expect(link).toHaveAttribute('href', /\.apk$/);
+  await prompt.getByRole('button', { name: 'Later' }).click();
+  await expect(prompt).toBeHidden();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / }).or(page.getByRole('heading').first())).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Update the app — one time' })).toHaveCount(0);
+  await ctx.close();
 });

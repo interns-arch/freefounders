@@ -1,6 +1,7 @@
-import type { TaskPriority, TaskStatus } from '@freefounders/core/tasks';
+import { countLabel, type TaskPriority, type TaskStatus } from '@freefounders/core/tasks';
 import type { ReactNode } from 'react';
 import { Badge, type BadgeTone } from '@/components/ui/primitives';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { cn } from '@/lib/utils';
 
 /* Soft-tinted pills, the way the old Tasks app drew status and priority (rounded, bold, tinted background, no border). */
@@ -36,6 +37,23 @@ export function TaskCode({ code, className }: { code: string; className?: string
   return <span className={cn('shrink-0 rounded-md border border-border/70 bg-muted/70 px-1.5 py-0.5 font-mono text-[11px] font-semibold tracking-tight text-muted-foreground', className)}>{code}</span>;
 }
 
+/**
+ * The red count on the My Tasks / To accept / Requests tabs (original app d0a1bdf): a round counter like the bell's,
+ * 1–9, then 9+ and 99+. Nothing when there is nothing waiting.
+ */
+export function TabCount({ n, className }: { n: number | null | undefined; className?: string }) {
+  const label = countLabel(n);
+  if (!label) return null;
+  return (
+    <span
+      aria-label={`${n} waiting`}
+      className={cn('inline-grid min-w-[18px] place-items-center rounded-full bg-destructive px-1 font-mono text-[10px] leading-[16px] font-bold text-white tabular dark:text-background', className)}
+    >
+      {label}
+    </span>
+  );
+}
+
 /** A small count beside a heading or a tab ("To accept 3"): the old app's count-pill. */
 export function CountPill({ children, tone = 'primary', className }: { children: ReactNode; tone?: 'primary' | 'neutral' | 'danger'; className?: string }) {
   return (
@@ -62,27 +80,7 @@ export function Chip({ children, title, tone = 'outline', className }: { childre
   );
 }
 
-/** Two-to-four buttons that behave like tabs (Open / Done / All…). The active one is white with the accent colour. */
-export function Segmented<T extends string>({ value, onChange, options, label, className }: { value: T; onChange: (v: T) => void; options: Array<[T, string]>; label: string; className?: string }) {
-  return (
-    <div role="group" aria-label={label} className={cn('inline-flex h-9 shrink-0 items-center rounded-lg border bg-muted/60 p-0.5', className)}>
-      {options.map(([v, l]) => (
-        <button
-          key={`${v}-${l}`}
-          type="button"
-          aria-pressed={value === v}
-          onClick={() => onChange(v)}
-          className={cn(
-            'h-full cursor-pointer rounded-md px-3 text-[13px] font-semibold whitespace-nowrap text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
-            value === v && 'bg-card text-primary shadow-xs ring-1 ring-border/80 hover:text-primary',
-          )}
-        >
-          {l}
-        </button>
-      ))}
-    </div>
-  );
-}
+export { Segmented } from '@/components/common/controls';
 
 /** A filter that is on or off (Overdue only, Recurring only). `tone="danger"` lights up red, like the old overdue chip. */
 export function ToggleChip({ on, onChange, children, title, tone = 'primary' }: { on: boolean; onChange: (v: boolean) => void; children: ReactNode; title?: string; tone?: 'primary' | 'danger' }) {
@@ -93,8 +91,10 @@ export function ToggleChip({ on, onChange, children, title, tone = 'primary' }: 
       title={title}
       onClick={() => onChange(!on)}
       className={cn(
-        'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none [&_svg]:size-3.5',
-        on && tone === 'primary' && 'border-primary/50 bg-primary/8 text-primary hover:text-primary',
+        chipClass,
+        'h-9 font-semibold',
+        !on && chipIdleClass,
+        on && tone === 'primary' && chipActiveClass,
         on && tone === 'danger' && 'border-destructive/50 bg-destructive/10 text-destructive hover:border-destructive/60 hover:text-destructive',
       )}
     >

@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { AssetStatusBadge, EmployeeStatusBadge, EnumBadge } from '@/components/common/badges';
 import { LocalQrWarning, QRCode, useQrLinks } from '@/components/common/codes';
 import { useConfirm } from '@/components/common/confirm';
-import { DetailList, EmptyState, ErrorState, PageLoader } from '@/components/common/page';
+import { DetailList, EmptyState, ErrorState, PageLoader, BACK_LINK } from '@/components/common/page';
 import { EntityPicker } from '@/features/assets/components/pickers';
 import { Timeline } from '@/features/assets/components/timeline';
 import { Button } from '@/components/ui/button';
@@ -157,8 +157,8 @@ export default function EmployeeDetailPage() {
   return (
     <div className="space-y-4 sm:space-y-5">
       {can('employee:view') && (
-        <Link to="/assets/employees" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-3.5" /> Employees
+        <Link to="/assets/employees" className={BACK_LINK}>
+          <ArrowLeft /> Employees
         </Link>
       )}
 
@@ -168,7 +168,7 @@ export default function EmployeeDetailPage() {
           <Avatar name={e.fullName} className="size-14 text-base ring-4 ring-primary/10 sm:size-16 sm:text-lg" />
           <div className="min-w-0 flex-1">
             {e.departmentName && <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{e.departmentName}</p>}
-            <h1 className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">{e.fullName}</h1>
+            <h1 className="text-[22px] leading-tight font-bold tracking-tight break-words sm:text-[26px]">{e.fullName}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{e.employeeCode}</span>
               <EmployeeStatusBadge status={e.status} />

@@ -119,13 +119,13 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 export const Tabs = TabsPrimitive.Root;
 export function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
-  return <TabsPrimitive.List className={cn('no-scrollbar inline-flex h-10 w-full items-center gap-1 overflow-x-auto overflow-y-hidden border-b max-sm:h-11', className)} {...props} />;
+  return <TabsPrimitive.List className={cn('no-scrollbar inline-flex h-10 w-full items-center gap-1 overflow-x-auto overflow-y-hidden border-b max-sm:h-[2.75rem]', className)} {...props} />;
 }
 export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        '-mb-px inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-t-md border-b-2 border-transparent px-3 text-sm font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:ring-inset data-[state=active]:border-primary data-[state=active]:text-primary max-sm:h-11 [&_svg]:size-4',
+        '-mb-px inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-t-md border-b-2 border-transparent px-3 text-sm font-semibold text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:ring-inset data-[state=active]:border-primary data-[state=active]:text-primary max-sm:h-[2.75rem] [&_svg]:size-4',
         className,
       )}
       {...props}

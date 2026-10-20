@@ -57,6 +57,8 @@ export interface Task {
   subscribed: boolean;
   pending_change_requests: number;
   can_delete: boolean;
+  /** A task someone else gave me: any change (a new date, priority…) is a request to the giver, admins too. */
+  edits_need_giver?: boolean;
   created_at: string;
   updated_at: string;
   /** FreeFounders: what this task works on in another app (e.g. an Assets ticket). */

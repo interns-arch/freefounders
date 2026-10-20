@@ -37,7 +37,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="top-[12%] max-w-2xl translate-y-0 gap-0 overflow-hidden p-0" hideClose>
+      <DialogContent className="top-[12%] max-w-2xl translate-y-0 gap-0 overflow-hidden p-0 max-sm:top-2 max-sm:bottom-auto max-sm:rounded-xl max-sm:border max-sm:p-0 max-sm:w-[calc(100%-1rem)] max-sm:pb-0" hideClose>
         <DialogTitle className="sr-only">Search and commands</DialogTitle>
         <Command shouldFilter={!r} loop>
           <CommandInput

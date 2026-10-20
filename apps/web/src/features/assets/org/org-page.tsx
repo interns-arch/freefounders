@@ -78,7 +78,7 @@ export default function OrgPage({ kind }: { kind: OrgKind }) {
       key: 'assets',
       header: kind === 'vendor' ? 'Supplied' : 'Assets',
       cell: (r) => (
-        <button type="button" className="cursor-pointer tabular text-primary hover:underline" onClick={(e) => (e.stopPropagation(), navigate(assetsLink(r)))}>
+        <button type="button" className="-my-2 cursor-pointer px-2 py-2 tabular text-primary hover:underline" onClick={(e) => (e.stopPropagation(), navigate(assetsLink(r)))}>
           {Number(r.assetCount ?? 0)}
         </button>
       ),

@@ -6,6 +6,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { useLeadership } from '@freefounders/core/assets';
 import { useUrlFilters } from '@/lib/url-state';
 import { cn, formatNumber, relativeTime } from '@/lib/utils';
+import { Segmented } from '@/components/common/controls';
 
 
 const PERIODS = [
@@ -33,18 +34,7 @@ export default function LeadershipPage() {
         title="Leadership overview"
         description={`How the organisation and the IT team did in the last ${period}.`}
         actions={
-          <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
-            {PERIODS.map((p) => (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => set({ days: p.value })}
-                className={cn('cursor-pointer rounded-md px-2.5 py-1 text-[13px] font-medium transition', (f.days ?? '30') === p.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <Segmented label="Period" value={f.days ?? '30'} onChange={(v) => set({ days: v })} options={PERIODS.map((p) => [p.value, p.label] as [string, string])} />
         }
       />
 

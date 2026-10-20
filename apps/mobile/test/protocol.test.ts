@@ -1,7 +1,7 @@
 // The bridge between the web app and the shell (src/lib/protocol.ts, PLAN.md §19.17).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fromServer, isLocalHost, linkTarget, MAX_BASE64, normalizeServerUrl, originOf, parseMessage, replyError, replyOk } from '../src/lib/protocol.ts';
+import { fromServer, isLocalHost, linkTarget, MAX_BASE64, normalizeServerUrl, originOf, parseMessage, replyError, replyOk, voiceLang } from '../src/lib/protocol.ts';
 
 test('requests: location, photo, download, print', () => {
   assert.deepEqual(parseMessage('{"id":"r1","type":"location"}'), { kind: 'request', request: { id: 'r1', type: 'location' } });
@@ -15,6 +15,20 @@ test('requests: location, photo, download, print', () => {
     request: { id: 'r3', type: 'download', filename: 'a.csv', mime: 'text/csv', base64: 'YQ==' },
   });
   assert.deepEqual(parseMessage('{"id":"r4","type":"print","html":"<p>x</p>"}'), { kind: 'request', request: { id: 'r4', type: 'print', html: '<p>x</p>' } });
+});
+
+test('voice: the phone listens (Indian English or Hindi), and "Done" stops it', () => {
+  assert.deepEqual(parseMessage('{"id":"r5","type":"voice","lang":"hi-IN"}'), { kind: 'request', request: { id: 'r5', type: 'voice', lang: 'hi-IN' } });
+  // anything else falls back to Indian English
+  assert.deepEqual(parseMessage('{"id":"r5","type":"voice","lang":"fr-FR"}'), { kind: 'request', request: { id: 'r5', type: 'voice', lang: 'en-IN' } });
+  assert.deepEqual(parseMessage('{"id":"r5","type":"voice"}'), { kind: 'request', request: { id: 'r5', type: 'voice', lang: 'en-IN' } });
+  assert.deepEqual(parseMessage('{"id":"r6","type":"voice-stop"}'), { kind: 'request', request: { id: 'r6', type: 'voice-stop' } });
+  assert.equal(voiceLang(undefined), 'en-IN');
+  // a blocked microphone tells the web app it can only be allowed in Settings
+  assert.deepEqual(JSON.parse(replyError('r5', 'Blocked', { code: 'permission', permission: 'microphone', settings: true })), {
+    id: 'r5', ok: false, error: 'Blocked', code: 'permission', permission: 'microphone', settings: true,
+  });
+  assert.deepEqual(JSON.parse(replyOk('r5', { text: 'Rahul ko kal' })), { id: 'r5', ok: true, data: { text: 'Rahul ko kal' } });
 });
 
 test('events from the injected script have no id', () => {

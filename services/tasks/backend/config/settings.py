@@ -213,6 +213,10 @@ DAY_LOG_EPOCH = env("DAY_LOG_EPOCH", "")
 # it blank and everything behaves exactly as before.
 # ---------------------------------------------------------------------------
 AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
+# WhatsApp goes out only inside these local hours ("10-19" = 10 AM - 7 PM); outside them it is held until
+# the next opening. Each company can set its own (WHATSAPP_HOURS in Task settings); this is the default.
+# Always open under tests, so results never depend on the time of day the suite runs.
+WHATSAPP_HOURS = "0-24" if TESTING else os.environ.get("WHATSAPP_HOURS", "10-19")
 USE_S3 = bool(AWS_STORAGE_BUCKET_NAME) and not TESTING
 
 STORAGES = {

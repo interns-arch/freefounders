@@ -18,14 +18,17 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-xl border bg-popover p-6 shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] motion-reduce:animate-none',
+          // Desktop: centred card. Phones (PLAN.md §19.29): a bottom sheet across the full width that never exceeds the
+          // screen; the body scrolls inside, the footer (DialogFooter) stays at the bottom above the safe area.
+          'fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border bg-popover p-6 shadow-pop outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] motion-reduce:animate-none',
+          'max-sm:top-auto max-sm:bottom-0 max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-full max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-4 max-sm:pt-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:data-[state=open]:zoom-in-100 max-sm:data-[state=open]:slide-in-from-bottom-8 max-sm:data-[state=closed]:zoom-out-100',
           className,
         )}
         {...props}
       >
         {children}
         {!hideClose && (
-          <DialogPrimitive.Close className="absolute top-3 right-3 flex size-9 cursor-pointer items-center justify-center rounded-md text-foreground/70 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-11">
+          <DialogPrimitive.Close className="absolute top-3 right-3 flex size-9 cursor-pointer items-center justify-center rounded-md text-foreground/70 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-[2.75rem]">
             <X className="size-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
@@ -35,10 +38,19 @@ export function DialogContent({
   );
 }
 export function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col gap-1 pr-6', className)} {...props} />;
+  return <div className={cn('flex flex-col gap-1 pr-8 max-sm:pr-10', className)} {...props} />;
 }
 export function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />;
+  // On phones the buttons run full width and stick to the bottom of the sheet while its body scrolls.
+  return (
+    <div
+      className={cn(
+        'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:border-t max-sm:bg-popover max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:[&>*]:w-full',
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 export function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return <DialogPrimitive.Title className={cn('text-lg font-bold tracking-tight', className)} {...props} />;
@@ -75,7 +87,7 @@ export function SheetContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute top-3 right-3 flex size-9 cursor-pointer items-center justify-center rounded-md text-foreground/70 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-11">
+        <DialogPrimitive.Close className="absolute top-3 right-3 flex size-9 cursor-pointer items-center justify-center rounded-md text-foreground/70 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none max-sm:size-[2.75rem]">
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
@@ -84,13 +96,13 @@ export function SheetContent({
   );
 }
 export function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col gap-1 border-b px-6 py-5 pr-14 max-sm:px-4 max-sm:py-4', className)} {...props} />;
+  return <div className={cn('flex flex-col gap-1 border-b py-5 pr-14 pl-6 max-sm:py-4 max-sm:pl-4', className)} {...props} />;
 }
 export function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
   return <div className={cn('flex-1 overflow-y-auto px-6 py-5 scrollbar-thin max-sm:px-4', className)} {...props} />;
 }
 export function SheetFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-wrap items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3.5 max-sm:px-4 max-sm:pb-[max(0.875rem,env(safe-area-inset-bottom))]', className)} {...props} />;
+  return <div className={cn('flex flex-wrap items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3.5 max-sm:px-4 max-sm:pb-[max(0.875rem,env(safe-area-inset-bottom))] max-sm:[&>button]:flex-1', className)} {...props} />;
 }
 export const SheetTitle = DialogTitle;
 export const SheetDescription = DialogDescription;
@@ -110,7 +122,7 @@ export function DropdownMenuContent({ className, sideOffset = 6, ...props }: Rea
   );
 }
 const menuItem =
-  "relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none max-sm:min-h-11 max-sm:px-3 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground";
+  "relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none max-sm:min-h-[2.75rem] max-sm:px-3 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground";
 
 export function DropdownMenuItem({ className, destructive, ...props }: React.ComponentProps<typeof MenuPrimitive.Item> & { destructive?: boolean }) {
   return <MenuPrimitive.Item className={cn(menuItem, destructive && 'text-destructive data-[highlighted]:text-destructive [&_svg]:!text-destructive', className)} {...props} />;
@@ -191,7 +203,7 @@ export function CommandItem({ className, ...props }: React.ComponentProps<typeof
   return (
     <CommandPrimitive.Item
       className={cn(
-        "relative flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2 py-2 text-sm outline-none max-sm:min-h-11 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
+        "relative flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2 py-2 text-sm outline-none max-sm:min-h-[2.75rem] data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
         className,
       )}
       {...props}

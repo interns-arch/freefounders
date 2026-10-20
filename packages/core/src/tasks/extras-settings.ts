@@ -117,6 +117,25 @@ export function useNotificationRules() {
   return useQuery({ queryKey: ['tasks-settings', 'notification-rules'], queryFn: () => tasksApi.get<NotificationRule[]>('/notification-rules/') });
 }
 
+/** The company's WhatsApp sending hours (local, whole hours; default 10–19). Outside them a WhatsApp waits for the opening. */
+export interface WhatsappHours {
+  start: number;
+  end: number;
+}
+
+export function useWhatsappHours() {
+  return useQuery({ queryKey: ['tasks-settings', 'whatsapp-hours'], queryFn: () => tasksApi.get<WhatsappHours>('/whatsapp-hours/') });
+}
+
+/** PUT /whatsapp-hours/ {start, end} */
+export function useSetWhatsappHours() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (h: WhatsappHours) => tasksApi.put<WhatsappHours>('/whatsapp-hours/', h),
+    onSuccess: (h) => qc.setQueryData(['tasks-settings', 'whatsapp-hours'], h),
+  });
+}
+
 /** PUT /notification-rules/ {key: {email|whatsapp: on}} — answers with the whole list. */
 export function useSetNotificationRule() {
   const qc = useQueryClient();

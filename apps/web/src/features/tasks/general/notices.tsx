@@ -177,13 +177,23 @@ function NoticeManage() {
     setSent('');
     try {
       const p = await wa.preview.mutateAsync(n.id);
+      // Sent before: only the people who missed it (joined, reactivated or skipped since); everyone only when all had it.
+      const missing = p.missing ?? [];
+      const onlyMissing = missing.length > 0 && missing.length < p.with_whatsapp;
+      const again = p.with_whatsapp > 0 && missing.length === 0;
       const ok = await confirm({
-        title: `Send "${n.title}" on WhatsApp?`,
+        title: onlyMissing ? `Send "${n.title}" to the ${missing.length} who missed it?` : again ? `Everyone already has "${n.title}". Send it again?` : `Send "${n.title}" on WhatsApp?`,
         description: (
           <div className="space-y-2">
-            <p>
-              It goes to {p.with_whatsapp} of {p.audience} people.
-            </p>
+            {onlyMissing ? (
+              <p>
+                {p.with_whatsapp - missing.length} people already got it. It goes only to: {missing.join(', ')}.
+              </p>
+            ) : (
+              <p>
+                It goes to {p.with_whatsapp} of {p.audience} people.
+              </p>
+            )}
             {p.without_whatsapp.length > 0 && (
               <p>
                 No WhatsApp number on file (they will only see it in the app): {p.without_whatsapp.join(', ')}
@@ -191,10 +201,10 @@ function NoticeManage() {
             )}
           </div>
         ),
-        confirmText: 'Send on WhatsApp',
+        confirmText: onlyMissing ? `Send to ${missing.length}` : again ? 'Send again to everyone' : 'Send on WhatsApp',
       });
       if (!ok.confirmed) return;
-      const r = await wa.send.mutateAsync(n.id);
+      const r = await wa.send.mutateAsync({ id: n.id, onlyMissing });
       setSent(`Sending "${n.title}" to ${r.queued} people on WhatsApp.`);
     } catch (e) {
       setErr(errorMessage(e));
@@ -206,7 +216,7 @@ function NoticeManage() {
 
   return (
     <div className="space-y-3">
-      <Button onClick={() => setEditing('new')}>
+      <Button variant="cta" onClick={() => setEditing('new')}>
         <Plus /> New notice
       </Button>
       <ErrorNote>{err}</ErrorNote>

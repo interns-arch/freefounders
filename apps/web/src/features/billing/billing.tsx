@@ -249,7 +249,7 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
       title={b.state === 'trialing' ? 'Choose a plan' : 'Plans'}
       description="Price per user. Yearly = 2 months free. GST 18% is added."
       actions={
-        <div role="radiogroup" aria-label="Billing period" className="inline-flex rounded-md border bg-muted/50 p-0.5">
+        <div role="radiogroup" aria-label="Billing period" className="inline-flex gap-0.5 rounded-md border bg-muted p-0.5">
           {(['month', 'year'] as const).map((i) => (
             <button
               key={i}
@@ -258,8 +258,8 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
               aria-checked={interval === i}
               onClick={() => setBillingInterval(i)}
               className={cn(
-                'min-h-9 cursor-pointer rounded-sm px-3 text-sm font-semibold text-muted-foreground transition outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:min-h-10',
-                interval === i && 'bg-card text-foreground shadow-xs',
+                'inline-flex h-8 cursor-pointer items-center rounded-sm px-3 text-[13px] font-semibold text-muted-foreground transition outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:h-[2.375rem]',
+                interval === i && 'bg-card text-primary shadow-card ring-1 ring-border',
               )}
             >
               {i === 'month' ? 'Monthly' : 'Yearly'}

@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
-import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { EmptyState, ErrorState, PageHeader, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Badge, Card } from '@/components/ui/primitives';
 import { useAuth } from '@/features/assets/lib/auth';
@@ -13,6 +13,7 @@ import { errorMessage } from '@freefounders/core';
 import { type ReconItem, useAddReconSims, useInvalidateReconciliation, useReconciliation } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDateTime } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { STATUS_META } from './summary';
 
 const TABS: { value: string; label: string; match: (i: ReconItem) => boolean; whenEmpty?: boolean }[] = [
@@ -73,11 +74,9 @@ export default function ReconRunPage() {
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" size="xs" asChild>
-        <Link to="/assets/reconciliation">
-          <ArrowLeft /> All checks
-        </Link>
-      </Button>
+      <Link to="/assets/reconciliation" className={BACK_LINK}>
+        <ArrowLeft /> All checks
+      </Link>
       <PageHeader
         title={`${RECON_SOURCE_LABELS[run.source]} check`}
         description={`${run.fileName} · ${run.rowCount} rows · ${formatDateTime(run.createdAt)}${run.createdByName ? ` · by ${run.createdByName}` : ''}${run.repairedRows ? ` · ${run.repairedRows} broken rows joined` : ''}`}
@@ -114,8 +113,8 @@ export default function ReconRunPage() {
             aria-selected={tab.value === t.value}
             onClick={() => set({ tab: t.value })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-              tab.value === t.value ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+              chipClass,
+              tab.value === t.value ? chipActiveClass : chipIdleClass,
             )}
           >
             {t.label} <span className="ml-0.5 tabular opacity-70">{count(t)}</span>

@@ -8,7 +8,8 @@
  *
  * location → {latitude, longitude, accuracy}; photo {title, optional} → "data:image/jpeg;base64,…" (null = "punch without
  * a photo", only when optional; error "cancelled" when closed); download {filename, mime, base64} → {saved: true};
- * print {html} → {printed: true} (Android's print dialog, which can also save a PDF).
+ * print {html} → {printed: true} (Android's print dialog, which can also save a PDF); voice {lang} → {text} (the phone's
+ * speech recogniser, after Android's microphone pop-up; app 1.1.0+), voice-stop → stops it ("Done").
  * In a normal browser none of this is used and every caller keeps its browser behaviour.
  */
 
@@ -17,7 +18,7 @@ export interface AppInfo {
   version: string;
 }
 
-export type AppRequestType = 'location' | 'photo' | 'download' | 'print' | 'open-settings';
+export type AppRequestType = 'location' | 'photo' | 'download' | 'print' | 'open-settings' | 'voice' | 'voice-stop';
 
 interface Reply {
   id: string;
@@ -25,8 +26,8 @@ interface Reply {
   data?: unknown;
   error?: string;
   /** Why it failed, when the person can fix it: a permission the phone blocked (settings = only in the phone's Settings). */
-  code?: 'permission';
-  permission?: 'location' | 'camera';
+  code?: 'permission' | 'unavailable';
+  permission?: 'location' | 'camera' | 'microphone';
   settings?: boolean;
 }
 
@@ -48,7 +49,9 @@ export const isInApp = () => appInfo() !== null;
 /** An answer from the app that says no (`code` is "cancelled", "timeout" or "failed"). */
 export class AppRequestError extends Error {
   /** Set when the phone blocked a permission: which one, and whether only the phone's Settings can allow it again. */
-  blocked?: { permission: 'location' | 'camera'; settings: boolean };
+  blocked?: { permission: 'location' | 'camera' | 'microphone'; settings: boolean };
+  /** The app cannot do it here (no speech service, or an app from before voice). */
+  unavailable?: boolean;
   constructor(
     message: string,
     readonly code: 'cancelled' | 'timeout' | 'failed' = 'failed',
@@ -64,6 +67,8 @@ const TIMEOUTS: Record<AppRequestType, number> = {
   download: 60_000,
   print: 10 * 60_000,
   'open-settings': 30_000,
+  voice: 3 * 60_000, // includes the microphone question; listening stops by itself after 2 minutes
+  'voice-stop': 15_000,
 };
 
 const pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -88,6 +93,8 @@ function onMessage(event: Event) {
     const msg = reply.error || 'The app could not do that.';
     const err = new AppRequestError(msg === 'cancelled' ? 'Cancelled.' : msg, msg === 'cancelled' ? 'cancelled' : 'failed');
     if (reply.code === 'permission' && reply.permission) err.blocked = { permission: reply.permission, settings: !!reply.settings };
+    // an app from before voice answers 'This app cannot do "voice"'
+    if (reply.code === 'unavailable' || /cannot do "/.test(msg)) err.unavailable = true;
     waiting.reject(err);
   }
 }

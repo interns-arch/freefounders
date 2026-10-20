@@ -19,7 +19,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { AssetStatusBadge, ConditionBadge, EnumBadge, HolderLabel } from '@/components/common/badges';
 import { Barcode, QRCode, useQrLinks } from '@/components/common/codes';
 import { AttributeList } from '@/features/assets/components/dynamic-fields';
-import { DetailList, EmptyState, ErrorState, PageLoader } from '@/components/common/page';
+import { DetailList, EmptyState, ErrorState, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Timeline } from '@/features/assets/components/timeline';
 import { PhotoStrip } from '@/features/assets/components/photos';
 import { Button } from '@/components/ui/button';
@@ -83,8 +83,8 @@ export default function AssetDetailPage() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <Link to="/assets/assets" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-3.5" /> Assets
+        <Link to="/assets/assets" className={`mb-2 ${BACK_LINK}`}>
+          <ArrowLeft /> Assets
         </Link>
         <Card className="relative overflow-hidden p-4 sm:p-5">
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -95,7 +95,7 @@ export default function AssetDetailPage() {
               <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
                 {a.category.name} · {a.type.name}
               </p>
-              <h1 className="mt-0.5 truncate text-xl font-semibold tracking-tight sm:text-2xl">{a.name}</h1>
+              <h1 className="mt-0.5 text-[22px] leading-tight font-bold tracking-tight break-words sm:text-[26px]">{a.name}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <button
                   type="button"

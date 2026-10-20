@@ -57,7 +57,7 @@ export function MultiSelect({
           id={id}
           aria-label={label}
           className={cn(
-            'flex h-9 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-left text-sm shadow-xs outline-none max-sm:h-11 max-sm:text-base focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25',
+            'flex h-9 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-left text-sm shadow-xs outline-none max-sm:h-[2.75rem] max-sm:text-base focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25',
             !picked.length && 'text-muted-foreground',
             className,
           )}

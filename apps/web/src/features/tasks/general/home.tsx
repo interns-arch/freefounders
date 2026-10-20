@@ -70,7 +70,7 @@ export function HomePage() {
       >
         <div className="relative flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight sm:text-[26px]">
+            <h1 className="text-[26px] leading-tight font-bold tracking-tight sm:text-[28px]">
               {greeting()}, <span className="text-primary">{me.first_name || me.username}</span>
             </h1>
             <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">

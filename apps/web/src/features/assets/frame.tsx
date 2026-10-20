@@ -99,7 +99,7 @@ function FrameInner({ children }: { children: ReactNode }) {
           type="button"
           onClick={() => setPaletteOpen(true)}
           aria-label="Search assets, people, tags"
-          className="flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-muted-foreground shadow-xs transition hover:border-primary/40 max-sm:h-11 sm:max-w-md"
+          className="flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-muted-foreground shadow-xs transition hover:border-primary/40 max-sm:h-[2.75rem] sm:max-w-md"
         >
           <Search className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-left">Search assets, people, tags…</span>
@@ -110,14 +110,14 @@ function FrameInner({ children }: { children: ReactNode }) {
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-1 max-sm:gap-2">
           {canScan && (
-            <Button variant="ghost" size="icon-sm" className="max-sm:size-11" onClick={() => navigate('/assets/scan')} aria-label="Scan QR or barcode" title="Scan">
+            <Button variant="ghost" size="icon-sm" className="max-sm:size-[2.75rem]" onClick={() => navigate('/assets/scan')} aria-label="Scan QR or barcode" title="Scan">
               <ScanLine />
             </Button>
           )}
           {adds.length > 0 && (
             <DropdownMenu open={addOpen} onOpenChange={setAddOpen}>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" className="gap-1.5 max-sm:h-11 max-sm:min-w-11" aria-label="Add">
+                <Button size="sm" className="gap-1.5 max-sm:h-[2.75rem] max-sm:min-w-11" aria-label="Add">
                   <Plus className="size-4" />
                   <span className="hidden sm:inline">Add</span>
                 </Button>

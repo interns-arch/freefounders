@@ -557,13 +557,15 @@ given per action). Dates read "8 Oct, 05:30 pm"; relative due dates "6 hours fro
 - **Opened by** "Add task", or "Use" on a template (pre-filled). Title "Add task" / "New task from "{template}"";
   "Each person you pick gets their own copy of the task.". People offered are those I may give tasks to.
 - **Helpers**:
-  - **"Speak the task"** (voice; browsers that can record): "Say the task out loud — who it is for and when it is due"; button
-    "Stop · mm:ss", stops at 2:00; "That was too short — hold on and say the whole task."; "No microphone access. Allow it in the
-    browser, or type the task."; "Listening…". Fills title, description, due date, effort, assignee (and steps if none); shows
-    "Heard: …" with warnings ("Could not place the name "X" — pick the person below.", "The time it heard has already passed —
-    set the due date below.", "Check every field before creating — this was filled in from speech."). Never creates by itself.
-  - **"AI draft"**: one line (e.g. "Ravi ko brake pads ke baare mein call karo, phir quotation bhejo") → "Generate": replaces
-    title and description, appends steps (max 30).
+  - **"Voice draft"** (replaced "Speak the task" and the "AI draft" box, 2026-10-20, PLAN.md §19.30) with a language picker
+    (English / हिंदी, remembered): in the phone app (1.1.0+) the phone's own speech recogniser after Android's "Allow
+    microphone?" pop-up ("Done · mm:ss" stops it; blocked → "Open settings" + "Try again"); in Chrome / Edge / Safari on https
+    or localhost the browser's speech recognition (asks for the microphone first; blocked → the steps to allow it for this
+    browser/phone, "Try again", "Use the keyboard mic instead"); otherwise (older app, the http:// address, Firefox) a box to
+    speak into with the keyboard's mic → "Fill in the form". The server reads person, deadline and effort from the words (no AI
+    key needed) and tidies the title. Shows "Heard: …" with warnings ("Could not place the name "X" — pick the person below.",
+    "The time it heard has already passed — set the due date below.", "Check every field before creating — this was filled in
+    from speech."). Never creates by itself.
 - **Fields**:
 
 | Label | Type | Required | Rules / help |

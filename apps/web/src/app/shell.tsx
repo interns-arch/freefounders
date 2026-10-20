@@ -12,6 +12,7 @@ import { useHotkeys } from '@/lib/hotkeys';
 import { cn } from '@/lib/utils';
 import { ADMIN_NAV } from '@/features/admin/nav';
 import { SwitchingOverlay } from '@/features/account/switcher';
+import { AppUpdatePrompt } from './app-update';
 import { BillingBanners } from '@/features/billing/banners';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
@@ -199,7 +200,7 @@ export function AppShell() {
 
   // Flat menu (PLAN.md §19.22): white in light mode, deep navy in dark mode; the current page is a blue tint with blue text.
   const itemClass =
-    'relative flex min-h-11 items-center gap-2.5 rounded-md px-3 py-1.5 text-[14px] font-medium text-sidebar-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground lg:min-h-9 [&_svg]:text-muted-foreground';
+    'relative flex min-h-[2.75rem] items-center gap-2.5 rounded-md px-3 py-1.5 text-[14px] font-medium text-sidebar-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground lg:min-h-9 [&_svg]:text-muted-foreground';
   const activeClass = 'bg-primary/8 font-semibold text-primary hover:bg-primary/12 hover:text-primary dark:bg-primary/12 [&_svg]:text-primary';
 
   const sidebar = (
@@ -222,7 +223,7 @@ export function AppShell() {
                   to={WORKSPACE_HOME[w]}
                   aria-current={w === here ? 'page' : undefined}
                   className={cn(
-                    'flex min-h-11 flex-1 items-center gap-2.5 rounded-md px-2 py-1.5 text-[14px] font-semibold outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground lg:min-h-9',
+                    'flex min-h-[2.75rem] flex-1 items-center gap-2.5 rounded-md px-2 py-1.5 text-[14px] font-semibold outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground lg:min-h-9',
                     w === here ? 'text-foreground' : 'text-sidebar-foreground',
                   )}
                 >
@@ -238,7 +239,7 @@ export function AppShell() {
                   aria-expanded={expanded}
                   aria-controls={`menu-${w}`}
                   aria-label={expanded ? `Hide ${WORKSPACE_NAMES[w]} menu` : `Show ${WORKSPACE_NAMES[w]} menu`}
-                  className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground outline-none transition hover:bg-sidebar-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 lg:size-9"
+                  className="grid size-[2.75rem] shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground outline-none transition hover:bg-sidebar-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 lg:size-9"
                 >
                   <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} aria-hidden />
                 </button>
@@ -347,6 +348,7 @@ export function AppShell() {
         </nav>
       </div>
       <SwitchingOverlay />
+      <AppUpdatePrompt />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent className="max-w-md">
           <DialogHeader>

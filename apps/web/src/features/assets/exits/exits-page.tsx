@@ -11,6 +11,7 @@ import { EXIT_CASE_TONE } from '@/lib/status';
 import type { ExitCaseListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 
 const TABS = [
   { value: 'OPEN', label: 'In progress' },
@@ -118,8 +119,8 @@ export default function ExitsPage() {
             type="button"
             onClick={() => set({ status: t.value || 'ALL' })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-              (f.status === 'ALL' ? '' : f.status) === t.value ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+              chipClass,
+              (f.status === 'ALL' ? '' : f.status) === t.value ? chipActiveClass : chipIdleClass,
             )}
           >
             {t.label}

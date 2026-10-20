@@ -10,6 +10,7 @@ adds only what a WebView cannot do by itself:
 | Punch **selfie** (expo-camera front camera, Retake / Use photo, JPEG 0.6, ≤ 720 px) | same for the browser camera; and a better camera |
 | **Downloads** (reports CSV/XLSX, payroll, form submissions, Assets photos) → saved + Android share sheet | a WebView cannot save files |
 | **Print** (ID cards, labels) → Android print dialog (also "Save as PDF") | a WebView cannot print |
+| **Voice draft** (speak a task) → the phone's speech recogniser (expo-speech-recognition) after Android's microphone pop-up, words back to the web app | a WebView on plain `http://` gets no microphone (PLAN.md §19.30; app 1.1.0+, not in Expo Go) |
 | Back button, pull-to-refresh, splash, "Can't reach FreeFounders" screen with a server-address field | |
 | Links to other sites, `tel:`, `mailto:`, WhatsApp → the phone's apps | |
 
@@ -52,11 +53,14 @@ web → app   window.ReactNativeWebView.postMessage(JSON)
   {"id":"r2","type":"photo","title":"Check in","optional":false}
   {"id":"r3","type":"download","filename":"attendance-daily-2026-10-12.xlsx","mime":"…","base64":"…"}
   {"id":"r4","type":"print","html":"<html>…"}
+  {"id":"r5","type":"voice","lang":"en-IN"}        ("hi-IN" for Hindi)      {"id":"r6","type":"voice-stop"}   (Done)
 app → web   webview.postMessage(JSON)  → a "message" event on document (Android)
   {"id":"r1","ok":true,"data":{"latitude":12.97,"longitude":77.59,"accuracy":8}}
   {"id":"r2","ok":true,"data":"data:image/jpeg;base64,…"}      (data null = "Punch without a photo", optional only)
   {"id":"r2","ok":false,"error":"cancelled"}
   {"id":"r3","ok":true,"data":{"saved":true,"name":"…"}}
+  {"id":"r5","ok":true,"data":{"text":"Rahul ko kal 5 baje tak quotation bhejna hai"}}
+  {"id":"r5","ok":false,"error":"…","code":"permission","permission":"microphone","settings":true}   (or "code":"unavailable")
   {"id":"rX","ok":false,"error":"<message for the person>"}
 events from the injected script (no id, no answer)
   {"type":"scroll","atTop":true}        pull-to-refresh only when the page is scrolled to the top
@@ -105,3 +109,11 @@ to pages of the server address; other sites open outside, `data:` pages and fore
 is accepted only for office-network addresses. For store/tester builds: an `https://` address with
 `EXPO_PUBLIC_LOCK_SERVER=1` (no address field on the phone), and https-only traffic — `expo-build-properties` with
 `"android": { "usesCleartextTraffic": false }` (Expo Go and local LAN testing need cleartext, so only release builds).
+
+## Updating the installed app (PLAN.md §19.30)
+
+Most changes reach the app by themselves (it shows the web app). A new shell is needed only for new native powers (1.1.0:
+voice). The web app asks an older app once per session to update: `GET /api/platform/app-version` →
+`MOBILE_MIN_VERSION` (default 1.1.0) and `MOBILE_APK_URL` (default `/download/freefounders.apk`, i.e. put the built APK
+at `apps/web/public/download/freefounders.apk`; `*.apk` is git-ignored). "Update now" opens it in the phone's browser.
+Raise `version` and `android.versionCode` in `app.json` for every new APK.

@@ -221,39 +221,7 @@ export function SmartLink({ to, className, children, ...rest }: { to: string; cl
   );
 }
 
-/** A row of toggle buttons (one is on). */
-export function Segmented<T extends string>({
-  value,
-  onChange,
-  options,
-  label,
-  className,
-}: {
-  value: T;
-  onChange: (v: T) => void;
-  options: Array<[T, ReactNode]>;
-  label: string;
-  className?: string;
-}) {
-  return (
-    <div role="group" aria-label={label} className={cn('inline-flex max-w-full flex-wrap gap-0.5 rounded-md border bg-muted p-0.5', className)}>
-      {options.map(([v, l]) => (
-        <button
-          key={v}
-          type="button"
-          aria-pressed={value === v}
-          onClick={() => onChange(v)}
-          className={cn(
-            'inline-flex cursor-pointer items-center gap-1.5 rounded-sm px-3 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-10 max-sm:px-3.5',
-            value === v && 'bg-card text-primary shadow-card ring-1 ring-border',
-          )}
-        >
-          {l}
-        </button>
-      ))}
-    </div>
-  );
-}
+export { Segmented } from '@/components/common/controls';
 
 /** ▲ 6.4 / ▼ 12 / no change / — (no earlier period). */
 export function Delta({ value, suffix = '' }: { value: number | null | undefined; suffix?: string }) {

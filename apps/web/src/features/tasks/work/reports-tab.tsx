@@ -8,6 +8,7 @@ import { Badge, Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { RangePicker, ScoreRing, downloadCSV, fmtEffort, pct, rangeParams, rangeReady } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { Segmented, StatusPill, TaskCode } from './task-bits';
 
 function Loading() {
@@ -148,7 +149,7 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
 
   return (
     <div className="space-y-4">
-      <nav aria-label="Reports" className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
+      <nav aria-label="Reports" className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 lg:mx-0 lg:px-0">
         {REPORT_TABS.map(([v, l]) => (
           <button
             key={v}
@@ -156,8 +157,9 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
             aria-current={tab === v ? 'page' : undefined}
             onClick={() => setTab(v)}
             className={cn(
-              'h-8 shrink-0 cursor-pointer rounded-md border bg-card px-3.5 text-[13px] font-semibold text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none',
-              tab === v && 'border-transparent bg-primary text-primary-foreground hover:text-primary-foreground',
+              chipClass,
+              'font-semibold',
+              tab === v ? chipActiveClass : chipIdleClass,
             )}
           >
             {l}

@@ -116,18 +116,17 @@ class AiFallbackTests(TestCase):
             {**base, "on_time_rate": 30.0, "score": 40.0, "overdue": 8}))
         self.assertIn("No completions", review_sentence({**base, "completed": 0}))
 
-    def test_ai_draft_endpoint(self):
+    def test_ai_draft_endpoint_is_gone(self):
+        """The AI draft was replaced by the Voice draft (original app d0a1bdf)."""
         from rest_framework.test import APIClient
         from accounts.models import Role, User
-        u = User.objects.create_user("drafter", "d@x.com", "pass@12345",
-                                     role=Role.SALES_EXECUTIVE)
+        User.objects.create_user("drafter", "d@x.com", "pass@12345", role=Role.SALES_EXECUTIVE)
         c = APIClient()
         r = c.post("/api/auth/login", {"username": "drafter", "password": "pass@12345"})
         c.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
         res = c.post("/api/tasks/ai_draft/", {"prompt": "Audit the Hyundai parts shelf"},
                      format="json")
-        self.assertEqual(res.status_code, 200)
-        self.assertTrue(res.data["title"])
+        self.assertIn(res.status_code, (404, 405))
 
 
 class AssignerChecklistTests(Base):

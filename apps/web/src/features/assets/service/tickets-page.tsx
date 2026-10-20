@@ -21,6 +21,7 @@ import { PRIORITY_TONE, TICKET_TONE } from '@/lib/status';
 import type { Ticket } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDateTime, relativeTime } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { safeHref } from '@/lib/safe-url';
 
 const TYPE_ICON: Record<string, { icon: typeof LifeBuoy; tone: string }> = {
@@ -95,8 +96,8 @@ export default function TicketsPage() {
             type="button"
             onClick={() => set({ status: t.value || 'ALL' })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-              (f.status === 'ALL' ? '' : f.status) === t.value ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+              chipClass,
+              (f.status === 'ALL' ? '' : f.status) === t.value ? chipActiveClass : chipIdleClass,
             )}
           >
             {t.label}

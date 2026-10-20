@@ -68,7 +68,7 @@ export function SopRegister() {
         </label>
         <span className="flex-1" />
         {canEdit && (
-          <Button onClick={() => setEditing('new')}>
+          <Button variant="cta" onClick={() => setEditing('new')}>
             <Plus /> Write a process
           </Button>
         )}

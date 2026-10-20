@@ -62,7 +62,7 @@ export default function CatalogPage() {
             <Button size="sm" variant="outline" onClick={() => quickAdd.open('category')}>
               <Plus /> Category
             </Button>
-            <Button size="sm" onClick={() => quickAdd.open('assetType', { defaults: { categoryId: catId } })}>
+            <Button variant="cta" size="sm" onClick={() => quickAdd.open('assetType', { defaults: { categoryId: catId } })}>
               <Plus /> Asset type
             </Button>
           </>
@@ -92,7 +92,7 @@ export default function CatalogPage() {
                         return n;
                       });
                     }}
-                    className={cn('flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-muted', catId === c.id && !typeId && 'bg-accent font-medium')}
+                    className={cn('flex w-full cursor-pointer items-center gap-2 rounded-md max-sm:min-h-[2.5rem] px-2 py-1.5 max-sm:min-h-[2.5rem] text-left text-sm transition hover:bg-muted', catId === c.id && !typeId && 'bg-accent font-medium')}
                   >
                     <ChevronRight className={cn('size-3.5 text-muted-foreground transition', open && 'rotate-90')} />
                     <AssetIcon icon={c.icon} color={c.color} size="sm" className="size-6" />

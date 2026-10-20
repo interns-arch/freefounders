@@ -104,6 +104,8 @@ export interface TaskCompletion {
   reviewed_at: string | null;
   created_at: string;
   files: TaskFile[];
+  /** Who it waits for (the person who gave the task). */
+  approver_detail?: UserBrief | null;
 }
 
 export interface TaskChangeRequest {
@@ -329,13 +331,20 @@ export function useWorkTaskList(params: WorkListParams, options: { enabled?: boo
   });
 }
 
-/** Counts for the "To accept (n)" and "Requests (n)" tabs. */
+/** Counts on the My Tasks (open + in progress), To accept and Requests tabs. */
 export function useTaskInboxCounts() {
-  const count = (path: string) => () =>
-    tasksApi.get<DrfPage<unknown> | unknown[]>(path, { scope: 'inbox', page_size: 1 }).then((d) => (Array.isArray(d) ? d.length : (d.count ?? d.results.length)));
+  const count = (path: string, q: Record<string, string | number> = { scope: 'inbox' }) => () =>
+    tasksApi.get<DrfPage<unknown> | unknown[]>(path, { ...q, page_size: 1 }).then((d) => (Array.isArray(d) ? d.length : (d.count ?? d.results.length)));
+  const mine = useQuery({ queryKey: ['tasks', 'my-open-count'], queryFn: count('/tasks/', { scope: 'my', status: 'open,in_progress' }) });
   const reviews = useQuery({ queryKey: ['task-completions', 'inbox-count'], queryFn: count('/task-completions/') });
   const requests = useQuery({ queryKey: ['task-change-requests', 'inbox-count'], queryFn: count('/task-change-requests/') });
-  return { reviews: reviews.data ?? 0, requests: requests.data ?? 0 };
+  return { mine: mine.data ?? 0, reviews: reviews.data ?? 0, requests: requests.data ?? 0 };
+}
+
+/** A count on a tab, like the bell: 1–9, then 9+, and 99+ past that ('' for none). */
+export function countLabel(n: number | null | undefined): string {
+  if (!n || n < 1) return '';
+  return n > 99 ? '99+' : n > 9 ? '9+' : String(n);
 }
 
 /** GET /task-settings/ — whether completing needs remarks / a proof file. */
@@ -497,18 +506,18 @@ export function useCreateTaskCategory() {
   });
 }
 
-/** POST /tasks/ai_draft/ {prompt} — AI drafts a title, description and steps. */
-export function useAiTaskDraft() {
-  return useMutation({ mutationFn: (prompt: string) => tasksApi.post<{ title: string; description: string; checklist?: string[] }>('/tasks/ai_draft/', { prompt }) });
-}
-
-/** POST /tasks/voice_draft/ (multipart audio) — a spoken task turned into form values. Creates nothing. */
+/**
+ * POST /tasks/voice_draft/ — Voice draft (replaced the AI draft): the words the browser or the phone app heard
+ * ({transcript}, no AI key needed) or a recorded clip (multipart audio, needs the server's Gemini key) turned into form
+ * values (person, deadline, effort, title). Creates nothing.
+ */
 export function useVoiceTaskDraft() {
   return useMutation({
-    mutationFn: (audio: Blob) => {
-      const ext = (audio.type.includes('mp4') && 'm4a') || (audio.type.includes('ogg') && 'ogg') || 'webm';
+    mutationFn: (said: string | Blob) => {
+      if (typeof said === 'string') return tasksApi.post<VoiceDraft>('/tasks/voice_draft/', { transcript: said });
+      const ext = (said.type.includes('mp4') && 'm4a') || (said.type.includes('ogg') && 'ogg') || 'webm';
       const fd = new FormData();
-      fd.append('audio', audio, `note.${ext}`);
+      fd.append('audio', said, `note.${ext}`);
       return tasksApi.upload<VoiceDraft>('/tasks/voice_draft/', fd);
     },
   });
@@ -560,6 +569,10 @@ export function useTaskStep() {
 /** POST /tasks/:id/summarize/ — a short summary (AI when available). */
 export function useSummarizeTask() {
   return useMutation({ mutationFn: (id: number) => tasksApi.post<{ summary: string; provider: string }>(`/tasks/${id}/summarize/`, {}) });
+}
+/** POST /tasks/:id/remove_file/ {id} — takes a wrong or outdated file off a task (uploader while open, the giver, an admin). */
+export function useRemoveTaskFile() {
+  return useTaskMutation(({ task, file }: { task: number; file: number }) => tasksApi.post<TaskFile[]>(`/tasks/${task}/remove_file/`, { id: file }));
 }
 /** POST /tasks/:id/upload/ (multipart file…) — reference files, addable any time. */
 export function useUploadTaskFiles() {

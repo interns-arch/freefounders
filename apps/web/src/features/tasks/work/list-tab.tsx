@@ -89,7 +89,12 @@ export function TaskListTab({
     },
     { enabled: customReady },
   );
-  const rows = useMemo(() => list.data?.rows ?? [], [list.data]);
+  // Reading order (original app 3903b4b): open work first, then what is overdue, then what is done; the server's
+  // order (newest first) is kept inside each group (the sort is stable).
+  const rows = useMemo(() => {
+    const rank = (t: WorkTask) => (t.status === 'done' ? 2 : t.is_overdue ? 1 : 0);
+    return [...(list.data?.rows ?? [])].sort((a, b) => rank(a) - rank(b));
+  }, [list.data]);
   // Counts use every row; only the first 50 are drawn (weak phones), "Load more" adds the next ones.
   const more = useShowMore(rows, { reset: [scope, status, overdue, recurring, fDone, range, custom, person, dept, values.q ?? ''] });
 
@@ -309,9 +314,10 @@ function DelegatedAgents({
 }) {
   const [q, setQ] = useState('');
   const [all, setAll] = useState(false);
-  const agents = data.agents.filter((a) => !q.trim() || a.name.toLowerCase().includes(q.trim().toLowerCase()));
-  const shown = all || q ? agents : agents.slice(0, 8);
   const picked = data.agents.find((a) => String(a.id) === person);
+  // One agent picked (original app 13fbf98): only their row; Clear brings everyone back.
+  const agents = picked ? [picked] : data.agents.filter((a) => !q.trim() || a.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const shown = picked || all || q ? agents : agents.slice(0, 8);
   const kind = overdue ? 'overdue' : fDone ? fDone : status === 'open' ? 'open' : status === 'done' ? 'done' : 'all';
   const KIND: Record<string, string> = { all: 'all tasks', open: 'open tasks', overdue: 'overdue tasks', done: 'completed tasks', on_time: 'completed on time', late: 'completed late (after due date)' };
   if (data.agents.length === 0) return null;
@@ -401,7 +407,7 @@ function DelegatedAgents({
           </TBody>
         </Table>
       </div>
-      {!q && agents.length > 8 && (
+      {!q && !picked && agents.length > 8 && (
         <Button variant="link" size="sm" className="mt-1 px-0" onClick={() => setAll((v) => !v)}>
           {all ? 'Show fewer' : `Show all ${agents.length} agents`}
         </Button>

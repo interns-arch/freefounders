@@ -11,6 +11,7 @@ import { PRIORITY_TONE } from '@/lib/status';
 import type { QueueItem } from '@freefounders/core/assets';
 import { useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, relativeTime } from '@/lib/utils';
+import { Segmented } from '@/components/common/controls';
 
 const ORDER: Priority[] = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
 const LABEL: Record<Priority, string> = { URGENT: 'Urgent', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
@@ -67,21 +68,7 @@ export default function QueuePage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-0.5 rounded-lg border bg-card p-0.5">
-          {KINDS.map((k) => (
-            <button
-              key={k.label}
-              type="button"
-              onClick={() => set({ kind: k.value })}
-              className={cn(
-                'cursor-pointer rounded-md px-3 py-1 text-[13px] font-medium transition',
-                (f.kind ?? '') === k.value ? 'bg-primary/8 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-            >
-              {k.label}
-            </button>
-          ))}
-        </div>
+        <Segmented label="Show" value={f.kind ?? ''} onChange={(v) => set({ kind: v })} options={KINDS.map((k) => [k.value, k.label] as [string, string])} />
         {!!q.data?.overdue && (
           <Badge tone="red" className="ml-auto">
             <AlertTriangle /> {q.data.overdue} overdue

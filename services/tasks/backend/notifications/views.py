@@ -83,3 +83,27 @@ def notification_rules(request):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=400)
     return Response(rules.table())
+
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def whatsapp_hours(request):
+    """The company's WhatsApp sending hours (original app d40034c): {start, end} in local hours, default 10-19.
+    Outside them a WhatsApp is held until the next opening (repeating overdue pings are skipped). Task settings."""
+    from accounts.permissions import has_capability
+    from tenancy.company_settings import set_value
+
+    from .service import HOURS_SETTING, whatsapp_hours as current
+
+    if not has_capability(request.user, "tasks.settings"):
+        raise PermissionDenied("Your role does not include Task settings.")
+    if request.method == "PUT":
+        try:
+            start, end = int(request.data.get("start")), int(request.data.get("end"))
+        except (TypeError, ValueError):
+            return Response({"detail": "Send start and end as whole hours (0-24)."}, status=400)
+        if not (0 <= start < end <= 24):
+            return Response({"detail": "The start must be before the end, both between 0 and 24."}, status=400)
+        set_value(HOURS_SETTING, f"{start}-{end}")
+    start, end = current()
+    return Response({"start": start, "end": end})

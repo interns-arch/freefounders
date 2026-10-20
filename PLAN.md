@@ -1985,6 +1985,83 @@ Note: Member includes Assets requests/tickets, so Tasks-only people also open As
 | Smoke | 10 / 10 (member now gets a role made in the role builder) |
 | e2e | 63 / 63: full run 60 pass; the 2 web-hr failures (test helpers picked "any level-1 Tasks role", now the built-in Member; same fix in 4 other specs) and 1 Settings module-switch flake pass when rerun (15 / 15 for the touched specs). New: `web-admin` "People: Make Admin / Make Member, and extra access + a responsibility for one person" |
 
+
+### 19.29 UI alignment + mobile pass (2026-10-20)
+Founder: "make the overall UI aligned across the complete project and make it best for the mobile application" (the
+Android app = this web app in a WebView, §19.17, so phones 320–412 px are the target).
+- **One set of "pick one" controls** (`components/common/controls.tsx`): `TabBar` (page sections: underline tabs, links
+  or buttons, scrolls sideways and keeps the open one in view), `Segmented` (2–5 views of one list; the two copies in
+  Tasks now re-export it) and filter chips (`ChipRow`/`FilterChip`, `chipClass`). Attendance's section bar became the
+  same underline tabs as Tasks; Assets' status chips (assets, employees, exits, joiners, requests, tickets, maintenance,
+  reconciliation), Tasks reports, Leadership periods, Priority queue kinds, the employees "Details / Phones & emails"
+  switch, the requests switcher and the billing period now share these looks (8 px radius, no capsules).
+- **Page structure**: `PAGE_TITLE` / `DETAIL_TITLE` (26/28 px bold; 22/26 px for a person's or asset's name; wraps
+  instead of truncating) for every in-app title incl. Home, Tasks home, Assets dashboard and the detail pages (the
+  joiner page got its missing h1); `BACK_LINK` for "← Assets / Employees / Exits / All checks / New joiners" above
+  detail pages. Each screen's one main create action is the CTA (Add user, Asset type, New joiner, Log maintenance,
+  New group, New notice, Log mistake, Write a process, New template).
+- **Phones**: tap targets in rem, not spacing steps (under 640 px `--spacing` is 0.22rem, which made `h-10` 35 px):
+  buttons/fields/selects 44 px, small buttons and chips 40 px, tabs 44 px, menu rows 44 px; leftovers fixed (catalog
+  tree, dashboard links, filter-chip Clear, picker Clear, colour field). Dialogs are **bottom sheets** on phones (full
+  width, never taller than the screen, body scrolls, `DialogFooter` sticks to the bottom above the safe area with
+  full-width buttons); slide-over sheets keep room for the close button and stretch their footer buttons. Mobile
+  numbers are `type="tel"`. Results (temporary Playwright pass, every route + detail pages, light and dark): sideways
+  scroll 0 at 320/360/390/412 (also 0 before), touch targets under 40 px on 390 px 531 → 57 (left: inline text links,
+  checkboxes/switches whose tap area is widened by a pseudo-element), no console errors; 24 dialogs/sheets opened at
+  390 px all fit. Desktop unchanged apart from the shared looks.
+
+| Check | Result |
+|---|---|
+| Web | rules + typecheck + build clean |
+| Smoke | 10 / 10 |
+| e2e | 74 / 74: full run 62 pass; 11 failures came from the running suite (a Tasks migration added by parallel backend work was not yet applied, then API restarts → 502) and pass when rerun; `settings.spec` "photo at check-in" now answers the uniform question (§19.27) |
+
+### 19.30 Tasks updates ported from the original app (2026-10-20)
+Founder: bring the original app's changes since the copy (`bc785fe`, branch `feature/delegated-dashboard-whatsapp`, up
+to `2bc1425`) into FreeFounders, adapted to its design, and "remove the previous features that are being replaced by
+them". The original stays read-only. "Super Admin" there = the **Owner** here (`accounts.access.is_owner`, i.e. holds
+`tasks.delete_admin_work`, the hidden Owner role §19.28); "admin" = `tasks.view_all` at company scope. **No new
+permission keys** (CATALOGUE_VERSION stays 2).
+
+| Original | Here |
+|---|---|
+| `9d3050b` + `52ba930` Notices on WhatsApp (not in the copy) | `send_whatsapp`: GET also lists `missing` (people it can reach who never got it: joined, reactivated, skipped); POST `{only_missing: true}` sends only to them; sends record `/notices?n=<id>`; one person's failure is recorded for them and the rest still go; default template **`notice_posted`** (Utility, {{1}} name, {{2}} title; `company_notice` still works when named in `NOTICE_WHATSAPP_TEMPLATE`). Notices → "Send on WhatsApp" offers "Send to the N who missed it" (or "Send again to everyone"). |
+| `3fbf6e7` Only a Super Admin gives a task to a Super Admin | **Only the Owner gives a task to the Owner** (themselves included), on top of §19.24 `tasks.assign`: create, admin edit, a change request proposing the Owner (400), approving such a request, directory templates, corrective tasks. The Assign-to pickers (`/tasks/assignees/`) hide Owners from everyone but Owners. Message "Only the Owner can give a task to the Owner." |
+| `13fbf98` Delegated: a picked agent shows only that agent | Delegated tab: with an agent picked, the per-agent panel shows only their row ("Show all" hidden); Clear brings everyone back. |
+| `3903b4b` Lists: open, then overdue, then done | My Tasks / All / Delegated / Subscribed: open work first, then overdue, then done (server order kept inside each group). |
+| `6ec1bc6` Deleting a task you were given needs the giver's approval | `can_delete_task`: the Owner deletes anything; the **giver** may take back what they gave (an admin's work too); the **receiver never** deletes directly, admins included; a third admin still cannot touch work given to an admin. A cancel request goes to the giver (the Owners when the giver has left or is the one asking); only they or an Owner decide it (other admins no longer see it in their inbox). Approved → Deleted bin, and every **Owner** is told (`task_deleted_on_request`, in-app + email). Web: the edit/request dialog sends "Send delete request" with a reason instead of deleting. **Removed**: the old route of admins' cancels on admin work to the Super Admin inbox, and the dialog's direct delete for a task someone gave you. |
+| `88484c3` (reverted by `442fe3e`) | Skipped. |
+| `d40034c` WhatsApp 10 AM–7 PM, remind givers, no self-accept | WhatsApp only inside the **company's hours** (`WHATSAPP_HOURS`, CompanySetting, default `10-19`; env default; `0-24` under tests): outside them in-app + email go at once, the WhatsApp is **held** (`Notification.wa_deferred`, migration `notifications 0003`) and sent by the worker at the opening (dropped after 3 days); the 2-hourly overdue pings are **skipped** instead. Morning digest waits for the opening, day-end digest at 6 PM (`DAY_END_DIGEST_HOUR` default 18). Task settings → **WhatsApp hours** (From / Until; `GET/PUT /api/whatsapp-hours/`, `tasks.settings`). Finished work waiting: **one grouped reminder per giver** ("N finished tasks are waiting for you to accept", `task_completion_reminder`, WhatsApp template `task_completion_review` for non-admins) after `APPROVAL_REMIND_HOURS` (§17.2), then **daily** while it waits; this **replaces** the one-off per-completion `approval_reminder` (the 2× escalation to admins stays). **Nobody accepts or sends back their own work** (admins too; bulk accept skips it). To accept → My submissions: "Sent for approval · waiting for <giver>" (`approver_detail`), no Accept/Send back on own rows. |
+| `3ff22ba` A task someone gave you is changed through them | `edits_need_giver` (on every task): a task someone else (still active) gave me → any change but the status is a request to the giver, admins and Owners included (direct PATCH 403 with the giver's name; `request_change` allowed for admins then). Web: "Request change" / "Change" instead of "Edit" on such tasks; the dialog says "given to you by …". Tasks an admin gave out still edit directly. |
+| `d0a1bdf` Voice draft replaces AI draft; red tab counts | **Voice draft**: `voice_draft` takes `{transcript}` (words from the browser/phone; no AI key) or an audio clip (Gemini key); without AI, `speech_rules` reads the person, deadline ("kal 5 baje", "in 2 hours", weekdays, Hindi/Hinglish), effort ("30 minute") and tidies the title. Web `voice-note.tsx`: language English/हिंदी, browser speech recognition on https/localhost, else the keyboard-mic box. **Removed**: the "AI draft" button/box, `POST /tasks/ai_draft/`, `useAiTaskDraft`, the browser audio recording (MediaRecorder) path of the old "Speak the task" (the server still accepts audio). Red round counts (1–9, 9+, 99+) on **My Tasks** (open + in progress), **To accept**, **Requests** (and "More" on phones); `countLabel` in core. |
+| `ed023cf` Voice draft asks for the microphone | Browser: asks for the microphone first; blocked → steps for this browser (Chrome on Android, Safari on iPhone, desktop), "Try again", "Use the keyboard mic instead"; keyboard-mic help. The partsexpressonline link was not ported (a note says the http:// address never gets the microphone). |
+| `ba5c94e` App v3: native voice with the mic pop-up | Phone app **1.1.0** (versionCode 2): bridge request **`voice` {lang}** → `{text}` and **`voice-stop`** (Done), `apps/mobile/src/lib/voice.ts` with **expo-speech-recognition** 57.1 (the phone's speech recogniser; Android's "Allow FreeFounders to record audio?" pop-up; blocked twice → `code: permission, permission: microphone, settings: true` → web shows "Open settings" + "Try again"; no speech service / Expo Go → `code: unavailable` → keyboard-mic box). `app.json`: `RECORD_AUDIO` moved from `blockedPermissions` to `permissions`, plugin config (Google speech service package visibility), iOS usage texts. Nothing is recorded or kept. **Needs a new APK build** (`eas build -p android --profile preview`). |
+| `0980b4d` Startup prompt to update older apps | Platform `GET /api/platform/app-version` (public) → `{minVersion, apkUrl}` from `MOBILE_MIN_VERSION` (default `1.1.0`; empty = off) and `MOBILE_APK_URL` (default `/download/freefounders.apk` = `apps/web/public/download/freefounders.apk`, git-ignored; or a full https:// address). Inside the app, an older version gets "Update the app — one time" (Later = this session); "Update now" opens the APK in a new window, which the shell always hands to the phone's browser (works in 1.0.0 too). The Voice draft in an old app offers the same link. |
+| `748b527` Remove a wrong or outdated file | `POST /tasks/{id}/remove_file/ {id}`: the uploader while the task is open, the giver, or an admin (after Done only the giver/admin); logged "Removed file: …". Web: an × on each attachment in the task panel (with a confirmation). |
+| `2bc1425` Team Performance: who asks most to change a due date | `GET /tasks/change_request_leaders/?range=` (Team performance permission, same audience as `team_report`): people ranked by requests that move a due date (counted on the day raised), approved / rejected / waiting, tasks, approval rate, latest 20 requests each. Web: a panel on Team performance under the ranking; open a person for their requests. |
+| `13fd6e2` WIP weekly overdue email | Skipped (FreeFounders already has the Monday overdue email, `send_weekly_overdue_email`). |
+| Older ones (before the copy) | Checked in the new web app, all present: proof files in To accept (`2387ca3`), bulk accept (`009f6f0`), "Tasks I've delegated" on Home + WhatsApp reminders for requests (`8a7b0cb`), Tasks given & received (admins everyone, others their own, click a person; `f6d9cf4`/`287e5b2`/`06b659c`), Delegated per-agent counts (`cb8ffd6`), My team Delete confirmation (`6d7d102`), dashboard insights (`f63f1e0`). Not ported: anything about the old frontend serving / APK hosting on the old server. |
+
+Docs: `docs/UI-FUNCTIONALITY.md` (Voice draft), `services/tasks/README.md` (endpoints), `.env.example` (Tasks
+`WHATSAPP_HOURS`, `NOTICE_WHATSAPP_TEMPLATE`; Platform `MOBILE_MIN_VERSION`, `MOBILE_APK_URL`), CLAUDE.md (ported up to
+`2bc1425`), `apps/mobile/README.md` (voice bridge).
+
+**For the founder**: (1) build and install the new APK (1.1.0) and put it at `apps/web/public/download/freefounders.apk`
+(or set `MOBILE_APK_URL`) so 1.0.0 phones get the update prompt; (2) Meta templates `notice_posted` (Utility) and
+`task_completion_review` must be approved for the company's WhatsApp number; (3) the first "please accept" reminder now
+follows `APPROVAL_REMIND_HOURS` (24 h by default; the original used 3 h) and repeats daily.
+
+| Check | Result |
+|---|---|
+| Tasks (SQLite) | 900 pass, 21 skipped (new `crm/tests_ported_2026_10.py`: Owner-only assigning, delete by request, WhatsApp hours + held/skipped/dropped + settings endpoint, grouped daily accept reminders, no self-accept, changes through the giver, voice transcript rules, remove file, due-date change leaders; notice WhatsApp only-missing + one failure; `DeleteRulesTests` updated as in the original) |
+| Tasks tenancy (Postgres) | 32 pass; dev DB migrated (`migrate_companies`, 36 companies) |
+| Platform | 113 pass (new: app-version) |
+| Core | 11 pass (new: app version compare) |
+| Mobile | typecheck + 22 tests (new: voice / voice-stop protocol), `expo export` android OK, expo-doctor 21/21 |
+| Web | rules + typecheck + build clean |
+| Smoke | 10 / 10 |
+| e2e | 78 / 78 in one full run (new `web-tasks-ported` 2: an admin receiver changes and deletes only through the giver, red tab counts, Owner-only assigning, Team performance panels + WhatsApp hours; `web-app-shell` +2: Voice draft through the app bridge, the update prompt for an older app). Then DEMO reset to the owner (`company -- reset --code DEMO --keep-owner`) |
+
 ---
 
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)

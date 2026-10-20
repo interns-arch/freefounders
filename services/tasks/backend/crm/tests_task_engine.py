@@ -1001,9 +1001,16 @@ class DeleteRulesTests(Base):
         t = self.task(self.rahul, self.manager)
         self.assertEqual(self.delete_as(self.admin, t).status_code, 204)
 
-    def test_an_admin_cannot_delete_work_given_to_an_admin(self):
+    def test_the_giver_can_delete_work_they_gave_an_admin(self):
+        # rule since 2026-10-10 (original app 6ec1bc6): whoever gave the task may take it back
         t = self.task(self.boss2, self.admin)
-        self.assertEqual(self.delete_as(self.admin, t).status_code, 403)
+        self.assertEqual(self.delete_as(self.admin, t).status_code, 204)
+
+    def test_a_third_admin_cannot_delete_work_given_to_an_admin(self):
+        from accounts.models import Role
+        t = self.task(self.boss2, self.admin)
+        other = make("boss3", Role.ADMIN, "management")
+        self.assertEqual(self.delete_as(other, t).status_code, 403)
         t.refresh_from_db()
         self.assertIsNone(t.deleted_at)
 
@@ -1012,9 +1019,9 @@ class DeleteRulesTests(Base):
         t = self.task(self.admin, self.boss2)
         self.assertEqual(self.delete_as(self.admin, t).status_code, 403)
 
-    def test_the_refusal_names_the_super_admin(self):
+    def test_the_refusal_tells_an_admin_receiver_to_ask_the_giver(self):
         t = self.task(self.admin, self.boss2)
-        self.assertIn("Super Admin", str(self.delete_as(self.admin, t).data))
+        self.assertIn("whoever gave it", str(self.delete_as(self.admin, t).data))
 
     # ---- the super admin ---------------------------------------------------
     def test_a_super_admin_deletes_admin_work(self):
@@ -1028,8 +1035,8 @@ class DeleteRulesTests(Base):
         self.assertEqual(self.delete_as(self.sup, t).status_code, 204)
 
     # ---- the routing around it ---------------------------------------------
-    def test_an_approved_cancel_cannot_get_round_the_admin_rule(self):
-        """An admin approving a cancel is still an admin deleting admin work."""
+    def test_the_giver_approves_an_admin_receivers_cancel(self):
+        """Admin -> admin: the receiver asks, the giver approves, it is deleted."""
         t = self.task(self.boss2, self.admin)
         self.as_(self.boss2)
         self.client.post(f"/api/tasks/{t.id}/request_change/",
@@ -1040,12 +1047,13 @@ class DeleteRulesTests(Base):
         self.as_(self.admin)
         res = self.client.post(f"/api/task-change-requests/{rid}/review/",
                                {"decision": "approved"}, format="json")
-        self.assertIn(res.status_code, (403, 404))
+        self.assertEqual(res.status_code, 200)
         t.refresh_from_db()
-        self.assertIsNone(t.deleted_at)
+        self.assertIsNotNone(t.deleted_at)
 
-    def test_such_a_cancel_is_sent_to_the_super_admin(self):
+    def test_a_cancel_whose_giver_left_is_sent_to_the_owner(self):
         t = self.task(self.boss2, self.admin)
+        User.objects.filter(pk=self.admin.pk).update(is_active=False)
         self.as_(self.boss2)
         self.client.post(f"/api/tasks/{t.id}/request_change/",
                          {"changes": {"cancel": True},
@@ -1060,9 +1068,10 @@ class DeleteRulesTests(Base):
         self.assertIsNotNone(t.deleted_at)
 
     # ---- super admin is otherwise an ordinary admin ------------------------
-    def test_tasks_flow_both_ways_between_admin_and_super_admin(self):
+    def test_only_the_owner_gives_work_to_the_owner(self):
+        # rule since 2026-10-08 (original app 3fbf6e7): an admin can no longer assign to the Owner
         from crm.scoping import can_assign_to
-        self.assertTrue(can_assign_to(self.admin, self.sup))
+        self.assertFalse(can_assign_to(self.admin, self.sup))
         self.assertTrue(can_assign_to(self.sup, self.admin))
 
     def test_a_super_admin_has_every_admin_power(self):

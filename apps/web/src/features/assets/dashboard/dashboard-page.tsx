@@ -104,7 +104,7 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
               {ASSET_STATUSES.filter((s) => data.byStatus[s]).map((s) => (
-                <Link key={s} to={`/assets/assets?status=${s}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm transition hover:bg-muted">
+                <Link key={s} to={`/assets/assets?status=${s}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 max-sm:min-h-[2.5rem] text-sm transition hover:bg-muted">
                   <span className={cn('size-2.5 rounded-sm', ASSET_STATUS_BAR[s])} />
                   <span className="flex-1 text-muted-foreground">{ASSET_STATUS_LABELS[s]}</span>
                   <span className="font-mono text-[13px] font-semibold tabular">{data.byStatus[s]}</span>
@@ -196,7 +196,7 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
             <ul className="space-y-1">
               {data.byType.map((ty) => (
                 <li key={ty.id}>
-                  <Link to={`/assets/assets?assetTypeId=${ty.id}&status=AVAILABLE`} className="-mx-1.5 flex items-center gap-3 rounded-md px-1.5 py-1 text-sm transition hover:bg-muted">
+                  <Link to={`/assets/assets?assetTypeId=${ty.id}&status=AVAILABLE`} className="-mx-1.5 flex items-center gap-3 rounded-md max-sm:min-h-[2.5rem] px-1.5 py-1 text-sm transition hover:bg-muted">
                     <AssetIcon icon={ty.icon} color="indigo" size="sm" />
                     <span className="min-w-0 flex-1 truncate">{ty.name}</span>
                     <span className={cn('font-mono text-[13px] font-semibold tabular', ty.available === 0 ? 'text-destructive' : 'text-success')}>{ty.available}</span>
@@ -317,7 +317,7 @@ function PersonalView({ data, name }: { data: PersonalDashboard; name?: string }
         <div className="relative flex items-start gap-4">
           <div className="min-w-0 flex-1">
             {company.short && <p className="font-mono text-[11px] font-medium tracking-wider text-primary-foreground/75 uppercase">{company.short}</p>}
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[28px]">
               {greeting()}
               {name ? `, ${name}` : ''}
             </h1>

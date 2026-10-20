@@ -28,6 +28,8 @@ export function TaskRow({ t, me, isAdmin, scope, actions }: { t: WorkTask; me: n
   const open = t.status !== 'done';
   const late = open && !!t.is_overdue;
   const canChange = (mine || t.created_by_detail?.id === me || isAdmin) && open;
+  // a task someone else gave me is changed through them, admins too (original app 3ff22ba)
+  const directEdit = isAdmin && !t.edits_need_giver;
   return (
     <li
       className={cn(
@@ -134,8 +136,14 @@ export function TaskRow({ t, me, isAdmin, scope, actions }: { t: WorkTask; me: n
           </Button>
         )}
         {canChange && actions.request && (
-          <Button variant="outline" size="xs" title={isAdmin ? 'Edit this task (admin — applies immediately)' : 'Propose a change (deadline, effort, recurrence…) for approval'} onClick={() => actions.request?.(t)} aria-label={`${isAdmin ? 'Edit' : 'Change'} ${t.code}`}>
-            <Pencil /> {isAdmin ? 'Edit' : 'Change'}
+          <Button
+            variant="outline"
+            size="xs"
+            title={directEdit ? 'Edit this task (admin — applies immediately)' : t.edits_need_giver ? 'Given to you: changes go to the person who gave it, for approval' : 'Propose a change (deadline, effort, recurrence…) for approval'}
+            onClick={() => actions.request?.(t)}
+            aria-label={`${directEdit ? 'Edit' : 'Change'} ${t.code}`}
+          >
+            <Pencil /> {directEdit ? 'Edit' : 'Change'}
           </Button>
         )}
         {actions.follow && (

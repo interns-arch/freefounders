@@ -147,6 +147,7 @@ class TaskSerializer(serializers.ModelSerializer):
     parent_code = serializers.CharField(source="parent.code", read_only=True, default=None)
     pending_change_requests = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
+    edits_need_giver = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -159,7 +160,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "due_at", "is_overdue", "effort_minutes", "assignee_estimate_minutes",
             "progress_percent", "actual_minutes",
             "completion_note", "completed_at", "deleted_at", "subscribed",
-            "pending_change_requests", "can_delete", "created_at", "updated_at",
+            "pending_change_requests", "can_delete", "edits_need_giver", "created_at", "updated_at",
             "external_url",
         ]
         read_only_fields = ["assignee_estimate_minutes", "progress_percent",
@@ -171,6 +172,12 @@ class TaskSerializer(serializers.ModelSerializer):
         from .scoping import can_delete_task
         request = self.context.get("request")
         return bool(request and can_delete_task(request.user, obj))
+
+    def get_edits_need_giver(self, obj):
+        """A task someone else gave this person: changes go to the giver as a request (admins too)."""
+        from .scoping import edits_need_giver
+        request = self.context.get("request")
+        return bool(request and edits_need_giver(request.user, obj))
 
     def get_pending_change_requests(self, obj):
         return sum(1 for r in obj.change_requests.all() if r.status == "pending") \
@@ -365,6 +372,7 @@ class TaskChangeRequestSerializer(serializers.ModelSerializer):
 class TaskCompletionSerializer(serializers.ModelSerializer):
     submitted_by = UserBriefSerializer(read_only=True)
     reviewed_by = UserBriefSerializer(read_only=True)
+    approver_detail = UserBriefSerializer(source="approver", read_only=True)
     task_code = serializers.CharField(source="task.code", read_only=True)
     task_title = serializers.CharField(source="task.title", read_only=True)
     task_effort_minutes = serializers.IntegerField(source="task.effort_minutes", read_only=True)
@@ -378,7 +386,8 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
         fields = ["id", "task", "task_code", "task_title", "task_due_at",
                   "task_effort_minutes", "task_actual_minutes",
                   "submitted_by", "note", "status", "status_display",
-                  "remarks", "reviewed_by", "reviewed_at", "created_at", "files"]
+                  "remarks", "reviewed_by", "reviewed_at", "created_at", "files",
+                  "approver_detail"]
         read_only_fields = fields
 
     def get_files(self, obj):

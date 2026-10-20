@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { EmployeeStatusBadge, EnumBadge } from '@/components/common/badges';
 import { useConfirm } from '@/components/common/confirm';
 import { Field } from '@/components/common/form';
-import { EmptyState, ErrorState, PageLoader } from '@/components/common/page';
+import { EmptyState, ErrorState, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Timeline } from '@/features/assets/components/timeline';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
@@ -133,8 +133,8 @@ export default function ExitDetailPage() {
   return (
     <div className="space-y-5">
       <div>
-        <Link to="/assets/exits" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-3.5" /> Exits
+        <Link to="/assets/exits" className={`mb-2 ${BACK_LINK}`}>
+          <ArrowLeft /> Exits
         </Link>
         <Card className="relative overflow-hidden p-4 sm:p-5">
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -142,7 +142,7 @@ export default function ExitDetailPage() {
             <Avatar name={x.employee.fullName} className="size-14 text-base ring-4 ring-warning/15" />
             <div>
               <p className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Exit clearance · {x.caseNumber}</p>
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+              <h1 className="text-[22px] leading-tight font-bold tracking-tight break-words sm:text-[26px]">
                 <Link to={`/assets/employees/${x.employee.id}`} className="hover:text-primary">
                   {x.employee.fullName}
                 </Link>

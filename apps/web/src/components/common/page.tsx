@@ -6,6 +6,13 @@ import { Skeleton } from '@/components/ui/primitives';
 import { errorMessage } from '@freefounders/core';
 import { cn } from '@/lib/utils';
 
+/** "← Employees": the link back to a list above a detail page (same size and tap area everywhere). */
+export const BACK_LINK = 'inline-flex min-h-8 items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-[2.5rem] [&_svg]:size-4';
+
+/** The one in-app page title style (PageHeader); detail pages with a long name use DETAIL_TITLE. */
+export const PAGE_TITLE = 'text-[26px] leading-tight font-bold tracking-tight sm:text-[28px]';
+export const DETAIL_TITLE = 'text-[22px] leading-tight font-bold tracking-tight sm:text-[26px]';
+
 /** Page title block (the old app's "Good morning, Demo" header): big bold title, a quiet line under it, actions on the right. */
 export function PageHeader({
   title,
@@ -35,7 +42,7 @@ export function PageHeader({
             ))}
           </nav>
         )}
-        <h1 className="truncate text-[26px] leading-tight font-bold tracking-tight sm:text-[28px]">{title}</h1>
+        <h1 className={cn('break-words', PAGE_TITLE)}>{title}</h1>
         {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

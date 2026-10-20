@@ -3,7 +3,7 @@
  * score the Employees report uses, with attendance % and leave days next to it (PLAN.md §17.5).
  */
 import { errorMessage } from '@freefounders/core';
-import { type TeamReportRow, useSendOverdueEmail, useTeamReport } from '@freefounders/core/tasks';
+import { type ChangeRequestLeader, type TeamReportRow, useChangeRequestLeaders, useSendOverdueEmail, useTeamReport } from '@freefounders/core/tasks';
 import { ChevronDown, ChevronRight, Download, Mail, TriangleAlert } from '@/components/icons';
 import { Fragment, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
@@ -258,7 +258,7 @@ export function TeamReportPage() {
                     <TR className="cursor-pointer hover:bg-muted/40" onClick={() => setOpen(open === r.user ? null : r.user)}>
                       <TD className="text-muted-foreground">{r.score === null ? '—' : i + 1}</TD>
                       <TD>
-                        <button type="button" aria-expanded={open === r.user} className="flex min-h-8 cursor-pointer items-center gap-1 rounded text-left font-medium" title="Show this person's full breakdown">
+                        <button type="button" aria-expanded={open === r.user} className="flex min-h-8 max-sm:min-h-[2.5rem] cursor-pointer items-center gap-1 rounded text-left font-medium" title="Show this person's full breakdown">
                           {open === r.user ? <ChevronDown className="size-4 shrink-0" /> : <ChevronRight className="size-4 shrink-0" />}
                           {r.name}
                         </button>
@@ -312,8 +312,107 @@ export function TeamReportPage() {
         </>
       )}
 
+      <DueChangeLeaders range={range} custom={custom} />
+
       {/* tasks given / received per person — shows only for admins */}
       <DelegationCard />
     </div>
+  );
+}
+
+const REQUEST_TONE: Record<string, 'neutral' | 'success' | 'danger' | 'warning'> = { approved: 'success', rejected: 'danger', pending: 'warning' };
+
+/**
+ * Who asks most often to move a task's due date/time over the same range (original app 2bc1425): most first, with
+ * how those requests ended; open a person for their latest requests.
+ */
+function DueChangeLeaders({ range, custom }: { range: string; custom: CustomRange }) {
+  const q = useChangeRequestLeaders(range, custom);
+  const [open, setOpen] = useState<number | null>(null);
+  const d = q.data;
+  return (
+    <Panel
+      title="Who asks most to change a due date"
+      description={d ? `${d.total} request${d.total === 1 ? '' : 's'} to move a due date or time, from ${d.people} ${d.people === 1 ? 'person' : 'people'}${d.pending ? ` · ${d.pending} still waiting` : ''}.` : 'Requests to move a due date or time, counted on the day they were raised.'}
+      bodyClassName="p-0"
+    >
+      {q.error ? (
+        <ErrorNote className="m-4">{errorMessage(q.error)}</ErrorNote>
+      ) : !d ? (
+        <Skeleton className="m-4 h-24" />
+      ) : d.rows.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-muted-foreground">Nobody asked to move a due date in this range.</p>
+      ) : (
+        <Table>
+          <THead>
+            <TR>
+              <TH className="w-8" />
+              <TH>Person</TH>
+              <TH className="text-right">Requests</TH>
+              <TH className="text-right">Approved</TH>
+              <TH className="text-right">Rejected</TH>
+              <TH className="text-right">Waiting</TH>
+              <TH className="text-right">Tasks</TH>
+              <TH className="text-right">Approval rate</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {d.rows.map((r, i) => (
+              <Fragment key={r.user}>
+                <TR className="cursor-pointer" onClick={() => setOpen(open === r.user ? null : r.user)}>
+                  <TD>
+                    <Button variant="ghost" size="icon-xs" aria-expanded={open === r.user} aria-label={`${open === r.user ? 'Hide' : 'Show'} ${r.name}'s requests`}>
+                      {open === r.user ? <ChevronDown /> : <ChevronRight />}
+                    </Button>
+                  </TD>
+                  <TD>
+                    <span className="mr-1.5 font-mono text-xs text-muted-foreground tabular">{i + 1}.</span>
+                    <strong>{r.name}</strong>
+                    <div className="text-xs text-muted-foreground">{[r.role, r.department].filter(Boolean).join(' · ')}</div>
+                  </TD>
+                  <TD className="text-right font-semibold tabular">{r.total}</TD>
+                  <TD className="text-right tabular text-success">{r.approved}</TD>
+                  <TD className={cn('text-right tabular', r.rejected > 0 && 'text-destructive')}>{r.rejected}</TD>
+                  <TD className={cn('text-right tabular', r.pending > 0 && 'text-warning')}>{r.pending}</TD>
+                  <TD className="text-right tabular">{r.tasks}</TD>
+                  <TD className="text-right tabular">{pctText(r.approval_rate)}</TD>
+                </TR>
+                {open === r.user && (
+                  <TR>
+                    <TD colSpan={8} className="pt-0">
+                      <LeaderRequests r={r} />
+                    </TD>
+                  </TR>
+                )}
+              </Fragment>
+            ))}
+          </TBody>
+        </Table>
+      )}
+    </Panel>
+  );
+}
+
+function LeaderRequests({ r }: { r: ChangeRequestLeader }) {
+  return (
+    <ul className="divide-y rounded-lg bg-muted/40 text-sm">
+      {r.requests.map((x) => (
+        <li key={x.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2">
+          <Link to={`/tasks/tasks/${x.task}`} className="font-mono text-xs font-semibold text-primary hover:underline">
+            {x.task_code}
+          </Link>
+          <span className="min-w-0 flex-1">
+            <span className="font-medium">{x.task_title}</span>
+            <span className="block text-xs text-muted-foreground">
+              {x.changes.join(' · ')}
+              {x.reason ? ` — “${x.reason}”` : ''}
+            </span>
+          </span>
+          <Chip tone={REQUEST_TONE[x.status] ?? 'neutral'}>{x.status}</Chip>
+          <span className="text-xs text-muted-foreground tabular">{new Date(x.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+        </li>
+      ))}
+      {r.total > r.requests.length && <li className="px-4 py-2 text-xs text-muted-foreground">Showing the latest {r.requests.length} of {r.total}.</li>}
+    </ul>
   );
 }

@@ -2,7 +2,7 @@
   "expo": {
     "name": "FreeFounders",
     "slug": "freefounders",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "freefounders",
@@ -12,7 +12,9 @@
       "bundleIdentifier": "com.freefounders.app",
       "infoPlist": {
         "NSCameraUsageDescription": "FreeFounders takes a selfie when you punch in or out, and lets you take photos for attachments.",
-        "NSLocationWhenInUseUsageDescription": "FreeFounders checks that you are at your office when you punch in or out."
+        "NSLocationWhenInUseUsageDescription": "FreeFounders checks that you are at your office when you punch in or out.",
+        "NSMicrophoneUsageDescription": "FreeFounders listens when you speak a task (Voice draft).",
+        "NSSpeechRecognitionUsageDescription": "FreeFounders turns the task you speak into text (Voice draft)."
       }
     },
     "android": {
@@ -26,14 +28,14 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ],
       "blockedPermissions": [
-        "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_BACKGROUND_LOCATION"
       ],
       "predictiveBackGestureEnabled": false,
-      "versionCode": 1
+      "versionCode": 2
     },
     "plugins": [
       "expo-router",
@@ -65,6 +67,17 @@
         }
       ],
       "expo-sharing",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "FreeFounders listens when you speak a task (Voice draft).",
+          "speechRecognitionPermission": "FreeFounders turns the task you speak into text (Voice draft).",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts"
+          ]
+        }
+      ],
       [
         "expo-build-properties",
         {

@@ -8,12 +8,10 @@
 import { useAccess } from '@freefounders/core';
 import { useHrConfig } from '@freefounders/core/hr';
 import { ArrowLeft } from '@/components/icons';
-import { useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageHeader, PageLoader } from '@/components/common/page';
-import { useActiveInView } from '@/components/common/responsive';
+import { TabBar } from '@/components/common/controls';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { MonthView } from './attendance';
 import { DailyTab } from './daily';
 import { DashboardTab } from './dashboard';
@@ -36,8 +34,6 @@ export function HrPage() {
   const navigate = useNavigate();
   const { tab: asked } = useParams();
   const [params] = useSearchParams();
-  const tabsRow = useRef<HTMLElement>(null);
-  useActiveInView(tabsRow, `${asked}|${!!access.tasks.me}|${!!cfg.data}`);
   if (!access.tasks.me) return <PageLoader />;
 
   // Each section is its own permission (PLAN.md §19.19). Under the "manager approves" rule a reports-to manager
@@ -83,24 +79,7 @@ export function HrPage() {
   return (
     <div className="space-y-4">
       <PageHeader className="mb-0" title="Leave & Attendance" />
-      <nav ref={tabsRow} aria-label="Attendance and leave sections" className="no-scrollbar -mx-4 overflow-x-auto px-4 py-1 lg:mx-0 lg:px-0">
-        <div className="flex w-max gap-0.5 rounded-md border bg-muted p-0.5">
-          {tabs.map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              aria-current={tab === v ? 'page' : undefined}
-              onClick={() => choose(v)}
-              className={cn(
-                'inline-flex h-8 cursor-pointer items-center rounded-sm px-3.5 text-[13px] font-semibold whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground max-sm:h-10 max-sm:px-4',
-                tab === v && 'bg-card text-primary shadow-card ring-1 ring-border',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </nav>
+      <TabBar label="Attendance and leave sections" items={tabs.map(([v, label]) => ({ value: v, label }))} value={tab} onChange={choose} />
       {tab === 'today' && <TodayTab />}
       {tab === 'history' && !otherUser && <MonthView />}
       {tab === 'history' && otherUser && (

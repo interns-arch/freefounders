@@ -5,6 +5,7 @@ import {
   useAddTaskStep,
   useDeleteTask,
   usePendingReviewOf,
+  useRemoveTaskFile,
   useReviewCompletion,
   useSummarizeTask,
   useTaskComment,
@@ -105,6 +106,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
   const summarize = useSummarizeTask();
   const upload = useUploadTaskFiles();
   const del = useDeleteTask();
+  const removeFile = useRemoveTaskFile();
   const decide = useReviewCompletion();
   const dialogs = useTaskDialogs({ onDeleted: onClose });
 
@@ -159,6 +161,14 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
       },
       onError: fail,
     });
+  };
+
+  // A wrong or outdated file comes off (original app 748b527): the uploader while the task is open, the giver, an admin.
+  const canRemoveFile = (f: { uploaded_by: { id: number } | null }) => isAdmin || t.created_by_detail?.id === me?.id || (canAct && f.uploaded_by?.id === me?.id);
+  const dropFile = async (f: { id: number; filename: string }) => {
+    const ok = await confirm({ title: `Remove "${f.filename}"?`, description: 'It comes off this task for good; the task feed notes who removed it.', confirmText: 'Remove', destructive: true });
+    if (!ok.confirmed) return;
+    removeFile.mutate({ task: t.id, file: f.id }, { onSuccess: () => toast.success('File removed'), onError: fail });
   };
 
   const hasActions = canAct || t.can_delete;
@@ -258,7 +268,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
             )}
             {canAct && (
               <Button variant="outline" size="sm" onClick={() => dialogs.open({ kind: 'request', task: t })}>
-                <Pencil /> {isAdmin ? 'Edit' : 'Request change'}
+                <Pencil /> {isAdmin && !t.edits_need_giver ? 'Edit' : 'Request change'}
               </Button>
             )}
             <span className="flex-1" />
@@ -483,6 +493,11 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
                     <span className="truncate">{f.filename}</span>
                   )}
                   <span className="shrink-0 text-xs text-muted-foreground">· {f.uploaded_by?.name}</span>
+                  {canRemoveFile(f) && (
+                    <Button variant="ghost" size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground hover:text-destructive" aria-label={`Remove ${f.filename}`} title="Remove this file" disabled={removeFile.isPending} onClick={() => dropFile(f)}>
+                      <X />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>

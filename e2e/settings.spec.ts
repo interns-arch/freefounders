@@ -20,6 +20,12 @@ async function token(request: APIRequestContext, login = OWNER.login, password =
 
 const auth = (t: string) => ({ ...XRW, authorization: `Bearer ${t}` });
 
+/** The company may ask "Are you wearing the uniform?" before a check-in (HR setting, PLAN.md §19.27): answer Yes. */
+async function answerUniform(page: Page) {
+  const yes = page.getByRole('button', { name: /Yes, I.m wearing it/ });
+  await yes.waitFor({ timeout: 2000 }).then(() => yes.click()).catch(() => {});
+}
+
 test('admins brand the company and switch modules; Tasks follows', async ({ page, request }) => {
   const owner = await token(request);
   const before = await (await request.get('/api/platform/company', { headers: auth(owner) })).json();
@@ -101,6 +107,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     await page.goto('/tasks/hr');
     await page.getByRole('button', { name: /Check in/ }).click();
+    await answerUniform(page);
     const camera = page.getByRole('dialog', { name: 'Check in' });
     await expect(camera).toBeVisible();
     await expect(page.getByText(/A photo is saved with your attendance/)).toBeVisible();

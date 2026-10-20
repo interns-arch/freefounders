@@ -92,12 +92,17 @@ export interface NoticeWhatsappPreview {
   audience: number;
   with_whatsapp: number;
   without_whatsapp: string[];
+  /** People it can reach who have not had it yet (joined, reactivated or skipped since the last send). */
+  missing: string[];
 }
 
-/** GET then POST /notices/:id/send_whatsapp/ — preview who it reaches, then send. */
+/** GET then POST /notices/:id/send_whatsapp/ — preview who it reaches, then send (to everyone, or only the people who missed it). */
 export function useNoticeWhatsapp() {
   return {
     preview: useMutation({ mutationFn: (id: number) => tasksApi.get<NoticeWhatsappPreview>(`/notices/${id}/send_whatsapp/`) }),
-    send: useMutation({ mutationFn: (id: number) => tasksApi.post<{ queued: number }>(`/notices/${id}/send_whatsapp/`) }),
+    send: useMutation({
+      mutationFn: ({ id, onlyMissing = false }: { id: number; onlyMissing?: boolean }) =>
+        tasksApi.post<{ queued: number }>(`/notices/${id}/send_whatsapp/`, onlyMissing ? { only_missing: true } : {}),
+    }),
   };
 }

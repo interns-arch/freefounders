@@ -80,7 +80,9 @@ function ProofFiles({ files }: { files: TaskFile[] }) {
  * reason. In "To accept" rows can be ticked, or narrowed to one person, and accepted in one go (only the rows on screen).
  */
 export function ReviewsTab({ href }: { href: (id: number) => string }) {
-  const isAdmin = useAccess().tasks.can('tasks.view_all');
+  const access = useAccess();
+  const isAdmin = access.tasks.can('tasks.view_all');
+  const me = access.tasks.me?.id;
   const confirm = useConfirm();
   const [scope, setScope] = useState<'inbox' | 'mine' | 'all'>('inbox');
   const q = useCompletionReviews(scope);
@@ -285,7 +287,14 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
                       )}
                     </div>
                   </div>
-                  {r.status === 'pending' && rejecting !== r.id && (
+                  {/* Nobody accepts their own work (original app d40034c): it waits for the person who gave the task. */}
+                  {r.status === 'pending' && (scope === 'mine' || r.submitted_by?.id === me) && (
+                    <p className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-md border border-info/30 bg-info/8 px-2.5 py-1 text-xs font-semibold text-info" title="The person who gave you the task accepts it or sends it back">
+                      <Clock className="size-3.5" aria-hidden /> Sent for approval
+                      {r.approver_detail?.name ? <span className="font-normal text-muted-foreground">· waiting for {r.approver_detail.name}</span> : null}
+                    </p>
+                  )}
+                  {r.status === 'pending' && rejecting !== r.id && scope !== 'mine' && r.submitted_by?.id !== me && (
                     <div className="flex gap-2 pl-7 sm:pl-0 [&>button]:flex-1 sm:[&>button]:flex-none">
                       <Button size="sm" disabled={busy} aria-label={`Accept ${r.task_code}`} onClick={() => decide.mutate({ id: r.id, decision: 'approved' }, { onSuccess: () => toast.success(`${r.task_code} accepted`), onError: fail })}>
                         <CheckCircle2 /> Accept

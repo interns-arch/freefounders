@@ -21,6 +21,7 @@ import { MAINTENANCE_TONE } from '@/lib/status';
 import type { MaintenanceRecord } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, formatMoney } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 
 const TABS = [
   { value: 'IN_PROGRESS,SCHEDULED', label: 'Active' },
@@ -116,7 +117,7 @@ export default function MaintenancePage() {
         description="Repairs, servicing and inspections. Assets return to their holder (or to Available) when work completes."
         actions={
           manage && (
-            <Button size="sm" onClick={() => quickAdd.open('maintenance')}>
+            <Button variant="cta" size="sm" onClick={() => quickAdd.open('maintenance')}>
               <Plus /> Log maintenance
             </Button>
           )
@@ -129,8 +130,8 @@ export default function MaintenancePage() {
             type="button"
             onClick={() => set({ status: t.value || 'ALL' })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-              (f.status === 'ALL' ? '' : f.status) === t.value ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+              chipClass,
+              (f.status === 'ALL' ? '' : f.status) === t.value ? chipActiveClass : chipIdleClass,
             )}
           >
             {t.label}

@@ -15,6 +15,7 @@ import { ONBOARDING_TONE } from '@/lib/status';
 import type { OnboardingListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 
 export function JoinsIn({ date, className }: { date: string; className?: string }) {
   const d = daysUntil(date) ?? 0;
@@ -93,8 +94,8 @@ export function OnboardingTable({ tabs, defaultStatus, empty }: { tabs: { value:
             type="button"
             onClick={() => set({ status: t.value })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-              f.status === t.value ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+              chipClass,
+              f.status === t.value ? chipActiveClass : chipIdleClass,
             )}
           >
             {t.label}
@@ -128,7 +129,7 @@ export default function OnboardingPage() {
   const quickAdd = useQuickAdd();
   const { can } = useAuth();
   const newJoiner = can('onboarding:manage') && (
-    <Button size="sm" onClick={() => quickAdd.open('onboarding')}>
+    <Button variant="cta" size="sm" onClick={() => quickAdd.open('onboarding')}>
       <Plus /> New joiner
     </Button>
   );

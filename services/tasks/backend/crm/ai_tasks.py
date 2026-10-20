@@ -1,13 +1,16 @@
 """E3: AI layer for tasks — any provider behind AI_ENABLED, deterministic
 fallback ALWAYS works (the app never blocks on AI).
 
-  draft_task(prompt)          -> {"title", "description", "checklist", "provider"}
+  draft_from_speech(words)    -> the task form from a spoken note (Voice draft); without an AI key
+                                 speech_rules() reads who / by when / how long
+  draft_task(prompt)          -> {"title", "description", "checklist", "provider"} (the voice fallback)
   summarize_task(task, feed)  -> {"summary", "provider"}
   review_sentence(stats)      -> str  (pure rules — Sir's categories, so the
                                  no-API-key install says the same things)
 """
 import logging
 import re
+from datetime import timedelta
 
 from config import llm
 
@@ -79,7 +82,9 @@ def draft_from_speech(transcript: str, now, known_names=()) -> dict:
     data = llm.chat_json(system, text, max_tokens=900, timeout=75) or {}
     if not data.get("title"):
         base = draft_task(text)          # the deterministic fallback still applies
-        return {**base, "assignee": None, "due_at": None, "effort_minutes": None}
+        rules = speech_rules(text, now, known_names)
+        title = rules.pop("title", "")
+        return {**base, **rules, **({"title": title} if title else {})}
     effort = data.get("effort_minutes")
     try:
         effort = int(effort) if effort not in (None, "") else None
@@ -94,6 +99,139 @@ def draft_from_speech(transcript: str, now, known_names=()) -> dict:
         "effort_minutes": effort if (effort and 0 < effort <= 60 * 24 * 30) else None,
         "provider": llm.provider(),
     }
+
+
+# ---- no-AI reading of a spoken task: who, by when, how long ---------------
+_NUM = {w: n for n, ws in enumerate([
+    (), ("one", "ek", "एक"), ("two", "do", "दो"), ("three", "teen", "तीन"),
+    ("four", "char", "chaar", "चार"), ("five", "paanch", "panch", "पांच", "पाँच"),
+    ("six", "chhe", "chah", "छह"), ("seven", "saat", "सात"), ("eight", "aath", "आठ"),
+    ("nine", "nau", "नौ"), ("ten", "das", "दस"), ("eleven", "gyarah", "ग्यारह"),
+    ("twelve", "barah", "बारह")]) for w in ws}
+_N = r"(\d{1,3}(?:\.\d)?|" + "|".join(sorted(map(re.escape, _NUM), key=len, reverse=True)) + r")"
+_WEEKDAYS = [("monday", "somvar", "सोमवार"), ("tuesday", "mangalvar", "मंगलवार"),
+             ("wednesday", "budhvar", "बुधवार"), ("thursday", "guruvar", "गुरुवार"),
+             ("friday", "shukravar", "शुक्रवार"), ("saturday", "shanivar", "शनिवार"),
+             ("sunday", "ravivar", "रविवार")]
+_PARTS = [(("subah", "morning", "सुबह"), 10), (("dopahar", "afternoon", "दोपहर"), 14),
+          (("shaam", "sham", "evening", "शाम", "end of (?:the )?day", "eod"), 18),
+          (("raat", "night", "रात"), 20)]
+
+
+def _num(s):
+    s = s.lower()
+    return float(s) if re.match(r"\d", s) else float(_NUM.get(s, 0))
+
+
+def _has(text, *words):
+    return any(re.search(rf"(?<!\w){w}(?!\w)", text) for w in words)
+
+
+def speech_rules(text: str, now, known_names=()) -> dict:
+    """Without an AI key: pick out the person, the deadline and the effort
+    from what was said, in English or Hinglish. Only what was actually said
+    -- no name, no date means none is filled in."""
+    t = " " + (text or "").lower() + " "
+
+    # who: the longest known name that was said (full name beats first name)
+    assignee = None
+    for name in sorted(known_names, key=len, reverse=True):
+        n = name.lower().strip()
+        if n and _has(t, re.escape(n)):
+            assignee = name
+            break
+    if not assignee:
+        for name in known_names:
+            first = name.lower().split()[0] if name.strip() else ""
+            if len(first) >= 3 and _has(t, re.escape(first)):
+                assignee = first                  # the caller sorts out who that is
+                break
+
+    # when: "in 2 hours" / "2 ghante mein" first, then a day and a time
+    due = None
+    rel = re.search(rf"(?:in|within)\s+{_N}\s*(hours?|hrs?|minutes?|mins?)(?!\w)"
+                    rf"|{_N}\s*(ghante|ghanta|घंटे|minute|minat|मिनट)\s*(?:mein|me|में)", t)
+    if rel:
+        n = _num(rel.group(1) or rel.group(3))
+        unit = rel.group(2) or rel.group(4)
+        due = now + (timedelta(minutes=n) if unit.startswith(("min", "मि")) else timedelta(hours=n))
+        t = t.replace(rel.group(0), " ")
+    else:
+        day = None
+        if _has(t, "day after tomorrow", "parso", "parson", "परसों"):
+            day = 2
+        elif _has(t, "tomorrow", "kal", "कल"):
+            day = 1
+        elif _has(t, "today", "aaj", "आज", "abhi"):
+            day = 0
+        else:
+            for i, names in enumerate(_WEEKDAYS):
+                if _has(t, *names):
+                    day = (i - now.weekday()) % 7 or 7
+                    break
+        hour = minute = None
+        tm = re.search(r"(?<!\d)(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?|baje|बजे|o.?clock)", t)
+        if tm:
+            hour, minute = int(tm.group(1)), int(tm.group(2) or 0)
+            ap = tm.group(3).replace(".", "")
+            if ap == "pm" and hour < 12:
+                hour += 12
+            elif ap == "am" and hour == 12:
+                hour = 0
+            elif ap not in ("am", "pm") and 1 <= hour <= 7 \
+                    and not _has(t, "subah", "morning", "सुबह"):
+                hour += 12                        # "5 baje" at work is 5 PM
+        else:
+            for words, h in _PARTS:
+                if _has(t, *words):
+                    hour, minute = h, 0
+                    break
+        if day is not None or hour is not None:
+            base = now + timedelta(days=day or 0)
+            if hour is None:
+                hour, minute = 18, 0              # a day with no time: end of that day
+            if 0 <= hour <= 23 and 0 <= (minute or 0) <= 59:
+                due = base.replace(hour=hour, minute=minute or 0, second=0, microsecond=0)
+                if day is None and due <= now:
+                    due += timedelta(days=1)      # "5 baje" said at 6 PM: tomorrow
+
+    # how long: "30 minutes" / "2 hours" / "1 ghanta" left over after the deadline
+    effort = None
+    ef = re.search(rf"{_N}\s*(hours?|hrs?|ghante|ghanta|घंटे|minutes?|mins?|minute|मिनट)(?!\w)", t)
+    if ef:
+        n = _num(ef.group(1))
+        effort = int(n * 60) if ef.group(2).startswith(("h", "g", "घ")) else int(n)
+        effort = effort if 0 < effort <= 60 * 24 * 30 else None
+
+    return {"assignee": assignee,
+            "due_at": due.replace(tzinfo=None).isoformat(timespec="minutes") if due else None,
+            "effort_minutes": effort,
+            "title": _speech_title(text, assignee)}
+
+
+_FILLER = (r"(?:\d{1,2}(?:[:.]\d{2})?\s*(?:a\.?m\.?|p\.?m\.?|baje|बजे|o.?clock)"
+           r"|(?:in|within)\s+\S+\s*(?:hours?|hrs?|minutes?|mins?)"
+           r"|\S+\s*(?:ghante|ghanta|घंटे|minute|minat|मिनट|minutes?|mins?|hours?|hrs?)"
+           r"(?:\s*(?:mein|me|में|ka kaam|ka|lagega|lagenge))?"
+           r"|day after tomorrow|tomorrow|today|parso|parson|kal|aaj|abhi|tak|by"
+           r"|subah|morning|dopahar|afternoon|shaam|sham|evening|raat|night|eod"
+           r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+           r"|somvar|mangalvar|budhvar|guruvar|shukravar|shanivar|ravivar"
+           r"|please|plz|karna hai|karni hai|karna|hai)")
+
+
+def _speech_title(text, assignee):
+    """The spoken sentence minus who / when / how long: what is left is the
+    work itself, e.g. "Rahul ko kal 5 baje tak quotation bhejna hai" ->
+    "Quotation bhejna"."""
+    t = " " + (text or "") + " "
+    if assignee:
+        t = re.sub(rf"(?i)(?<!\w)(?:ask\s+|tell\s+)?{re.escape(assignee)}\w*"
+                   rf"(?:\s+(?:ko|se|to|ne))?(?!\w)", " ", t)
+    t = re.sub(rf"(?i)(?<!\w){_FILLER}(?!\w)", " ", t)
+    words = t.split()
+    title = " ".join(words[:12])
+    return title[:1].upper() + title[1:] if len(words) >= 2 else ""
 
 
 def draft_task(prompt: str) -> dict:

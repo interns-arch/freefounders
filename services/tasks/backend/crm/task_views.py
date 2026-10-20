@@ -12,7 +12,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.access import is_admin, users_at_level, users_with
+from accounts.access import is_admin, users_with
 from config.throttles import AIThrottle
 from accounts.models import User, Role
 from accounts.permissions import HasCapability, has_capability
@@ -21,7 +21,7 @@ from notifications.service import notify
 from config import llm
 from config.images import compress_upload
 
-from .ai_tasks import (draft_from_speech, draft_task, proofread,
+from .ai_tasks import (draft_from_speech, proofread,
                        review_sentence, summarize_task)
 from .models import (
     ChangeRequestStatus, EventType, Holiday, LeadEvent, Task, TaskActivity,
@@ -31,8 +31,8 @@ from .models import (
     TaskStatus, TaskTemplate,
 )
 from .scoping import (
-    assign_refusal, assignable_users, assignment_level, can_assign_to, can_delete_task,
-    can_edit_task, delete_refusal, visible_leads, visible_tasks,
+    assign_refusal, assignable_users, can_assign_to, can_delete_task,
+    OWNER_ONLY, can_edit_task, delete_refusal, edits_need_giver, visible_leads, visible_tasks,
 )
 from .serializers import (
     HolidaySerializer, TaskActivitySerializer, TaskAttachmentSerializer,
@@ -153,15 +153,15 @@ def _approvers_for(req: TaskChangeRequest):
 
     An approver who would rather not decide can still Escalate to admin."""
     task = req.task
-    # Asking to delete work that belongs to an admin: only a Super Admin can
-    # carry that out, so send it straight there rather than to somebody who
-    # would have to refuse it.
-    if req.changes.get("cancel") and task.assigned_to \
-            and assignment_level(task.assigned_to) >= 3:
-        supers = list(User.objects.filter(
-            pk__in=users_with("tasks.delete_admin_work")).exclude(pk=req.requested_by_id))
-        if supers:
-            return supers
+    # Asking to delete a task: the person who GAVE it decides. If they have
+    # left (or are the one asking), it goes to the Owners.
+    if req.changes.get("cancel"):
+        giver = task.created_by
+        if giver and giver.is_active and giver.pk != req.requested_by_id:
+            return [giver]
+        owners = list(_owners().exclude(pk=req.requested_by_id))
+        if owners:
+            return owners
     if req.requested_by_id != task.created_by_id and task.created_by \
             and task.created_by.is_active:
         return [task.created_by]
@@ -265,10 +265,40 @@ def _change_request_wa(req: TaskChangeRequest, approver):
     ])
 
 
+def _owners():
+    """The company's Owners (PLAN.md §19.28: in Tasks, whoever holds tasks.delete_admin_work)."""
+    return User.objects.filter(pk__in=users_with("tasks.delete_admin_work").values("pk"))
+
+
+def _notify_owners_of_requested_delete(task, req, approver):
+    """A task was deleted because the person who received it asked and the
+    giver agreed: the Owners hear about every such delete."""
+    def who(u):
+        return (u.get_full_name() or u.username) if u else "-"
+    for owner in _owners().exclude(pk=approver.pk):
+        notify(owner, "task_deleted_on_request",
+               f"Task deleted on request - {task.code}: {task.title}"[:200],
+               NL_JOIN([
+                   f"Task: {task.code} - {task.title}",
+                   f"Given by: {who(task.created_by)}",
+                   f"Assigned to: {who(task.assigned_to)}",
+                   f"Delete asked by: {who(req.requested_by)}",
+                   f"Approved by: {who(approver)}",
+                   f"Reason: {req.reason[:300]}",
+                   "",
+                   "It is in Tasks -> Deleted and can be restored from there.",
+               ]),
+               link="/tasks?tab=deleted", want_whatsapp=False)
+
+
 def can_review_request(user, req: TaskChangeRequest) -> bool:
     """Derived from _approvers_for, so routing and permission never drift."""
+    from accounts.access import is_owner
     if req.requested_by_id == user.id:
         return False                       # never your own request
+    if req.changes.get("cancel"):
+        # deleting someone's task: the giver or an Owner, nobody else
+        return any(a.pk == user.pk for a in _approvers_for(req)) or is_owner(user)
     if req.escalated:                      # escalated: only admin decides
         return has_capability(user, "tasks.view_all")
     if any(a.pk == user.pk for a in _approvers_for(req)):
@@ -654,6 +684,12 @@ class TaskViewSet(viewsets.ModelViewSet):
                     "Tasks can't be edited directly — use “Request change” and the "
                     + ("task creator" if task.created_by_id != user.id else "admin")
                     + " will approve it.")
+        elif edits_need_giver(user, task) and {
+                k for k, v in data.items() if getattr(task, k) != v} - {"status"}:
+            giver = task.created_by
+            raise PermissionDenied(
+                f"This task was given to you by {giver.get_full_name() or giver.username} -- "
+                "use “Request change” and they will approve it.")
         else:
             new_assignee = data.get("assigned_to", task.assigned_to)
             if new_assignee and new_assignee != task.assigned_to and not can_assign_to(user, new_assignee):
@@ -985,15 +1021,6 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     # ---- E3: AI layer (Claude behind AI_ENABLED, rules otherwise) --------
     @action(detail=False, methods=["post"], throttle_classes=[AIThrottle])
-    def ai_draft(self, request):
-        """'Generate with AI Prompt': natural language -> title/description/
-        checklist draft. Never blocks — falls back to rules."""
-        prompt = str(request.data.get("prompt", "")).strip()
-        if not prompt:
-            raise ValidationError({"prompt": "Describe the task in your own words."})
-        return Response(draft_task(prompt))
-
-    @action(detail=False, methods=["post"], throttle_classes=[AIThrottle])
     def proofread(self, request):
         """Spelling and grammar pass over whatever a person typed. The browser
         underlines mistakes but only offers fixes on right-click, which nobody
@@ -1008,15 +1035,22 @@ class TaskViewSet(viewsets.ModelViewSet):
     # a voice note is short; anything longer is a meeting, not a task
     VOICE_MAX_BYTES = 10 * 1024 * 1024
 
-    @action(detail=False, methods=["post"], parser_classes=[MultiPartParser, FormParser], throttle_classes=[AIThrottle])
+    @action(detail=False, methods=["post"], parser_classes=[JSONParser, MultiPartParser, FormParser],
+            throttle_classes=[AIThrottle])
     def voice_draft(self, request):
-        """T-00136: speak a task, get the form filled in. Creates nothing."""
+        """Voice draft (replaced the AI draft, original app d0a1bdf): speak a task, get the form filled in.
+        Creates nothing.
+
+        Either `transcript` -- the browser or the phone app already turned the speech into words (free, works
+        with no AI key; who / by when / how long are then read by rules) -- or an `audio` clip for the server
+        to transcribe (needs the Gemini key)."""
+        said = str(request.data.get("transcript", "")).strip()[:4000]
         clip = request.FILES.get("audio")
-        if not clip:
+        if not said and not clip:
             raise ValidationError({"audio": "Record something first."})
-        if clip.size > self.VOICE_MAX_BYTES:
+        if not said and clip.size > self.VOICE_MAX_BYTES:
             raise ValidationError({"audio": "That recording is too long — keep it under a minute or two."})
-        if not llm.can_transcribe():
+        if not said and not llm.can_transcribe():
             raise ValidationError({"audio":
                 "Voice notes need the Gemini key. Type the task instead."})
 
@@ -1024,8 +1058,8 @@ class TaskViewSet(viewsets.ModelViewSet):
                       .order_by("first_name", "username")[:200])
         names = [(u.get_full_name() or u.username).strip() for u in people]
 
-        transcript = llm.transcribe(clip.read(), clip.content_type or "audio/webm",
-                                    hint=", ".join(names[:60]))
+        transcript = said or llm.transcribe(clip.read(), clip.content_type or "audio/webm",
+                                            hint=", ".join(names[:60]))
         if not transcript:
             raise ValidationError({"audio":
                 "Could not make out the recording — try again somewhere quieter, "
@@ -1639,6 +1673,62 @@ class TaskViewSet(viewsets.ModelViewSet):
         n = len(working)
         return {uid: {"attendance_rate": round(100 * v["attendance"] / n, 1) if n else None,
                       "leave_days": v["leave_days"], "working_days": n} for uid, v in out.items()}
+
+    LEADER_RECENT = 20          # requests listed under each person's row
+
+    @action(detail=False, methods=["get"],
+            permission_classes=[HasCapability.of("tasks.team_performance")])
+    def change_request_leaders(self, request):
+        """Who asks most often to move a task's due date/time over the range (original app 2bc1425), most
+        first, with how those requests ended and each person's latest ones. A request counts when it proposes
+        a new due date (whatever else it changes too), on the day it was raised. Read-only; the same audience
+        as team_report (Team performance)."""
+        now = timezone.now()
+        start, end = self._report_bounds(request.query_params, now)
+        users = {u.pk: u for u in User.objects.filter(is_active=True)}
+        crs = (TaskChangeRequest.objects.filter(requested_by_id__in=list(users))
+               .select_related("task").order_by("-created_at", "-id"))
+        if start:
+            crs = crs.filter(created_at__date__range=(start, end))
+
+        per = {}
+        for cr in crs:
+            if "due_at" not in (cr.changes or {}):
+                continue
+            who = users[cr.requested_by_id]
+            r = per.get(who.pk)
+            if r is None:
+                r = per[who.pk] = {
+                    "user": who.pk, "name": who.get_full_name() or who.username,
+                    "role": who.get_role_display(),
+                    "department": who.get_department_display(),
+                    "total": 0, "pending": 0, "approved": 0, "rejected": 0, "closed": 0,
+                    "tasks": set(), "last_at": cr.created_at, "requests": [],
+                }
+            r["total"] += 1
+            if cr.status in r:
+                r[cr.status] += 1
+            r["tasks"].add(cr.task_id)
+            if len(r["requests"]) < self.LEADER_RECENT:
+                r["requests"].append({
+                    "id": cr.id, "task": cr.task_id, "task_code": cr.task.code,
+                    "task_title": cr.task.title,
+                    "changes": cr.describe(), "reason": cr.reason,
+                    "status": cr.status, "created_at": cr.created_at,
+                })
+
+        rows = sorted(per.values(), key=lambda r: (-r["total"], r["name"].lower()))
+        for r in rows:
+            r["tasks"] = len(r["tasks"])
+            decided = r["approved"] + r["rejected"]
+            r["approval_rate"] = round(100 * r["approved"] / decided, 1) if decided else None
+        return Response({
+            "range": {"start": start, "end": end},
+            "total": sum(r["total"] for r in rows),
+            "people": len(rows),
+            "pending": sum(r["pending"] for r in rows),
+            "rows": rows,
+        })
 
     @action(detail=False, methods=["get"],
             permission_classes=[HasCapability.of("tasks.team_performance")])
@@ -2261,11 +2351,11 @@ class TaskViewSet(viewsets.ModelViewSet):
         if has_capability(request.user, "tasks.view_all"):
             # An admin normally edits directly, so a request would be a
             # pointless detour -- EXCEPT where the rules put something out of
-            # their reach. Deleting work assigned to an admin is the one such
-            # case today: they cannot do it, so they must be able to ask.
+            # their reach: a delete they may not do, and any change to a task
+            # someone else gave them (changed through the giver).
             wants_cancel = bool((request.data or {}).get("changes", {}).get("cancel"))
             blocked = wants_cancel and not can_delete_task(request.user, task)
-            if not blocked:
+            if not blocked and not edits_need_giver(request.user, task):
                 raise ValidationError({
                     "detail": "You're an admin — edit the task directly, no request needed."})
         if request.user.id not in (task.assigned_to_id, task.created_by_id):
@@ -2274,6 +2364,14 @@ class TaskViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "This task is deleted."})
         ser = TaskChangeRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
+        # asking to hand the task to someone: the same rule as assigning it
+        # (the Owner takes work only from an Owner)
+        wanted = (ser.validated_data.get("changes") or {}).get("assigned_to")
+        if wanted:
+            target = User.objects.filter(pk=wanted).first()
+            from accounts.access import is_owner
+            if target and target.pk != request.user.pk and is_owner(target) and not is_owner(request.user):
+                raise ValidationError({"detail": OWNER_ONLY})
         req = ser.save(task=task, requested_by=request.user)
         approver_side = "the task creator" if request.user.id != task.created_by_id else "an admin"
         # the activity feed gets the same friendly labels, not raw field names
@@ -2324,6 +2422,31 @@ class TaskViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def files(self, request, pk=None):
         task = self.get_object()
+        return Response(TaskAttachmentSerializer(
+            task.attachments.select_related("uploaded_by"), many=True).data)
+
+    @action(detail=True, methods=["post"])
+    def remove_file(self, request, pk=None):
+        """Take a wrong or out-of-date file off a task (original app 748b527). Whoever uploaded it, the person
+        who gave the task, or an admin. Once the task is done its files are the record of the work, so only
+        the giver or an admin may remove them then. Logged in the task feed."""
+        task = self.get_object()
+        att = task.attachments.filter(pk=request.data.get("id")).first()
+        if not att:
+            raise ValidationError({"detail": "That file is not on this task."})
+        user = request.user
+        giver_or_admin = task.created_by_id == user.pk or has_capability(user, "tasks.view_all")
+        uploader = att.uploaded_by_id == user.pk and task.status != TaskStatus.DONE
+        if not (giver_or_admin or uploader):
+            raise PermissionDenied(
+                "Only the person who uploaded this file, the person who gave the task, or an admin can remove it"
+                + (" -- and once a task is done, only the giver or an admin."
+                   if att.uploaded_by_id == user.pk else "."))
+        name = att.filename
+        if att.file:
+            att.file.delete(save=False)
+        att.delete()
+        act(task, user, f"Removed file: {name[:120]}")
         return Response(TaskAttachmentSerializer(
             task.attachments.select_related("uploaded_by"), many=True).data)
 
@@ -2504,6 +2627,9 @@ class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
         c = TaskCompletion.objects.filter(pk=pk).select_related("task", "submitted_by").first()
         if not c:
             raise NotFound("That review no longer exists.")
+        if c.submitted_by_id == request.user.id:
+            raise PermissionDenied("You cannot accept or send back your own work -- "
+                                   "it waits for the person who gave you the task.")
         if c.approver_id != request.user.id and not has_capability(request.user, "tasks.view_all"):
             raise PermissionDenied("This is not yours to decide.")
         if c.status != CompletionReviewStatus.PENDING:
@@ -2582,6 +2708,7 @@ class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
         with transaction.atomic():
             rows = (TaskCompletion.objects
                     .filter(pk__in=ids, approver=user, status=CompletionReviewStatus.PENDING)
+                    .exclude(submitted_by=user)          # nobody accepts their own work
                     .select_related("task").order_by("created_at"))
             for c in rows:
                 # conditional: if anything decided it a moment ago, leave it be
@@ -2627,13 +2754,13 @@ class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
             # my own report asking to change a task they created themselves
             from_my_report = Q(requested_by__reporting_manager=user) & creator_raised
             if has_capability(user, "tasks.delete_admin_work"):
-                # a super admin is the only one who can carry out a cancel on
-                # work assigned to an admin, so those land here whoever asked
-
-                cancels_on_admin_work = (Q(changes__cancel=True)
-                                         & Q(task__assigned_to__in=users_at_level(3)))
+                # the Owner decides a delete request only when the giver has
+                # left or is the one asking (otherwise the giver decides)
+                giver_gone = (Q(task__created_by__isnull=True) | Q(task__created_by__is_active=False)
+                              | creator_raised)
+                cancels_for_owner = Q(changes__cancel=True) & giver_gone
                 qs = qs.filter(i_gave_it | from_my_report | Q(escalated=True)
-                               | cancels_on_admin_work)
+                               | cancels_for_owner)
             elif has_capability(user, "tasks.view_all"):
                 # admins are the LAST resort, not the default inbox: only
                 # escalations and people with no manager on file land here
@@ -2641,6 +2768,9 @@ class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
                               | Q(requested_by__reporting_manager__is_active=False))
                 qs = qs.filter(i_gave_it | from_my_report | Q(escalated=True)
                                | (creator_raised & no_manager))
+                # a delete request is the giver's (or an Owner's) to decide, never another admin's
+                qs = qs.exclude(pk__in=TaskChangeRequest.objects.filter(changes__cancel=True)
+                                .exclude(task__created_by=user).values("pk"))
             else:
                 qs = qs.filter(i_gave_it | from_my_report).filter(escalated=False)
             qs = qs.exclude(requested_by=user).filter(status=ChangeRequestStatus.PENDING)
@@ -2706,6 +2836,8 @@ class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
                     applied = self._apply(task, req.changes, request.user)
                 except (ValueError, TypeError):
                     raise ValidationError({"detail": "This change cannot be applied (a value is not valid)."})
+                if req.changes.get("cancel"):
+                    _notify_owners_of_requested_delete(task, req, request.user)
                 act(task, request.user,
                     f"Change request approved ({', '.join(applied)}) — requested by "
                     f"{req.requested_by.get_full_name() or req.requested_by.username}")

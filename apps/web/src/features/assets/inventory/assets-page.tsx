@@ -26,6 +26,7 @@ import { useAssetList, useAssetType, useAssetTypes, useCategories, usePrefetchAs
 import type { AssetListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate, formatNumber, relativeTime } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { BulkDialog, type BulkKind } from './bulk-dialog';
 import { AttributeFilters } from './attribute-filters';
 
@@ -210,8 +211,8 @@ export default function AssetsPage() {
               role="tab"
               aria-selected={active}
               className={cn(
-                'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition max-sm:min-h-10',
-                active ? 'border-primary/40 bg-card text-primary shadow-xs' : 'border-transparent text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-xs',
+                chipClass,
+                active ? chipActiveClass : chipIdleClass,
               )}
             >
               {s === 'ALL' ? 'All' : ASSET_STATUS_LABELS[s]}
@@ -286,12 +287,12 @@ export default function AssetsPage() {
                 key={af.key}
                 type="button"
                 onClick={() => set({ [af.key]: null, ...(af.key === 'holderType' ? { holderId: null } : {}) })}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-primary/25 bg-primary/8 px-2 py-0.5 text-xs text-primary transition hover:border-destructive/40 hover:bg-destructive/8 hover:text-destructive"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-md border max-sm:min-h-[2.5rem] border-primary/25 bg-primary/8 px-2 py-0.5 text-xs text-primary transition hover:border-destructive/40 hover:bg-destructive/8 hover:text-destructive"
               >
                 {af.label} <X className="size-3" />
               </button>
             ))}
-            <button type="button" className="cursor-pointer text-xs text-muted-foreground hover:text-foreground" onClick={() => clear(['status', 'search'])}>
+            <button type="button" className="cursor-pointer text-xs max-sm:min-h-[2.5rem] max-sm:px-2 text-muted-foreground hover:text-foreground" onClick={() => clear(['status', 'search'])}>
               Clear all
             </button>
           </div>

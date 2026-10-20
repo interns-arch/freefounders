@@ -110,7 +110,7 @@ export function HomePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="min-w-0">
-        <h1 className="text-2xl font-extrabold tracking-tight sm:text-[28px]">
+        <h1 className="text-[26px] leading-tight font-bold tracking-tight sm:text-[28px]">
           {greeting()}, {first}
         </h1>
         <p className="mt-0.5 text-sm text-muted-foreground">

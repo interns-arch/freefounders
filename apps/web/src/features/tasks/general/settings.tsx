@@ -16,10 +16,12 @@ import {
   useRemoveTaskCategory,
   useSaveAssignmentRule,
   useSetNotificationRule,
+  useSetWhatsappHours,
   useSetTaskSetting,
   useTaskDepartments,
   useTaskSettings,
   useTeamPeople,
+  useWhatsappHours,
 } from '@freefounders/core/tasks';
 import { ArrowDown, ArrowUp, ExternalLink, X } from '@/components/icons';
 import { useState } from 'react';
@@ -46,6 +48,7 @@ export function TaskSettingsPage() {
       {can('settings.manage') && <Departments />}
       {can('tasks.assign') && <Categories onError={setErr} />}
       {can('tasks.settings') && <NotificationRules onError={setErr} />}
+      {can('tasks.settings') && <WhatsappHours onError={setErr} />}
       {leads && <AssignmentRules onError={setErr} />}
     </div>
   );
@@ -274,6 +277,56 @@ function NotificationRules({ onError }: { onError: (m: string) => void }) {
         )}
       </Panel>
     </section>
+  );
+}
+
+const HOURS = Array.from({ length: 25 }, (_, h) => h);
+const hourLabel = (h: number) => (h === 0 ? '12 AM (midnight)' : h === 24 ? '12 AM (end of day)' : h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM`);
+
+/**
+ * WhatsApp only inside the company's hours (original app d40034c; default 10 AM – 7 PM). Outside them the in-app note and
+ * email still go at once; the WhatsApp waits for the opening, and the repeating overdue reminders are skipped.
+ */
+function WhatsappHours({ onError }: { onError: (m: string) => void }) {
+  const q = useWhatsappHours();
+  const save = useSetWhatsappHours();
+  const [draft, setDraft] = useState<{ start: number; end: number } | null>(null);
+  const v = draft ?? q.data;
+  const changed = !!draft && !!q.data && (draft.start !== q.data.start || draft.end !== q.data.end);
+  const bad = !!v && v.start >= v.end;
+  return (
+    <Panel title="WhatsApp hours" description="WhatsApp messages go out only between these times. Anything outside them is held and sent when they open; in-app and email are never held.">
+      {q.error && <ErrorNote>{errorMessage(q.error)}</ErrorNote>}
+      {!v ? (
+        <Skeleton className="h-10" />
+      ) : (
+        <div className="flex flex-wrap items-end gap-3">
+          {(['start', 'end'] as const).map((k) => (
+            <div key={k} className="space-y-1">
+              <Label htmlFor={`wa-hours-${k}`}>{k === 'start' ? 'From' : 'Until'}</Label>
+              <NativeSelect id={`wa-hours-${k}`} className="w-auto min-w-40" value={v[k]} onChange={(e) => setDraft({ ...v, [k]: Number(e.target.value) })}>
+                {HOURS.filter((h) => (k === 'start' ? h < 24 : h > 0)).map((h) => (
+                  <option key={h} value={h}>
+                    {hourLabel(h)}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          ))}
+          <Button
+            disabled={!changed || bad}
+            loading={save.isPending}
+            onClick={() => {
+              onError('');
+              if (v) save.mutate(v, { onSuccess: () => setDraft(null), onError: (e) => onError(errorMessage(e)) });
+            }}
+          >
+            Save hours
+          </Button>
+          {bad && <span className="text-sm text-destructive">“From” must be before “Until”.</span>}
+        </div>
+      )}
+    </Panel>
   );
 }
 

@@ -14,6 +14,10 @@ class Notification(models.Model):
     body = models.TextField(blank=True, default="")
     link = models.CharField(max_length=200, blank=True, default="")
     channels = models.JSONField(default=list, blank=True)
+    # A WhatsApp held back because it came up outside the company's sending hours
+    # (WHATSAPP_HOURS, default 10 AM - 7 PM): {"template": name|None, "params": [...], "text": str}.
+    # Sent at the next opening, then cleared.
+    wa_deferred = models.JSONField(null=True, blank=True)
     read_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

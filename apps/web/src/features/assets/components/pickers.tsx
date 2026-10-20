@@ -101,7 +101,7 @@ export function Combobox({
           type="button"
           aria-invalid={invalid || undefined}
           className={cn(
-            'flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-input bg-card px-3 text-left text-sm shadow-xs outline-none transition max-sm:h-11 max-sm:text-base focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive',
+            'flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-input bg-card px-3 text-left text-sm shadow-xs outline-none transition max-sm:h-[2.75rem] max-sm:text-base focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive',
             className,
           )}
         >
@@ -112,7 +112,7 @@ export function Combobox({
               role="button"
               tabIndex={-1}
               aria-label="Clear"
-              className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground max-sm:-my-2 max-sm:p-2.5"
               onClick={(e) => {
                 e.stopPropagation();
                 onChange(null);

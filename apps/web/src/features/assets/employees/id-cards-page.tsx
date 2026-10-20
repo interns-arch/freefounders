@@ -1,7 +1,7 @@
 import { ArrowLeft, Printer } from '@/components/icons';
 import { Link, useSearchParams } from 'react-router';
 import { LocalQrWarning, QRCode, useQrLinks } from '@/components/common/codes';
-import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { EmptyState, ErrorState, PageHeader, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { useEmployeesByIds } from '@freefounders/core/assets';
 import { printPage } from '@/lib/native-bridge';
@@ -32,8 +32,8 @@ export default function IdCardsPage() {
   return (
     <div className="print-sheet">
       <div className="no-print">
-        <Link to="/assets/employees" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-3.5" /> Employees
+        <Link to="/assets/employees" className={`mb-2 ${BACK_LINK}`}>
+          <ArrowLeft /> Employees
         </Link>
         <PageHeader
           title="ID cards"

@@ -21,7 +21,7 @@ const TYPE_DEFAULTS: Record<string, Partial<React.ComponentProps<'input'>>> = {
 
 export function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
   const defaults = type ? TYPE_DEFAULTS[type] : undefined;
-  return <input type={type} data-slot="input" className={cn(fieldBase, 'h-9 py-1 file:border-0 file:bg-transparent file:text-sm max-sm:h-11', className)} {...defaults} {...props} />;
+  return <input type={type} data-slot="input" className={cn(fieldBase, 'h-9 py-1 file:border-0 file:bg-transparent file:text-sm max-sm:h-[2.75rem]', className)} {...defaults} {...props} />;
 }
 
 export function Textarea({ className, ...props }: React.ComponentProps<'textarea'>) {
@@ -36,7 +36,7 @@ export function NativeSelect({ className, children, ...props }: React.ComponentP
       className={cn(
         fieldBase,
         // The chevron is drawn in index.css (select[data-slot='select']) in the theme's muted colour, so it follows dark mode.
-        'h-9 cursor-pointer appearance-none pr-8 max-sm:h-11',
+        'h-9 cursor-pointer appearance-none pr-8 max-sm:h-[2.75rem]',
         className,
       )}
       {...props}

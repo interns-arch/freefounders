@@ -2,7 +2,7 @@ import { ArrowLeft, Printer } from '@/components/icons';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Barcode, LocalQrWarning, QRCode, useQrLinks } from '@/components/common/codes';
-import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { EmptyState, ErrorState, PageHeader, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
 import { useAssetsByIds } from '@freefounders/core/assets';
@@ -25,8 +25,8 @@ export default function LabelsPage() {
   return (
     <div className="print-sheet">
       <div className="no-print">
-        <Link to="/assets/assets" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-3.5" /> Assets
+        <Link to="/assets/assets" className={`mb-2 ${BACK_LINK}`}>
+          <ArrowLeft /> Assets
         </Link>
         <PageHeader
           title="Asset labels"

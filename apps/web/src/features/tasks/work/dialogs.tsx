@@ -28,7 +28,8 @@ import { FilePick, PickedFiles, ProofreadText, addFiles, fmtDT, fmtEffort, nowFo
 import { EffortInput, type EffortUnit } from './effort-input';
 
 /** The task fields every dialog needs (a list row or the full detail). */
-type TaskLike = Pick<WorkTask, 'id' | 'code' | 'title' | 'effort_minutes' | 'actual_minutes' | 'progress_percent' | 'frequency' | 'created_by_detail'>;
+type TaskLike = Pick<WorkTask, 'id' | 'code' | 'title' | 'effort_minutes' | 'actual_minutes' | 'progress_percent' | 'frequency' | 'created_by_detail'> &
+  Partial<Pick<WorkTask, 'can_delete' | 'edits_need_giver'>>;
 
 function FormDialog({
   open,
@@ -242,16 +243,21 @@ function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onC
   const access = useAccess();
   const isAdmin = access.tasks.can('tasks.view_all');
   const me = access.tasks.me;
-  // An admin edit gives the task directly (only people they may give tasks to); a request only proposes a new
-  // person, and whoever approves it needs "Give tasks to others", so anyone can be proposed.
+  const ids = { due: useId(), prio: useId(), effort: useId(), assignee: useId(), title: useId(), stop: useId(), cancel: useId() };
+  const [f, setF] = useState({ due_at: '', priority: '', effort: '', title: '', stop_recurring: false, cancel: false, assigned_to: '', reason: '' });
+  // An admin edits directly, except a task someone else GAVE them (original app 3ff22ba): any change to it is a request
+  // to the giver, as for everyone; and deleting one they may not delete is asked the same way (6ec1bc6).
+  const askGiver = isAdmin && (!!task.edits_need_giver || (f.cancel && task.can_delete === false));
+  const direct = isAdmin && !askGiver;
+  const giverName = task.created_by_detail?.name || 'the person who gave it';
+  // A direct edit gives the task (only people they may give tasks to); a request only proposes a new person, and
+  // whoever approves it needs "Give tasks to others", so anyone can be proposed.
   const assignees = useTaskAssignees().data;
   const everyone = useTeamPeople().data;
-  const team = (isAdmin ? assignees : everyone) ?? [];
+  const team = (direct ? assignees : everyone) ?? [];
   const request = useRequestTaskChange();
   const edit = useEditTask();
   const del = useDeleteTask();
-  const ids = { due: useId(), prio: useId(), effort: useId(), assignee: useId(), title: useId(), stop: useId(), cancel: useId() };
-  const [f, setF] = useState({ due_at: '', priority: '', effort: '', title: '', stop_recurring: false, cancel: false, assigned_to: '', reason: '' });
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
   const approver = task.created_by_detail?.id === me?.id ? 'an admin' : 'the task creator';
   const past = !!f.due_at && new Date(f.due_at) <= new Date();
@@ -276,11 +282,11 @@ function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onC
       toast.success(msg);
       onClose();
     };
-    if (isAdmin) {
+    if (direct) {
       if (changes.cancel) del.mutate(task.id, { onSuccess: () => (toast.success(`${task.code} moved to Deleted`), onDeleted?.(), onClose()), onError: fail });
       else edit.mutate({ id: task.id, ...changes }, { onSuccess: done('Task updated'), onError: fail });
     } else {
-      request.mutate({ id: task.id, changes, reason: f.reason.trim() }, { onSuccess: done('Change request sent'), onError: fail });
+      request.mutate({ id: task.id, changes, reason: f.reason.trim() }, { onSuccess: done(changes.cancel ? 'Delete request sent' : 'Change request sent'), onError: fail });
     }
   };
 
@@ -289,11 +295,16 @@ function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onC
       open
       onClose={onClose}
       wide
-      title={isAdmin ? `Edit task — ${task.code}` : `Request a change — ${task.code}`}
+      title={direct ? `Edit task — ${task.code}` : `Request a change — ${task.code}`}
       description={
         <>
           {task.title} ·{' '}
-          {isAdmin ? (
+          {askGiver ? (
+            <>
+              this task was given to you by <strong>{giverName}</strong> —{' '}
+              {f.cancel ? 'deleting it needs their approval. Once they agree it moves to Deleted and the Owner is told.' : 'changes (like a new due date) are sent to them to approve.'}
+            </>
+          ) : isAdmin ? (
             'admin edit: applies immediately and is logged in the task activity.'
           ) : (
             <>
@@ -302,9 +313,9 @@ function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onC
           )}
         </>
       }
-      submitLabel={isAdmin ? 'Apply changes' : 'Send request'}
+      submitLabel={direct ? 'Apply changes' : askGiver && f.cancel ? 'Send delete request' : 'Send request'}
       submitting={busy}
-      disabled={!isAdmin && !f.reason.trim()}
+      disabled={!direct && !f.reason.trim()}
       onSubmit={submit}
     >
       <div className="grid gap-4 sm:grid-cols-2">
@@ -348,7 +359,7 @@ function RequestChangeDialog({ task, onClose, onDeleted }: { task: TaskLike; onC
           <Label htmlFor={ids.cancel}>Cancel this task entirely</Label>
         </div>
       </div>
-      {!isAdmin && <ProofreadText label="Reason" required value={f.reason} onChange={(v) => set('reason', v)} rows={2} placeholder="e.g. Deadline was set to midnight by mistake" />}
+      {!direct && <ProofreadText label="Reason" required value={f.reason} onChange={(v) => set('reason', v)} rows={2} placeholder="e.g. Deadline was set to midnight by mistake" />}
     </FormDialog>
   );
 }

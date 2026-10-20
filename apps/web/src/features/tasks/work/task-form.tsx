@@ -9,7 +9,6 @@ import {
   type TaskTemplate,
   type VoiceDraft,
   useActiveGroups,
-  useAiTaskDraft,
   useCreateTaskCategory,
   useCreateTasks,
   useTaskAssignees,
@@ -17,7 +16,7 @@ import {
   useTaskFormCategories,
   useWorkloads,
 } from '@freefounders/core/tasks';
-import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Pencil, Plus, Sparkles, X } from '@/components/icons';
+import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Pencil, Plus, X } from '@/components/icons';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { Field, FormErrorSummary, FormSection } from '@/components/common/form';
@@ -46,9 +45,8 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
   const groups = (useActiveGroups().data ?? []) as TaskGroupOption[];
   const departments = useTaskDepartments().data ?? [];
   const create = useCreateTasks();
-  const ai = useAiTaskDraft();
   const addCategory = useCreateTaskCategory();
-  const ids = { title: useId(), assign: useId(), due: useId(), category: useId(), dept: useId(), freq: useId(), until: useId(), prio: useId(), group: useId(), loop: useId(), ai: useId(), cat: useId() };
+  const ids = { title: useId(), assign: useId(), due: useId(), category: useId(), dept: useId(), freq: useId(), until: useId(), prio: useId(), group: useId(), loop: useId(), cat: useId() };
 
   const [f, setF] = useState({
     title: template?.title ?? '',
@@ -72,7 +70,6 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
   const [editIdx, setEditIdx] = useState(-1);
   const [editDraft, setEditDraft] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [aiPrompt, setAiPrompt] = useState<string | null>(null);
   const [voice, setVoice] = useState<VoiceDraft | null>(null);
   const [catBox, setCatBox] = useState<string | null>(null);
   const [catNote, setCatNote] = useState('');
@@ -111,20 +108,6 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
     if (d.effort_minutes) setUnit('minutes');
     if (d.checklist?.length) setSteps((prev) => (prev.length ? prev : d.checklist!.map((text) => ({ text, due_at: '' }))));
     if (d.assigned_to) setAssignees([d.assigned_to]);
-  };
-
-  const runAi = () => {
-    if (!aiPrompt?.trim()) return;
-    setErr('');
-    ai.mutate(aiPrompt, {
-      onSuccess: (d) => {
-        setF((p) => ({ ...p, title: d.title, description: d.description }));
-        setSteps((prev) => [...prev, ...(d.checklist ?? []).map((text) => ({ text, due_at: '' }))].slice(0, 30));
-        if (d.checklist?.length) setStepsOpen(true);
-        setAiPrompt(null);
-      },
-      onError: (e) => setErr(errorMessage(e)),
-    });
   };
 
   const submitCategory = () => {
@@ -223,9 +206,6 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
             <SheetDescription>Each person you pick gets their own copy of the task.</SheetDescription>
             <div className="mt-2 flex flex-wrap items-start gap-2">
               <VoiceNote onDraft={applyVoice} disabled={create.isPending} />
-              <Button type="button" variant="outline" size="sm" aria-expanded={aiPrompt !== null} title="Describe the task in your words — AI drafts title, description & steps" onClick={() => setAiPrompt((p) => (p === null ? '' : null))}>
-                <Sparkles /> AI draft
-              </Button>
             </div>
           </SheetHeader>
           <SheetBody className="space-y-5">
@@ -248,27 +228,6 @@ export function TaskFormSheet({ template, onClose }: { template?: TaskTemplate |
                 <p className="text-xs text-muted-foreground">Check every field before creating — this was filled in from speech.</p>
                 <Button type="button" variant="link" size="xs" className="px-0" onClick={() => setVoice(null)}>
                   Hide
-                </Button>
-              </div>
-            )}
-            {aiPrompt !== null && (
-              <div className="flex gap-2 rounded-xl border border-primary/30 bg-primary/5 p-2">
-                <Input
-                  id={ids.ai}
-                  aria-label="Describe the task for the AI draft"
-                  autoFocus
-                  value={aiPrompt}
-                  placeholder="e.g. Ravi ko brake pads ke baare mein call karo, phir quotation bhejo"
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      runAi();
-                    }
-                  }}
-                />
-                <Button type="button" size="sm" className="h-9" loading={ai.isPending} onClick={runAi}>
-                  Generate
                 </Button>
               </div>
             )}

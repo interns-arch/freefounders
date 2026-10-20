@@ -235,7 +235,8 @@ All under `/api/`, JWT `Authorization: Bearer <token>` unless noted.
 | `tasks/{id}/estimate/` | POST | assignee, once | counter-estimate in minutes |
 | `tasks/{id}/progress/` | POST | assignee | repeatable status update: % done, effort spent so far, comment — logs to activity, notifies creator |
 | `tasks/{id}/activity\|comment\|add_check\|check/{item}/` | GET/POST | visible · assignee/creator/admin for checklist | per-task feed, comments (notify assignee+creator), checklist add/toggle/delete |
-| `tasks/ai_draft/` · `tasks/{id}/summarize/` | POST | any | E3 AI layer (Claude behind AI_ENABLED, rule-based fallback): prompt→title/description/checklist · per-task summary |
+| `tasks/voice_draft/` · `tasks/{id}/summarize/` | POST | any | Voice draft ({transcript} from the browser/phone, or an audio clip with the Gemini key) → the task form's values (`ai_draft` removed 2026-10-20, PLAN.md §19.30) · per-task summary (AI behind AI_ENABLED, rule-based fallback) |
+| `tasks/{id}/remove_file/` · `tasks/change_request_leaders/` · `whatsapp-hours/` | POST · GET · GET/PUT | uploader (open task) / giver / admin · Team performance · Task settings | take a file off a task · who asks most to move a due date · the company's WhatsApp sending hours (PLAN.md §19.30) |
 | `tasks/{id}/complete/` | POST | assignee | complete: description + actual effort spent MANDATORY, proof file per settings |
 | `tasks/time_report/?range=` | GET | self · dept (manager) · all (admin) | Time Earned (assigned effort) vs Time Spent (actual) per person |
 | `tasks/employees_report/?range=&grain=` | GET | self · dept (manager) · all (admin) | per-person counts+%, transparent score (60/40 formula), multitasker index; `grain=daily` = completion-day crediting; `range=custom&start&end` |

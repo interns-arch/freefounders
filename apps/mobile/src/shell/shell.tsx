@@ -3,6 +3,7 @@
  * The WebView shows the web app at the server address; the shell adds what a WebView cannot do on its own:
  *   - GPS and the front camera for the punch (bridge requests `location` / `photo`, see src/lib/protocol.ts),
  *   - saving files (`download` → share sheet) and printing (`print` → Android's print dialog),
+ *   - the voice draft (`voice` → the phone's speech recogniser after Android's microphone pop-up, `voice-stop`),
  *   - Android back button, pull-to-refresh, links to other apps, splash + "Can't reach FreeFounders" screen.
  * Sign-in is the web's own: its refresh cookie is kept by the WebView's cookie store between launches.
  */
@@ -18,6 +19,7 @@ import { type CameraState, injectedScript } from '@/lib/injected';
 import { currentPosition } from '@/lib/location';
 import { printHtml, saveAndShare } from '@/lib/native-actions';
 import { askPermissionsAtStart } from '@/lib/permissions';
+import { listen, stopListening } from '@/lib/voice';
 import { usePalette } from '@/lib/palette';
 import { type AppRequest, fromServer, linkTarget, originOf, parseMessage, replyError, replyOk } from '@/lib/protocol';
 import { loadServerUrl, saveServerUrl } from '@/lib/server-url';
@@ -121,6 +123,26 @@ export function Shell() {
             return;
           case 'print':
             send(replyOk(r.id, await printHtml(r.html)));
+            return;
+          case 'voice': {
+            const heard = await listen(r.lang);
+            send(
+              heard.ok
+                ? replyOk(r.id, { text: heard.text })
+                : replyError(
+                    r.id,
+                    heard.message,
+                    heard.code === 'permission'
+                      ? { code: 'permission', permission: 'microphone', settings: !!heard.settings }
+                      : heard.code === 'unavailable'
+                        ? { code: 'unavailable' }
+                        : undefined,
+                  ),
+            );
+            return;
+          }
+          case 'voice-stop':
+            send(replyOk(r.id, { stopped: stopListening() }));
             return;
         }
       } catch (e) {

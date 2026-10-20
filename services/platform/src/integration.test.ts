@@ -215,6 +215,13 @@ describe('public endpoints', () => {
     assert.equal(jwks.body.keys[0].d, undefined, 'private part never published');
   });
 
+  test('app-version: what the phone app update prompt needs, without signing in', async () => {
+    const res = await call('GET', '/app-version');
+    assert.equal(res.status, 200);
+    assert.match(String(res.body.minVersion), /^\d+\.\d+\.\d+$/);
+    assert.ok(String(res.body.apkUrl).endsWith('.apk'));
+  });
+
   test('mutating requests need the CSRF header', async () => {
     const res = await call('POST', '/auth/login', { body: { login: 'olivia', password: PASSWORD }, csrf: false });
     assert.equal(res.status, 403);

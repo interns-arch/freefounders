@@ -51,7 +51,7 @@ export function TemplatesTab({ onUse }: { onUse: (t: TaskTemplate) => void }) {
   return (
     <div className="max-w-4xl space-y-4">
       {canManage && (
-        <Button onClick={() => setAdding(true)}>
+        <Button variant="cta" onClick={() => setAdding(true)}>
           <Plus /> New template
         </Button>
       )}

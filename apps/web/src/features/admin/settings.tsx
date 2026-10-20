@@ -156,7 +156,7 @@ function ProfileCard({ company }: { company: CompanySettings }) {
                 <input
                   type="color"
                   aria-labelledby="brand-colour-label"
-                  className="h-9 w-12 shrink-0 cursor-pointer rounded-sm border border-input bg-card p-1"
+                  className="h-9 w-12 shrink-0 cursor-pointer rounded-sm border border-input bg-card p-1 max-sm:h-[2.75rem]"
                   value={colour || DEFAULT_BRAND_COLOUR}
                   onChange={(e) => setColour(e.target.value)}
                 />

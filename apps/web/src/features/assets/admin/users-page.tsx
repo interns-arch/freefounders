@@ -51,7 +51,7 @@ export default function UsersPage() {
         title="Users"
         description="Who can sign in, and with which role."
         actions={
-          <Button size="sm" onClick={() => setEditing('new')}>
+          <Button variant="cta" size="sm" onClick={() => setEditing('new')}>
             <Plus /> Add user
           </Button>
         }

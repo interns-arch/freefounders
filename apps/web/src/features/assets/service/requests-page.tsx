@@ -27,6 +27,7 @@ import { PRIORITY_TONE, REQUEST_TONE } from '@/lib/status';
 import type { AssetRequest } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, relativeTime } from '@/lib/utils';
+import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 
 const TABS = [
   { value: 'PENDING,APPROVED', label: 'Open' },
@@ -43,7 +44,7 @@ export default function RequestsPage() {
   const joiners = can('asset:assign') && params.get('view') === 'joiners';
   const waiting = useOnboardingWaitingCount(can('asset:assign'));
   const switcher = can('asset:assign') && (
-    <div className="mb-4 flex gap-0.5 rounded-lg bg-muted p-0.5 sm:w-fit">
+    <div className="mb-4 flex gap-0.5 rounded-md border bg-muted p-0.5 sm:w-fit">
       {[
         { to: '/assets/requests', label: 'Asset requests', active: !joiners, count: 0 },
         { to: '/assets/requests?view=joiners', label: 'New joiners', active: joiners, count: waiting.data?.total ?? 0 },
@@ -51,7 +52,8 @@ export default function RequestsPage() {
         <Link
           key={v.to}
           to={v.to}
-          className={cn('flex-1 rounded-md px-3 py-1.5 text-center text-[13px] font-medium transition sm:flex-none', v.active ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+          aria-current={v.active ? 'page' : undefined}
+          className={cn('inline-flex h-8 flex-1 items-center justify-center rounded-sm px-3 text-[13px] font-semibold whitespace-nowrap transition-colors max-sm:h-[2.375rem] sm:flex-none', v.active ? 'bg-card text-primary shadow-card ring-1 ring-border' : 'text-muted-foreground hover:text-foreground')}
         >
           {v.label}
           {v.count > 0 && <span className="ml-1.5 rounded-sm bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">{v.count}</span>}
@@ -220,8 +222,8 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
             type="button"
             onClick={() => set({ status: t.value || 'ALL' })}
             className={cn(
-              'shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] max-sm:min-h-10 font-medium transition',
-              (f.status === 'ALL' ? '' : f.status) === t.value ? 'border-primary/30 bg-primary/8 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+              chipClass,
+              (f.status === 'ALL' ? '' : f.status) === t.value ? chipActiveClass : chipIdleClass,
             )}
           >
             {t.label}

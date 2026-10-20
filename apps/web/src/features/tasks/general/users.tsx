@@ -397,7 +397,7 @@ function EditUser({ user, onClose }: { user: ManagedUser; onClose: () => void })
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="u-phone">WhatsApp / Mobile</Label>
-          <Input id="u-phone" value={f.whatsapp_phone} onChange={set('whatsapp_phone')} placeholder="9876543210" />
+          <Input id="u-phone" type="tel" value={f.whatsapp_phone} onChange={set('whatsapp_phone')} placeholder="9876543210" />
           <p className="text-xs text-muted-foreground">No number means no WhatsApp alerts.</p>
         </div>
       </div>

@@ -81,6 +81,7 @@ def send_task_reminders() -> int:
               + ["", "Finish it, or open Tasks to post a status update."]),
             link="/tasks",
             wa_template=wa_template,
+            outside_hours="skip",          # repeats every 2h: never pile up at the opening
         )
         task.reminded_at = now
         task.save(update_fields=["reminded_at"])
@@ -135,7 +136,8 @@ def send_daily_task_digest(force=False) -> int:
     """One morning message per person: due today / overdue / open counts
     with the top tasks — 'aaj ka plan' in a single ping, never spam."""
     now = timezone.localtime()
-    if not force and now.hour < 9:
+    from notifications.service import whatsapp_hours
+    if not force and now.hour < max(9, whatsapp_hours()[0]):   # once the company's WhatsApp hours open
         return 0
     today = now.date()
     # nothing is due on a day off, so a "your tasks today" ping is only noise
@@ -184,7 +186,7 @@ def send_daily_task_digest(force=False) -> int:
     return sent
 
 
-DAY_END_HOUR = int(os.environ.get("DAY_END_DIGEST_HOUR", "19"))   # 7 PM local
+DAY_END_HOUR = int(os.environ.get("DAY_END_DIGEST_HOUR", "18"))   # 6 PM: inside the default WhatsApp hours
 
 
 def send_day_end_digest(force=False) -> int:
@@ -402,6 +404,8 @@ def send_followup_reminders(force=False) -> int:
     from hr.approvals import remind_and_escalate
     sent += remind_and_escalate()       # leave / corrections waiting too long (PLAN.md §17.2)
     sent += remind_task_approvals()     # change requests / completion reviews waiting too long
+    from notifications.service import send_deferred_whatsapp
+    send_deferred_whatsapp()            # what was held outside the WhatsApp hours goes at the opening
     from .duties import create_duty_tasks
     create_duty_tasks()                 # role duties due today (PLAN.md §17.3)
     send_daily_task_digest()            # date-guarded: one per person per day
@@ -416,6 +420,52 @@ def send_followup_reminders(force=False) -> int:
         send_daily_manager_summaries()      # date-guarded: once a day after 09:00
         send_weekly_founder_digest()        # date-guarded: Mondays only
     return sent
+
+
+ACCEPT_REMIND_EVERY_HOURS = 24    # finished work still waiting: the giver is reminded again daily
+
+
+def _remind_givers_to_accept(reviews, first, now) -> int:
+    """Finished work the giver has not accepted (original app d40034c): ONE reminder per giver listing
+    everything waiting for them, first after APPROVAL_REMIND_HOURS, then daily while it still waits.
+    WhatsApp (template task_completion_review) for non-admins, as for the first ask."""
+    from datetime import timedelta
+
+    from accounts.access import is_admin
+
+    from .models import TaskCompletion
+
+    waiting = (reviews.filter(created_at__lte=first, approver__is_active=True, task__deleted_at__isnull=True)
+               .filter(Q(reminded_at__isnull=True)
+                       | Q(reminded_at__lte=now - timedelta(hours=ACCEPT_REMIND_EVERY_HOURS)))
+               .order_by("created_at"))
+    by_giver = {}
+    for c in waiting:
+        by_giver.setdefault(c.approver, []).append(c)
+
+    def who(u):
+        return (u.get_full_name() or u.username) if u else "-"
+
+    for giver, items in by_giver.items():
+        first_item = items[0]
+        lines = [f"{len(items)} finished task(s) are waiting for you to accept:", ""]
+        for c in items[:15]:
+            age = int((now - c.created_at).total_seconds() // 3600)
+            lines.append(f"- {c.task.code} {c.task.title[:70]} - by {who(c.submitted_by)}, waiting {age}h")
+        if len(items) > 15:
+            lines.append(f"... and {len(items) - 15} more")
+        lines += ["", "Open Tasks -> To accept to accept or send back."]
+        notify(giver, "task_completion_reminder",
+               (f"Waiting for you to accept: {first_item.task.code} {first_item.task.title}"
+                if len(items) == 1 else f"{len(items)} finished tasks are waiting for you to accept")[:200],
+               "\n".join(lines), link="/tasks?tab=reviews", link_label="Open To accept",
+               want_whatsapp=not is_admin(giver),
+               wa_template=("task_completion_review", [
+                   who(giver), first_item.task.code,
+                   (first_item.task.title[:50] + (f" (+{len(items) - 1} more)" if len(items) > 1 else "")),
+                   who(first_item.submitted_by)]))
+        TaskCompletion.objects.filter(pk__in=[c.pk for c in items]).update(reminded_at=now)
+    return len(by_giver)
 
 
 def remind_task_approvals() -> int:
@@ -452,12 +502,7 @@ def remind_task_approvals() -> int:
         req.save(update_fields=["admin_alerted_at"])
 
     reviews = TaskCompletion.objects.filter(status=CompletionReviewStatus.PENDING, approver__isnull=False).select_related("task", "approver", "submitted_by")
-    for c in reviews.filter(created_at__lte=first, reminded_at__isnull=True):
-        notify(c.approver, "approval_reminder", f"Waiting for you: accept the work on {c.task.title}",
-               c.note[:300], link=f"/tasks/{c.task_id}", link_label="Review it")
-        sent += 1
-        c.reminded_at = now
-        c.save(update_fields=["reminded_at"])
+    sent += _remind_givers_to_accept(reviews, first, now)
     for c in reviews.filter(created_at__lte=second, escalated_at__isnull=True):
         for user in _admins().exclude(pk__in=[c.approver_id, c.submitted_by_id]):
             notify(user, "approval_escalated", f"Not reviewed for {2 * hours} hours: work on {c.task.title}",

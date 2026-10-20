@@ -50,11 +50,40 @@ class NoticeWhatsAppTests(TestCase):
         self.assertEqual(res.data["queued"], 2)
         self.assertEqual(tpl.call_count, 2)
         _, name, params = tpl.call_args.args
-        self.assertEqual(name, "company_notice")
-        self.assertEqual(params[1], "Diwali holiday")
-        self.assertNotIn("\n", params[2])
+        self.assertEqual(name, "notice_posted")      # utility: name + title only
+        self.assertEqual(params, ["a", "Diwali holiday"])
         mail.assert_not_called()
         self.assertEqual(Notification.objects.filter(type="notice").count(), 2)
+
+    def test_only_missing_skips_people_who_already_got_it(self):
+        self.as_(self.admin)
+        with INLINE, mock.patch("notifications.channels.whatsapp.send_template", return_value=FAKE):
+            self.client.post(f"/api/notices/{self.n.id}/send_whatsapp/")
+        latecomer = make("late", Role.SALES_EXECUTIVE, "9800000009")
+        d = self.client.get(f"/api/notices/{self.n.id}/send_whatsapp/").data
+        self.assertEqual(d["missing"], ["late"])
+        with INLINE, mock.patch("notifications.channels.whatsapp.send_template",
+                                return_value=FAKE) as tpl:
+            res = self.client.post(f"/api/notices/{self.n.id}/send_whatsapp/",
+                                   {"only_missing": True}, format="json")
+        self.assertEqual(res.data["queued"], 1)
+        self.assertEqual(tpl.call_count, 1)
+        self.assertEqual(tpl.call_args.args[0], latecomer.whatsapp_phone)
+
+    def test_one_failure_does_not_stop_the_rest(self):
+        self.as_(self.admin)
+        calls = {"n": 0}
+
+        def flaky(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("boom")
+            return FAKE
+        with INLINE, mock.patch("notifications.channels.whatsapp.send_template", side_effect=flaky):
+            self.client.post(f"/api/notices/{self.n.id}/send_whatsapp/")
+        rows = Notification.objects.filter(type="notice")
+        self.assertEqual(rows.count(), 2)                      # both people recorded
+        self.assertEqual(sorted(r.channels[-1]["status"] for r in rows), ["error", "sent"])
 
     def test_draft_cannot_be_sent(self):
         self.n.status = NoticeStatus.DRAFT; self.n.save()

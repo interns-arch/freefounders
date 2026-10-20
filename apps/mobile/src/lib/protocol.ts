@@ -6,6 +6,8 @@
  *                        {"id": "r2", "type": "photo", "title": "Check in", "optional": false}
  *                        {"id": "r3", "type": "download", "filename": "report.xlsx", "mime": "…", "base64": "…"}
  *                        {"id": "r4", "type": "print", "html": "<html>…"}
+ *                        {"id": "r5", "type": "voice", "lang": "en-IN" | "hi-IN"}   the phone's speech recogniser (mic pop-up)
+ *                        {"id": "r6", "type": "voice-stop"}                          "Done": stop listening, r5 gets the words
  *   web → app (event, from the injected script; no answer)
  *                        {"type": "scroll", "atTop": true}          pull-to-refresh only when the page is at the top
  *                        {"type": "camera-for-files"}               a file picker wants the camera option
@@ -13,6 +15,9 @@
  *                        {"id": "r2", "ok": true, "data": "data:image/jpeg;base64,…"}   (data null = no photo, optional only)
  *                        {"id": "r2", "ok": false, "error": "cancelled"}
  *                        {"id": "r3", "ok": true, "data": {"saved": true}}
+ *                        {"id": "r5", "ok": true, "data": {"text": "Rahul ko kal 5 baje tak quotation bhejna hai"}}
+ *                        {"id": "r5", "ok": false, "error": "…", "code": "permission", "permission": "microphone", "settings": true}
+ *                        {"id": "r5", "ok": false, "error": "…", "code": "unavailable"}   (no speech service / Expo Go)
  */
 
 export type AppRequest =
@@ -20,7 +25,14 @@ export type AppRequest =
   | { id: string; type: 'open-settings' }
   | { id: string; type: 'photo'; title: string; optional: boolean }
   | { id: string; type: 'download'; filename: string; mime: string; base64: string }
-  | { id: string; type: 'print'; html: string };
+  | { id: string; type: 'print'; html: string }
+  | { id: string; type: 'voice'; lang: VoiceLang }
+  | { id: string; type: 'voice-stop' };
+
+/** The languages the voice draft offers (Indian English, Hindi). */
+export const VOICE_LANGS = ['en-IN', 'hi-IN'] as const;
+export type VoiceLang = (typeof VOICE_LANGS)[number];
+export const voiceLang = (v: unknown): VoiceLang => (VOICE_LANGS as readonly unknown[]).includes(v) ? (v as VoiceLang) : 'en-IN';
 
 export type AppEvent = { type: 'scroll'; atTop: boolean } | { type: 'camera-for-files' };
 
@@ -67,6 +79,10 @@ export function parseMessage(raw: unknown): Parsed {
     case 'print':
       if (!str(m.html) || !m.html) return { kind: 'invalid', id, error: 'Nothing to print.' };
       return { kind: 'request', request: { id, type: 'print', html: m.html } };
+    case 'voice':
+      return { kind: 'request', request: { id, type: 'voice', lang: voiceLang(m.lang) } };
+    case 'voice-stop':
+      return { kind: 'request', request: { id, type: 'voice-stop' } };
     default:
       return { kind: 'invalid', id, error: `This app cannot do "${String(m.type)}". Update the FreeFounders app.` };
   }

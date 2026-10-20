@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
  * outline / secondary / ghost for everything else; destructive for deleting; success for approving.
  * Sizes: the desktop height comes first, then the phone height (max-sm:), so every button is a comfortable thumb
  * target on a phone (44 px for the normal sizes, 40 px for the small in-row ones) without changing the desktop look.
+ * Phone heights are in rem, not Tailwind spacing steps: under 640 px --spacing is denser (0.22rem), which made h-10 35 px.
  * Text is never smaller than 14 px. Red and green buttons use dark text in dark mode (white on the lighter dark-mode
  * red/green is under 4.5:1); the orange CTA uses white text in light mode and navy text in dark mode (--cta-foreground).
  */
@@ -28,13 +29,13 @@ const buttonVariants = cva(
         success: 'bg-success text-white shadow-xs hover:brightness-95 dark:text-background',
       },
       size: {
-        default: 'h-9 px-4 py-2 has-[>svg]:px-3 max-sm:h-11',
-        sm: 'h-8 gap-1.5 px-3 has-[>svg]:px-2.5 max-sm:h-10',
-        xs: 'h-7 gap-1 rounded-sm px-2 has-[>svg]:px-1.5 max-sm:h-10 max-sm:px-3',
-        lg: 'h-10 px-5 text-[15px] has-[>svg]:px-4 max-sm:h-11',
-        icon: 'size-9 max-sm:size-11',
-        'icon-sm': 'size-8 max-sm:size-10',
-        'icon-xs': 'size-7 rounded-sm max-sm:size-10',
+        default: 'h-9 px-4 py-2 has-[>svg]:px-3 max-sm:h-[2.75rem]',
+        sm: 'h-8 gap-1.5 px-3 has-[>svg]:px-2.5 max-sm:h-[2.5rem]',
+        xs: 'h-7 gap-1 rounded-sm px-2 has-[>svg]:px-1.5 max-sm:h-[2.5rem] max-sm:px-3',
+        lg: 'h-10 px-5 text-[15px] has-[>svg]:px-4 max-sm:h-[2.875rem]',
+        icon: 'size-9 max-sm:size-[2.75rem]',
+        'icon-sm': 'size-8 max-sm:size-[2.5rem]',
+        'icon-xs': 'size-7 rounded-sm max-sm:size-[2.5rem]',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },

@@ -45,7 +45,7 @@ export function GroupsPage() {
         description="Team workspaces: shared tasks, members and a dashboard."
         actions={
           canCreate && (
-            <Button onClick={() => setAdding(true)}>
+            <Button variant="cta" onClick={() => setAdding(true)}>
               <Plus /> New group
             </Button>
           )

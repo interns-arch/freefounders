@@ -157,7 +157,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
             <Input id="pf-code" name="employeeCode" value={f.employeeCode} onChange={set('employeeCode')} />
           </Field>
           <Field label="Mobile" htmlFor="pf-mobile" error={errors.mobile}>
-            <Input id="pf-mobile" name="mobile" value={f.mobile} onChange={set('mobile')} inputMode="tel" />
+            <Input id="pf-mobile" name="mobile" type="tel" value={f.mobile} onChange={set('mobile')} />
           </Field>
           <Field
             label="Role"

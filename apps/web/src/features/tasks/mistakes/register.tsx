@@ -91,7 +91,7 @@ export function MistakeRegister() {
           </Button>
         )}
         <span className="flex-1" />
-        <Button onClick={() => setShowLog(true)}>
+        <Button variant="cta" onClick={() => setShowLog(true)}>
           <Plus /> Log mistake
         </Button>
       </div>
