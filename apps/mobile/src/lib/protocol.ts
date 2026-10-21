@@ -110,16 +110,62 @@ export function originOf(url: string): string | null {
  * WhatsApp open in the phone's own apps. `about:blank`, `javascript:` (runs in the same page) and the server's own
  * `blob:` addresses stay. Everything else is blocked: a `data:` page (it would get the app's powers) and, inside a frame,
  * any other site (a frame must never start another app on its own).
+ *
+ * Payments (PLAN.md §21.4): Razorpay's pages (https://*.razorpay.com) stay in the app, in a frame too; while a payment
+ * is on (`paying`, see paymentStep) the bank's 3-D Secure pages stay as well, until the page is back on the server.
+ * UPI app links (upi://, or an Android intent:// for a UPI app) open the UPI app even from Razorpay's frame (see
+ * outsideUrl): that is how "Pay with a UPI app" works.
  */
-export function linkTarget(url: string, server: string, topFrame = true): 'inside' | 'outside' | 'block' {
+export function linkTarget(url: string, server: string, topFrame = true, paying = false): 'inside' | 'outside' | 'block' {
   const u = url.trim();
   if (/^about:(blank|srcdoc)$/i.test(u) || /^javascript:/i.test(u)) return 'inside';
   if (/^blob:/i.test(u)) return originOf(u.slice(5)) === originOf(server) ? 'inside' : 'block';
   if (/^data:/i.test(u)) return 'block';
+  if (upiAppUrl(u)) return 'outside';
   const o = originOf(u);
   if (o && o === originOf(server)) return 'inside';
+  if (isPaymentPage(u)) return 'inside';
+  if (topFrame && paying && o?.startsWith('https://')) return 'inside';
   return topFrame ? 'outside' : 'block';
 }
+
+/** Razorpay Checkout and its pages: https on razorpay.com or one of its sub-domains. */
+export function isPaymentPage(url: string): boolean {
+  const o = originOf(url);
+  return !!o && /^https:\/\/([a-z0-9-]+\.)*razorpay\.com$/.test(o);
+}
+
+/**
+ * A payment starts when a top-level page of Razorpay loads and ends when the page is back on the FreeFounders server
+ * (Razorpay posts the result there). Other pages in between (the bank) keep the current state.
+ */
+export function paymentStep(url: string, server: string, paying: boolean): boolean {
+  if (isPaymentPage(url)) return true;
+  const o = originOf(url);
+  if (o && o === originOf(server)) return false;
+  return paying;
+}
+
+/** Schemes of UPI apps that Razorpay's "Pay with a UPI app" may open (upi:// is the standard one). */
+const UPI_SCHEMES = ['upi', 'phonepe', 'tez', 'gpay', 'paytmmp', 'paytm', 'bhim', 'credpay', 'mobikwik', 'amazonpay'];
+
+/**
+ * The address to hand to Android for a UPI payment link, or null when it is not one:
+ * "upi://pay?pa=…" stays; "intent://pay?pa=…#Intent;scheme=upi;package=com.phonepe.app;end" → "upi://pay?pa=…" (React
+ * Native's Linking cannot open intent:// itself; Android then offers the UPI apps, or opens the named one).
+ */
+export function upiAppUrl(url: string): string | null {
+  const u = url.trim();
+  const direct = /^([a-z][a-z0-9+.-]*):/i.exec(u);
+  if (direct && UPI_SCHEMES.includes(direct[1].toLowerCase())) return u;
+  const m = /^intent:\/\/([^#]*)#Intent;(.*)$/i.exec(u);
+  if (!m) return null;
+  const scheme = /(?:^|;)scheme=([a-z][a-z0-9+.-]*)(?:;|$)/i.exec(m[2])?.[1]?.toLowerCase();
+  return scheme && UPI_SCHEMES.includes(scheme) ? `${scheme}://${m[1]}` : null;
+}
+
+/** What to open outside the app for a link: the UPI app address for a UPI link, else the link itself. */
+export const outsideUrl = (url: string) => upiAppUrl(url) ?? url;
 
 /** True when a bridge message comes from a page of the FreeFounders server (any other page is ignored). */
 export function fromServer(pageUrl: string | undefined, server: string): boolean {

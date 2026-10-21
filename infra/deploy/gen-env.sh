@@ -27,6 +27,12 @@ PLATFORM_SECRET=$(rnd 32)
 TASKS_SECRET_KEY=$(rnd 40)
 TASKS_SETTINGS_KEY=$(rnd 32)
 FAKE_GATEWAY_SECRET=$(rnd 24)
+# Payments: fake = FakePay (open demo only). Razorpay is switched on with infra/deploy/set-razorpay.sh, which asks for
+# the three values without echoing them and sets BILLING_GATEWAY=razorpay (README.md "Switching on Razorpay").
+BILLING_GATEWAY=fake
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
 # First company (created once by README step 5) and the staff account for /console.
 FF_COMPANY_CODE=DEMO
 FF_COMPANY_NAME="FreeFounders Demo"

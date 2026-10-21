@@ -1,5 +1,5 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { type Caller, CurrentCaller, Needs, Public, ReadOnlyOk, uuidParam, ZodPipe } from '../common/http';
 import {
@@ -8,6 +8,7 @@ import {
   checkoutSchema,
   outcomeSchema,
   profileSchema,
+  razorpayVerifySchema,
   renewSchema,
   seatsSchema,
 } from './billing.service';
@@ -57,6 +58,23 @@ export class BillingController {
   @HttpCode(200)
   fakeComplete(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(outcomeSchema)) body: z.infer<typeof outcomeSchema>) {
     return this.billing.fakeComplete(caller.companyId, uuidParam(id), body.outcome);
+  }
+
+  /** Razorpay Checkout's success handler (browser): signature checked, then the checkout is paid (idempotent with the webhook). */
+  @Post('razorpay/verify')
+  @HttpCode(200)
+  razorpayVerify(@CurrentCaller() caller: Caller, @Body(new ZodPipe(razorpayVerifySchema)) body: z.infer<typeof razorpayVerifySchema>) {
+    return this.billing.verifyRazorpay(caller.companyId, body);
+  }
+
+  /**
+   * Razorpay Checkout in redirect mode (the phone app): Razorpay's page posts the handler fields here as a form. No
+   * token or CSRF header can come with it (main.ts); the HMAC signature is the proof. Answers with the payment page.
+   */
+  @Public()
+  @Post('razorpay/callback')
+  async razorpayCallback(@Query('session') session: unknown, @Body() form: Record<string, unknown>, @Res() res: Response) {
+    res.redirect(303, await this.billing.razorpayCallback(session, form));
   }
 
   /** Gateway webhooks: no session, no CSRF header (main.ts); the signature over the raw body is checked instead. */

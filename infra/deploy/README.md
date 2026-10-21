@@ -28,6 +28,7 @@ Postgres and the APIs are on an `internal` Docker network: no host ports, no int
 | `gen-env.sh` | writes `FF_HOME/.env` with fresh random secrets (mode 600) |
 | `ff.sh` | `docker compose` with the right project / env file / compose file |
 | `bootstrap.sh` | once: first company + owner + `/console` staff account, then `company sync` |
+| `set-razorpay.sh` | switches payments to Razorpay: asks for the keys without showing them, writes `.env`, recreates the platform only |
 
 ## Server layout (`FF_HOME`, default `/opt/freefounders`)
 ```
@@ -91,6 +92,8 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 | `COOKIE_SECURE` | `false` on plain http (Platform refresh cookie and Assets session cookie); `true` on https |
 | `DEMO_MODE` | `1` = **open demo**: sign-up one-time codes are shown on screen (no email/SMS needed) and FakePay checkout works in this production build. **Unsafe for real customers** (anyone can sign up as any email/phone, and payments are fake). Default `0`. `BILLING_DEV_TOOLS` is always off here. |
 | `FAKE_GATEWAY_SECRET` | FakePay signing secret (used only with `DEMO_MODE=1`) |
+| `BILLING_GATEWAY` | `fake` (FakePay, open demo only) or `razorpay`. Without `DEMO_MODE=1` only `razorpay` works; anything missing → checkout answers 503 "Payments are not set up yet" and the reason is in the platform log (never a key) |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Razorpay API keys and webhook secret. Set them only with `set-razorpay.sh` (below) |
 | `PLATFORM_SECRET` | encrypts the Platform's signing keys at rest (≥ 32 chars). Changing it invalidates the keys. |
 | `TASKS_SECRET_KEY`, `TASKS_SETTINGS_KEY` | Django secret key; per-company settings encryption key |
 | `POSTGRES_PASSWORD`, `*_DB_PASSWORD` | database superuser and per-service roles (read at first Postgres start only) |
@@ -98,6 +101,51 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 
 WhatsApp, Gmail and AI stay off (no keys). To turn them on for a company later: `ff.sh exec tasks python manage.py
 company_setting <code> <NAME> <value>` (the containers have no internet until the `internal` network is relaxed).
+
+## Switching on Razorpay
+Everything is built (PLAN.md §21.4); adding the keys is the only step. Start with **test keys**: they take no real money.
+
+1. **Razorpay Dashboard** (dashboard.razorpay.com), Test mode switched on (top bar):
+   - *Account & Settings → API Keys → Generate Test Key*: you get a **Key ID** (`rzp_test_…`) and a **Key Secret**
+     (shown once; download it). Live keys (`rzp_live_…`) come after KYC (company PAN, GST, bank, website with
+     Terms / Privacy / Refund pages).
+   - *Subscriptions* must be enabled on the account (Test mode has it; for Live, ask Razorpay support to enable
+     Subscriptions + UPI AutoPay).
+   - *Account & Settings → Webhooks → Add New Webhook* (only once the site has a domain with https, see below):
+     - URL: `https://<domain>/api/platform/billing/webhook/razorpay`
+     - Secret: any long random text; the same text goes into `RAZORPAY_WEBHOOK_SECRET`
+     - Active events: `subscription.authenticated`, `subscription.activated`, `subscription.charged`,
+       `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`,
+       `payment.captured`, `payment.failed`, `invoice.paid`
+   - Leave Razorpay's own invoices/receipts as payment records only: **our GST invoice (Billing → Invoices) is the tax
+     invoice**. The amounts sent to Razorpay already include 18 % GST, worked out by the Platform.
+2. **On the server** (as the user that owns `/opt/freefounders`):
+   ```
+   bash /opt/freefounders/app/infra/deploy/set-razorpay.sh
+   ```
+   It asks for the Key ID, then the Key Secret and the Webhook Secret **without showing them** (`read -s`: not on screen,
+   not in shell history, not in `ps`), writes them to `/opt/freefounders/.env` (mode 600), sets
+   `BILLING_GATEWAY=razorpay` and recreates **only the platform container**. Leave the webhook secret empty while there
+   is no https domain: a random one is stored; paste it into Razorpay later (`sudo grep RAZORPAY_WEBHOOK_SECRET
+   /opt/freefounders/.env`). Back to FakePay: `bash …/set-razorpay.sh --off`.
+3. Check: `app/infra/deploy/ff.sh logs --tail 30 platform` shows `Payments: Razorpay (test mode, key rzp_test_…)`. If a
+   value is missing it shows `Payments are OFF (checkout answers 503): …` instead, and the rest of the app keeps working.
+4. Try it: Billing → choose a plan → *Continue to payment* → *Pay* opens Razorpay Checkout. Use Razorpay's test cards
+   / test UPI IDs (razorpay.com/docs/payments/payments/test-card-details; for subscriptions pick a card marked as
+   supporting recurring payments). The plan is active at once and the GST invoice is in Billing → Invoices.
+
+**What works on the http demo (`http://<ip>:7395`) and what needs a domain + https**
+| | http demo (now) | domain + https |
+|---|---|---|
+| Checkout in a browser (modal), plan active at once, GST invoice | yes (the browser's success handler is verified on the server) | yes |
+| Renewals, failed renewals (past due), cancellations made in Razorpay | the billing clock asks Razorpay after each period end (every 5 min until seen; past due 2 days after a missed charge) | yes, at once, by webhook (Razorpay sends webhooks only to public https URLs on port 443) |
+| Phone app checkout (Razorpay redirect mode, UPI apps) | not reliable: Razorpay posts the result from https to an http address | yes |
+The platform container reaches `api.razorpay.com` through its own `egress` network (docker-compose.yml); the databases
+and the other APIs stay without internet.
+
+**Live keys**: only with `DEMO_MODE=0` (no codes on screen, no FakePay), `COOKIE_SECURE=true` and https. Then run
+`set-razorpay.sh` again with the `rzp_live_…` keys and add the webhook again in Live mode (Razorpay keeps separate
+webhooks for Test and Live).
 
 ## Known limits of the http demo
 - Browsers allow camera, microphone, geolocation and service workers only on https (or localhost): punch-in with

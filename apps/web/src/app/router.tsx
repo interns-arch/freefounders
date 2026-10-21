@@ -33,7 +33,7 @@ export const router = createBrowserRouter([
       { path: 'account', element: <AccountPage /> },
       // Signed in, without the app frame: a new company, the fake payment page, a printable invoice.
       { path: 'new-company', lazy: async () => ({ Component: (await import('@/features/account/new-company')).NewCompanyPage }) },
-      { path: 'billing/pay/:sessionId', lazy: async () => ({ Component: (await import('@/features/billing/pay')).FakePayPage }) },
+      { path: 'billing/pay/:sessionId', lazy: async () => ({ Component: (await import('@/features/billing/pay')).PayPage }) },
       { path: 'billing/invoices/:id', lazy: async () => ({ Component: (await import('@/features/billing/invoice')).InvoicePage }) },
       {
         element: <AppShell />,

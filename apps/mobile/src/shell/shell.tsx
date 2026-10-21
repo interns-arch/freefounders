@@ -21,7 +21,7 @@ import { printHtml, saveAndShare } from '@/lib/native-actions';
 import { askPermissionsAtStart } from '@/lib/permissions';
 import { listen, stopListening } from '@/lib/voice';
 import { usePalette } from '@/lib/palette';
-import { type AppRequest, fromServer, linkTarget, originOf, parseMessage, replyError, replyOk } from '@/lib/protocol';
+import { type AppRequest, fromServer, linkTarget, originOf, outsideUrl, parseMessage, paymentStep, replyError, replyOk, upiAppUrl } from '@/lib/protocol';
 import { loadServerUrl, saveServerUrl } from '@/lib/server-url';
 import { OfflineScreen } from './offline-screen';
 import { SelfieCamera } from './selfie-camera';
@@ -44,6 +44,8 @@ export function Shell() {
   const insets = useSafeAreaInsets();
   const web = useRef<WebView>(null);
   const canGoBack = useRef(false);
+  /** A Razorpay payment is on (redirect mode): the bank's pages stay in the app until it is back on the server. */
+  const paying = useRef(false);
   const [server, setServer] = useState<string | null>(null);
   const [camera, setCamera] = useState<CameraState | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -179,7 +181,10 @@ export function Shell() {
   );
 
   const openOutside = (url: string) => {
-    void Linking.openURL(url).catch(() => Alert.alert('Cannot open this link', url));
+    const upi = upiAppUrl(url);
+    void Linking.openURL(outsideUrl(url)).catch(() =>
+      upi ? Alert.alert('No UPI app found', 'No app on this phone can pay this UPI request. Choose another way to pay.') : Alert.alert('Cannot open this link', url),
+    );
   };
 
   if (!server || !script) return <Splash />;
@@ -246,7 +251,9 @@ export function Shell() {
               allowFileAccessFromFileURLs={false}
               allowUniversalAccessFromFileURLs={false}
               onShouldStartLoadWithRequest={(req) => {
-                const where = linkTarget(req.url, server, req.isTopFrame !== false);
+                const top = req.isTopFrame !== false;
+                if (top) paying.current = paymentStep(req.url, server, paying.current);
+                const where = linkTarget(req.url, server, top, paying.current);
                 if (where === 'inside') return true;
                 if (where === 'outside') openOutside(req.url);
                 return false;

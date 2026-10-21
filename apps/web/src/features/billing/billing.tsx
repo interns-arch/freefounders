@@ -193,7 +193,9 @@ function CurrentPlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
             </div>
             <p className="text-xs text-muted-foreground">More users: charged for the rest of this period on the next invoice. Fewer: from the next period.</p>
           </div>
-          {b.cancelAtPeriodEnd ? (
+          {b.cancelAtPeriodEnd && b.canResume === false ? (
+            <p className="max-w-xs text-xs text-muted-foreground">To keep this plan, choose it again under Plans: the unused days are credited.</p>
+          ) : b.cancelAtPeriodEnd ? (
             <Button variant="outline" loading={resume.isPending} onClick={() => resume.mutate(undefined, { onSuccess: () => toast.success('Subscription resumed'), onError: (e) => toast.error(errorMessage(e)) })}>
               Resume subscription
             </Button>
@@ -346,13 +348,21 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
                 <dd className="font-mono tabular-nums">{formatInr(subtotal + gst)}</dd>
               </div>
             </dl>
-            <p className="mt-2 text-xs text-muted-foreground">CGST + SGST or IGST is worked out from your GST state on the payment page.</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              CGST + SGST or IGST is worked out from your GST state on the payment page.
+              {b.checkoutGateway === 'razorpay' && ' Paid by UPI AutoPay, card or net banking through Razorpay; it renews by itself until you cancel.'}
+            </p>
+            {b.checkoutGateway === null && isPaidPlan(plan) && (
+              <p role="status" className="mt-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2 text-xs">
+                Payments are not set up yet. Please try again later.
+              </p>
+            )}
             <Button
               variant="cta"
               allowReadOnly={needsReadOnlyCta}
               size="lg"
               className="mt-3 h-11 w-full"
-              disabled={(isCurrent(plan) && (!isPaidPlan(plan) || seats === b.seats.paid)) || tooMany}
+              disabled={(isCurrent(plan) && (!isPaidPlan(plan) || seats === b.seats.paid)) || tooMany || (b.checkoutGateway === null && isPaidPlan(plan))}
               loading={checkout.isPending}
               onClick={go}
             >

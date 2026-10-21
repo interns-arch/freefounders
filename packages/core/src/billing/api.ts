@@ -16,6 +16,7 @@ import type {
   Invoice,
   InvoiceSummary,
   Plan,
+  RazorpayHandlerResponse,
 } from './types';
 
 export const billingKeys = {
@@ -37,6 +38,7 @@ export const billingApi = {
   checkout: (body: CheckoutInput) => platformApi.post<CheckoutStarted>('/billing/checkout', body),
   checkoutSession: (id: string) => platformApi.get<CheckoutSession>(`/billing/checkout/${encodeURIComponent(id)}`),
   fakeComplete: (id: string, outcome: FakeOutcome) => platformApi.post<FakeResult>(`/billing/fake/${encodeURIComponent(id)}/complete`, { outcome }),
+  razorpayVerify: (sessionId: string, r: RazorpayHandlerResponse) => platformApi.post<CheckoutSession>('/billing/razorpay/verify', { sessionId, ...r }),
   setSeats: (seats: number) => platformApi.post<unknown>('/billing/seats', { seats }),
   cancel: () => platformApi.post<unknown>('/billing/cancel'),
   resume: () => platformApi.post<unknown>('/billing/resume'),
@@ -102,6 +104,18 @@ export function useFakeComplete() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, outcome }: { id: string; outcome: FakeOutcome }) => billingApi.fakeComplete(id, outcome),
+    onSuccess: async (_r, v) => {
+      await qc.invalidateQueries({ queryKey: billingKeys.checkout(v.id) });
+      await after();
+    },
+  });
+}
+/** Razorpay Checkout succeeded in the browser: the server checks the signature and marks the checkout paid. */
+export function useRazorpayVerify() {
+  const after = useAfterBillingChange();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, response }: { id: string; response: RazorpayHandlerResponse }) => billingApi.razorpayVerify(id, response),
     onSuccess: async (_r, v) => {
       await qc.invalidateQueries({ queryKey: billingKeys.checkout(v.id) });
       await after();

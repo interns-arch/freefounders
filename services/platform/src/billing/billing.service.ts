@@ -1,4 +1,14 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleDestroy,
+  type OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -7,12 +17,14 @@ import { CompanySetupService } from '../company/setup.service';
 import { CompanyService } from '../company/company.service';
 import { DbService, type Executor } from '../db/db.service';
 import {
+  accounts,
   type AppKey,
   APPS,
   billingEvents,
   billingProfiles,
   checkoutSessions,
   companies,
+  gatewayPlans,
   type GstParty,
   invoiceCounters,
   invoiceLines,
@@ -25,7 +37,19 @@ import {
   seatChanges,
   subscriptions,
 } from '../db/schema';
-import { FakeGateway, type GatewayEvent, FAKE_SIGNATURE_HEADER, type PaymentGateway, signFake } from './gateway';
+import {
+  FAKE_SIGNATURE_HEADER,
+  FakeGateway,
+  type CheckoutCreated,
+  type GatewayConfig,
+  gatewayConfig,
+  type GatewayEvent,
+  PAYMENTS_OFF_MESSAGE,
+  type PaymentGateway,
+  type RenewalResult,
+  signFake,
+} from './gateway';
+import { type GatewayPlanStore, RazorpayError, RazorpayGateway } from './razorpay.gateway';
 import { financialYear, gst, GSTIN_RE, invoiceNumber, SAC_SAAS, seller, stateName } from './gst';
 import {
   companyNow,
@@ -70,6 +94,15 @@ export const seatsSchema = z.object({ seats: z.number().int().min(1).max(MAX_SEA
 export const outcomeSchema = z.object({ outcome: z.enum(['success', 'failure', 'cancel']) });
 export const renewSchema = z.object({ outcome: z.enum(['success', 'failure']).default('success') });
 export const advanceSchema = z.object({ days: z.number().int().min(1).max(400), renewalOutcome: z.enum(['success', 'failure']).default('success') });
+/** Razorpay Checkout's handler response (field names as Razorpay sends them). */
+export const razorpayVerifySchema = z.object({
+  sessionId: z.string().uuid(),
+  razorpay_payment_id: z.string().trim().regex(/^pay_[A-Za-z0-9]{6,40}$/, 'Invalid payment id'),
+  razorpay_subscription_id: z.string().trim().max(60).optional(),
+  razorpay_signature: z.string().trim().regex(/^[0-9a-f]{64}$/i, 'Invalid signature'),
+});
+/** Razorpay renews by itself; a charge not seen this long after the period ended counts as failed (past due). */
+const RENEWAL_GRACE_MS = 2 * DAY_MS;
 
 const addInterval = (d: Date, interval: string) => {
   const out = new Date(d);
@@ -93,7 +126,10 @@ type After = Array<() => Promise<unknown>>;
 @Injectable()
 export class BillingService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('Billing');
+  /** Gateways whose webhooks are accepted: FakePay always (it checks its own secret), Razorpay when its keys are set. */
   private readonly gateways = new Map<string, PaymentGateway>([['fake', new FakeGateway()]]);
+  /** BILLING_GATEWAY and its keys, checked once at start-up (gateway.ts). */
+  readonly config: GatewayConfig;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
@@ -101,7 +137,31 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     private readonly dbs: DbService,
     private readonly setup: CompanySetupService,
     private readonly company: CompanyService,
-  ) {}
+  ) {
+    this.config = gatewayConfig();
+    if (this.config.razorpay) {
+      this.gateways.set('razorpay', new RazorpayGateway(this.config.razorpay, this.planStore()));
+      // The key id is public (it is in every Checkout); the secrets are never logged.
+      this.log.log(`Payments: Razorpay (${this.config.razorpay.mode} mode, key ${this.config.razorpay.keyId})`);
+    } else if (this.config.problem) {
+      this.log.error(`Payments are OFF (checkout answers 503): ${this.config.problem}. Everything else keeps working.`);
+    }
+  }
+
+  /** Razorpay plan ids, cached in gateway_plans by plan + interval + price. */
+  private planStore(): GatewayPlanStore {
+    type Key = Parameters<GatewayPlanStore['find']>[0];
+    const where = (k: Key) =>
+      and(eq(gatewayPlans.gateway, 'razorpay'), eq(gatewayPlans.plan, k.plan), eq(gatewayPlans.interval, k.interval), eq(gatewayPlans.unitPrice, k.unitPrice), eq(gatewayPlans.amount, k.amount));
+    const find = async (k: Key) => (await this.dbs.root.select({ id: gatewayPlans.gatewayPlanId }).from(gatewayPlans).where(where(k)).limit(1))[0]?.id ?? null;
+    return {
+      find,
+      save: async (k, id) => {
+        await this.dbs.root.insert(gatewayPlans).values({ gateway: 'razorpay', plan: k.plan, interval: k.interval, unitPrice: k.unitPrice, amount: k.amount, gatewayPlanId: id }).onConflictDoNothing();
+        return (await find(k)) ?? id;
+      },
+    };
+  }
 
   onModuleInit() {
     const seconds = Number(process.env.BILLING_TICK_SECONDS ?? 300);
@@ -114,9 +174,34 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  /** The gateway new checkouts use (the fake one until Razorpay is wired). */
+  /** The gateway new checkouts use (BILLING_GATEWAY); 503 when payments are not set up. */
   private gateway(): PaymentGateway {
-    return this.gateways.get('fake')!;
+    const g = this.config.name ? this.gateways.get(this.config.name) : undefined;
+    if (!g) throw new ServiceUnavailableException(PAYMENTS_OFF_MESSAGE);
+    return g;
+  }
+
+  /** The Razorpay gateway, for a subscription Razorpay charges; 503 when its keys are not set on this server. */
+  private razorpay(): RazorpayGateway {
+    const g = this.gateways.get('razorpay');
+    if (!(g instanceof RazorpayGateway)) throw new ServiceUnavailableException(PAYMENTS_OFF_MESSAGE);
+    return g;
+  }
+
+  /** A Razorpay error in words for the owner (never the request or the keys). */
+  private razorpayFailed(err: unknown, action: string): never {
+    if (err instanceof RazorpayError) {
+      this.log.warn(`Razorpay ${action}: ${err.status} ${err.message}`);
+      if (err.status === 0 || err.status >= 500) throw new BadGatewayException('Razorpay could not be reached. Please try again in a minute.');
+      if (err.status === 401) throw new ServiceUnavailableException(PAYMENTS_OFF_MESSAGE);
+      throw new BadRequestException(`Razorpay: ${err.message}`);
+    }
+    throw err;
+  }
+
+  /** What one seat costs at the gateway per period, GST included (Razorpay plans are GST-inclusive amounts). */
+  private unitAmount(unitPrice: number, buyerState: string | null) {
+    return gst([{ description: '', sac: SAC_SAAS, quantity: 1, unitPrice, amount: unitPrice }], buyerState).total;
   }
 
   private async plan(code: string): Promise<PlanRow> {
@@ -211,6 +296,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       profile: await this.profile(companyId),
       devTools: billingDevTools(),
       now: now.toISOString(),
+      /** Who charges this subscription's renewals ('razorpay' or 'fake'). */
+      gateway: sub.gateway === 'razorpay' ? 'razorpay' : 'fake',
+      /** The gateway new payments use; null = payments are not set up on this server (checkout answers 503). */
+      checkoutGateway: this.config.name,
+      /** A Razorpay cancellation cannot be undone: the owner chooses the plan again instead (unused time credited). */
+      canResume: sub.gateway !== 'razorpay',
     };
   }
 
@@ -218,6 +309,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   /** POST billing/checkout: prices the purchase (with a credit for unused paid time), opens a gateway checkout. */
   async checkout(caller: Caller, input: z.infer<typeof checkoutSchema>) {
+    const gateway = this.gateway(); // 503 first: nothing is priced or stored while payments are off
     const plan = await this.plan(input.plan);
     if (!plan.offered || !isPaid(plan)) throw new BadRequestException({ message: 'Choose a paid plan', errors: { plan: 'Choose a paid plan' } });
     const used = await seatsUsed(this.dbs, caller.companyId);
@@ -238,12 +330,16 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       if (credit > 0) lines.push({ description: `Unused time on the ${current.name} plan (credit)`, sac: SAC_SAAS, quantity: 1, unitPrice: -credit, amount: -credit, periodStart: iso(now), periodEnd: iso(sub.currentPeriodEnd) });
     }
     lines.push(...(await this.pendingSeatLines(caller.companyId)).lines);
-    const tax = gst(lines, (await this.buyer(caller.companyId)).state);
+    const buyerState = (await this.buyer(caller.companyId)).state;
+    const tax = gst(lines, buyerState);
+    if (gateway.name === 'razorpay' && tax.total < 100) {
+      throw new BadRequestException('Nothing to pay now: the unused time on your current plan covers this change. Choose it near the end of the period, or contact FreeFounders support.');
+    }
     const [session] = await this.dbs.db
       .insert(checkoutSessions)
       .values({
         companyId: caller.companyId,
-        gateway: this.gateway().name,
+        gateway: gateway.name,
         plan: plan.code,
         interval: input.interval,
         seats: input.seats,
@@ -257,8 +353,32 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         expiresAt: new Date(Date.now() + CHECKOUT_TTL_MS),
       })
       .returning();
-    const { checkoutUrl } = await this.gateway().createCheckout({ sessionId: session.id, companyId: caller.companyId, amount: tax.total, description: lines[0].description });
-    return { sessionId: session.id, checkoutUrl };
+    const unitPrice = priceOf(plan, input.interval);
+    let created: CheckoutCreated;
+    try {
+      created = await gateway.createCheckout({
+        sessionId: session.id,
+        companyId: caller.companyId,
+        amount: tax.total,
+        description: `${lines[0].description}, first ${input.interval === 'year' ? 'year' : 'month'} incl. GST`,
+        expiresAt: session.expiresAt,
+        subscription: {
+          planCode: plan.code,
+          planName: plan.name,
+          interval: input.interval,
+          seats: input.seats,
+          unitPrice,
+          unitAmount: this.unitAmount(unitPrice, buyerState),
+          // Razorpay renews on real time (the dev clock offset is for FakePay only).
+          firstPeriodEnd: addInterval(new Date(), input.interval),
+        },
+      });
+    } catch (err) {
+      await this.dbs.db.update(checkoutSessions).set({ status: 'failed', completedAt: new Date() }).where(eq(checkoutSessions.id, session.id));
+      this.razorpayFailed(err, 'checkout');
+    }
+    if (created.ref || created.data) await this.dbs.db.update(checkoutSessions).set({ gatewayRef: created.ref ?? null, gatewayData: created.data ?? null }).where(eq(checkoutSessions.id, session.id));
+    return { sessionId: session.id, checkoutUrl: created.checkoutUrl, gateway: gateway.name };
   }
 
   private async session(companyId: string, id: string) {
@@ -273,7 +393,74 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const plan = await this.plan(s.plan);
     const [c] = await this.dbs.db.select({ name: companies.name }).from(companies).where(eq(companies.id, companyId)).limit(1);
     const status = s.status === 'open' && s.expiresAt < new Date() ? 'expired' : s.status;
-    return { id: s.id, plan: s.plan, planName: plan.name, interval: s.interval, seats: s.seats, lines: s.lines, subtotal: s.subtotal, cgst: s.cgst, sgst: s.sgst, igst: s.igst, total: s.total, companyName: c?.name ?? '', status, gateway: s.gateway };
+    const out = { id: s.id, plan: s.plan, planName: plan.name, interval: s.interval, seats: s.seats, lines: s.lines, subtotal: s.subtotal, cgst: s.cgst, sgst: s.sgst, igst: s.igst, total: s.total, companyName: c?.name ?? '', status, gateway: s.gateway };
+    if (s.gateway !== 'razorpay' || status !== 'open' || !s.gatewayRef) return out;
+    return { ...out, razorpay: await this.razorpayOptions(s, plan.name, c?.name ?? '') };
+  }
+
+  /**
+   * What the web passes to Razorpay Checkout (https://razorpay.com/docs/payments/subscriptions/integration-guide/):
+   * the public key id, our subscription, names, prefill from the billing profile / the person who started it, notes.
+   */
+  private async razorpayOptions(s: typeof checkoutSessions.$inferSelect, planName: string, companyName: string) {
+    const profile = await this.profile(s.companyId);
+    const [who] = s.createdBy
+      ? await this.dbs.db
+          .select({ name: people.fullName, email: people.email, accountEmail: accounts.email, mobile: accounts.mobile })
+          .from(people)
+          .leftJoin(accounts, eq(accounts.id, people.accountId))
+          .where(eq(people.id, s.createdBy))
+          .limit(1)
+      : [];
+    return {
+      keyId: this.razorpay().keyId,
+      subscriptionId: s.gatewayRef!,
+      amount: s.total,
+      currency: 'INR',
+      name: 'FreeFounders',
+      description: `${planName}, ${intervalLabel(s.interval)}, ${s.seats} users`,
+      prefill: { name: who?.name ?? profile?.legalName ?? companyName, email: profile?.email ?? who?.accountEmail ?? who?.email ?? '', contact: who?.mobile ?? '' },
+      notes: { companyId: s.companyId, sessionId: s.id },
+      /** Phone app (redirect mode): Razorpay posts the result here, then the page shows it. */
+      callbackPath: `/api/platform/billing/razorpay/callback?session=${s.id}`,
+    };
+  }
+
+  /** The handler's signature, against OUR subscription id for this checkout (never the one the browser sends). */
+  private async checkRazorpayHandler(s: typeof checkoutSessions.$inferSelect, paymentId: string, signature: string) {
+    if (s.gateway !== 'razorpay' || !s.gatewayRef) throw new BadRequestException('This checkout is not a Razorpay checkout');
+    if (!this.razorpay().checkHandlerSignature(paymentId, s.gatewayRef, signature)) throw new BadRequestException('The payment could not be verified (signature does not match)');
+    // Same handler as the webhook: stored once, applied once. The webhook (source of truth) then finds it settled.
+    const event: GatewayEvent = { id: `checkout_${paymentId}`, type: 'payment.captured', sessionId: s.id, paymentId, amount: s.total, subscriptionId: s.gatewayRef, source: 'checkout.handler' };
+    await this.storeAndApply('razorpay', event);
+  }
+
+  /** POST billing/razorpay/verify: Razorpay Checkout's success handler (browser). */
+  async verifyRazorpay(companyId: string, input: z.infer<typeof razorpayVerifySchema>) {
+    const s = await this.session(companyId, input.sessionId);
+    await this.checkRazorpayHandler(s, input.razorpay_payment_id, input.razorpay_signature);
+    return { ...(await this.getCheckout(companyId, s.id)), redirectUrl: '/billing' };
+  }
+
+  /**
+   * POST billing/razorpay/callback?session= (public): Checkout in redirect mode (the phone app) posts the handler fields
+   * as a form. The signature is the proof; the answer is the payment page with the result.
+   */
+  async razorpayCallback(sessionId: unknown, form: Record<string, unknown> | undefined): Promise<string> {
+    if (typeof sessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(sessionId)) return '/billing';
+    const back = (result: string) => `/billing/pay/${sessionId}?result=${result}`;
+    const [s] = await this.dbs.db.select().from(checkoutSessions).where(eq(checkoutSessions.id, sessionId)).limit(1);
+    if (!s) return '/billing';
+    const paymentId = typeof form?.razorpay_payment_id === 'string' ? form.razorpay_payment_id : '';
+    const signature = typeof form?.razorpay_signature === 'string' ? form.razorpay_signature : '';
+    if (!paymentId || !signature) return back(s.status === 'paid' ? 'paid' : 'failed');
+    try {
+      await this.checkRazorpayHandler(s, paymentId, signature);
+      return back('paid');
+    } catch (err) {
+      this.log.warn(`Razorpay callback for checkout ${s.id}: ${(err as Error).message}`);
+      return back('failed');
+    }
   }
 
   /**
@@ -299,35 +486,67 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   /** POST billing/webhook/:gateway: signature checked, stored once by event id, applied. */
   async handleWebhook(gatewayName: string, headers: Record<string, string | string[] | undefined>, rawBody: Buffer | undefined) {
     const gateway = this.gateways.get(gatewayName);
-    if (!gateway) throw new NotFoundException('Unknown payment gateway');
+    if (!gateway) {
+      // Razorpay retries later: say "not ready" rather than "unknown" while its keys are missing on this server.
+      if (gatewayName === 'razorpay') throw new ServiceUnavailableException(PAYMENTS_OFF_MESSAGE);
+      throw new NotFoundException('Unknown payment gateway');
+    }
     if (!rawBody?.length) throw new BadRequestException('Empty event');
     const event = gateway.verifyWebhook(headers, rawBody);
+    return this.storeAndApply(gatewayName, event);
+  }
+
+  /** Stores the event once (billing_events, unique per gateway + event id) and applies it in the same transaction. */
+  private async storeAndApply(gatewayName: string, event: GatewayEvent) {
     const after: After = [];
     const result = await this.dbs.tx(async (tx) => {
       const [stored] = await tx
         .insert(billingEvents)
-        .values({ gateway: gatewayName, eventId: event.id, type: event.type, payload: event as unknown as Record<string, unknown> })
+        .values({ gateway: gatewayName, eventId: event.id, type: event.source && event.source !== event.type ? `${event.type} (${event.source})` : event.type, payload: event as unknown as Record<string, unknown> })
         .onConflictDoNothing()
         .returning({ id: billingEvents.id });
       if (!stored) return { ok: true, duplicate: true };
       await this.applyEvent(tx, gatewayName, event, after);
       return { ok: true, duplicate: false };
     });
-    for (const fn of after) await fn();
+    for (const fn of after) await fn().catch((err) => this.log.error(`After billing event ${event.id}: ${(err as Error).message}`));
     return result;
   }
 
+  /** The checkout an event is about: by our session id, else by the gateway's subscription id. */
+  private async eventSession(tx: Executor, gatewayName: string, event: GatewayEvent) {
+    if (/^[0-9a-f-]{36}$/i.test(event.sessionId)) {
+      const [s] = await tx.select().from(checkoutSessions).where(and(eq(checkoutSessions.id, event.sessionId), eq(checkoutSessions.gateway, gatewayName))).for('update').limit(1);
+      if (s) return s;
+    }
+    if (!event.subscriptionId) return null;
+    const [s] = await tx
+      .select()
+      .from(checkoutSessions)
+      .where(and(eq(checkoutSessions.gatewayRef, event.subscriptionId), eq(checkoutSessions.gateway, gatewayName)))
+      .orderBy(desc(checkoutSessions.createdAt))
+      .for('update')
+      .limit(1);
+    return s ?? null;
+  }
+
   private async applyEvent(tx: Executor, gatewayName: string, event: GatewayEvent, after: After) {
-    if (!/^[0-9a-f-]{36}$/i.test(event.sessionId)) return;
-    const [s] = await tx.select().from(checkoutSessions).where(and(eq(checkoutSessions.id, event.sessionId), eq(checkoutSessions.gateway, gatewayName))).for('update').limit(1);
+    if (event.type === 'ignored') return;
+    if (event.type === 'subscription.pending' || event.type === 'subscription.halted' || event.type === 'subscription.cancelled') {
+      return this.applySubscriptionEvent(tx, gatewayName, event);
+    }
+    const s = await this.eventSession(tx, gatewayName, event);
+    // A recurring charge: the first payment of a checkout still open, else a renewal.
+    if (event.type === 'subscription.charged' && (!s || s.status !== 'open')) return this.applyRenewalEvent(tx, gatewayName, event);
     if (!s || s.status !== 'open') return; // already settled (or unknown): nothing changes
     if (event.type === 'checkout.cancelled') {
       await tx.update(checkoutSessions).set({ status: 'cancelled', completedAt: new Date() }).where(eq(checkoutSessions.id, s.id));
       return;
     }
     if (event.type === 'payment.failed') {
-      // A first purchase that fails changes nothing but the checkout.
-      await tx.update(checkoutSessions).set({ status: 'failed', completedAt: new Date() }).where(eq(checkoutSessions.id, s.id));
+      // A first purchase that fails changes nothing but the checkout. Razorpay Checkout lets the person try again in
+      // the same window, so a Razorpay checkout stays open (it expires by itself).
+      if (gatewayName !== 'razorpay') await tx.update(checkoutSessions).set({ status: 'failed', completedAt: new Date() }).where(eq(checkoutSessions.id, s.id));
       await tx.insert(payments).values({ companyId: s.companyId, checkoutSessionId: s.id, gateway: gatewayName, gatewayPaymentId: event.paymentId ?? null, amount: s.total, status: 'failed', reason: event.reason ?? null });
       return;
     }
@@ -335,14 +554,29 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       this.log.error(`Checkout ${s.id}: paid ${event.amount}, expected ${s.total}; not applied`);
       return;
     }
-    // Paid: the plan starts now, for one period.
+    // Paid: the plan starts now, for one period (Razorpay: until the first renewal it was given, `start_at`).
     await tx.update(checkoutSessions).set({ status: 'paid', completedAt: new Date() }).where(eq(checkoutSessions.id, s.id));
     const sub = await this.lockSub(tx, s.companyId);
     const now = companyNow(sub);
-    const end = addInterval(now, s.interval);
+    const startAt = s.gatewayData?.startAt;
+    const end = gatewayName === 'razorpay' && typeof startAt === 'number' && startAt * 1000 > now.getTime() ? new Date(startAt * 1000) : addInterval(now, s.interval);
+    const gatewaySubscriptionId = gatewayName === 'razorpay' ? s.gatewayRef : null;
     await tx
       .update(subscriptions)
-      .set({ plan: s.plan, interval: s.interval, state: 'active', stateSince: now, seats: s.seats, nextPeriodSeats: null, currentPeriodStart: now, currentPeriodEnd: end, cancelAtPeriodEnd: false, updatedAt: new Date() })
+      .set({
+        plan: s.plan,
+        interval: s.interval,
+        state: 'active',
+        stateSince: now,
+        seats: s.seats,
+        nextPeriodSeats: null,
+        currentPeriodStart: now,
+        currentPeriodEnd: end,
+        cancelAtPeriodEnd: false,
+        gateway: gatewayName,
+        gatewaySubscriptionId,
+        updatedAt: new Date(),
+      })
       .where(eq(subscriptions.companyId, s.companyId));
     const pending = await this.pendingSeatLines(s.companyId, tx);
     const invoice = await this.createInvoice(tx, s.companyId, { issuedAt: now, periodStart: now, periodEnd: end, lines: s.lines, checkoutSessionId: s.id, total: s.total });
@@ -350,6 +584,97 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     await tx.insert(payments).values({ companyId: s.companyId, invoiceId: invoice.id, checkoutSessionId: s.id, gateway: gatewayName, gatewayPaymentId: event.paymentId ?? null, amount: s.total, status: 'captured' });
     const plan = await this.plan(s.plan);
     after.push(() => this.applyEntitlements(s.companyId, plan));
+    // A plan bought again (upgrade, new seats on UPI, after a cancel): the old Razorpay subscription stops charging.
+    const old = sub.gateway === 'razorpay' ? sub.gatewaySubscriptionId : null;
+    if (old && old !== gatewaySubscriptionId) after.push(() => this.cancelAtRazorpay(old));
+  }
+
+  private async cancelAtRazorpay(subscriptionId: string) {
+    const g = this.gateways.get('razorpay');
+    if (!(g instanceof RazorpayGateway)) {
+      this.log.error(`Razorpay subscription ${subscriptionId} should be cancelled but Razorpay is not set up here: cancel it in the Razorpay dashboard`);
+      return;
+    }
+    await g.cancel(subscriptionId).catch((err) => this.log.error(`Cancel Razorpay subscription ${subscriptionId}: ${(err as Error).message} (cancel it in the Razorpay dashboard)`));
+  }
+
+  /** Our subscription that a gateway subscription charges, locked (null when it is not, or no longer, ours). */
+  private async subByGatewayId(tx: Executor, gatewayName: string, gatewaySubscriptionId: string | undefined) {
+    if (!gatewaySubscriptionId) return null;
+    const [row] = await tx
+      .select({ companyId: subscriptions.companyId })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.gateway, gatewayName), eq(subscriptions.gatewaySubscriptionId, gatewaySubscriptionId)))
+      .limit(1);
+    if (!row) return null;
+    const sub = await this.lockSub(tx, row.companyId);
+    return sub.gatewaySubscriptionId === gatewaySubscriptionId ? sub : null;
+  }
+
+  private async paymentKnown(tx: Executor, gatewayName: string, paymentId: string) {
+    const [p] = await tx
+      .select({ id: payments.id })
+      .from(payments)
+      .where(and(eq(payments.gateway, gatewayName), eq(payments.gatewayPaymentId, paymentId), eq(payments.status, 'captured')))
+      .limit(1);
+    return !!p;
+  }
+
+  /** A renewal charged by the gateway (Razorpay subscription.charged / invoice.paid): a new period and its invoice. */
+  private async applyRenewalEvent(tx: Executor, gatewayName: string, event: GatewayEvent) {
+    if (!event.paymentId) return;
+    const sub = await this.subByGatewayId(tx, gatewayName, event.subscriptionId);
+    if (!sub || (await this.paymentKnown(tx, gatewayName, event.paymentId))) return; // not ours, or already counted
+    const plan = await this.plan(sub.plan);
+    if (!isPaid(plan)) return;
+    await this.recordRenewal(tx, sub, plan, companyNow(sub), { gatewayName, paymentId: event.paymentId, amount: event.amount, periodStart: event.periodStart, periodEnd: event.periodEnd });
+  }
+
+  /** Razorpay says a renewal failed (pending: it retries; halted: it gave up) or the subscription ended. */
+  private async applySubscriptionEvent(tx: Executor, gatewayName: string, event: GatewayEvent) {
+    const sub = await this.subByGatewayId(tx, gatewayName, event.subscriptionId);
+    if (!sub) return;
+    const now = companyNow(sub);
+    const set = (values: Partial<SubscriptionRow>) => tx.update(subscriptions).set({ ...values, updatedAt: new Date() }).where(eq(subscriptions.companyId, sub.companyId));
+    if (event.type === 'subscription.cancelled') {
+      // Cancelled at Razorpay (dashboard, the customer's mandate, or completed): the paid period still runs, then Free / read-only.
+      if (sub.state === 'active') await set({ state: 'cancelled', stateSince: now, cancelAtPeriodEnd: true });
+      return;
+    }
+    if (event.paymentId && !(await this.paymentKnown(tx, gatewayName, event.paymentId))) {
+      await tx.insert(payments).values({ companyId: sub.companyId, gateway: gatewayName, gatewayPaymentId: event.paymentId, amount: event.amount ?? 0, status: 'failed', reason: event.reason ?? null });
+    }
+    if (sub.state === 'active') await set({ state: 'past_due', stateSince: now });
+  }
+
+  /**
+   * A paid renewal: the next period (seats lowered for it if asked), an invoice with the pro-rata seat lines, the
+   * payment. Used by the billing clock (FakePay, or a Razorpay charge looked up) and by gateway webhooks.
+   */
+  private async recordRenewal(
+    tx: Executor,
+    sub: SubscriptionRow,
+    plan: PlanRow,
+    now: Date,
+    r: { gatewayName: string; paymentId: string; amount?: number; periodStart?: string; periodEnd?: string; forced?: boolean },
+  ) {
+    const companyId = sub.companyId;
+    // A forced renewal ("simulate the next renewal") charges now; a past_due one starts a new period now.
+    const start = r.periodStart ? new Date(r.periodStart) : r.forced || sub.state !== 'active' ? now : (sub.currentPeriodEnd ?? now);
+    const end = r.periodEnd ? new Date(r.periodEnd) : addInterval(start, sub.interval);
+    const seats = sub.nextPeriodSeats ?? sub.seats;
+    const pending = await this.pendingSeatLines(companyId, tx);
+    const lines = [...this.planLines(plan, sub.interval, seats, start, end), ...pending.lines];
+    const invoice = await this.createInvoice(tx, companyId, { issuedAt: start, periodStart: start, periodEnd: end, lines });
+    if (typeof r.amount === 'number' && r.amount !== invoice.total) {
+      this.log.warn(`Company ${companyId}: ${r.gatewayName} charged ${r.amount} paise, invoice ${invoice.number} says ${invoice.total} (rounding, or a change Razorpay was not told about)`);
+    }
+    if (pending.ids.length) await tx.update(seatChanges).set({ invoiceId: invoice.id }).where(inArray(seatChanges.id, pending.ids));
+    await tx.insert(payments).values({ companyId, invoiceId: invoice.id, gateway: r.gatewayName, gatewayPaymentId: r.paymentId, amount: r.amount ?? invoice.total, status: 'captured' });
+    await tx
+      .update(subscriptions)
+      .set({ state: 'active', stateSince: sub.state === 'active' ? sub.stateSince : now, seats, nextPeriodSeats: null, currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd: false, updatedAt: new Date() })
+      .where(eq(subscriptions.companyId, companyId));
   }
 
   /** The subscription row, locked for this transaction (created as Complimentary if the company had none). */
@@ -415,7 +740,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   // ─── seats, cancel, resume ──────────────────────────────────────────────
 
-  /** More seats now (the extra is charged pro rata on the next invoice); fewer from the next period, never below use. */
+  /**
+   * More seats now (the extra is charged pro rata on the next invoice); fewer from the next period, never below use.
+   * A Razorpay subscription is told too: the quantity from the next cycle, and the pro-rata amount (GST included) as an
+   * add-on on its next invoice. Razorpay cannot change UPI AutoPay / e-mandate subscriptions: then nothing changes and
+   * the owner is asked to choose the plan again with the new number (unused time is credited).
+   */
   async changeSeats(companyId: string, seats: number) {
     await this.dbs.tx(async (tx) => {
       const sub = await this.lockSub(tx, companyId);
@@ -427,24 +757,52 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       const min = Math.max(plan.minSeats, used);
       if (seats < min) throw new BadRequestException({ message: `Keep at least ${min} seats (${used} in use; the plan starts at ${plan.minSeats}).`, errors: { seats: `At least ${min}` } });
       const now = companyNow(sub);
+      const razorpaySub = sub.gateway === 'razorpay' ? sub.gatewaySubscriptionId : null;
+      if (razorpaySub && sub.state === 'cancelled') throw new BadRequestException('This plan is cancelled. Choose the plan again below with the number of users you need.');
+      let amount = 0;
       if (seats > sub.seats) {
         const len = sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime();
         const left = Math.max(0, sub.currentPeriodEnd.getTime() - now.getTime());
-        const amount = Math.round(((seats - sub.seats) * priceOf(plan, sub.interval) * left) / Math.max(1, len));
+        amount = Math.round(((seats - sub.seats) * priceOf(plan, sub.interval) * left) / Math.max(1, len));
         await tx.insert(seatChanges).values({ companyId, seatsFrom: sub.seats, seatsTo: seats, effectiveAt: now, periodEnd: sub.currentPeriodEnd, amount });
         await tx.update(subscriptions).set({ seats, nextPeriodSeats: null, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
       } else {
         await tx.update(subscriptions).set({ nextPeriodSeats: seats === sub.seats ? null : seats, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
       }
+      if (razorpaySub) {
+        // Inside the transaction: if Razorpay refuses, nothing above is kept.
+        const rzp = this.razorpay();
+        try {
+          await rzp.setQuantity(razorpaySub, seats);
+        } catch (err) {
+          if (err instanceof RazorpayError && err.status === 400) {
+            this.log.warn(`Razorpay quantity for ${razorpaySub}: ${err.message}`);
+            throw new BadRequestException(
+              'Razorpay cannot change the number of users on this subscription (UPI AutoPay and bank mandates cannot be changed). Choose the plan again below with the new number of users: the unused time is credited.',
+            );
+          }
+          this.razorpayFailed(err, 'change quantity');
+        }
+        if (amount > 0) {
+          const withGst = gst([{ description: '', sac: SAC_SAAS, quantity: 1, unitPrice: amount, amount }], (await this.buyer(companyId)).state).total;
+          await rzp.addOn(razorpaySub, `${seats - sub.seats} user${seats - sub.seats === 1 ? '' : 's'} added (${sub.seats} → ${seats}), pro rata incl. GST`, withGst).catch((err) => this.razorpayFailed(err, 'add-on'));
+        }
+      }
     });
     return this.view(companyId);
   }
 
+  /** Cancel at the end of the paid period. A Razorpay subscription is cancelled there at once (no more charges). */
   async cancel(companyId: string) {
     await this.dbs.tx(async (tx) => {
       const sub = await this.lockSub(tx, companyId);
       const plan = await this.plan(sub.plan);
       if (!isPaid(plan) || sub.state !== 'active') throw new BadRequestException('Only an active paid plan can be cancelled');
+      if (sub.gateway === 'razorpay' && sub.gatewaySubscriptionId) {
+        await this.razorpay()
+          .cancel(sub.gatewaySubscriptionId)
+          .catch((err) => this.razorpayFailed(err, 'cancel'));
+      }
       await tx.update(subscriptions).set({ state: 'cancelled', stateSince: companyNow(sub), cancelAtPeriodEnd: true, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
     });
     return this.view(companyId);
@@ -454,6 +812,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     await this.dbs.tx(async (tx) => {
       const sub = await this.lockSub(tx, companyId);
       if (sub.state !== 'cancelled') throw new BadRequestException('The plan is not cancelled');
+      // Razorpay cannot restart a cancelled subscription: paying again makes a new one (the unused time is credited).
+      if (sub.gateway === 'razorpay') throw new BadRequestException('A cancelled Razorpay subscription cannot be restarted. Choose the plan again below: the unused time is credited.');
       await tx.update(subscriptions).set({ state: 'active', stateSince: companyNow(sub), cancelAtPeriodEnd: false, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
     });
     return this.view(companyId);
@@ -539,9 +899,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         await toFreeOrReadOnly(sub.currentPeriodEnd);
         return true;
       }
+      // Razorpay charges renewals by itself (webhooks); the clock looks a missed one up while the plan waits for it.
+      const external = sub.gateway === 'razorpay' && !!sub.gatewaySubscriptionId;
       if (sub.state === 'past_due') {
         const until = new Date(sub.stateSince.getTime() + PAST_DUE_DAYS * DAY_MS);
-        if (opts.forceRenewal) return this.renew(tx, sub, plan, now, opts.renewalOutcome ?? 'success', true);
+        if (external) {
+          if (await this.renewExternal(tx, sub, plan, now)) return true;
+        } else if (opts.forceRenewal) return this.renew(tx, sub, plan, now, opts.renewalOutcome ?? 'success', true);
         if (until > now) return false;
         await set({ state: 'read_only', stateSince: until });
         return true;
@@ -552,7 +916,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         await set({ state: 'suspended', stateSince: until });
         return true;
       }
-      if (sub.state === 'active' && isPaid(plan) && sub.currentPeriodEnd && (sub.currentPeriodEnd <= now || opts.forceRenewal)) {
+      if (sub.state === 'active' && isPaid(plan) && sub.currentPeriodEnd && external && sub.currentPeriodEnd <= now) {
+        return this.renewExternal(tx, sub, plan, now);
+      }
+      if (sub.state === 'active' && isPaid(plan) && sub.currentPeriodEnd && !external && (sub.currentPeriodEnd <= now || opts.forceRenewal)) {
         return this.renew(tx, sub, plan, now, opts.renewalOutcome ?? 'success', !!opts.forceRenewal);
       }
       return false;
@@ -560,31 +927,59 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Charges the next period through the gateway. Paid: a new period (seats lowered for it if asked) and an invoice with
+   * Charges the next period through FakePay. Paid: a new period (seats lowered for it if asked) and an invoice with
    * the pro-rata seat lines. Failed: past_due from the end of the paid period.
    */
   private async renew(tx: Executor, sub: SubscriptionRow, plan: PlanRow, now: Date, outcome: 'success' | 'failure', forced: boolean): Promise<boolean> {
     const companyId = sub.companyId;
-    // A forced renewal ("simulate the next renewal") charges now; a past_due one starts a new period now.
+    const fake = this.gateways.get('fake')!;
     const start = forced || sub.state === 'past_due' ? now : (sub.currentPeriodEnd ?? now);
-    const end = addInterval(start, sub.interval);
     const seats = sub.nextPeriodSeats ?? sub.seats;
-    const pending = await this.pendingSeatLines(companyId, tx);
-    const lines = [...this.planLines(plan, sub.interval, seats, start, end), ...pending.lines];
+    const lines = [...this.planLines(plan, sub.interval, seats, start, addInterval(start, sub.interval)), ...(await this.pendingSeatLines(companyId, tx)).lines];
     const tax = gst(lines, (await this.buyer(companyId)).state);
-    const charge = await this.gateway().chargeRenewal({ companyId, amount: tax.total, outcome });
-    const set = (values: Partial<SubscriptionRow>) => tx.update(subscriptions).set({ ...values, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
-    if (!charge.ok) {
-      await tx.insert(payments).values({ companyId, gateway: this.gateway().name, gatewayPaymentId: charge.paymentId, amount: tax.total, status: 'failed', reason: charge.reason ?? null });
-      if (sub.state === 'past_due') return false; // still past due; the 7 days keep running
-      await set({ state: 'past_due', stateSince: forced ? now : (sub.currentPeriodEnd ?? now) });
+    const charge = await fake.chargeRenewal({ companyId, amount: tax.total, outcome });
+    if (!charge.ok) return this.renewalFailed(tx, sub, now, forced, fake.name, charge, tax.total);
+    await this.recordRenewal(tx, sub, plan, now, { gatewayName: fake.name, paymentId: charge.paymentId, forced });
+    return true;
+  }
+
+  /** A failed renewal: past_due from the end of the paid period (or now when forced); already past_due stays so. */
+  private async renewalFailed(tx: Executor, sub: SubscriptionRow, now: Date, forced: boolean, gatewayName: string, charge: RenewalResult, amount: number) {
+    await tx.insert(payments).values({ companyId: sub.companyId, gateway: gatewayName, gatewayPaymentId: charge.paymentId || null, amount, status: 'failed', reason: charge.reason ?? null });
+    if (sub.state === 'past_due') return false; // still past due; the 7 days keep running
+    await tx
+      .update(subscriptions)
+      .set({ state: 'past_due', stateSince: forced ? now : (sub.currentPeriodEnd ?? now), updatedAt: new Date() })
+      .where(eq(subscriptions.companyId, sub.companyId));
+    return true;
+  }
+
+  /**
+   * A Razorpay renewal the webhook has not brought (yet): asks Razorpay. Paid → recorded like the webhook would;
+   * pending/halted → past_due; not charged yet → wait, up to RENEWAL_GRACE_MS after the period end, then past_due.
+   * Razorpay unreachable or not set up on this server → nothing changes now.
+   */
+  private async renewExternal(tx: Executor, sub: SubscriptionRow, plan: PlanRow, now: Date): Promise<boolean> {
+    const rzp = this.gateways.get('razorpay');
+    if (!rzp) return false;
+    let r: RenewalResult;
+    try {
+      r = await rzp.chargeRenewal({ companyId: sub.companyId, amount: 0, subscriptionId: sub.gatewaySubscriptionId, periodEnd: sub.currentPeriodEnd });
+    } catch (err) {
+      this.log.warn(`Razorpay renewal check for company ${sub.companyId}: ${(err as Error).message}`);
+      return false;
+    }
+    if (r.ok) {
+      if (await this.paymentKnown(tx, rzp.name, r.paymentId)) return false;
+      await this.recordRenewal(tx, sub, plan, now, { gatewayName: rzp.name, paymentId: r.paymentId, amount: r.amount, periodStart: r.periodStart, periodEnd: r.periodEnd });
       return true;
     }
-    const invoice = await this.createInvoice(tx, companyId, { issuedAt: start, periodStart: start, periodEnd: end, lines });
-    if (pending.ids.length) await tx.update(seatChanges).set({ invoiceId: invoice.id }).where(inArray(seatChanges.id, pending.ids));
-    await tx.insert(payments).values({ companyId, invoiceId: invoice.id, gateway: this.gateway().name, gatewayPaymentId: charge.paymentId, amount: tax.total, status: 'captured' });
-    await set({ state: 'active', stateSince: sub.state === 'active' ? sub.stateSince : now, seats, nextPeriodSeats: null, currentPeriodStart: start, currentPeriodEnd: end });
-    return true;
+    if (r.pending) {
+      if (sub.state !== 'active' || !sub.currentPeriodEnd || now.getTime() - sub.currentPeriodEnd.getTime() < RENEWAL_GRACE_MS) return false;
+      return this.renewalFailed(tx, sub, now, false, rzp.name, { ...r, reason: 'Razorpay has not charged the renewal' }, 0);
+    }
+    if (sub.state !== 'active') return false; // already past due: Razorpay keeps retrying; the 7 days keep running
+    return this.renewalFailed(tx, sub, now, false, rzp.name, r, 0);
   }
 
   /** Runs the state machine for one company until nothing changes, then applies plan changes in the apps. */
@@ -653,6 +1048,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     this.assertDevTools();
     const { sub, plan } = await subscriptionOf(this.dbs, companyId);
     if (!isPaid(plan) || !['active', 'past_due'].includes(sub.state)) throw new BadRequestException('Nothing to renew: buy a paid plan first');
+    if (sub.gateway === 'razorpay') throw new BadRequestException('Razorpay charges this plan by itself: renewals cannot be simulated');
     await this.tick(companyId, { renewalOutcome: outcome, forceRenewal: true });
     return this.view(companyId);
   }
@@ -779,10 +1175,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   async consolePlan(companyId: string, planCode: string, seats: number) {
     await this.assertCompany(companyId);
     const plan = await this.plan(planCode);
+    let stopAtRazorpay: string | null = null;
     await this.dbs.tx(async (tx) => {
       const sub = await this.lockSub(tx, companyId);
       const now = companyNow(sub);
       const paid = isPaid(plan);
+      // A staff-set plan is not charged: a Razorpay subscription behind the old one stops.
+      stopAtRazorpay = sub.gateway === 'razorpay' ? sub.gatewaySubscriptionId : null;
       await tx
         .update(subscriptions)
         .set({
@@ -794,10 +1193,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           currentPeriodStart: paid ? now : null,
           currentPeriodEnd: paid ? addInterval(now, sub.interval) : null,
           cancelAtPeriodEnd: false,
+          gateway: null,
+          gatewaySubscriptionId: null,
           updatedAt: new Date(),
         })
         .where(eq(subscriptions.companyId, companyId));
     });
+    if (stopAtRazorpay) await this.cancelAtRazorpay(stopAtRazorpay);
     await this.applyEntitlements(companyId, plan);
     return (await this.consoleCompanies()).find((c) => c.id === companyId);
   }

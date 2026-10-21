@@ -2,8 +2,9 @@
 # the env file (FF_HOME/.env, mode 600, never in git) and this file. README.md has the whole procedure.
 #
 # Only the gateway publishes a port (FF_PORT, default 7395). Databases and APIs sit on an internal network with no
-# published ports and no internet access. Every container has a hard memory ceiling (memswap = mem, so it cannot push
-# the host into swap) and a CPU share; total ~1.9 GB / 1.5 CPU.
+# published ports and no internet access (the Platform alone also joins `egress`, to reach api.razorpay.com). Every
+# container has a hard memory ceiling (memswap = mem, so it cannot push the host into swap) and a CPU share; total
+# ~1.9 GB / 1.5 CPU.
 name: freefounders
 
 x-logging: &logging
@@ -68,7 +69,13 @@ services:
       OTP_DEV_ECHO: ${DEMO_MODE:-0}
       FAKE_GATEWAY_SECRET: ${FAKE_GATEWAY_SECRET:-}
       BILLING_DEV_TOOLS: "0"
-    networks: [internal]
+      # Payments (PLAN.md §21.4): fake (open demo) or razorpay. Keys only in FF_HOME/.env (set-razorpay.sh), never here.
+      BILLING_GATEWAY: ${BILLING_GATEWAY:-fake}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+    # egress: only the Platform may call out (api.razorpay.com); it still publishes no port.
+    networks: [internal, egress]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/platform/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 30s
@@ -189,3 +196,5 @@ networks:
   internal:
     internal: true
   edge: {}
+  # Outbound internet for the Platform only (Razorpay API calls). No ports are published on it.
+  egress: {}

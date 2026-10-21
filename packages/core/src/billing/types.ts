@@ -56,7 +56,15 @@ export interface BillingSummary {
   devTools: boolean;
   /** The billing clock (moved by the dev tools). */
   now: string;
+  /** Who charges this plan's renewals (PLAN.md §21.4). */
+  gateway?: PaymentGatewayName;
+  /** The gateway new payments use; null = payments are not set up on this server yet. */
+  checkoutGateway?: PaymentGatewayName | null;
+  /** False for a Razorpay plan: a cancelled one is bought again instead (unused time credited). */
+  canResume?: boolean;
 }
+
+export type PaymentGatewayName = 'fake' | 'razorpay';
 
 /** GET billing/plans. Business data on the server (§21), so the screen reads whatever plans it lists. */
 export interface Plan {
@@ -89,6 +97,30 @@ export interface CheckoutInput {
 export interface CheckoutStarted {
   sessionId: string;
   checkoutUrl: string;
+  gateway?: PaymentGatewayName;
+}
+
+/** What Razorpay Checkout needs (GET billing/checkout/:id while a Razorpay checkout is open). */
+export interface RazorpayCheckoutOptions {
+  /** Public key id (rzp_test_… / rzp_live_…); the secret never leaves the server. */
+  keyId: string;
+  subscriptionId: string;
+  /** paise, GST included */
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  prefill: { name?: string; email?: string; contact?: string };
+  notes: Record<string, string>;
+  /** Redirect mode (phone app): Razorpay posts the result to this path on our server. */
+  callbackPath: string;
+}
+
+/** Razorpay Checkout's success handler response. */
+export interface RazorpayHandlerResponse {
+  razorpay_payment_id: string;
+  razorpay_subscription_id?: string;
+  razorpay_signature: string;
 }
 
 export type CheckoutStatus = 'open' | 'pending' | 'paid' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | string;
@@ -107,6 +139,8 @@ export interface CheckoutSession {
   total: number;
   companyName: string;
   status: CheckoutStatus;
+  gateway?: PaymentGatewayName;
+  razorpay?: RazorpayCheckoutOptions;
 }
 
 export type FakeOutcome = 'success' | 'failure' | 'cancel';

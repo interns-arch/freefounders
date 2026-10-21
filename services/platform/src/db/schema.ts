@@ -385,8 +385,35 @@ export const subscriptions = platform.table('subscriptions', {
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
   /** Dev tools only: the company's billing clock runs this many days ahead. */
   clockOffsetDays: integer('clock_offset_days').notNull().default(0),
+  /** Who charges the renewals: null/'fake' = our billing clock; 'razorpay' = a Razorpay subscription (PLAN.md §21.4). */
+  gateway: text('gateway'),
+  /** Razorpay subscription id (sub_…) that charges this plan; webhooks find the company by it. */
+  gatewaySubscriptionId: text('gateway_subscription_id'),
   ...timestamps,
-});
+}, (t) => [index('subscriptions_gateway_subscription_idx').on(t.gatewaySubscriptionId)]);
+
+/**
+ * Plans created at a payment gateway (Razorpay), made on demand and reused. Keyed by plan + interval + price, so a price
+ * change makes a new gateway plan and running subscriptions keep theirs.
+ */
+export const gatewayPlans = platform.table(
+  'gateway_plans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    gateway: text('gateway').notNull(),
+    plan: text('plan')
+      .notNull()
+      .references(() => plans.code),
+    interval: text('interval').notNull(),
+    /** paise per seat, before GST */
+    unitPrice: integer('unit_price').notNull(),
+    /** paise per seat charged by the gateway, GST included */
+    amount: integer('amount').notNull(),
+    gatewayPlanId: text('gateway_plan_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('gateway_plans_key_uq').on(t.gateway, t.plan, t.interval, t.unitPrice, t.amount)],
+);
 
 export interface InvoiceLineInput {
   description: string;
@@ -433,9 +460,13 @@ export const checkoutSessions = platform.table(
     createdBy: uuid('created_by').references(() => people.id, { onDelete: 'set null' }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
+    /** The gateway's object for this checkout (Razorpay: the subscription id sub_…). */
+    gatewayRef: text('gateway_ref'),
+    /** What the gateway's checkout needs later (Razorpay: plan id, first renewal time). */
+    gatewayData: jsonb('gateway_data').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('checkout_sessions_company_idx').on(t.companyId)],
+  (t) => [index('checkout_sessions_company_idx').on(t.companyId), index('checkout_sessions_gateway_ref_idx').on(t.gatewayRef)],
 );
 
 /** GST tax invoices: one number series per financial year (April–March), e.g. FF/2026-27/000001. */

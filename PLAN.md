@@ -2362,3 +2362,85 @@ created (the resend throttle answered "Wait a few seconds…", easy to miss), an
 - The punch-in e2e tests answer the uniform question when the company asks it (DEMO has "Ask and record" on).
 - Results: Platform 112 pass, core 9, web rules + typecheck + build clean, smoke 10/10, e2e 74: full run 69 pass + the 5
   punch tests (uniform dialog) pass after that fix (8/8 for web-app-shell + web-hr); DEMO reset to the owner afterwards.
+
+### 21.4 Razorpay ready (2026-10-21)
+
+Founder: "Razorpay I want to add in this; I will give you the access token later; make it ready for that." Razorpay is
+now a complete gateway behind the same interface as FakePay (`services/platform/src/billing/`), switched on by env.
+**Adding the keys is the only step left** (infra/deploy/README.md "Switching on Razorpay": `set-razorpay.sh`).
+
+**Switch (Platform env, checked at start-up, `gateway.ts → gatewayConfig`)**: `BILLING_GATEWAY=fake|razorpay`,
+`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`. Default `fake` in dev and on the open demo
+(`DEMO_MODE=1`); a production build without `DEMO_MODE` accepts only `razorpay`. A missing / malformed value → one clear
+error line in the log (`Payments are OFF (checkout answers 503): …`, names of the missing variables, never a value),
+`POST billing/checkout` answers **503 "Payments are not set up yet"**, the Billing page says so and disables
+*Continue to payment*; sign-in, the apps and the rest of Billing keep working.
+
+**How our billing maps onto Razorpay Subscriptions** (plain HTTPS + Basic auth, no SDK; `razorpay.gateway.ts`):
+- **Plans**: one Razorpay plan per (our plan, monthly/yearly, price per user **with GST**), created on first use and cached
+  in the new `gateway_plans` table (unique on gateway + plan + interval + unit price + amount), so a price change makes a
+  new Razorpay plan and running subscriptions keep theirs. Tasks ₹99 → ₹116.82 per user per month at Razorpay.
+- **Checkout** (`POST billing/checkout` → `{sessionId, checkoutUrl: /billing/pay/<id>, gateway}`): a Razorpay
+  subscription with `quantity` = seats, `total_count` 120 months / 10 years, `start_at` = end of the first paid period,
+  `expire_by` = the checkout's 1 h, and **one upfront add-on = our checkout total** (GST included; upgrade credit and
+  pending pro-rata seat lines already in it). Razorpay's rule "future start + upfront amount → only the upfront amount
+  is charged at authorisation" makes the first charge exactly our total; every renewal is plan amount × quantity.
+  `notes {companyId, sessionId}` on the subscription and the payment. A total under ₹1 (a credit covers it) is refused.
+- **Pay step** (`/billing/pay/<id>`, `GET billing/checkout/:id` adds `razorpay: {keyId, subscriptionId, amount, name,
+  description, prefill {name, email, contact} from the billing profile / the person, notes, callbackPath}`): *Pay* loads
+  `checkout.razorpay.com/v1/checkout.js` (only on this page) and opens Checkout. Success → `POST billing/razorpay/verify`
+  `{sessionId, razorpay_payment_id, razorpay_subscription_id, razorpay_signature}`: HMAC_SHA256(payment_id + "|" + **our**
+  subscription id, key secret), constant-time compare, then the same store-once/apply handler as webhooks (event id
+  `checkout_<payment id>`): checkout paid, plan active, our GST invoice. Failure: Razorpay's reason + "You can try again"
+  (the checkout stays open); closing the window: "Nothing was charged".
+- **Phone app**: Checkout runs in redirect mode (`callback_url`): Razorpay posts the handler fields to the public
+  `POST billing/razorpay/callback?session=` (signature is the proof; CSRF header exempt like webhooks), which answers 303
+  to `/billing/pay/<id>?result=paid|failed`. The shell keeps `https://*.razorpay.com` pages inside (frames too), keeps the
+  bank's 3-D Secure pages inside while a payment is on (until back on the server), and opens UPI apps for `upi://…` and
+  Android `intent://…#Intent;scheme=upi;…` links (converted to `upi://`, also from Razorpay's frame) — `protocol.ts`
+  `isPaymentPage`, `paymentStep`, `upiAppUrl`, with tests.
+- **Webhooks** (`POST billing/webhook/razorpay`, X-Razorpay-Signature = HMAC_SHA256(raw body, webhook secret),
+  constant-time; event id from X-Razorpay-Event-Id, stored once in `billing_events`), the source of truth:
+  `payment.captured`, `subscription.authenticated/activated` with the upfront payment, or `subscription.charged` while the
+  checkout is open → that checkout is paid (no-op when verify got there first); `subscription.charged` / `invoice.paid`
+  later → **renewal**: new period from Razorpay's `current_start/current_end` (or the invoice's billing dates), our GST
+  invoice with the pro-rata seat lines, payment (counted once per Razorpay payment id); `subscription.pending/halted` →
+  **past_due** (then read_only after 7 days, suspended after 30, as before), a later charge → active again;
+  `subscription.cancelled/completed` → cancelled at the period end; `payment.failed` on an open checkout → recorded, the
+  checkout stays open. Anything else is stored and ignored. Without its keys the endpoint answers 503 (Razorpay retries).
+- **Without webhooks** (the http demo: Razorpay sends webhooks only to public https on port 443) the billing clock looks a
+  renewal up after the period end (`GET subscriptions/:id`, `GET invoices?subscription_id=`): paid → recorded like the
+  webhook; pending/halted → past_due; nothing yet → waits up to 2 days, then past_due.
+- **Seats**: more → `PATCH subscriptions/:id {quantity, schedule_change_at: cycle_end}` + an add-on with the pro-rata
+  amount incl. GST on the next Razorpay invoice (= our pro-rata line on the next GST invoice); fewer → quantity from the
+  next cycle. Razorpay cannot update UPI AutoPay / e-mandate subscriptions: then nothing changes and the owner is told to
+  choose the plan again with the new number (unused time is credited); the paid new subscription cancels the old one.
+- **Cancel** → Razorpay subscription cancelled at once (no more charges), our plan runs to the period end, then Free /
+  read-only as before. **Resume** is not possible at Razorpay (a cancelled subscription cannot restart): the Billing page
+  says "choose it again under Plans: the unused days are credited" instead of the Resume button (`canResume: false`).
+  Dev tools' simulated renewals are refused for Razorpay plans.
+- **GST**: amounts sent to Razorpay are the tax-inclusive totals from our GST logic (`gst.ts`); **our GST invoice stays the
+  tax invoice**; Razorpay's subscription invoices/receipts are payment records only. A renewal whose charged amount differs
+  from our invoice (paise rounding, or a change Razorpay was not told about) is logged.
+- **Gateway / server**: CSP (Report-Only) in `infra/deploy/Caddyfile` and `infra/gateway/Caddyfile` allows
+  `script-src https://checkout.razorpay.com`, `frame-src`/`connect-src https://api.razorpay.com https://*.razorpay.com`,
+  `form-action https://api.razorpay.com`; `Permissions-Policy payment=(self api/checkout.razorpay.com)`; COOP
+  `same-origin-allow-popups` (bank popups). docker-compose: the platform alone joins a new `egress` network to reach
+  `api.razorpay.com`; the env passes `BILLING_GATEWAY` + the three keys from `FF_HOME/.env`.
+
+**Tables** (migration `0012_razorpay`): `gateway_plans`; `checkout_sessions.gateway_ref` (sub_…) + `gateway_data`
+(plan id, `start_at`); `subscriptions.gateway` + `gateway_subscription_id`.
+
+**Tests**: Platform 125 (113 + 12 in `src/razorpay.test.ts` against a local Razorpay stand-in, no network: config and
+missing keys → 503 with the app running; plan creation + caching; checkout body; verify good / bad / another
+subscription; webhook signature good / bad / tampered; duplicate event ids; webhook-only payment; failed attempt keeps
+the checkout; redirect callback; renewal → period + invoice, `invoice.paid` duplicate ignored; pending / halted → past_due
+→ active; cancelled; seats with add-on + UPI refusal; cancel / resume / buy again cancels the old one; billing clock
+look-up paid / waiting / halted); web rules + typecheck + build; phone app typecheck + 24 unit tests (2 new). No e2e or
+smoke against a real gateway.
+
+**When the keys arrive (founder)**: Razorpay Dashboard (Test mode) → API Keys → Key ID + Key Secret; on the server
+`bash /opt/freefounders/app/infra/deploy/set-razorpay.sh` (Key ID, then the secret hidden, webhook secret empty for now);
+check the platform log; pay once with a Razorpay test card / UPI ID. With a domain + https: add the webhook
+`https://<domain>/api/platform/billing/webhook/razorpay` with the events listed in the README and the stored secret.
+Live keys only after KYC, with `DEMO_MODE=0` and https.

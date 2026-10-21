@@ -24,7 +24,7 @@ export async function subscriptionOf(dbs: DbService, companyId: string): Promise
   if (row) return row;
   const now = new Date();
   return {
-    sub: { companyId, plan: 'complimentary', interval: 'month', state: 'active', stateSince: now, seats: 0, nextPeriodSeats: null, trialEndsAt: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, clockOffsetDays: 0, createdAt: now, updatedAt: now },
+    sub: { companyId, plan: 'complimentary', interval: 'month', state: 'active', stateSince: now, seats: 0, nextPeriodSeats: null, trialEndsAt: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, clockOffsetDays: 0, gateway: null, gatewaySubscriptionId: null, createdAt: now, updatedAt: now },
     plan: { code: 'complimentary', name: 'Complimentary', description: '', apps: ['tasks', 'assets'], priceMonthly: 0, priceYearly: 0, minSeats: 1, maxSeats: null, offered: false, sort: 9 },
   };
 }
