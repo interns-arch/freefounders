@@ -1,6 +1,7 @@
 // Creates the first company and its owner login when the database is empty. Safe to run on every start.
 //   node dist/seed.js            demo company for local development, plus the dev staff account (below)
 //   node dist/seed.js --bootstrap  real install: COMPANY_NAME, COMPANY_CODE, OWNER_NAME, OWNER_EMAIL, OWNER_LOGIN, OWNER_PASSWORD
+//                                  (+ optional STAFF_EMAIL, STAFF_PASSWORD: a FreeFounders staff account for /console)
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
@@ -24,21 +25,23 @@ export const DEMO = {
  */
 export const DEV_STAFF = { email: 'staff@freefounders.test', password: 'Demo@1234', fullName: 'FreeFounders Staff (dev)' };
 
-export async function seedStaff(): Promise<boolean> {
-  if (process.env.NODE_ENV === 'production') return false;
+export async function seedStaff(staff = DEV_STAFF, companyCode = DEMO.companyCode, bootstrap = false): Promise<boolean> {
+  // The dev staff password is public (it is in this file): a real install passes its own (--bootstrap, STAFF_*).
+  if (!bootstrap && process.env.NODE_ENV === 'production') return false;
   const pool = new pg.Pool({ connectionString: databaseUrl(), ssl: databaseSsl(), max: 1 });
   const db = drizzle(pool, { schema });
   try {
-    const [demo] = await db.select({ id: schema.companies.id }).from(schema.companies).where(eq(schema.companies.code, DEMO.companyCode)).limit(1);
+    const [demo] = await db.select({ id: schema.companies.id }).from(schema.companies).where(eq(schema.companies.code, companyCode.toUpperCase())).limit(1);
     if (!demo) return false;
-    const [existing] = await db.select({ id: schema.accounts.id }).from(schema.accounts).where(sql`lower(${schema.accounts.email}) = ${DEV_STAFF.email}`).limit(1);
+    const email = staff.email.trim().toLowerCase();
+    const [existing] = await db.select({ id: schema.accounts.id }).from(schema.accounts).where(sql`lower(${schema.accounts.email}) = ${email}`).limit(1);
     if (existing) return false;
     await db.transaction(async (tx) => {
       const [account] = await tx
         .insert(schema.accounts)
-        .values({ email: DEV_STAFF.email, fullName: DEV_STAFF.fullName, passwordHash: await hashPassword(DEV_STAFF.password), isStaff: true })
+        .values({ email, fullName: staff.fullName, passwordHash: await hashPassword(staff.password), isStaff: true })
         .returning();
-      await tx.insert(schema.people).values({ companyId: demo.id, fullName: DEV_STAFF.fullName, email: DEV_STAFF.email, platformRole: 'member', accountId: account.id });
+      await tx.insert(schema.people).values({ companyId: demo.id, fullName: staff.fullName, email, platformRole: 'member', accountId: account.id });
     });
     return true;
   } finally {
@@ -95,6 +98,14 @@ if (require.main === module) {
     .then(async (created) => {
       console.log(created ? '✔ Company and owner created' : '• Company already exists, nothing to seed');
       if (!bootstrap && (await seedStaff())) console.log(`✔ Dev staff account ${DEV_STAFF.email} created (owner console)`);
+      const staffEmail = process.env.STAFF_EMAIL?.trim();
+      const staffPassword = process.env.STAFF_PASSWORD?.trim();
+      const code = process.env.COMPANY_CODE?.trim();
+      if (bootstrap && staffEmail && staffPassword && code) {
+        if (staffPassword.length < 12) throw new Error('STAFF_PASSWORD must be at least 12 characters');
+        const staff = { email: staffEmail, password: staffPassword, fullName: process.env.STAFF_NAME?.trim() || 'FreeFounders Staff' };
+        if (await seedStaff(staff, code, true)) console.log(`✔ Staff account ${staffEmail} created (owner console)`);
+      }
     })
     .catch((err) => {
       console.error('✖ Seed failed:', err.message);

@@ -1,0 +1,59 @@
+# FreeFounders gateway for the open demo on the shared server: plain http on :7395 (no certificate yet), the same
+# path routing as infra/gateway/dev-gateway.mjs and the prod draft infra/gateway/Caddyfile:
+#   /api/platform/*  Platform (path kept)      /tasks/api/*  Tasks (/tasks stripped)      /media/*  Tasks
+#   /assets/api/*    Assets (/assets stripped) everything else: the web app (apps/web/dist, mounted at /srv/web)
+{
+	admin off
+	auto_https off
+}
+
+(security_headers) {
+	header {
+		# No HSTS: this site is plain http until it gets a domain and a certificate.
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), geolocation=(self), microphone=(self), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+		-X-Powered-By
+		?Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+	}
+}
+
+http://:7395 {
+	encode gzip
+	import security_headers
+
+	request_body {
+		max_size 100MB
+	}
+
+	handle /api/platform/* {
+		reverse_proxy platform:4000
+	}
+
+	handle_path /tasks/api/* {
+		rewrite * /api{uri}
+		reverse_proxy tasks:8000
+	}
+	handle /media/* {
+		header ?Cache-Control "private, no-store"
+		reverse_proxy tasks:8000
+	}
+
+	handle_path /assets/api/* {
+		rewrite * /api{uri}
+		reverse_proxy assets:3000
+	}
+
+	handle {
+		root * /srv/web
+		@hashed path /static/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		header /index.html Cache-Control "no-cache"
+		header /sw.js Cache-Control "no-cache"
+		file_server
+	}
+}

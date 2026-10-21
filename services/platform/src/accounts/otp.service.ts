@@ -20,9 +20,18 @@ function ipLimit(): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 20;
 }
 
-/** The code comes back in the answer (dev and tests only: OTP_DEV_ECHO=1, never in production). */
+/**
+ * The code comes back in the answer (dev and tests only: OTP_DEV_ECHO=1, never in production), except on an open demo
+ * server that sets DEMO_MODE=1 (infra/deploy/README.md): anyone can then sign up without a real email/SMS. Unsafe for
+ * real customers; off by default.
+ */
 export function otpDevEcho(): boolean {
-  return process.env.OTP_DEV_ECHO === '1' && process.env.NODE_ENV !== 'production';
+  return process.env.OTP_DEV_ECHO === '1' && (process.env.NODE_ENV !== 'production' || demoMode());
+}
+
+/** DEMO_MODE=1: an open demo server (codes on screen, FakePay). Never on an install with real customers. */
+export function demoMode(): boolean {
+  return process.env.DEMO_MODE === '1';
 }
 
 /** Sends a one-time code by email or SMS. The real senders (SES, a DLT SMS template / WhatsApp) come with §20 step 0. */

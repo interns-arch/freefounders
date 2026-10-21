@@ -1,0 +1,191 @@
+# FreeFounders on a shared Docker host (open demo, plain http). Use it through ./ff.sh, which sets the project name,
+# the env file (FF_HOME/.env, mode 600, never in git) and this file. README.md has the whole procedure.
+#
+# Only the gateway publishes a port (FF_PORT, default 7395). Databases and APIs sit on an internal network with no
+# published ports and no internet access. Every container has a hard memory ceiling (memswap = mem, so it cannot push
+# the host into swap) and a CPU share; total ~1.9 GB / 1.5 CPU.
+name: freefounders
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD:?}
+      TASKS_DB_PASSWORD: ${TASKS_DB_PASSWORD:?}
+      ASSETS_DB_PASSWORD: ${ASSETS_DB_PASSWORD:?}
+    command: >-
+      postgres -c shared_buffers=64MB -c max_connections=60 -c work_mem=4MB -c maintenance_work_mem=32MB
+      -c effective_cache_size=192MB -c wal_buffers=4MB -c max_wal_size=256MB
+    volumes:
+      - ${FF_HOME:?}/data/postgres:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-freefounders.sh:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 512m
+    memswap_limit: 512m
+    shm_size: 64m
+    cpus: 0.3
+    logging: *logging
+
+  platform:
+    build:
+      context: ../../services/platform
+      dockerfile: ../../infra/deploy/platform.Dockerfile
+    image: freefounders-platform:latest
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+      PORT: "4000"
+      DATABASE_URL: postgres://ff_platform:${PLATFORM_DB_PASSWORD}@postgres:5432/ff_platform
+      PGSSLMODE: disable
+      DB_POOL_SIZE: "6"
+      PLATFORM_SECRET: ${PLATFORM_SECRET:?}
+      TASKS_INTERNAL_URL: http://tasks:8000/api/internal
+      ASSETS_INTERNAL_URL: http://assets:3000/api/internal
+      EVENT_POLL_SECONDS: "30"
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?}
+      # Open demo only (README.md): one-time codes shown on screen and FakePay. Unsafe for real customers.
+      DEMO_MODE: ${DEMO_MODE:-0}
+      OTP_DEV_ECHO: ${DEMO_MODE:-0}
+      FAKE_GATEWAY_SECRET: ${FAKE_GATEWAY_SECRET:-}
+      BILLING_DEV_TOOLS: "0"
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/platform/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    mem_limit: 320m
+    memswap_limit: 320m
+    cpus: 0.3
+    logging: *logging
+
+  tasks:
+    build:
+      context: ../../services/tasks
+      dockerfile: Dockerfile
+    image: freefounders-tasks:latest
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    env_file: tasks.env
+    environment: &tasks_env
+      SECRET_KEY: ${TASKS_SECRET_KEY:?}
+      SETTINGS_KEY: ${TASKS_SETTINGS_KEY:?}
+      ALLOWED_HOSTS: ${TASKS_ALLOWED_HOSTS:?}
+      CSRF_TRUSTED_ORIGINS: ${PUBLIC_WEB_URL:?}
+      DATABASE_URL: postgres://ff_tasks:${TASKS_DB_PASSWORD}@postgres:5432/ff_tasks
+    # The image's own entrypoint runs plain `migrate` + 1 worker (standalone mode). Here: every company's schema, and
+    # 2 workers (the reminder ticker runs in tasks-worker instead, NOTIF_SCHEDULER=false).
+    entrypoint: []
+    command: >-
+      sh -c "python manage.py migrate_companies --verbosity 1 &&
+      exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --timeout 120
+      --max-requests 2000 --max-requests-jitter 200 --access-logfile - --error-logfile -"
+    volumes:
+      - ${FF_HOME:?}/data/tasks-media:/app/backend/media
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    mem_limit: 400m
+    memswap_limit: 400m
+    cpus: 0.3
+    logging: *logging
+
+  tasks-worker:
+    image: freefounders-tasks:latest
+    restart: unless-stopped
+    depends_on:
+      tasks: { condition: service_healthy }
+    env_file: tasks.env
+    environment: *tasks_env
+    entrypoint: []
+    command: ["python", "manage.py", "run_worker"]
+    volumes:
+      - ${FF_HOME:?}/data/tasks-media:/app/backend/media
+    networks: [internal]
+    mem_limit: 250m
+    memswap_limit: 250m
+    cpus: 0.15
+    logging: *logging
+
+  assets:
+    build:
+      context: ../../services/assets
+      dockerfile: ../../infra/deploy/assets.Dockerfile
+    image: freefounders-assets:latest
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+      PORT: "3000"
+      DATABASE_URL: postgres://ff_assets:${ASSETS_DB_PASSWORD}@postgres:5432/ff_assets
+      PGSSLMODE: disable
+      DB_POOL_SIZE: "8"
+      TENANCY: schemas
+      PLATFORM_JWKS_URL: http://platform:4000/api/platform/.well-known/jwks.json
+      PUBLIC_URL: ${PUBLIC_WEB_URL:?}
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      UPLOAD_DIR: /data/uploads
+      PHOTO_CONCURRENCY: "1"
+    volumes:
+      - ${FF_HOME:?}/data/assets-uploads:/data/uploads
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    mem_limit: 320m
+    memswap_limit: 320m
+    cpus: 0.3
+    logging: *logging
+
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [platform, tasks, assets]
+    ports:
+      - "${FF_PORT:-7395}:7395"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${FF_HOME:?}/web:/srv/web:ro
+    networks: [internal, edge]
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: 0.15
+    logging: *logging
+
+networks:
+  # No internet and no host ports: Postgres and the APIs are reachable only from each other and the gateway.
+  internal:
+    internal: true
+  edge: {}

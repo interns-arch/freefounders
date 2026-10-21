@@ -43,8 +43,12 @@ export interface PaymentGateway {
 
 export const FAKE_SIGNATURE_HEADER = 'x-fakepay-signature';
 
-/** HMAC secret of the fake gateway: FAKE_GATEWAY_SECRET (dev default in scripts/dev.mjs; none in production). */
+/**
+ * HMAC secret of the fake gateway: FAKE_GATEWAY_SECRET (dev default in scripts/dev.mjs; none in production).
+ * A production build uses it only on an open demo server (DEMO_MODE=1), so a stray secret cannot switch FakePay on.
+ */
 function fakeSecret(): string | null {
+  if (process.env.NODE_ENV === 'production' && process.env.DEMO_MODE !== '1') return null;
   const s = process.env.FAKE_GATEWAY_SECRET?.trim();
   return s && s.length >= 16 ? s : null;
 }
