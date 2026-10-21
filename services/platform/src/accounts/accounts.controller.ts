@@ -5,6 +5,7 @@ import { respondTokens } from '../auth/auth.controller';
 import { AuthService } from '../auth/auth.service';
 import { type AuthedRequest, type Caller, CurrentCaller, Needs, Public, ReadOnlyOk, uuidParam, ZodPipe } from '../common/http';
 import { acceptSchema, inviteSchema, InvitesService } from '../invites/invites.service';
+import { countCompanyNameCheck } from '../company/company-name';
 import { countUsernameCheck } from './username';
 import { AccountsService, companySchema, completeSchema, forgotSchema, resetSchema, resetVerifySchema, startSchema, verifySchema } from './accounts.service';
 
@@ -32,6 +33,19 @@ export class AccountsController {
     const caller = req.caller && (await this.auth.isLive(req.caller)) ? req.caller : undefined;
     const own = caller ? (await this.accounts.accountOfPerson(caller.personId))?.id : undefined;
     return this.accounts.usernameAvailable(name, own);
+  }
+
+  /**
+   * Is a company name free (PLAN.md §21.6)? Public (sign-up), 60 checks per minute per address. `rename=1` from a
+   * signed-in caller (Settings): their own company's name counts as free. Without it (sign-up, New company) it does not.
+   */
+  @Public()
+  @Get('companies/name-available')
+  async companyNameAvailable(@Query('n') n: unknown, @Query('rename') rename: unknown, @Req() req: AuthedRequest) {
+    countCompanyNameCheck(req.ip);
+    const name = typeof n === 'string' ? n.slice(0, 200) : '';
+    const caller = rename === '1' && req.caller && (await this.auth.isLive(req.caller)) ? req.caller : undefined;
+    return this.accounts.companyNameAvailable(name, caller?.companyId);
   }
 
   /** The signed-in account adds or changes its username (409 when taken). Allowed while the company is read-only. */

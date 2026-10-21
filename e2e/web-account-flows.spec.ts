@@ -158,6 +158,17 @@ test('username: "already taken" for an existing one, Continue waits; sign up wit
   await expect(page.getByText('Available', { exact: true })).toBeVisible();
   await page.getByLabel('Choose a password').fill(PASSWORD);
   await go.click();
+  // Company names are unique (PLAN.md §21.6): Mona's company, in another case and spacing, is refused while typing.
+  const companyName = page.getByLabel('Company name');
+  const variant = `  ${companyA.toUpperCase().replace(/ /g, '   ')} `;
+  await companyName.fill(variant);
+  await expect(page.getByText(`A company called "${companyA.toUpperCase()}" already exists. If you work there, ask its owner for an invite link.`)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create company' })).toBeDisabled();
+  await companyName.fill('x');
+  await expect(page.getByText('Use 2–80 characters for the company name.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create company' })).toBeDisabled();
+  await companyName.fill(`E2E Username Co ${stamp}`);
+  await expect(page.getByText('Available', { exact: true })).toBeVisible();
   await companyStep(page, `E2E Username Co ${stamp}`, 'tasks');
 
   // Another browser: a wrong password keeps the general message plus the hint; the username (any case) signs in.

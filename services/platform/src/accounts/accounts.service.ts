@@ -6,6 +6,7 @@ import { BillingService } from '../billing/billing.service';
 import { stateName } from '../billing/gst';
 import { badRequest, type Caller } from '../common/http';
 import { CompanySetupService } from '../company/setup.service';
+import { assertCompanyNameFree, COMPANY_NAME_MAX, companyNameAvailability } from '../company/company-name';
 import { DbService } from '../db/db.service';
 import { accounts, APPS, companies, logins, people } from '../db/schema';
 import { type Identifier, normaliseIdentifier } from './identifier';
@@ -22,7 +23,7 @@ export const startSchema = z.object({ identifier: identifierSchema });
 export const verifySchema = z.object({ otpId: z.string().uuid('Ask for a new code'), code: z.string().trim().regex(/^[0-9]{6}$/, 'Enter the 6-digit code') });
 export const newPasswordSchema = z.string().min(6, 'Use at least 6 characters').max(200);
 export const companySchema = z.object({
-  name: z.string().trim().min(2, 'Enter the company name').max(120),
+  name: z.string().trim().min(2, 'Enter the company name').max(COMPANY_NAME_MAX, `At most ${COMPANY_NAME_MAX} characters`),
   teamSize: z.string().trim().max(20).optional().nullable(),
   industry: z.string().trim().max(80).optional().nullable(),
   state: z.string().trim().max(60).optional().nullable().refine((s) => !s || !!stateName(s), 'Choose a state'),
@@ -85,6 +86,11 @@ export class AccountsService {
   async accountOfPerson(personId: string): Promise<AccountRow | undefined> {
     const [row] = await this.dbs.db.select({ account: accounts }).from(people).innerJoin(accounts, eq(accounts.id, people.accountId)).where(eq(people.id, personId)).limit(1);
     return row?.account;
+  }
+
+  /** GET companies/name-available (PLAN.md §21.6); `exceptCompanyId`: the caller renaming its own company. */
+  companyNameAvailable(raw: string, exceptCompanyId?: string | null) {
+    return companyNameAvailability(this.dbs.db, raw, exceptCompanyId);
   }
 
   // ─── usernames (PLAN.md §21.5) ──────────────────────────────────────────
@@ -222,13 +228,15 @@ export class AccountsService {
 
   /** The rows: company (code from its name), its owner (the account's membership), the trial. */
   private async insertCompany(account: AccountRow, input: CompanyInput) {
-    const code = await this.setup.freeCode(input.name);
-    const [company] = await this.dbs.db.insert(companies).values({ name: input.name, code, enabledApps: [...new Set(input.apps)] }).returning();
+    // Unique across the product (409 on the field; the lock is held until this transaction ends).
+    const name = await assertCompanyNameFree(this.dbs.db, input.name);
+    const code = await this.setup.freeCode(name);
+    const [company] = await this.dbs.db.insert(companies).values({ name, code, enabledApps: [...new Set(input.apps)] }).returning();
     const [owner] = await this.dbs.db
       .insert(people)
       .values({ companyId: company.id, fullName: account.fullName, email: account.email, mobile: account.mobile, platformRole: 'owner', accountId: account.id })
       .returning({ id: people.id });
-    await this.billing.startTrial(this.dbs.db, company.id, { legalName: input.name, state: input.state ?? null, email: account.email });
+    await this.billing.startTrial(this.dbs.db, company.id, { legalName: name, state: input.state ?? null, email: account.email });
     if (input.teamSize || input.industry) this.log.log(`New company ${code}: team ${input.teamSize ?? '?'}, industry ${input.industry ?? '?'}`);
     return { companyId: company.id, ownerId: owner.id, company };
   }

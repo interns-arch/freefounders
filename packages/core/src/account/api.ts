@@ -17,6 +17,7 @@ import type {
   SignupCompleteInput,
   SignupVerified,
 } from './types';
+import { COMPANY_NAME_INVALID, type CompanyNameAvailability, companyNameShapeProblem, normaliseCompanyName } from './company-name';
 import { normaliseUsername, type UsernameAvailability, usernameFromName, USERNAME_MESSAGES, usernameShapeProblem, usernameVariants } from './username';
 
 export const accountKeys = {
@@ -24,6 +25,7 @@ export const accountKeys = {
   invites: ['account', 'invites'] as const,
   invite: (token: string) => ['account', 'invite', token] as const,
   username: (name: string) => ['account', 'username', name] as const,
+  companyName: (name: string, renameBy: string | null) => ['account', 'company-name', name, renameBy] as const,
 };
 
 export const accountApi = {
@@ -31,6 +33,7 @@ export const accountApi = {
   signupVerify: (otpId: string, code: string) => platformApi.post<SignupVerified>('/signup/verify', { otpId, code }),
   signupComplete: (body: SignupCompleteInput) => platformApi.post<SignupComplete>('/signup/complete', { ...body, ...session.clientHint() }),
   usernameAvailable: (u: string) => platformApi.get<UsernameAvailability>('/auth/username-available', { u }),
+  companyNameAvailable: (n: string, rename = false) => platformApi.get<CompanyNameAvailability>('/companies/name-available', rename ? { n, rename: '1' } : { n }),
   setUsername: (username: string) => platformApi.put<{ ok: boolean; username: string }>('/auth/username', { username }),
   forgot: (identifier: string) => platformApi.post<OtpSent>('/auth/forgot', { identifier }),
   resetVerify: (otpId: string, code: string) => platformApi.post<{ ok: boolean }>('/auth/reset/verify', { otpId, code }),
@@ -72,12 +75,14 @@ export function useSignupVerify() {
 /** Creates the account (or uses the existing one) and the company, then signs in to it. Can take several seconds. */
 export function useSignupComplete() {
   const enter = useEnterCompany();
+  const forgetNameChecks = useForgetCompanyNameChecks();
   return useMutation({
     mutationFn: async (body: SignupCompleteInput) => {
       const res = await accountApi.signupComplete(body);
       await enter(res);
       return res;
     },
+    onError: forgetNameChecks,
   });
 }
 export function useForgotPassword() {
@@ -173,6 +178,48 @@ export function usernameErrorOf(err: unknown): string | null {
   return e && (e.status === 409 || e.status === 400) && e.errors?.username ? e.errors.username : null;
 }
 
+// ─── company names (PLAN.md §21.6) ──────────────────────────────────────────
+
+export type CompanyNameCheckState = 'empty' | 'same' | 'checking' | 'available' | 'taken' | 'invalid' | 'error';
+
+/**
+ * Live check of a company name while it is typed (sign-up, New company, Settings): the length at once, then the server
+ * after 400 ms of no typing. `ok` when the server said it is free, or (Settings: `current` given) when it is still the
+ * company's own name, which is never checked (an older duplicate keeps saving). `rename`: the signed-in caller's
+ * company counts as free.
+ */
+export function useCompanyNameCheck(value: string, opts: { enabled?: boolean; rename?: boolean; current?: string } = {}) {
+  const claims = useClaims();
+  const name = normaliseCompanyName(value);
+  const settled = useDebounced(name, 400);
+  const same = opts.current !== undefined && name === normaliseCompanyName(opts.current);
+  const shapeOk = !!name && !companyNameShapeProblem(name);
+  const renameBy = opts.rename ? (claims?.sub ?? null) : null;
+  const q = useQuery({
+    queryKey: accountKeys.companyName(settled, renameBy),
+    queryFn: () => accountApi.companyNameAvailable(settled, !!opts.rename),
+    enabled: (opts.enabled ?? true) && shapeOk && !same && settled === name,
+    staleTime: 15_000,
+    retry: false,
+  });
+  let state: CompanyNameCheckState;
+  let message: string | null = null;
+  if (!name) state = 'empty';
+  else if (same) state = 'same';
+  else if (!shapeOk) (state = 'invalid'), (message = COMPANY_NAME_INVALID);
+  else if (settled !== name || q.isFetching || (!q.data && !q.isError)) state = 'checking';
+  else if (q.isError) (state = 'error'), (message = 'Could not check this name. Try again.');
+  else if (q.data!.available) (state = 'available'), (message = 'Available');
+  else (state = q.data!.reason ?? 'taken'), (message = q.data!.message);
+  return { state, message, ok: state === 'available' || state === 'same' };
+}
+
+/** After a refused create / rename (409: someone took the name a moment ago), earlier "Available" answers are stale. */
+export function useForgetCompanyNameChecks() {
+  const qc = useQueryClient();
+  return () => void qc.removeQueries({ queryKey: ['account', 'company-name'] });
+}
+
 // ─── companies of the signed-in account ─────────────────────────────────────
 
 /** GET auth/companies (only for a person with an account: pass `enabled` false otherwise). */
@@ -188,12 +235,14 @@ export function useSwitchCompany() {
 /** Creates another company for this account and signs in to it. */
 export function useCreateCompany() {
   const enter = useEnterCompany();
+  const forgetNameChecks = useForgetCompanyNameChecks();
   return useMutation({
     mutationFn: async (body: CompanyInput) => {
       const res = await accountApi.createCompany(body);
       await enter(res);
       return res;
     },
+    onError: forgetNameChecks,
   });
 }
 

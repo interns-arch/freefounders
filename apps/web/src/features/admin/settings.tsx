@@ -15,10 +15,12 @@ import {
   useUpdateDepartment,
   useUploadLogo,
 } from '@freefounders/core/admin';
+import { companyNameErrorOf, useCompanyNameCheck } from '@freefounders/core/account';
 import { ChevronRight, ImageIcon, Palette } from '@/components/icons';
 import { type ChangeEvent, type FormEvent, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Field } from '@/components/common/form';
+import { LiveCheckLine } from '@/components/common/live-check';
 import { ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
@@ -99,19 +101,34 @@ function ProfileCard({ company }: { company: CompanySettings }) {
   const remove = useRemoveLogo();
   const fileRef = useRef<HTMLInputElement>(null);
   const fail = (err: unknown) => setError(errorMessage(err));
+  // Unique across FreeFounders (PLAN.md §21.6): a new name is checked while typing; the current one never blocks Save.
+  const check = useCompanyNameCheck(name, { rename: true, current: company.name });
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameProblem = nameError ?? (['taken', 'invalid', 'error'].includes(check.state) ? check.message : null);
+  const changeName = (v: string) => {
+    setName(v);
+    setNameError(null);
+    setMessage('');
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setMessage('');
+    if (!check.ok) return document.getElementById('co-name')?.focus();
     save.mutate(
-      { name, shortName: shortName || null, colour: colour || null },
+      { name: name.trim().replace(/\s+/g, ' '), shortName: shortName || null, colour: colour || null },
       {
         onSuccess: (res) => {
           setSync(res.sync);
           setMessage('Saved');
         },
-        onError: fail,
+        onError: (err) => {
+          const taken = companyNameErrorOf(err);
+          if (!taken) return fail(err);
+          setNameError(taken);
+          document.getElementById('co-name')?.focus();
+        },
       },
     );
   };
@@ -143,7 +160,17 @@ function ProfileCard({ company }: { company: CompanySettings }) {
         <form onSubmit={submit} className="grid gap-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Company name" htmlFor="co-name">
-              <Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} />
+              <Input
+                id="co-name"
+                value={name}
+                onChange={(e) => changeName(e.target.value)}
+                required
+                minLength={2}
+                maxLength={Math.max(80, company.name.length)}
+                aria-invalid={nameProblem ? true : undefined}
+                aria-describedby="co-name-status"
+              />
+              <LiveCheckLine id="co-name-status" problem={nameProblem} state={check.state} />
             </Field>
             <Field label="Short name (menus and titles)" htmlFor="co-short">
               <Input id="co-short" value={shortName} onChange={(e) => setShortName(e.target.value)} maxLength={40} placeholder={name} />
@@ -224,7 +251,7 @@ function ProfileCard({ company }: { company: CompanySettings }) {
                 {message}
               </span>
             )}
-            <Button type="submit" loading={save.isPending}>
+            <Button type="submit" loading={save.isPending} disabled={!!nameError || !check.ok}>
               Save company
             </Button>
           </div>

@@ -13,6 +13,7 @@ import { BillingService } from './billing/billing.service';
 import { financialYear, gst } from './billing/gst';
 import { normaliseIdentifier } from './accounts/identifier';
 import { resetUsernameChecks } from './accounts/username';
+import { resetCompanyNameChecks } from './company/company-name';
 import { DbService } from './db/db.service';
 import { accounts, billingProfiles, checkoutSessions, companies, invites, otpCodes, people, personApps, seatChanges, subscriptions } from './db/schema';
 import { createApp } from './main';
@@ -970,6 +971,119 @@ describe('account usernames (PLAN.md §21.5)', () => {
     } finally {
       delete process.env.USERNAME_CHECK_IP_LIMIT;
       resetUsernameChecks();
+    }
+  });
+});
+
+describe('company names are unique (PLAN.md §21.6)', () => {
+  const sfx = randomUUID().slice(0, 6);
+  const NAME = `Unique Traders ${sfx}`;
+  const takenMsg = (n: string) => `A company called "${n}" already exists. If you work there, ask its owner for an invite link.`;
+  const avail = async (n: string, opts: { token?: string; rename?: boolean } = {}) =>
+    (await call('GET', `/companies/name-available?n=${encodeURIComponent(n)}${opts.rename ? '&rename=1' : ''}`, { token: opts.token })).body;
+  let owner = '';
+  let companyId = '';
+
+  before(async () => {
+    const res = await signup(`unique-${sfx}@names.test`, { name: NAME });
+    owner = res.accessToken;
+    companyId = res.companyId;
+  });
+
+  test('availability: free, taken in any case / spacing, invalid by length', async () => {
+    assert.deepEqual(await avail(`Fresh Name ${sfx}`), { available: true, message: 'Available' });
+    for (const variant of [NAME, NAME.toUpperCase(), `  unique   traders ${sfx} `, `UNIQUE\ttraders  ${sfx}`]) {
+      assert.deepEqual(await avail(variant), { available: false, reason: 'taken', message: takenMsg(variant.trim().replace(/\s+/g, ' ')) }, variant);
+    }
+    for (const bad of ['', 'x', '   a   ', 'y'.repeat(81)]) assert.equal((await avail(bad)).reason, 'invalid', bad);
+    assert.equal((await avail('y'.repeat(80))).available, true);
+    // Signed in: only a rename counts the caller's own company as free (New company must not reuse it).
+    assert.equal((await avail(NAME, { token: owner })).available, false);
+    assert.equal((await avail(NAME.toLowerCase(), { token: owner, rename: true })).available, true);
+    assert.equal((await avail(NAME, { rename: true })).available, false, 'rename=1 without a sign-in changes nothing');
+  });
+
+  test('sign-up with a taken name: 409 on companyName, nothing used up; another name finishes it', async () => {
+    const t = await verified(`second-${sfx}@names.test`);
+    const body = (name: string) => ({ signupToken: t.signupToken, fullName: 'Second Founder', password: PASSWORD, username: `second${sfx}`, company: { name, apps: ['tasks'] } });
+    const dup = await call('POST', '/signup/complete', { body: body(`  UNIQUE  traders ${sfx}`) });
+    assert.equal(dup.status, 409, JSON.stringify(dup.body));
+    assert.deepEqual([dup.body.field, dup.body.message, dup.body.errors.companyName], ['companyName', takenMsg(`UNIQUE traders ${sfx}`), takenMsg(`UNIQUE traders ${sfx}`)]);
+    const [none] = await dbs.db.select({ n: sql<number>`count(*)::int` }).from(accounts).where(sql`lower(${accounts.email}) = ${`second-${sfx}@names.test`}`);
+    assert.equal(none.n, 0, 'no account was made');
+    const long = await call('POST', '/signup/complete', { body: body('z'.repeat(81)) });
+    assert.equal(long.status, 400);
+    const ok = await call('POST', '/signup/complete', { body: body(`  Second   Traders ${sfx} `) });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal((await company(ok.body.companyId)).name, `Second Traders ${sfx}`, 'stored trimmed, inner spaces collapsed');
+  });
+
+  test("New company (POST companies) with a taken name: 409, even the caller's own company name", async () => {
+    const own = await call('POST', '/companies', { token: owner, body: { name: NAME.toLowerCase(), apps: ['tasks'] } });
+    assert.deepEqual([own.status, own.body.field], [409, 'companyName']);
+    const other = await call('POST', '/companies', { token: owner, body: { name: `second traders ${sfx}`, apps: ['tasks'] } });
+    assert.equal(other.status, 409);
+    assert.equal((await call('GET', '/auth/me', { token: owner })).status, 200, 'a refused new company keeps the session');
+  });
+
+  test('rename (Settings): a taken name is 409; its own name (any case) is fine; a free name saves', async () => {
+    const taken = await call('PATCH', '/company', { token: owner, body: { name: `SECOND traders ${sfx}` } });
+    assert.deepEqual([taken.status, taken.body.field, taken.body.message], [409, 'companyName', takenMsg(`SECOND traders ${sfx}`)]);
+    assert.equal((await company(companyId)).name, NAME);
+    const same = await call('PATCH', '/company', { token: owner, body: { name: NAME.toUpperCase(), shortName: 'UT' } });
+    assert.equal(same.status, 200, JSON.stringify(same.body));
+    const renamed = await call('PATCH', '/company', { token: owner, body: { name: `Unique  Traders Renamed ${sfx}` } });
+    assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
+    assert.equal((await company(companyId)).name, `Unique Traders Renamed ${sfx}`);
+    assert.equal((await avail(NAME)).available, true, 'the old name is free again');
+    assert.equal((await call('PATCH', '/company', { token: owner, body: { name: NAME } })).status, 200);
+  });
+
+  test('two sign-ups with the same new name at once: exactly one wins', async () => {
+    const name = `Race Co ${sfx}`;
+    const tokens = await Promise.all([verified(`race1-${sfx}@names.test`), verified(`race2-${sfx}@names.test`)]);
+    const results = await Promise.all(
+      tokens.map((t, i) =>
+        call('POST', '/signup/complete', { body: { signupToken: t.signupToken, fullName: `Racer ${i}`, password: PASSWORD, username: uname(), company: { name: i ? name.toUpperCase() : name, apps: ['tasks'] } } }),
+      ),
+    );
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409], JSON.stringify(results.map((r) => r.body)));
+    const [rows] = await dbs.db.select({ n: sql<number>`count(*)::int` }).from(companies).where(sql`lower(${companies.name}) = ${name.toLowerCase()}`);
+    assert.equal(rows.n, 1);
+  });
+
+  test('companies that already share a name (made before this rule) still load, sign in and save their settings', async () => {
+    const twin = `Twin Co ${sfx}`;
+    const made: Array<typeof companies.$inferSelect> = [];
+    for (const [i, n] of [twin, ` twin  co ${sfx}`].entries()) {
+      const [co] = await dbs.db.insert(companies).values({ name: n, code: `TWIN${i}X${randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase()}`, enabledApps: [] }).returning();
+      const [p] = await dbs.db.insert(people).values({ companyId: co.id, fullName: `Twin Owner ${i}`, platformRole: 'owner' }).returning();
+      await dbs.db.execute(sql`insert into platform.logins (person_id, username, password_hash) values (${p.id}, ${`twin${i}.${sfx}`}, ${await hashPassword(PASSWORD)})`);
+      made.push(co);
+    }
+    for (const [i, co] of made.entries()) {
+      const res = await login(`twin${i}.${sfx}`);
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const me = await call('GET', '/auth/me', { token: res.body.accessToken });
+      assert.equal(me.body.company.name, co.name);
+      const save = await call('PATCH', '/company', { token: res.body.accessToken, body: { name: co.name, shortName: `T${i}` } });
+      assert.equal(save.status, 200, JSON.stringify(save.body));
+      assert.equal((await avail(co.name, { token: res.body.accessToken, rename: true })).available, false, 'the other twin still holds the name');
+    }
+    assert.equal((await company(made[1].id)).name, made[1].name, 'existing names are left as they are');
+  });
+
+  test('availability checks are limited per address (60 a minute by default)', async () => {
+    resetCompanyNameChecks();
+    process.env.COMPANY_NAME_CHECK_IP_LIMIT = '3';
+    try {
+      for (let i = 0; i < 3; i++) assert.equal((await call('GET', '/companies/name-available?n=abc')).status, 200);
+      const limited = await call('GET', '/companies/name-available?n=abc');
+      assert.equal(limited.status, 429);
+      assert.ok(limited.body.retryAfterSeconds > 0);
+    } finally {
+      delete process.env.COMPANY_NAME_CHECK_IP_LIMIT;
+      resetCompanyNameChecks();
     }
   });
 });

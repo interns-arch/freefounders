@@ -2,7 +2,7 @@
  * "Create your company" (PLAN.md §20.5 step 2): name, team size, industry, state (GST), apps. Used by sign-up and by
  * "New company" in the account menu. Then the "Setting up your company…" screen while the server provisions it.
  */
-import { type CompanyInput, INDUSTRIES, TEAM_SIZES, type TeamSize } from '@freefounders/core/account';
+import { type CompanyInput, INDUSTRIES, TEAM_SIZES, type TeamSize, useCompanyNameCheck } from '@freefounders/core/account';
 import { INDIAN_STATES } from '@freefounders/core/billing';
 import type { AppKey } from '@freefounders/core';
 import { CheckCircle2, ClipboardList, Loader2, Package } from '@/components/icons';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Label, NativeSelect } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
-import { FormError, TextField } from './parts';
+import { CompanyNameField, FormError } from './parts';
 
 export const EMPTY_COMPANY: CompanyInput = { name: '', teamSize: '1-10', industry: '', state: '', apps: ['tasks', 'assets'] };
 
@@ -29,6 +29,7 @@ export function CompanyForm({
   error,
   submitLabel = 'Create company',
   busy,
+  nameError,
 }: {
   value: CompanyInput;
   onChange: (v: CompanyInput) => void;
@@ -36,8 +37,16 @@ export function CompanyForm({
   error?: string | null;
   submitLabel?: string;
   busy?: boolean;
+  /** The server refused the name at submit (409: another company has it); shown on the field until it is changed. */
+  nameError?: string | null;
 }) {
-  const [errors, setErrors] = useState<Errors>({});
+  const [errors, setErrors] = useState<Errors>(() => ({ name: nameError ?? undefined }));
+  useEffect(() => {
+    if (nameError) setErrors((e) => ({ ...e, name: nameError }));
+  }, [nameError]);
+  // Unique across FreeFounders (PLAN.md §21.6): checked while typing, Create waits for "Available".
+  const check = useCompanyNameCheck(value.name);
+  const nameBlocked = !!errors.name || (!!value.name.trim() && !check.ok);
   const set = <K extends keyof CompanyInput>(k: K, v: CompanyInput[K]) => {
     onChange({ ...value, [k]: v });
     if (errors[k as keyof Errors]) setErrors((e) => ({ ...e, [k]: undefined }));
@@ -47,7 +56,7 @@ export function CompanyForm({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next: Errors = {
-      name: value.name.trim().length < 2 ? 'Enter your company’s name.' : undefined,
+      name: value.name.trim().length < 2 ? 'Enter your company’s name.' : errors.name,
       industry: value.industry ? undefined : 'Choose an industry.',
       state: value.state ? undefined : 'Choose the state (needed for GST invoices).',
       apps: value.apps.length ? undefined : 'Choose at least one app.',
@@ -59,21 +68,16 @@ export function CompanyForm({
       return;
     }
     if (next.apps) return;
-    onSubmit({ ...value, name: value.name.trim() });
+    if (!check.ok) {
+      document.getElementById('company-name')?.focus();
+      return;
+    }
+    onSubmit({ ...value, name: value.name.trim().replace(/\s+/g, ' ') });
   };
 
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
-      <TextField
-        id="company-name"
-        label="Company name"
-        value={value.name}
-        onChange={(e) => set('name', e.target.value)}
-        autoComplete="organization"
-        autoFocus
-        error={errors.name}
-        maxLength={120}
-      />
+      <CompanyNameField id="company-name" value={value.name} onChange={(v) => set('name', v)} check={check} error={errors.name} autoFocus />
       <fieldset className="space-y-1.5">
         <legend className="mb-1.5 text-sm font-medium">Team size</legend>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -163,7 +167,7 @@ export function CompanyForm({
         )}
       </fieldset>
       <FormError>{error}</FormError>
-      <Button type="submit" size="lg" className="h-11 w-full" loading={busy}>
+      <Button type="submit" size="lg" className="h-11 w-full" loading={busy} disabled={nameBlocked}>
         {submitLabel}
       </Button>
       <p className="text-center text-xs text-muted-foreground">14-day free trial of every app. No card needed.</p>

@@ -1,5 +1,6 @@
 /** Admin API functions + hooks (Platform: /api/platform). Same endpoints the old portal called. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useForgetCompanyNameChecks } from '../account/api';
 import { platformApi } from '../http';
 import { LOOKUP } from '../query';
 import type { AppKey } from '../session';
@@ -201,7 +202,8 @@ function useCompanyChanged() {
 
 export function useUpdateCompany() {
   const changed = useCompanyChanged();
-  return useMutation({ mutationFn: adminApi.updateCompany, onSuccess: (c) => changed(c) });
+  const forgetNameChecks = useForgetCompanyNameChecks();
+  return useMutation({ mutationFn: adminApi.updateCompany, onSuccess: (c) => changed(c), onError: forgetNameChecks });
 }
 /** `image` is a data URL (PNG, JPEG or WebP, at most LOGO_MAX_BYTES). */
 export function useUploadLogo() {

@@ -21,6 +21,7 @@ import { AppModule } from './app.module';
 import { hashPassword } from './auth/auth.service';
 import { DbService } from './db/db.service';
 import { accounts, APPS, companies, logins, people, subscriptions } from './db/schema';
+import { assertCompanyNameFree } from './company/company-name';
 import { CODE_RE, CompanySetupService } from './company/setup.service';
 import { RolesService } from './roles/roles.service';
 
@@ -117,7 +118,9 @@ async function main() {
       if (password.length < 6) throw new Error('--owner-password must be at least 6 characters');
 
       const company = await dbs.db.transaction(async (tx) => {
-        const [c] = await tx.insert(companies).values({ name, code, enabledApps: apps }).returning();
+        // Company names are unique across the product (PLAN.md §21.6): same check and lock as sign-up.
+        const clean = await assertCompanyNameFree(tx, name);
+        const [c] = await tx.insert(companies).values({ name: clean, code, enabledApps: apps }).returning();
         const [owner] = await tx.insert(people).values({ companyId: c.id, fullName: ownerName, email: ownerEmail, platformRole: 'owner' }).returning();
         await tx.insert(logins).values({ personId: owner.id, username: opts['owner-login']?.trim() || null, passwordHash: await hashPassword(password), mustChangePassword: false });
         // Made by us, not by sign-up: no billing (PLAN.md §21).

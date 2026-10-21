@@ -4,7 +4,7 @@
  * One question per screen, a progress bar and a back button; nothing typed is lost going back.
  */
 import { ApiError, errorMessage } from '@freefounders/core';
-import { type CompanyInput, identifierKind, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@freefounders/core/account';
+import { companyNameErrorOf, type CompanyInput, identifierKind, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@freefounders/core/account';
 import { PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -31,6 +31,8 @@ export function SignupPage() {
   const usernameTouched = useRef(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [company, setCompany] = useState<CompanyInput>(EMPTY_COMPANY);
+  /** 409 at submit: another company took this name a moment ago (PLAN.md §21.6). */
+  const [companyNameError, setCompanyNameError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
 
   const start = useSignupStart();
@@ -136,6 +138,13 @@ export function SignupPage() {
       if (taken) {
         setUsernameError(taken);
         setStep('profile');
+        return;
+      }
+      // Same for the company name: back to the company step with the message on the field.
+      const nameTaken = companyNameErrorOf(err);
+      if (nameTaken) {
+        setCompanyNameError(nameTaken);
+        setStep('company');
       }
       /* anything else is shown on the setup screen */
     }
@@ -259,7 +268,16 @@ export function SignupPage() {
       {step === 'company' && (
         <div>
           <StepTitle title="Create your company">You can change all of this later in Settings.</StepTitle>
-          <CompanyForm value={company} onChange={setCompany} onSubmit={(c) => void create(c)} submitLabel="Create company" />
+          <CompanyForm
+            value={company}
+            onChange={(c) => {
+              if (c.name !== company.name) setCompanyNameError(null);
+              setCompany(c);
+            }}
+            onSubmit={(c) => void create(c)}
+            submitLabel="Create company"
+            nameError={companyNameError}
+          />
         </div>
       )}
     </AuthFrame>

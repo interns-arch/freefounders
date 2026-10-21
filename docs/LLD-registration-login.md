@@ -63,14 +63,15 @@ erDiagram
 |---|---|---|---|
 | `POST signup/start` | public | `{identifier}` | `{otpId, channel, devCode?}` · 429 `{message, retryAfterSeconds}` |
 | `POST signup/verify` | public | `{otpId, code}` | `{signupToken, accountExists}` · 400 wrong / expired / too many tries |
-| `POST signup/complete` | public | `{signupToken, fullName?, username?, password, company:{name, teamSize, industry, state, apps}}` (`fullName` + `username` required for a new account) | sign-in response + `{companyId, provisionMs, setupIncomplete?}` · 409 `{field:'username', message, errors:{username}}` taken · 400 invalid / reserved |
+| `POST signup/complete` | public | `{signupToken, fullName?, username?, password, company:{name, teamSize, industry, state, apps}}` (`fullName` + `username` required for a new account) | sign-in response + `{companyId, provisionMs, setupIncomplete?}` · 409 `{field:'username', message, errors:{username}}` taken · 409 `{field:'companyName', message, errors:{companyName}}` company name taken (§4.8) · 400 invalid / reserved |
+| `GET companies/name-available?n=&rename=1?` | public (optional bearer) | — | `{available, reason?: 'taken' / 'invalid', message}` · 429 after 60 / min per IP; `rename=1` + bearer: the caller's own company counts as free |
 | `GET auth/username-available?u=` | public (optional bearer) | — | `{available, reason?: 'taken' / 'invalid' / 'reserved', message, username?}` · 429 after 60 / min per IP |
 | `PUT auth/username` | bearer (account) | `{username}` | `{ok, username}` · 409 taken · 400 invalid / reserved · 403 admin-made login |
 | `POST auth/login` | public | `{login, password, client?}` or `{ticket, companyId, client?}` | sign-in response, or `{chooseCompany:[{companyId,name,code,role}], ticket}` · 401 wrong · 402 suspended · 429 network limit |
 | `POST auth/refresh` | refresh cookie / body | `{refreshToken?}` (mobile) | new sign-in response (rotated refresh) |
 | `GET auth/companies` | bearer | — | `[{companyId, name, code, role, current}]` |
 | `POST auth/switch` | bearer | `{companyId}` | sign-in response for that company |
-| `POST companies` | bearer (account) | company fields | sign-in response for the new company |
+| `POST companies` | bearer (account) | company fields | sign-in response for the new company · 409 `{field:'companyName', …}` name taken |
 | `POST auth/forgot` | public | `{identifier}` | `{otpId, channel, devCode?}` (same answer whether the account exists or not) |
 | `POST auth/reset/verify` | public | `{otpId, code}` | `{ok:true}` (counts an attempt, does not consume) |
 | `POST auth/reset` | public | `{otpId, code, newPassword}` | `{ok:true}`; all sessions of the account are revoked |
@@ -189,6 +190,24 @@ with the reason.
   whether a name exists (accepted, `docs/security/platform.md` §7). Signed in, the caller's own name counts as free.
 - **Change:** `PUT auth/username` for a signed-in account (the web: /account → Username); one name for all its companies.
 - **Existing accounts** got no username (they add one on /account); their email / mobile keep working.
+
+### 4.8 Company names are unique (§21.6)
+- **Rule:** no two companies share a name, compared after trimming, collapsing inner whitespace and lower-casing
+  ("Test  Comp" = "test comp"); every company counts (there is no deleted state). 2–80 characters after trimming. New
+  names are stored trimmed with single spaces (`services/platform/src/company/company-name.ts`).
+- **Where:** `signup/complete` and `POST companies` (inside the transaction that inserts the company, so a refusal uses
+  nothing up: the sign-up token and username stay free), `PATCH company` (Settings) when the name really changes (saving
+  the current name, in any case, is always allowed), and the CLI `company -- create`.
+- **Race-safe:** `pg_advisory_xact_lock(hashtext('ff-company-name:<normalised>'))` then the lookup, in the same
+  transaction; two sign-ups with the same name at once → one 200, one 409. No unique index: deployed databases already
+  hold duplicates (two "testcomp" on the server), which stay as they are and keep loading, signing in and saving.
+- **Answer:** 409 `{field:'companyName', message:'A company called "<name>" already exists. If you work there, ask its
+  owner for an invite link.', errors:{companyName}}`; 400 for the length.
+- **Availability:** `GET companies/name-available?n=` (public, 60 per minute per IP, `COMPANY_NAME_CHECK_IP_LIMIT`).
+  `rename=1` with a sign-in (Settings): the caller's own company is not counted. Without it (sign-up, New company) it is.
+- **Web:** the company step of sign-up, /new-company and Admin → Settings check the name 400 ms after typing stops
+  ("Available" or the message under the field); Create / Save stay disabled while it is taken, too short / long or being
+  checked; a 409 at submit returns to the field with the message.
 
 ## 5. How the apps trust the token
 - **Tasks (Django):** `accounts/platform_auth.py` verifies the JWT against the Platform JWKS (cached), maps `cid` to the

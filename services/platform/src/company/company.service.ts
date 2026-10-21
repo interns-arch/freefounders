@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
+import { assertCompanyNameFree, cleanCompanyName, normaliseCompanyName } from './company-name';
 import { type AppKey, APPS, companies, type ModuleSwitches } from '../db/schema';
 import { type AppModule, internalUrl, ProvisionClient } from '../provision/provision.client';
 
@@ -111,10 +112,18 @@ export class CompanyService {
 
   async update(caller: Caller, input: Partial<ProfileInput>) {
     const set: Partial<typeof companies.$inferInsert> = { updatedAt: new Date() };
-    if (input.name !== undefined) set.name = input.name;
     if (input.shortName !== undefined) set.shortName = input.shortName || null;
     if (input.colour !== undefined) set.brandColour = input.colour ? input.colour.toLowerCase() : null;
-    await this.dbs.db.update(companies).set(set).where(eq(companies.id, caller.companyId));
+    await this.dbs.tx(async () => {
+      if (input.name !== undefined) {
+        // A new name must be free across the product (PLAN.md §21.6); saving the current one (even an older duplicate
+        // or a longer name) is always allowed.
+        const [current] = await this.dbs.db.select({ name: companies.name }).from(companies).where(eq(companies.id, caller.companyId)).limit(1);
+        if (!current || normaliseCompanyName(current.name) !== normaliseCompanyName(input.name)) set.name = await assertCompanyNameFree(this.dbs.db, input.name, caller.companyId);
+        else if (cleanCompanyName(current.name) !== cleanCompanyName(input.name)) set.name = input.name;
+      }
+      await this.dbs.db.update(companies).set(set).where(eq(companies.id, caller.companyId));
+    });
     const sync = await this.push(caller.companyId);
     return { ...(await this.get(caller)), sync };
   }

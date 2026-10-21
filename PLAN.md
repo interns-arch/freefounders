@@ -2478,3 +2478,27 @@ invite join with a username, the per-IP limit); core 14 (3 new); web rules + typ
 web-account-flows 12/12 (1 new: suggestion, "already taken", reserved, invalid, sign up, sign in by username with the
 hint, /account change refused), web-signup-billing + single-login + web-admin 19/19; DEMO reset to the owner afterwards.
 On the server the migration runs with the next deploy; the founder's existing accounts get no username until they add one.
+
+### 21.6 Company names are unique (2026-10-21)
+
+Founder reported as a bug: a second sign-up (another account) also created "testcomp" (code TESTCOMP2). Decision:
+company names are unique across the product.
+
+- **Rule** (`services/platform/src/company/company-name.ts`): compared trimmed, inner whitespace collapsed, lower-case;
+  2–80 characters; every company counts. Checked in the transaction under an advisory lock per normalised name in
+  `signup/complete`, `POST companies`, `PATCH company` (only when the name really changes) and the CLI `company --
+  create` → 409 `{field:'companyName', message: 'A company called "<name>" already exists. If you work there, ask its
+  owner for an invite link.'}`. No unique index and no migration: the existing duplicates (two "testcomp" on the server)
+  stay untouched and keep working.
+- **API:** `GET companies/name-available?n=` (public, 60 / min per IP) → `{available, reason?: taken|invalid, message}`;
+  `rename=1` with a sign-in counts the caller's own company as free (Settings).
+- **Web:** live check (400 ms) under Company name on the sign-up company step, /new-company and Admin → Settings;
+  Create / Save disabled while taken / invalid / checking; a 409 at submit returns to the field with the message.
+- Docs: `docs/LLD-registration-login.md` §4.8.
+
+**Status 2026-10-21:** Platform 142 pass (7 new: availability incl. case / spacing variants and length, sign-up 409 with
+nothing used up, New company 409 incl. the caller's own name, rename 409 + own name allowed, concurrent sign-ups → one
+wins, existing duplicates still sign in and save Settings, per-IP limit); core 17 (3 new); web rules + typecheck + build;
+smoke 10/10; e2e web-account-flows + web-signup-billing + settings 16/16 (web-account-flows: a second sign-up typing an
+existing company's name in another case / spacing sees the message, Create disabled, then a free name continues); DEMO
+reset to the owner afterwards.

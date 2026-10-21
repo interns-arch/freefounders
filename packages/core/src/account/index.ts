@@ -2,3 +2,4 @@
 export * from './types';
 export * from './api';
 export * from './username';
+export * from './company-name';
