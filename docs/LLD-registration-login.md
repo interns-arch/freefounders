@@ -1,7 +1,7 @@
 # Low-level design: registration and login
 
 Platform service (`services/platform`, NestJS + Drizzle, Postgres schema `platform`). Everything below is what the code does
-as of 2026-10-21 (PLAN.md §13, §21, §19.24, §19.28). All routes are under `/api/platform`. Tasks and Assets never see
+as of 2026-10-21 (PLAN.md §13, §21, §21.5, §19.24, §19.28). All routes are under `/api/platform`. Tasks and Assets never see
 passwords; they only verify the signed access token.
 
 ## 1. Modules and classes
@@ -9,10 +9,11 @@ passwords; they only verify the signed access token.
 | Module / file | Class / function | Responsibility |
 |---|---|---|
 | `accounts/identifier.ts` | `normaliseIdentifier()` | Email → lower-case; Indian mobile (10 digits, optional `+91`/`0`) → `+91XXXXXXXXXX`; anything else → null |
+| `accounts/username.ts` | `usernameShape()`, `usernameTaken()`, `lockUsername()`, `assertUsernameFree()` | Account usernames (§21.5): shape + reserved words, "free" across `accounts.username`, `logins.username` and employee IDs, advisory lock per name, per-IP check limit |
 | `accounts/otp.service.ts` | `OtpService` | 6-digit codes: `start()` (send, rate-limit), `verify()` (check, count attempts, optionally consume) |
 | | `TicketsService` | Short-lived single-use tickets: `signup` (proves the identifier, 30 min) and `login` (choose-company step, 5 min) |
 | | `OtpSender` / `FakeOtpSender` | Delivery interface. Fake = Platform log (+ `devCode` in the response only with `OTP_DEV_ECHO=1` or `DEMO_MODE=1`) |
-| `accounts/accounts.service.ts` | `AccountsService` | Sign-up (`signupStart/Verify/Complete`), new company for an account, forgot / reset password |
+| `accounts/accounts.service.ts` | `AccountsService` | Sign-up (`signupStart/Verify/Complete`), new company for an account, forgot / reset password, `usernameAvailable`, `setUsername` |
 | `accounts/accounts.controller.ts` | controllers | HTTP layer, Zod validation, throttles |
 | `auth/auth.service.ts` | `AuthService` | Sign-in (`login`, `loginAccount`, `loginWithTicket`), `switchCompany`, `issueFor`, `refresh`, `logout`, `revokeAll`, `me`, `changePassword` |
 | `auth/auth.controller.ts` | controller | `auth/*` routes; sets / clears the refresh cookie (web) or returns it in the body (`client: 'mobile'`) |
@@ -27,7 +28,7 @@ passwords; they only verify the signed access token.
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `accounts` | `id` uuid PK, `email`, `mobile`, `full_name`, `password_hash`, `failed_logins`, `locked_until`, `last_login_at`, `password_changed_at`, `is_staff` | Global person who signed themselves up or joined by invite. Email and mobile unique (case-insensitive) |
+| `accounts` | `id` uuid PK, `email`, `mobile`, `username`, `full_name`, `password_hash`, `failed_logins`, `locked_until`, `last_login_at`, `password_changed_at`, `is_staff` | Global person who signed themselves up or joined by invite. Email and mobile unique (case-insensitive). `username` (migration 0013) nullable, stored lower-case, unique index on `lower(username)`; also never equal to a `logins.username` or an employee ID (checked in code, §4.7) |
 | `people` | `id` uuid PK, `company_id` FK, `account_id` FK (nullable), `full_name`, `employee_code`, `email`, `mobile`, `platform_role` (`owner`/`admin`/`member`), `status`, department, reports-to, … | One row per person **per company** (= a membership). Employee code unique per company |
 | `logins` | `person_id` PK/FK, `username` (unique, case-insensitive), `password_hash`, `failed_logins`, `locked_until`, `last_login_at`, `password_changed_at` | Admin-made login for one person in one company (username / employee ID) |
 | `person_apps` | (`person_id`, `app`) PK, `local_user_id` | Which apps the person can open and their user id inside that app |
@@ -62,7 +63,9 @@ erDiagram
 |---|---|---|---|
 | `POST signup/start` | public | `{identifier}` | `{otpId, channel, devCode?}` · 429 `{message, retryAfterSeconds}` |
 | `POST signup/verify` | public | `{otpId, code}` | `{signupToken, accountExists}` · 400 wrong / expired / too many tries |
-| `POST signup/complete` | public | `{signupToken, fullName?, password, company:{name, teamSize, industry, state, apps}}` | sign-in response + `{companyId, provisionMs, setupIncomplete?}` |
+| `POST signup/complete` | public | `{signupToken, fullName?, username?, password, company:{name, teamSize, industry, state, apps}}` (`fullName` + `username` required for a new account) | sign-in response + `{companyId, provisionMs, setupIncomplete?}` · 409 `{field:'username', message, errors:{username}}` taken · 400 invalid / reserved |
+| `GET auth/username-available?u=` | public (optional bearer) | — | `{available, reason?: 'taken' / 'invalid' / 'reserved', message, username?}` · 429 after 60 / min per IP |
+| `PUT auth/username` | bearer (account) | `{username}` | `{ok, username}` · 409 taken · 400 invalid / reserved · 403 admin-made login |
 | `POST auth/login` | public | `{login, password, client?}` or `{ticket, companyId, client?}` | sign-in response, or `{chooseCompany:[{companyId,name,code,role}], ticket}` · 401 wrong · 402 suspended · 429 network limit |
 | `POST auth/refresh` | refresh cookie / body | `{refreshToken?}` (mobile) | new sign-in response (rotated refresh) |
 | `GET auth/companies` | bearer | — | `[{companyId, name, code, role, current}]` |
@@ -72,11 +75,11 @@ erDiagram
 | `POST auth/reset/verify` | public | `{otpId, code}` | `{ok:true}` (counts an attempt, does not consume) |
 | `POST auth/reset` | public | `{otpId, code, newPassword}` | `{ok:true}`; all sessions of the account are revoked |
 | `GET invites/:token` | public | — | `{companyName, roles, apps, expiresAt, valid, reason?, message?}` |
-| `POST invites/:token/accept` | bearer (account) or `{signupToken, fullName?, password}` | | sign-in response for that company · 410 invalid · 402 no seat |
+| `POST invites/:token/accept` | bearer (account) or `{signupToken, fullName?, username?, password}` | | sign-in response for that company · 410 invalid · 402 no seat · 409 username taken |
 | `GET/POST invites`, `DELETE invites/:id` | bearer + Manage people | `{roleIds, apps, expiresInDays, maxUses}` | `{id, token, url}` |
 | `POST auth/change-password` | bearer | `{currentPassword, newPassword}` | `{ok}`; other sessions revoked |
 | `POST auth/logout` · `auth/logout-all` | refresh / bearer | | 204 |
-| `GET auth/me` | bearer | | person, company, apps, permissions, `account`, `billing` |
+| `GET auth/me` | bearer | | person, company, apps, permissions, `account` (`{id, email, mobile, username, isStaff}`), `billing` |
 | `GET .well-known/jwks.json` | public | | Ed25519 public keys (used by Tasks and Assets) |
 
 **Sign-in response:** `{accessToken, expiresIn: 900, refreshToken?}` — `refreshToken` only in the body for `client:'mobile'`;
@@ -103,15 +106,16 @@ sequenceDiagram
   P->>DB: check code_hash, attempts < 5, not expired → used_at
   P->>DB: insert auth_tickets kind=signup (30 min)
   P-->>U: {signupToken, accountExists}
-  U->>P: POST signup/complete {signupToken, name, password, company}
-  P->>DB: take ticket · reject if the email belongs to an admin-made login (409)
-  P->>DB: TX: insert/verify accounts (Argon2id) · insert companies · insert people(owner, account_id) · Admin + owner roles · subscription trialing 14 days (Suite)
+  U->>P: GET auth/username-available?u=… (live, debounced 400 ms)
+  U->>P: POST signup/complete {signupToken, name, username, password, company}
+  P->>DB: check username (shape, reserved, free) · reject if the email belongs to an admin-made login (409)
+  P->>DB: TX: advisory lock on the name · free again? (409 before the ticket is used) · take ticket · insert/verify accounts (Argon2id, username) · insert companies · insert people(owner, account_id) · Admin + owner roles · subscription trialing 14 days (Suite)
   P->>A: setUpCompany (schema co_<code>) · provision owner · push roles/profile/people
   P->>DB: insert refresh_sessions
   P-->>U: {accessToken, companyId} + refresh cookie
 ```
-Rules: password ≥ 6 characters (weak passwords warned in the web, never refused); an existing account gives only its
-password and gets a second company; at most a few new companies per account per day; app set-up failure → the user is
+Rules: password ≥ 6 characters (weak passwords warned in the web, never refused); a new account chooses a username (§4.7;
+the web suggests one from the name); an existing account gives only its password (its username is kept) and gets a second company; at most a few new companies per account per day; app set-up failure → the user is
 still signed in, `setupIncomplete: true`, and the Platform retries after 30 s, 2 min, 10 min.
 
 ### 4.2 Login
@@ -122,7 +126,7 @@ sequenceDiagram
   participant DB as Postgres
   U->>P: POST auth/login {login, password}
   P->>P: per-IP throttle (1000 / 15 min)
-  P->>DB: find logins.username / people.employee_code / account email or mobile
+  P->>DB: account by email / mobile, or (not an email / mobile) by accounts.username; else logins.username / people.employee_code
   alt admin-made login
     P->>P: verifyPassword (Argon2id or Django PBKDF2 → re-hash)
   else account
@@ -163,8 +167,28 @@ reset by an admin in People, not by code.
 Admin creates a link (`token` 32 random bytes, only `sha256` stored; roles limited by "you can give only what you hold";
 apps limited to the company's plan). `GET invites/:token` shows company and roles. Accept: signed-in account → new
 `people` row with `account_id` (or reuse an existing membership); new person → `signup/start` + `verify` first, then
-accept with the `signupToken` + name + password. Seat limit checked → 402. `uses` +1; expired / revoked / used-up → 410
+accept with the `signupToken` + name + username + password (409 on the field when the username was just taken). Seat limit checked → 402. `uses` +1; expired / revoked / used-up → 410
 with the reason.
+
+### 4.7 Usernames of accounts (§21.5)
+- **Shape:** 3–30 characters, `^[a-z][a-z0-9._-]{2,29}$` after lower-casing: starts with a letter (so never all digits: no
+  clash with a mobile number or a numeric employee ID), no `@` (never an email). Stored lower-case.
+- **Reserved:** admin, administrator, owner, support, help, staff, root, system, sysadmin, superuser, moderator,
+  freefounders (and anything starting with `freefounders` or `admin`), api, www, mail, security, billing, login, signup,
+  console, settings, tasks, assets, attendance, me, null, … (`RESERVED_USERNAMES`). Only account usernames are checked
+  against the list: the existing admin-made login `owner` keeps working.
+- **One namespace:** a name is free only if no account (`accounts.username`), no admin-made login (`logins.username`) and
+  no employee ID (`people.employee_code`, any company) uses it, case-insensitive; the account's own memberships do not
+  count. Enforced in code inside the transaction after `pg_advisory_xact_lock(hashtext('ff-username:<name>'))`, plus the
+  unique index `accounts_username_uq` (a race ends in 409, `exception.filter.ts`). Admin-made logins (People → create /
+  set login) and employee IDs refuse a name an account holds: 409 "This username is already taken. Try another." (logins),
+  400 (employee ID).
+- **Messages:** taken "This username is already taken. Try another." · invalid "Use 3–30 letters, numbers, dots, - or _,
+  starting with a letter." · reserved "This username is reserved."
+- **Availability:** `GET auth/username-available` (public, 60 per minute per IP, `USERNAME_CHECK_IP_LIMIT`); it reveals
+  whether a name exists (accepted, `docs/security/platform.md` §7). Signed in, the caller's own name counts as free.
+- **Change:** `PUT auth/username` for a signed-in account (the web: /account → Username); one name for all its companies.
+- **Existing accounts** got no username (they add one on /account); their email / mobile keep working.
 
 ## 5. How the apps trust the token
 - **Tasks (Django):** `accounts/platform_auth.py` verifies the JWT against the Platform JWKS (cached), maps `cid` to the

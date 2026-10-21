@@ -2444,3 +2444,37 @@ smoke against a real gateway.
 check the platform log; pay once with a Razorpay test card / UPI ID. With a domain + https: add the webhook
 `https://<domain>/api/platform/billing/webhook/razorpay` with the events listed in the README and the stored secret.
 Live keys only after KYC, with `DEMO_MODE=0` and https.
+
+### 21.5 Usernames for accounts (2026-10-21)
+
+Founder: a self-signed-up person typed their display name "test" at sign-in and got "not right"; "can you say that username
+already exists, like that?" Accounts now have a **username** next to their email / mobile.
+
+- **Table** (migration `0013_account_usernames`): `accounts.username` text, nullable, stored lower-case, unique index
+  `accounts_username_uq` on `lower(username)`. Existing accounts get none (they add one on /account); nothing else changed.
+- **Rules** (`services/platform/src/accounts/username.ts`): 3–30 characters, letters / digits / `.` / `_` / `-`, starts
+  with a letter (never all digits, no `@`); reserved words refused (admin, owner, support, staff, root, system,
+  freefounders, api, …; the existing admin-made login `owner` keeps working). **One namespace**: free only if no account,
+  no admin-made login (`logins.username`) and no employee ID uses it (case-insensitive), checked in the transaction under
+  an advisory lock per name + the unique index. Admin-made login creation / rename refuses an account's username (409, same
+  message); an employee ID equal to one is refused (400).
+- **API**: `GET auth/username-available?u=` (public, 60 per minute per IP) → `{available, reason?: taken|invalid|reserved,
+  message}` ("This username is already taken. Try another." / "Use 3–30 letters, numbers, dots, - or _, starting with a
+  letter." / "This username is reserved."); `signup/complete` and invite accept take `username` (required for a new
+  account) → 409 `{field: 'username', message}` when taken at submit (the sign-up token is not used up); `PUT
+  auth/username {username}` for a signed-in account; `auth/me` → `account.username`.
+- **Sign-in**: not an email / mobile → `accounts.username` first, then admin-made username → employee ID; same 401 text and
+  timing on failure; several companies → choose company as before.
+- **Web**: sign-up "About you" and join for new people have a **Username** field (suggested from the name: "test" → test,
+  "Asha Rao" → asha.rao, digits added when taken; live check after 400 ms: "Available" or the message; Continue disabled
+  until it is free); /account has a Username card (add / change); a failed sign-in adds "Signed up yourself? Use the
+  email, mobile number or username you chose."
+- Docs: `docs/LLD-registration-login.md` §4.7, `docs/LLD-signin-flow.md`, `docs/security/platform.md` §7.
+
+**Status 2026-10-21:** Platform 135 pass (10 new: availability valid / taken across both tables + employee ID / reserved /
+invalid, sign-up with username, 409 incl. case variants and a `logins.username` clash, the unique index, sign-in by
+username incl. choose company, change username, admin login create / rename and employee ID refusing an account's name,
+invite join with a username, the per-IP limit); core 14 (3 new); web rules + typecheck + build; smoke 10/10; e2e
+web-account-flows 12/12 (1 new: suggestion, "already taken", reserved, invalid, sign up, sign in by username with the
+hint, /account change refused), web-signup-billing + single-login + web-admin 19/19; DEMO reset to the owner afterwards.
+On the server the migration runs with the next deploy; the founder's existing accounts get no username until they add one.

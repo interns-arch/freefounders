@@ -1,19 +1,45 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Req, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { respondTokens } from '../auth/auth.controller';
 import { AuthService } from '../auth/auth.service';
 import { type AuthedRequest, type Caller, CurrentCaller, Needs, Public, ReadOnlyOk, uuidParam, ZodPipe } from '../common/http';
 import { acceptSchema, inviteSchema, InvitesService } from '../invites/invites.service';
+import { countUsernameCheck } from './username';
 import { AccountsService, companySchema, completeSchema, forgotSchema, resetSchema, resetVerifySchema, startSchema, verifySchema } from './accounts.service';
 
+const usernameSchema = z.object({ username: z.string().trim().min(1, 'Enter a username').max(60) });
 const newCompanySchema = companySchema.extend({ client: z.enum(['web', 'mobile']).default('web') });
 const meta = (req: AuthedRequest, client: 'web' | 'mobile' = 'web') => ({ ip: req.ip, userAgent: req.headers['user-agent'], client });
 
 /** Self-serve sign-up, forgot password and new companies (PLAN.md §21.2). */
 @Controller()
 export class AccountsController {
-  constructor(private readonly accounts: AccountsService) {}
+  constructor(
+    private readonly accounts: AccountsService,
+    private readonly auth: AuthService,
+  ) {}
+
+  /**
+   * Is a username free? Public (sign-up, join), 60 checks per minute per address (it tells which names exist:
+   * acceptable for usernames, docs/security/platform.md). A signed-in account's own name counts as free.
+   */
+  @Public()
+  @Get('auth/username-available')
+  async usernameAvailable(@Query('u') u: unknown, @Req() req: AuthedRequest) {
+    countUsernameCheck(req.ip);
+    const name = typeof u === 'string' ? u.slice(0, 100) : '';
+    const caller = req.caller && (await this.auth.isLive(req.caller)) ? req.caller : undefined;
+    const own = caller ? (await this.accounts.accountOfPerson(caller.personId))?.id : undefined;
+    return this.accounts.usernameAvailable(name, own);
+  }
+
+  /** The signed-in account adds or changes its username (409 when taken). Allowed while the company is read-only. */
+  @ReadOnlyOk()
+  @Put('auth/username')
+  setUsername(@CurrentCaller() caller: Caller, @Body(new ZodPipe(usernameSchema)) body: z.infer<typeof usernameSchema>) {
+    return this.accounts.setUsername(caller, body.username);
+  }
 
   @Public()
   @Post('signup/start')

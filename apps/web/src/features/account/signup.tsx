@@ -1,17 +1,17 @@
 /**
- * /signup (PLAN.md §20.5, §21.1): work email or mobile → 6-digit code → name + password (or, for an existing account,
+ * /signup (PLAN.md §20.5, §21.1): work email or mobile → 6-digit code → name + username + password (or, for an existing account,
  * just its password) → the company → "Setting up your company…" → Home with the Getting started checklist.
  * One question per screen, a progress bar and a back button; nothing typed is lost going back.
  */
 import { ApiError, errorMessage } from '@freefounders/core';
-import { type CompanyInput, identifierKind, type OtpSent, useSignupComplete, useSignupStart, useSignupVerify } from '@freefounders/core/account';
+import { type CompanyInput, identifierKind, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@freefounders/core/account';
 import { PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { CompanyForm, EMPTY_COMPANY, SetupScreen } from './company-form';
-import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer } from './parts';
+import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer, UsernameField } from './parts';
 
 type Step = 'identifier' | 'code' | 'profile' | 'company' | 'setup';
 const ORDER: Step[] = ['identifier', 'code', 'profile', 'company'];
@@ -26,6 +26,10 @@ export function SignupPage() {
   const [token, setToken] = useState<{ signupToken: string; accountExists: boolean } | null>(null);
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  // Typed by the person: the suggestion from the name no longer replaces it.
+  const usernameTouched = useRef(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [company, setCompany] = useState<CompanyInput>(EMPTY_COMPANY);
   const [fieldError, setFieldError] = useState<string | null>(null);
 
@@ -33,6 +37,23 @@ export function SignupPage() {
   const verify = useSignupVerify();
   const complete = useSignupComplete();
   const timer = useCodeTimer();
+  const newAccount = step === 'profile' && !!token && !token.accountExists;
+  const check = useUsernameCheck(username, newAccount);
+
+  // A free username from the name ("Asha Rao" → asha.rao), until the person types their own.
+  useEffect(() => {
+    if (!newAccount || usernameTouched.current || fullName.trim().length < 2) return;
+    let live = true;
+    const t = setTimeout(() => {
+      void suggestUsername(fullName).then((s) => {
+        if (live && s && !usernameTouched.current) setUsername(s);
+      });
+    }, 500);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [fullName, newAccount]);
 
   const back = () => {
     setFieldError(null);
@@ -86,6 +107,10 @@ export function SignupPage() {
       document.getElementById('signup-name')?.focus();
       return;
     }
+    if (!token?.accountExists && !check.ok) {
+      document.getElementById('signup-username')?.focus();
+      return;
+    }
     if (password.length < (token?.accountExists ? 1 : PLATFORM_PASSWORD_MIN)) {
       setFieldError('password');
       document.getElementById('signup-password')?.focus();
@@ -100,13 +125,19 @@ export function SignupPage() {
     setStep('setup');
     complete.reset();
     try {
-      const res = await complete.mutateAsync({ signupToken: token!.signupToken, fullName: fullName.trim(), password, company: c });
+      const res = await complete.mutateAsync({ signupToken: token!.signupToken, fullName: fullName.trim(), password, company: c, ...(token!.accountExists ? {} : { username: username.trim() }) });
       if (res.setupIncomplete) {
         toast.warning('Your company is created, but part of the app set-up has not finished. It finishes by itself in a few minutes; if an app does not open, sign out and in again later.', { duration: 15_000 });
       }
       navigate('/?home=1&welcome=1', { replace: true });
-    } catch {
-      /* shown on the setup screen */
+    } catch (err) {
+      // Someone took the username a moment ago: back to that field with the message (nothing was created).
+      const taken = usernameErrorOf(err);
+      if (taken) {
+        setUsernameError(taken);
+        setStep('profile');
+      }
+      /* anything else is shown on the setup screen */
     }
   };
 
@@ -198,6 +229,17 @@ export function SignupPage() {
                 autoFocus
                 error={fieldError === 'name' ? 'Enter your name.' : null}
               />
+              <UsernameField
+                id="signup-username"
+                value={username}
+                onChange={(v) => {
+                  usernameTouched.current = true;
+                  setUsername(v);
+                  setUsernameError(null);
+                }}
+                check={check}
+                serverError={usernameError}
+              />
               <PasswordField
                 id="signup-password"
                 label="Choose a password"
@@ -208,7 +250,7 @@ export function SignupPage() {
               />
             </>
           )}
-          <Button type="submit" size="lg" className="h-11 w-full">
+          <Button type="submit" size="lg" className="h-11 w-full" disabled={!token.accountExists && (!check.ok || !!usernameError)}>
             Continue
           </Button>
         </form>

@@ -95,6 +95,9 @@ test('sign up with a mobile number: wrong code, Back keeps the code, resend coun
   await page.getByLabel('Code', { exact: true }).fill(code);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Your full name').fill(`Mona ${stamp}`);
+  // A username is suggested from the name (PLAN.md §21.5) and checked live.
+  await expect(page.getByLabel('Username', { exact: true })).toHaveValue(`mona.${stamp}`);
+  await expect(page.getByText('Available', { exact: true })).toBeVisible();
   await page.getByLabel('Choose a password').fill('123456');
   await expect(page.getByText(/easy to guess|common|weak/i).first()).toBeVisible();
   await page.getByLabel('Choose a password').fill(PASSWORD);
@@ -127,6 +130,60 @@ test('the same mobile again: password only (a wrong one sends you back), then a 
   await page.getByRole('button', { name: 'Create company' }).click();
   await page.waitForURL((u) => u.pathname === '/' && u.searchParams.has('home'), { timeout: 90_000 });
   await expect(page.getByRole('heading', { name: 'Getting started' })).toBeVisible();
+});
+
+test('username: "already taken" for an existing one, Continue waits; sign up with a free one, then sign in with it', async ({ page, browser }) => {
+  test.setTimeout(150_000);
+  const email = `ria-${stamp}@e2e.test`;
+  const mine = `Ria_${stamp}`;
+  await page.goto('/signup');
+  await page.getByLabel('Work email or mobile number').fill(email);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Your full name').fill(`Ria ${stamp}`);
+  const field = page.getByLabel('Username', { exact: true });
+  await expect(field).toHaveValue(`ria.${stamp}`);
+  // Mona's username (first test) is taken, in any case; reserved and malformed names are told too.
+  await field.fill(`MONA.${stamp}`);
+  await expect(page.getByText('This username is already taken. Try another.')).toBeVisible();
+  const go = page.getByRole('button', { name: 'Continue' });
+  await expect(go).toBeDisabled();
+  await field.fill('admin');
+  await expect(page.getByText('This username is reserved.')).toBeVisible();
+  await field.fill('12');
+  await expect(page.getByText('Use 3–30 letters, numbers, dots, - or _, starting with a letter.')).toBeVisible();
+  await expect(go).toBeDisabled();
+  await field.fill(mine);
+  await expect(page.getByText('Available', { exact: true })).toBeVisible();
+  await page.getByLabel('Choose a password').fill(PASSWORD);
+  await go.click();
+  await companyStep(page, `E2E Username Co ${stamp}`, 'tasks');
+
+  // Another browser: a wrong password keeps the general message plus the hint; the username (any case) signs in.
+  const ctx = await browser.newContext();
+  const p2 = await ctx.newPage();
+  try {
+    await p2.goto('/login');
+    await p2.getByLabel('Email, mobile, username or employee ID').fill(mine.toLowerCase());
+    await p2.getByLabel('Password', { exact: true }).fill('wrong-password');
+    await p2.getByRole('button', { name: 'Sign in' }).click();
+    const alert = p2.getByRole('alert').filter({ hasText: 'The email, mobile number, username or password is not right.' });
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText('Signed up yourself? Use the email, mobile number or username you chose.');
+    await p2.getByLabel('Email, mobile, username or employee ID').fill(mine.toUpperCase());
+    await p2.getByLabel('Password', { exact: true }).fill(PASSWORD);
+    await p2.getByRole('button', { name: 'Sign in' }).click();
+    await p2.waitForURL((u) => u.pathname === '/' || u.pathname.startsWith('/attendance'));
+    // The account page shows it and can change it.
+    await p2.goto('/account');
+    await expect(p2.getByText(`You sign in with ${mine.toLowerCase()}`)).toBeVisible();
+    await p2.getByLabel('New username', { exact: true }).fill(`mona.${stamp}`);
+    await expect(p2.getByText('This username is already taken. Try another.')).toBeVisible();
+    await expect(p2.getByRole('button', { name: 'Change username' })).toBeDisabled();
+  } finally {
+    await ctx.close();
+  }
 });
 
 test('sign in with the mobile: choose a company, switch from the account menu and back; a reload keeps it; sign out', async ({ page }) => {

@@ -1,4 +1,6 @@
-import { ApiError, errorMessage, useChangePassword, usePlatformMe } from '@freefounders/core';
+import { ApiError, errorMessage, type MeAccount, useChangePassword, usePlatformMe } from '@freefounders/core';
+import { usernameErrorOf, useSetUsername, useUsernameCheck } from '@freefounders/core/account';
+import { UsernameField } from '@/features/account/parts';
 import { Loader2 } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -6,6 +8,65 @@ import { WeakPasswordNote } from '@/components/common/weak-password-note';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Logo } from '../shell-parts';
+
+/**
+ * Your username (accounts only, PLAN.md §21.5): add one or change it; it signs in to all your companies.
+ * Admin-made logins have their username set by the company admin, so they do not see this.
+ */
+function UsernameCard({ account }: { account: MeAccount }) {
+  const current = account.username ?? '';
+  const [value, setValue] = useState(current);
+  const [saved, setSaved] = useState(false);
+  const save = useSetUsername();
+  const changed = value.trim().toLowerCase() !== current;
+  const check = useUsernameCheck(value, changed);
+  const serverError = save.isError ? (usernameErrorOf(save.error) ?? errorMessage(save.error)) : null;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!changed || !check.ok) return;
+    save.mutate(value.trim(), { onSuccess: (res) => (setSaved(true), setValue(res.username)) });
+  };
+
+  return (
+    <form onSubmit={submit} className="w-full max-w-[400px] space-y-4 rounded-xl border bg-card p-7 shadow-card-lg" aria-labelledby="username-title">
+      <div className="space-y-1">
+        <h2 id="username-title" className="text-xl font-bold tracking-tight">
+          Username
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {current ? (
+            <>
+              You sign in with <span className="font-semibold text-foreground">{current}</span>, or your email or mobile number.
+            </>
+          ) : (
+            'Not set. Add one to sign in with it instead of your email or mobile number.'
+          )}
+        </p>
+      </div>
+      <UsernameField
+        id="account-username"
+        label={current ? 'New username' : 'Username'}
+        value={value}
+        onChange={(v) => {
+          setValue(v);
+          setSaved(false);
+          save.reset();
+        }}
+        check={changed ? check : { state: 'empty', message: null }}
+        serverError={serverError}
+      />
+      {saved && !changed && (
+        <p role="status" className="rounded-md border border-success/20 bg-success/8 px-3 py-2 text-sm font-medium text-success">
+          Username saved.
+        </p>
+      )}
+      <Button type="submit" className="w-full" allowReadOnly disabled={!changed || !check.ok || save.isPending} loading={save.isPending}>
+        {current ? 'Change username' : 'Add username'}
+      </Button>
+    </form>
+  );
+}
 
 /** Change your own password, whenever you like (account menu). Never forced, also not after an admin set it (R7). */
 export function AccountPage() {
@@ -40,6 +101,7 @@ export function AccountPage() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background p-6">
       <Logo />
+      {me.data?.account && <UsernameCard account={me.data.account} />}
       <form onSubmit={submit} className="w-full max-w-[400px] space-y-5 rounded-xl border bg-card p-7 shadow-card-lg" aria-labelledby="pw-title">
         <div className="space-y-1">
           <h1 id="pw-title" className="text-2xl font-bold tracking-tight">

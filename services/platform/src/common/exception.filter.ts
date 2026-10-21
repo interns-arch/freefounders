@@ -13,7 +13,10 @@ const UNIQUE_MESSAGES: Record<string, string> = {
   people_company_email_uq: 'Another person in this company already uses this email.',
   accounts_email_uq: 'An account with this email already exists.',
   accounts_mobile_uq: 'An account with this mobile number already exists.',
+  accounts_username_uq: 'This username is already taken. Try another.',
 };
+/** Constraints the web shows next to one field. */
+const UNIQUE_FIELDS: Record<string, string> = { accounts_username_uq: 'username' };
 
 function pgError(err: unknown): PgError | null {
   for (const c of [err, (err as { cause?: unknown })?.cause]) {
@@ -52,7 +55,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const pg = pgError(exception);
     if (pg?.code === '23505') {
-      res.status(409).json({ statusCode: 409, message: (pg.constraint && UNIQUE_MESSAGES[pg.constraint]) || 'This record already exists.' });
+      const message = (pg.constraint && UNIQUE_MESSAGES[pg.constraint]) || 'This record already exists.';
+      const field = pg.constraint ? UNIQUE_FIELDS[pg.constraint] : undefined;
+      res.status(409).json({ statusCode: 409, message, ...(field ? { field, errors: { [field]: message } } : {}) });
       return;
     }
     if (pg?.code === '22P02') {

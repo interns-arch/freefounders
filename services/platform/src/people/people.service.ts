@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { AuthService, hashPassword } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
-import { type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
+import { accountUsernameTaken, lockUsername, usernameConflict } from '../accounts/username';
+import { accounts, type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
 import { assertNewSeat, assertSeatFor } from '../billing/seats';
 import { ProvisionClient } from '../provision/provision.client';
 import { RolesService } from '../roles/roles.service';
@@ -205,6 +206,8 @@ export class PeopleService {
         .where(and(sql`lower(${people.employeeCode}) = lower(${username})`, ne(people.id, self)))
         .limit(1);
       if (clash) throw badRequest('This is another person’s employee ID — choose a different username', { 'login.username': 'Taken' });
+      // One namespace with the usernames people chose for their accounts (PLAN.md §21.5).
+      if (await accountUsernameTaken(db, username)) throw usernameConflict(personId ? 'username' : 'login.username');
     }
     if (employeeCode) {
       const [clash] = await db
@@ -213,6 +216,13 @@ export class PeopleService {
         .where(and(sql`lower(${logins.username}) = lower(${employeeCode})`, ne(logins.personId, self)))
         .limit(1);
       if (clash) throw badRequest('Another person signs in with this as their username', { employeeCode: 'Taken' });
+      const [own] = personId ? await db.select({ accountId: people.accountId }).from(people).where(eq(people.id, personId)).limit(1) : [];
+      const [acc] = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(and(sql`lower(${accounts.username}) = lower(${employeeCode})`, own?.accountId ? ne(accounts.id, own.accountId) : undefined))
+        .limit(1);
+      if (acc) throw badRequest('Another person signs in with this as their username', { employeeCode: 'Taken' });
     }
   }
 
@@ -259,6 +269,11 @@ export class PeopleService {
           throw badRequest('A login needs a username, email or employee ID to sign in with', { 'login.username': 'Required' });
         }
         const password = input.login.password ?? (generatedPassword = generatePassword());
+        if (input.login.username) {
+          // Same name chosen for an account at this moment: the lock orders the two, the later one sees it taken.
+          await lockUsername(tx, input.login.username);
+          if (await accountUsernameTaken(tx, input.login.username)) throw usernameConflict('login.username');
+        }
         await tx.insert(logins).values({ personId: p.id, username: input.login.username ?? null, passwordHash: await hashPassword(password), mustChangePassword: false });
       }
       return { person: this.view(p), generatedPassword };
@@ -358,8 +373,14 @@ export class PeopleService {
     let generatedPassword: string | undefined;
     const password = input.password ?? (generatedPassword = generatePassword());
     const values = { username, passwordHash: await hashPassword(password), mustChangePassword: false, failedLogins: 0, lockedUntil: null, passwordChangedAt: new Date(), updatedAt: new Date() };
-    if (existing) await this.dbs.db.update(logins).set(values).where(eq(logins.personId, id));
-    else await this.dbs.db.insert(logins).values({ personId: id, ...values });
+    await this.dbs.tx(async (tx) => {
+      if (username && username.toLowerCase() !== existing?.username?.toLowerCase()) {
+        await lockUsername(tx, username);
+        if (await accountUsernameTaken(tx, username)) throw usernameConflict();
+      }
+      if (existing) await tx.update(logins).set(values).where(eq(logins.personId, id));
+      else await tx.insert(logins).values({ personId: id, ...values });
+    });
     await this.auth.revokeAll(id);
     return { ok: true, username, generatedPassword };
   }

@@ -7,6 +7,7 @@ import { CompanyService } from '../company/company.service';
 import { DbService } from '../db/db.service';
 import { accounts, authTickets, otpCodes, type AppKey, APPS, companies, logins, people, personApps, type PlatformRole, refreshSessions, subscriptions } from '../db/schema';
 import { normaliseIdentifier } from '../accounts/identifier';
+import { looksLikeUsername, normaliseUsername } from '../accounts/username';
 import { TicketsService } from '../accounts/otp.service';
 import { billingSummary, isReadOnly, paymentRequired, SUSPENDED_MESSAGE } from '../billing/seats';
 import { heldAccess, platformPermissionsOf } from '../roles/platform-permissions';
@@ -157,7 +158,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     const db = this.dbs.db;
     const ipKey = `ip:${meta.ip ?? 'unknown'}`;
     if (this.throttle.blocked(ipKey, ipLimit())) throw new HttpException(IP_LIMIT_MESSAGE, 429);
-    // An account's email or mobile number (PLAN.md §21) comes first; everything else is an admin-made login as before.
+    // An account's email or mobile number (PLAN.md §21) comes first, then an account's username (§21.5); everything else
+    // is an admin-made login as before (username, then employee ID). Usernames are one namespace across accounts and
+    // admin-made logins, so at most one of them matches.
     const ident = normaliseIdentifier(input);
     if (ident) {
       const [account] = await db
@@ -165,6 +168,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
         .from(accounts)
         .where(ident.kind === 'email' ? sql`lower(${accounts.email}) = ${ident.value}` : eq(accounts.mobile, ident.value))
         .limit(1);
+      if (account) return this.loginAccount(account, password, meta, ipKey);
+    } else if (looksLikeUsername(input)) {
+      const [account] = await db.select().from(accounts).where(sql`lower(${accounts.username}) = ${normaliseUsername(input)}`).limit(1);
       if (account) return this.loginAccount(account, password, meta, ipKey);
     }
     const found = await this.findLogin(input);
@@ -482,7 +488,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
         hasLogo: sql<boolean>`${companies.logo} is not null`,
         profileVersion: companies.profileVersion,
         mustChangePassword: logins.mustChangePassword,
-        account: { id: accounts.id, email: accounts.email, mobile: accounts.mobile, isStaff: accounts.isStaff },
+        account: { id: accounts.id, email: accounts.email, mobile: accounts.mobile, username: accounts.username, isStaff: accounts.isStaff },
       })
       .from(people)
       .innerJoin(companies, eq(companies.id, people.companyId))

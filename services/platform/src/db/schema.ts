@@ -97,6 +97,8 @@ export const accounts = platform.table(
     id: uuid('id').primaryKey().defaultRandom(),
     email: text('email'),
     mobile: text('mobile'),
+    /** Optional sign-in name chosen by the person (stored lower-case; unique across accounts and logins, §21.5). */
+    username: text('username'),
     fullName: text('full_name').notNull(),
     passwordHash: text('password_hash').notNull(),
     failedLogins: integer('failed_logins').notNull().default(0),
@@ -107,7 +109,11 @@ export const accounts = platform.table(
     isStaff: boolean('is_staff').notNull().default(false),
     ...timestamps,
   },
-  (t) => [uniqueIndex('accounts_email_uq').on(sql`lower(${t.email})`), uniqueIndex('accounts_mobile_uq').on(t.mobile)],
+  (t) => [
+    uniqueIndex('accounts_email_uq').on(sql`lower(${t.email})`),
+    uniqueIndex('accounts_mobile_uq').on(t.mobile),
+    uniqueIndex('accounts_username_uq').on(sql`lower(${t.username})`),
+  ],
 );
 
 export const people = platform.table(

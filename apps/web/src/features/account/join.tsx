@@ -1,18 +1,30 @@
 /**
  * /join/:token (PLAN.md §21.1): "Join <company> on FreeFounders". Signed in: one Join button. Otherwise: sign up with
- * email / mobile → code → name + password (an existing account gives just its password), or "I already have an
+ * email / mobile → code → name + username + password (an existing account gives just its password), or "I already have an
  * account" (sign in, then back here). Then Home of that company.
  */
 import { errorMessage, session, useClaims } from '@freefounders/core';
-import { identifierKind, inviteRoleName, type OtpSent, useAcceptInvite, useInvitePreview, useSignupStart, useSignupVerify } from '@freefounders/core/account';
+import {
+  type AcceptAsNew,
+  identifierKind,
+  inviteRoleName,
+  type OtpSent,
+  suggestUsername,
+  useAcceptInvite,
+  useInvitePreview,
+  useSignupStart,
+  useSignupVerify,
+  usernameErrorOf,
+  useUsernameCheck,
+} from '@freefounders/core/account';
 import { APP_NAMES, PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
 import { Building2, Link2 } from '@/components/icons';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/utils';
-import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer } from './parts';
+import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer, UsernameField } from './parts';
 
 type Step = 'choose' | 'identifier' | 'code' | 'profile';
 
@@ -32,8 +44,23 @@ export function JoinPage() {
   const [verified, setVerified] = useState<{ signupToken: string; accountExists: boolean } | null>(null);
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const usernameTouched = useRef(false);
+  const newAccount = step === 'profile' && !!verified && !verified.accountExists;
+  const check = useUsernameCheck(username, newAccount);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const timer = useCodeTimer();
+
+  // A free username from the name, until the person types their own (PLAN.md §21.5).
+  useEffect(() => {
+    if (!newAccount || usernameTouched.current || fullName.trim().length < 2) return;
+    let live = true;
+    const t = setTimeout(() => void suggestUsername(fullName).then((s) => live && s && !usernameTouched.current && setUsername(s)), 500);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [fullName, newAccount]);
 
   // A refresh cookie may still sign this browser in.
   useEffect(() => {
@@ -63,7 +90,7 @@ export function JoinPage() {
     );
   }
 
-  const joined = async (asNew?: { signupToken: string; fullName: string; password: string }) => {
+  const joined = async (asNew?: AcceptAsNew) => {
     try {
       await accept.mutateAsync({ token, asNew });
       navigate('/?home=1&welcome=1', { replace: true });
@@ -100,7 +127,9 @@ export function JoinPage() {
     </div>
   );
 
-  const acceptError = accept.isError ? errorMessage(accept.error) : null;
+  // A username taken at the last moment is shown on its field, not as a general error.
+  const usernameError = accept.isError ? usernameErrorOf(accept.error) : null;
+  const acceptError = accept.isError && !usernameError ? errorMessage(accept.error) : null;
 
   if (claims) {
     return (
@@ -217,9 +246,10 @@ export function JoinPage() {
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
             if (!verified.accountExists && fullName.trim().length < 2) return setFieldError('name');
+            if (!verified.accountExists && !check.ok) return document.getElementById('join-username')?.focus();
             if (password.length < (verified.accountExists ? 1 : PLATFORM_PASSWORD_MIN)) return setFieldError('password');
             setFieldError(null);
-            void joined({ signupToken: verified.signupToken, fullName: fullName.trim(), password });
+            void joined({ signupToken: verified.signupToken, fullName: fullName.trim(), password, ...(verified.accountExists ? {} : { username: username.trim() }) });
           }}
         >
           {verified.accountExists ? (
@@ -236,6 +266,17 @@ export function JoinPage() {
             <>
               <StepTitle title="About you">How your new team will see you.</StepTitle>
               <TextField id="join-name" label="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" autoFocus error={fieldError === 'name' ? 'Enter your name.' : null} />
+              <UsernameField
+                id="join-username"
+                value={username}
+                onChange={(v) => {
+                  usernameTouched.current = true;
+                  setUsername(v);
+                  if (accept.isError) accept.reset();
+                }}
+                check={check}
+                serverError={usernameError}
+              />
               <PasswordField
                 id="join-password"
                 label="Choose a password"
@@ -247,7 +288,7 @@ export function JoinPage() {
             </>
           )}
           <FormError>{acceptError}</FormError>
-          <Button type="submit" size="lg" className="h-11 w-full" loading={accept.isPending}>
+          <Button type="submit" size="lg" className="h-11 w-full" loading={accept.isPending} disabled={!verified.accountExists && (!check.ok || !!usernameError)}>
             Join {invite.companyName}
           </Button>
         </form>

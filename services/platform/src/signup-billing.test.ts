@@ -12,6 +12,7 @@ import { hashPassword } from './auth/auth.service';
 import { BillingService } from './billing/billing.service';
 import { financialYear, gst } from './billing/gst';
 import { normaliseIdentifier } from './accounts/identifier';
+import { resetUsernameChecks } from './accounts/username';
 import { DbService } from './db/db.service';
 import { accounts, billingProfiles, checkoutSessions, companies, invites, otpCodes, people, personApps, seatChanges, subscriptions } from './db/schema';
 import { createApp } from './main';
@@ -61,9 +62,12 @@ async function verified(identifier: string) {
   return v.body as { signupToken: string; accountExists: boolean };
 }
 
-async function signup(identifier: string, company: Record<string, unknown>, password = PASSWORD, fullName = 'Asha Founder') {
+/** A fresh account username (PLAN.md §21.5). */
+const uname = () => `u${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+
+async function signup(identifier: string, company: Record<string, unknown>, password = PASSWORD, fullName = 'Asha Founder', username = uname()) {
   const { signupToken } = await verified(identifier);
-  const res = await call('POST', '/signup/complete', { body: { signupToken, fullName, password, company: { apps: ['tasks'], ...company } } });
+  const res = await call('POST', '/signup/complete', { body: { signupToken, fullName, password, username, company: { apps: ['tasks'], ...company } } });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   return res.body as { accessToken: string; companyId: string; provisionMs: number };
 }
@@ -387,7 +391,7 @@ describe('invites (PLAN.md §21.2)', () => {
   test('a new person joins with a sign-up token: account, membership, Tasks given; an existing member just signs in', async () => {
     appCalls.length = 0;
     const { signupToken } = await verified('joiner@invite.test');
-    const res = await call('POST', `/invites/${ids.token}/accept`, { body: { signupToken, fullName: 'Jo Joiner', password: PASSWORD } });
+    const res = await call('POST', `/invites/${ids.token}/accept`, { body: { signupToken, fullName: 'Jo Joiner', password: PASSWORD, username: uname() } });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.ok(res.cookie);
     assert.equal(res.body.companyId, ids.company);
@@ -441,7 +445,7 @@ describe('invites (PLAN.md §21.2)', () => {
     // owner + 2 joiners = 3 seats used
     const link = (await call('POST', '/invites', { token: owner, body: { apps: ['tasks'] } })).body;
     const t = await verified('fourth@invite.test');
-    const res = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Fourth', password: PASSWORD } });
+    const res = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Fourth', password: PASSWORD, username: uname() } });
     assert.equal(res.status, 402);
     assert.equal(res.body.message, 'The Free plan is for up to 3 users and all 3 are in use. The owner can upgrade in Billing to add more people.');
     // The same limit when an admin gives someone their first app.
@@ -479,7 +483,7 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
     // A member cannot see billing.
     const link = (await call('POST', '/invites', { token: owner, body: {} })).body;
     const t = await verified('member@pay.test');
-    const member = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Mem', password: PASSWORD } });
+    const member = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Mem', password: PASSWORD, username: uname() } });
     ids.memberToken = member.body.accessToken;
     assert.equal((await call('GET', '/billing', { token: member.body.accessToken })).status, 403);
   });
@@ -816,5 +820,156 @@ describe('forgot password and codes (quality pass 2026-10-19)', () => {
     const missing = await call('POST', '/signup/complete', { body: { signupToken: n.signupToken, password: PASSWORD, company: { name: 'Fresh Co', apps: ['tasks'] } } });
     assert.equal(missing.status, 400);
     assert.equal(missing.body.message, 'Enter your name');
+  });
+});
+
+describe('account usernames (PLAN.md §21.5)', () => {
+  const avail = async (u: string, token?: string) => (await call('GET', `/auth/username-available?u=${encodeURIComponent(u)}`, { token })).body;
+  let owner = '';
+  let companyId = '';
+  const suffix = randomUUID().slice(0, 6);
+  const asha = `asha.rao${suffix}`;
+
+  before(async () => {
+    const res = await signup(`asha-${suffix}@names.test`, { name: `Names Co ${suffix}` }, PASSWORD, 'Asha Rao', asha);
+    owner = res.accessToken;
+    companyId = res.companyId;
+  });
+
+  test('sign-up stores the username lower-case; auth/me shows it', async () => {
+    const [a] = await dbs.db.select().from(accounts).where(sql`lower(${accounts.email}) = ${`asha-${suffix}@names.test`}`);
+    assert.equal(a.username, asha);
+    const me = await call('GET', '/auth/me', { token: owner });
+    assert.equal(me.body.account.username, asha);
+  });
+
+  test('availability: valid, taken (accounts, any case), taken by an admin-made login or an employee ID, reserved, invalid', async () => {
+    const free = await avail(`Fresh.Name_${suffix}`);
+    assert.deepEqual([free.available, free.message], [true, 'Available']);
+    const taken = await avail(asha.toUpperCase());
+    assert.deepEqual(taken, { available: false, reason: 'taken', message: 'This username is already taken. Try another.' });
+    // An admin-made login's username (another table) is taken too.
+    const made = await call('POST', '/people', { token: owner, body: { fullName: 'Made Login', employeeCode: `EMP${suffix}`, login: { username: `madelogin${suffix}`, password: PASSWORD } } });
+    assert.equal(made.status, 201, JSON.stringify(made.body));
+    assert.equal((await avail(`MadeLogin${suffix}`)).reason, 'taken');
+    assert.equal((await avail(`emp${suffix}`)).reason, 'taken', 'an employee ID would make sign-in ambiguous');
+    for (const r of ['admin', 'Owner', 'support', 'freefounders', 'root', 'api', 'administrator2']) {
+      assert.deepEqual(await avail(r), { available: false, reason: 'reserved', message: 'This username is reserved.' }, r);
+    }
+    for (const bad of ['ab', '9876543210', '1abc', 'a@b.co', 'has space', 'x'.repeat(31), '', '_lead', 'émile']) {
+      assert.deepEqual(await avail(bad), { available: false, reason: 'invalid', message: 'Use 3–30 letters, numbers, dots, - or _, starting with a letter.' }, bad);
+    }
+    // Signed in: the caller's own name counts as free (the /account page).
+    assert.equal((await avail(asha, owner)).available, true);
+  });
+
+  test('sign-up: username required for a new account; taken (case variant, admin-made login) gives 409 on the field; invalid gives 400', async () => {
+    const t = await verified(`dup-${suffix}@names.test`);
+    const body = (username?: string) => ({ signupToken: t.signupToken, fullName: 'Dup Person', password: PASSWORD, ...(username === undefined ? {} : { username }), company: { name: 'Dup Co', apps: ['tasks'] } });
+    const none = await call('POST', '/signup/complete', { body: body() });
+    assert.deepEqual([none.status, none.body.errors?.username], [400, 'Choose a username']);
+    const upper = await call('POST', '/signup/complete', { body: body(asha.toUpperCase()) });
+    assert.equal(upper.status, 409);
+    assert.deepEqual([upper.body.field, upper.body.message, upper.body.errors.username], ['username', 'This username is already taken. Try another.', 'This username is already taken. Try another.']);
+    assert.equal((await call('POST', '/signup/complete', { body: body(`MADELOGIN${suffix}`) })).status, 409);
+    const reserved = await call('POST', '/signup/complete', { body: body('owner') });
+    assert.deepEqual([reserved.status, reserved.body.errors?.username], [400, 'This username is reserved.']);
+    assert.equal((await call('POST', '/signup/complete', { body: body('12345') })).status, 400);
+    // The sign-up token was not used up: choosing another name finishes the sign-up.
+    const ok = await call('POST', '/signup/complete', { body: body(`Dup.Person${suffix}`) });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    const [a] = await dbs.db.select({ username: accounts.username }).from(accounts).where(sql`lower(${accounts.email}) = ${`dup-${suffix}@names.test`}`);
+    assert.equal(a.username, `dup.person${suffix}`);
+  });
+
+  test('the unique index is the last word: two accounts cannot hold the same name in any case', async () => {
+    const [a] = await dbs.db.select().from(accounts).where(sql`lower(${accounts.email}) = ${`asha-${suffix}@names.test`}`);
+    await assert.rejects(dbs.db.insert(accounts).values({ fullName: 'Copy', username: asha.toUpperCase(), passwordHash: a.passwordHash }));
+  });
+
+  test('sign-in by account username (any case); wrong password = the same 401 as an unknown name', async () => {
+    const ok = await login(asha.toUpperCase());
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(decodeJwt(ok.body.accessToken).cid, companyId);
+    const wrong = await login(asha, 'Wrong@pass9');
+    const unknown = await login(`nobody${suffix}`, 'Wrong@pass9');
+    assert.deepEqual([wrong.status, unknown.status], [401, 401]);
+    assert.equal(wrong.body.message, unknown.body.message);
+    // An admin-made login with a username still signs in as before.
+    assert.equal((await login(`madelogin${suffix}`)).status, 200);
+  });
+
+  test('an account in two companies signs in by username, chooses a company, gets tokens for the chosen one', async () => {
+    const v = await verified(`asha-${suffix}@names.test`);
+    const second = await call('POST', '/signup/complete', { body: { signupToken: v.signupToken, password: PASSWORD, company: { name: `Names Two ${suffix}`, apps: ['tasks'] } } });
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+    const first = await login(asha);
+    assert.equal(first.status, 200);
+    assert.equal(first.body.chooseCompany.length, 2);
+    const picked = await call('POST', '/auth/login', { body: { ticket: first.body.ticket, companyId: second.body.companyId } });
+    assert.equal(picked.status, 200, JSON.stringify(picked.body));
+    assert.equal(decodeJwt(picked.body.accessToken).cid, second.body.companyId);
+  });
+
+  test('change username: same checks, 409 when taken, the new name signs in, the old one no longer', async () => {
+    const t = await verified(`changer-${suffix}@names.test`);
+    const res = await call('POST', '/signup/complete', { body: { signupToken: t.signupToken, fullName: 'Chan Ger', password: PASSWORD, username: `changer${suffix}`, company: { name: `Changer ${suffix}`, apps: ['tasks'] } } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const token = res.body.accessToken;
+    assert.equal((await call('PUT', '/auth/username', { token, body: { username: asha } })).status, 409);
+    assert.equal((await call('PUT', '/auth/username', { token, body: { username: `madelogin${suffix}` } })).status, 409);
+    assert.equal((await call('PUT', '/auth/username', { token, body: { username: 'admin' } })).status, 400);
+    assert.equal((await call('PUT', '/auth/username', { token, body: { username: '99' } })).status, 400);
+    const same = await call('PUT', '/auth/username', { token, body: { username: `CHANGER${suffix}` } });
+    assert.equal(same.status, 200, 'its own name, in another case');
+    const moved = await call('PUT', '/auth/username', { token, body: { username: `Changed.Now${suffix}` } });
+    assert.deepEqual([moved.status, moved.body.username], [200, `changed.now${suffix}`]);
+    assert.equal((await login(`changed.now${suffix}`)).status, 200);
+    assert.equal((await login(`changer${suffix}`)).status, 401);
+    // Without a username yet (an older account): it can add one.
+    const [a] = await dbs.db.update(accounts).set({ username: null }).where(sql`lower(${accounts.email}) = ${`changer-${suffix}@names.test`}`).returning();
+    assert.equal(a.username, null);
+    assert.equal((await call('PUT', '/auth/username', { token, body: { username: `added${suffix}` } })).status, 200);
+    // An admin-made login has no account: its username is the admin's to set.
+    const made = await login(`madelogin${suffix}`);
+    assert.equal((await call('PUT', '/auth/username', { token: made.body.accessToken, body: { username: `other${suffix}` } })).status, 403);
+  });
+
+  test('admins cannot give a login (new or renamed) or an employee ID an account username', async () => {
+    const created = await call('POST', '/people', { token: owner, body: { fullName: 'Clash One', login: { username: asha.toUpperCase(), password: PASSWORD } } });
+    assert.equal(created.status, 409, JSON.stringify(created.body));
+    assert.equal(created.body.message, 'This username is already taken. Try another.');
+    assert.equal(created.body.errors['login.username'], 'This username is already taken. Try another.');
+    const p = await call('POST', '/people', { token: owner, body: { fullName: 'Clash Two' } });
+    const renamed = await call('PUT', `/people/${p.body.person.id}/login`, { token: owner, body: { username: asha, password: PASSWORD } });
+    assert.equal(renamed.status, 409);
+    assert.equal(renamed.body.message, 'This username is already taken. Try another.');
+    const code = await call('PATCH', `/people/${p.body.person.id}`, { token: owner, body: { employeeCode: asha } });
+    assert.equal(code.status, 400);
+    assert.equal((await call('PUT', `/people/${p.body.person.id}/login`, { token: owner, body: { username: `fine${suffix}`, password: PASSWORD } })).status, 200);
+  });
+
+  test('a new person joining by invite chooses a username (taken gives 409)', async () => {
+    const link = (await call('POST', '/invites', { token: owner, body: { apps: [] } })).body;
+    const t = await verified(`joiner-${suffix}@names.test`);
+    const taken = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Jo Iner', password: PASSWORD, username: asha } });
+    assert.deepEqual([taken.status, taken.body.field], [409, 'username']);
+    const ok = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Jo Iner', password: PASSWORD, username: `jo.iner${suffix}` } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal((await login(`jo.iner${suffix}`)).status, 200);
+  });
+
+  test('availability checks are limited per address (60 a minute by default)', async () => {
+    resetUsernameChecks();
+    process.env.USERNAME_CHECK_IP_LIMIT = '3';
+    try {
+      for (let i = 0; i < 3; i++) assert.equal((await call('GET', '/auth/username-available?u=abcdef')).status, 200);
+      const limited = await call('GET', '/auth/username-available?u=abcdef');
+      assert.equal(limited.status, 429);
+      assert.ok(limited.body.retryAfterSeconds > 0);
+    } finally {
+      delete process.env.USERNAME_CHECK_IP_LIMIT;
+      resetUsernameChecks();
+    }
   });
 });

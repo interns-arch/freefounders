@@ -111,7 +111,7 @@ async function signup(identifier: string, name: string) {
   const v = await call('POST', '/signup/verify', { body: { otpId: start.body.otpId, code: start.body.devCode } });
   assert.equal(v.status, 200, JSON.stringify(v.body));
   const res = await call('POST', '/signup/complete', {
-    body: { signupToken: v.body.signupToken, fullName: 'Ravi Owner', password: PASSWORD, company: { name, teamSize: '11-50', industry: 'Retail', state: 'Maharashtra', apps: ['tasks'] } },
+    body: { signupToken: v.body.signupToken, fullName: 'Ravi Owner', password: PASSWORD, username: `r${randomBytes(6).toString('hex')}`, company: { name, teamSize: '11-50', industry: 'Retail', state: 'Maharashtra', apps: ['tasks'] } },
   });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   return res.body as { accessToken: string; companyId: string };

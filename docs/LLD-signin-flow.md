@@ -21,7 +21,8 @@ stays alive afterwards. Traced from the code (2026-10-21). Related: `docs/LLD-re
 
 ## Phase 1 — Screen (browser or phone app)
 
-1. `/login` shows **Email, mobile, username or employee ID** and **Password**.
+1. `/login` shows **Email, mobile, username or employee ID** and **Password**. "Username" means an account's own
+   username (§21.5) or an admin-made login's username.
 2. On submit the screen calls `session.login(login, password)` (packages/core).
 3. `session.login` → `POST /api/platform/auth/login` with
    `{ login, password, client }` and header `X-Requested-With: XMLHttpRequest`.
@@ -45,7 +46,10 @@ stays alive afterwards. Traced from the code (2026-10-21). Related: `docs/LLD-re
    - 10-digit Indian mobile (optional `+91` / `0` / spaces) → `{kind:'mobile', value:'+91XXXXXXXXXX'}`
    - otherwise → null.
    If it normalised: `SELECT * FROM platform.accounts WHERE lower(email)=$1` (or `mobile=$1`) LIMIT 1.
-   Found → **account path (Phase 5B)**.
+   Otherwise, if it has the shape of a username (`^[a-z][a-z0-9._-]{2,29}$` after lower-casing):
+   `SELECT * FROM platform.accounts WHERE lower(username)=$1` LIMIT 1 (PLAN.md §21.5).
+   Found → **account path (Phase 5B)**. Account and admin-made usernames are one namespace (checked when either is set),
+   so at most one of them matches.
 9. **Admin-made login lookup** (`findLogin`), in this order, joining `logins → people → companies`:
    1. contains `@` → `lower(people.email) = lower($1)`; exactly one match required (an email in two companies is ambiguous);
    2. `lower(logins.username) = lower($1)`;
@@ -67,7 +71,7 @@ stays alive afterwards. Traced from the code (2026-10-21). Related: `docs/LLD-re
 14. `assertOpen(company)`: subscription `suspended` and the person is not the owner → **402** "This company's
     subscription is suspended…". → go to **Phase 7** with this person.
 
-## Phase 5B — Account (email / mobile): check the password, pick the company
+## Phase 5B — Account (email / mobile / username): check the password, pick the company
 15. Same network guard; `verifyPassword(accounts.password_hash, password)`; wrong → `failed_logins + 1`, **401**;
     right → `failed_logins=0, last_login_at=now()`.
 16. `memberships(accountId)`: `people` rows with this `account_id`, `status='active'`, company `active`, joined with
@@ -151,7 +155,7 @@ sequenceDiagram
   C->>G: POST /api/platform/auth/login
   G->>P: forward
   P->>P: IP guard (1000 / 15 min)
-  P->>DB: accounts by email/mobile? (no)
+  P->>DB: accounts by email/mobile/username? (no)
   P->>DB: logins ⨝ people ⨝ companies (email → username → employee code)
   P->>P: Argon2id / PBKDF2 verify
   P->>DB: failed_logins=0, last_login_at (+ re-hash)
@@ -171,8 +175,8 @@ sequenceDiagram
   participant S as Screen
   participant P as Platform
   participant DB as Postgres
-  S->>P: POST auth/login {email, password}
-  P->>DB: accounts where email · verify Argon2id
+  S->>P: POST auth/login {email | mobile | username, password}
+  P->>DB: accounts where email / mobile / lower(username) · verify Argon2id
   P->>DB: memberships (people.account_id)
   P->>DB: INSERT auth_tickets kind=login (5 min, sha256)
   P-->>S: {chooseCompany:[A, B], ticket}
@@ -187,7 +191,9 @@ sequenceDiagram
 | Situation | Answer |
 |---|---|
 | Too many failed attempts from one network (1000 / 15 min) | 429, retry later |
-| Unknown name, switched-off person, inactive company | 401 (same text and timing as a wrong password) |
+| Unknown name, switched-off person, inactive company | 401 (same text and timing as a wrong password); the web adds "Signed up yourself? Use the email, mobile number or username you chose." |
+| Account username (any case) | account path: one company → tokens, several → `chooseCompany` |
+| Username of an admin-made login | admin-made path (unchanged) |
 | Wrong password | 401, counted, never locked (unless `LOGIN_MAX_FAILED` > 0) |
 | Email used by people in two companies (admin-made logins) | 401 (ambiguous): sign in with username or employee ID |
 | Account with no company | 403 "not part of any company yet" |

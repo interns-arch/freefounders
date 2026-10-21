@@ -10,6 +10,7 @@ import { DbService } from '../db/db.service';
 import { accounts, APPS, companies, logins, people } from '../db/schema';
 import { type Identifier, normaliseIdentifier } from './identifier';
 import { OtpService, TicketsService } from './otp.service';
+import { assertUsernameFree, lockUsername, USERNAME_MESSAGES, usernameConflict, usernameRefused, usernameShape, usernameTaken } from './username';
 
 /** A verified identifier stays usable for sign-up this long (PLAN.md §21.2). */
 export const SIGNUP_TTL_MS = 30 * 60 * 1000;
@@ -32,6 +33,8 @@ export const completeSchema = z.object({
   /** Not needed when the identifier already has an account (its name is kept). */
   fullName: z.string().trim().max(120).default(''),
   password: z.string().min(1, 'Enter a password').max(200),
+  /** Required for a new account (PLAN.md §21.5); ignored for an existing one. */
+  username: z.string().trim().max(60).optional(),
   company: companySchema,
   client: z.enum(['web', 'mobile']).default('web'),
 });
@@ -84,6 +87,31 @@ export class AccountsService {
     return row?.account;
   }
 
+  // ─── usernames (PLAN.md §21.5) ──────────────────────────────────────────
+
+  /** GET auth/username-available: free, taken, malformed or reserved (the caller's own name counts as free). */
+  async usernameAvailable(raw: string, exceptAccountId?: string | null) {
+    const shape = usernameShape(raw);
+    if (!shape.ok) return { available: false, reason: shape.reason, message: USERNAME_MESSAGES[shape.reason] };
+    if (await usernameTaken(this.dbs.db, shape.value, { accountId: exceptAccountId })) return { available: false, reason: 'taken' as const, message: USERNAME_MESSAGES.taken };
+    return { available: true, username: shape.value, message: 'Available' };
+  }
+
+  /** PUT auth/username: the signed-in account adds or changes its username (one for all its companies). */
+  async setUsername(caller: Caller, raw: string) {
+    const account = await this.accountOfPerson(caller.personId);
+    if (!account) throw new ForbiddenException('Your username is set by your company admin.');
+    const username = await this.dbs.tx(async () => {
+      const shape = usernameShape(raw);
+      if (!shape.ok) throw usernameRefused(shape.reason);
+      await lockUsername(this.dbs.db, shape.value);
+      const value = await assertUsernameFree(this.dbs.db, shape.value, { accountId: account.id });
+      await this.dbs.db.update(accounts).set({ username: value, updatedAt: new Date() }).where(eq(accounts.id, account.id));
+      return value;
+    });
+    return { ok: true, username };
+  }
+
   // ─── sign-up ────────────────────────────────────────────────────────────
 
   async signupStart(identifier: string, ip?: string) {
@@ -120,7 +148,7 @@ export class AccountsService {
    * Step 1 of using a sign-up token (outside any transaction, so a wrong password still counts towards the lockout when `LOGIN_MAX_FAILED` is on):
    * the identifier it proves, and the existing account, whose password must be right. A new account's password is checked.
    */
-  async checkSignup(signupToken: string, password: string, ip?: string, fullName?: string): Promise<{ id: Identifier; existing?: AccountRow }> {
+  async checkSignup(signupToken: string, password: string, ip?: string, fullName?: string, username?: string): Promise<{ id: Identifier; existing?: AccountRow; username?: string }> {
     const ticket = await this.tickets.peek(signupToken, 'signup');
     const id = ticket?.target ? normaliseIdentifier(ticket.target) : null;
     if (!ticket || !id) throw expired();
@@ -130,26 +158,37 @@ export class AccountsService {
       return { id, existing };
     }
     if (!fullName?.trim()) throw badRequest('Enter your name', { fullName: 'Enter your name' });
+    if (!username?.trim()) throw badRequest('Choose a username', { username: 'Choose a username' });
+    const shape = usernameShape(username);
+    if (!shape.ok) throw usernameRefused(shape.reason);
     const pw = newPasswordSchema.safeParse(password);
     if (!pw.success) throw badRequest(pw.error.issues[0].message, { password: pw.error.issues[0].message });
     await this.assertNotCompanyLogin(id);
-    return { id, existing };
+    // Early answer (the transaction checks again under a lock, and the unique index is the last word).
+    if (await usernameTaken(this.dbs.db, shape.value)) throw usernameConflict();
+    return { id, existing, username: shape.value };
   }
 
   /** Step 2, inside the caller's transaction: the token is used up (once only) and a new account is created. */
-  async takeSignup(signupToken: string, checked: { id: Identifier; existing?: AccountRow }, fullName: string, password: string): Promise<AccountRow> {
+  async takeSignup(signupToken: string, checked: { id: Identifier; existing?: AccountRow; username?: string }, fullName: string, password: string): Promise<AccountRow> {
+    if (checked.existing) {
+      if (!(await this.tickets.take(signupToken, 'signup'))) throw expired();
+      return checked.existing;
+    }
+    // Two people choosing the same name at the same moment: the lock makes the second one wait and then see it taken
+    // (before the sign-up token is used up, so they can simply choose another name).
+    const username = checked.username ? (await lockUsername(this.dbs.db, checked.username), await assertUsernameFree(this.dbs.db, checked.username)) : null;
     if (!(await this.tickets.take(signupToken, 'signup'))) throw expired();
-    if (checked.existing) return checked.existing;
     const [account] = await this.dbs.db
       .insert(accounts)
-      .values({ fullName, email: checked.id.kind === 'email' ? checked.id.value : null, mobile: checked.id.kind === 'mobile' ? checked.id.value : null, passwordHash: await hashPassword(password) })
+      .values({ fullName, username, email: checked.id.kind === 'email' ? checked.id.value : null, mobile: checked.id.kind === 'mobile' ? checked.id.value : null, passwordHash: await hashPassword(password) })
       .returning();
     return account;
   }
 
   /** POST signup/complete: account + company + owner + 14-day Suite trial, set up in the apps, signed in. */
   async signupComplete(input: z.infer<typeof completeSchema>, meta: Meta) {
-    const checked = await this.checkSignup(input.signupToken, input.password, meta.ip, input.fullName);
+    const checked = await this.checkSignup(input.signupToken, input.password, meta.ip, input.fullName, input.username);
     if (checked.existing) await this.assertCompanyQuota(checked.existing.id);
     const { account, ids } = await this.dbs.tx(async () => {
       const account = await this.takeSignup(input.signupToken, checked, input.fullName, input.password);

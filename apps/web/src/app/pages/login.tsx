@@ -1,4 +1,4 @@
-import { type ChooseCompany, errorMessage, session, useSignIn } from '@freefounders/core';
+import { ApiError, type ChooseCompany, errorMessage, session, useSignIn } from '@freefounders/core';
 import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from '@/components/icons';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -161,9 +161,12 @@ export function LoginPage() {
               </div>
             </div>
             {signIn.isError && (
-              <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
-                {errorMessage(signIn.error)}
-              </p>
+              <div role="alert" className="space-y-1 rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
+                <p>{errorMessage(signIn.error)}</p>
+                {signIn.error instanceof ApiError && signIn.error.status === 401 && (
+                  <p className="text-foreground">Signed up yourself? Use the email, mobile number or username you chose.</p>
+                )}
+              </div>
             )}
             <Button type="submit" className="h-11 w-full" size="lg" loading={signIn.isPending}>
               Sign in

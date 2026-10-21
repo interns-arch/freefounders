@@ -34,6 +34,8 @@ export interface SignupCompleteInput {
   signupToken: string;
   fullName: string;
   password: string;
+  /** Required for a new account (PLAN.md §21.5); ignored for an existing one. */
+  username?: string;
   company: CompanyInput;
 }
 
@@ -105,6 +107,8 @@ export interface AcceptAsNew {
   signupToken: string;
   fullName: string;
   password: string;
+  /** A new account's username (PLAN.md §21.5). */
+  username?: string;
 }
 
 export const TEAM_SIZES: Array<{ value: TeamSize; label: string }> = [

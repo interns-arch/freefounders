@@ -5,7 +5,8 @@
  */
 import { errorMessage, retryAfterSeconds } from '@freefounders/core';
 import { type PasswordAbout, PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
-import { AlertCircle, ArrowLeft, Eye, EyeOff, Info } from '@/components/icons';
+import { type UsernameCheckState } from '@freefounders/core/account';
+import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, Info, Loader2 } from '@/components/icons';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { WeakPasswordNote } from '@/components/common/weak-password-note';
@@ -107,6 +108,70 @@ export function TextField({
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Username (PLAN.md §21.5) with its live check next to it: "Available" (success text), the server's message (error
+ * text), or "Checking…". `serverError` (taken at submit) wins over the live state until the name is changed.
+ */
+export function UsernameField({
+  id,
+  value,
+  onChange,
+  check,
+  serverError,
+  autoFocus,
+  label = 'Username',
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  check: { state: UsernameCheckState; message: string | null };
+  serverError?: string | null;
+  autoFocus?: boolean;
+  label?: string;
+}) {
+  const problem = serverError ?? (['taken', 'invalid', 'reserved', 'error'].includes(check.state) ? check.message : null);
+  const statusId = `${id}-status`;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        className="h-11"
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\s+/g, ''))}
+        autoComplete="username"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        maxLength={30}
+        autoFocus={autoFocus}
+        aria-invalid={problem ? true : undefined}
+        aria-describedby={statusId}
+      />
+      <p id={statusId} aria-live="polite" className="min-h-5 text-[13px]">
+        {problem ? (
+          <span className="flex items-start gap-1.5 font-medium text-destructive">
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            {problem}
+          </span>
+        ) : check.state === 'available' ? (
+          <span className="flex items-center gap-1.5 font-medium text-success">
+            <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />
+            Available
+          </span>
+        ) : check.state === 'checking' ? (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+            Checking…
+          </span>
+        ) : (
+          <span className="text-muted-foreground">You can sign in with it. Letters, numbers, dots, - or _.</span>
+        )}
+      </p>
     </div>
   );
 }

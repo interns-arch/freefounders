@@ -14,6 +14,8 @@ export interface MeAccount {
   id: string;
   email: string | null;
   mobile: string | null;
+  /** Sign-in name chosen by the person (PLAN.md §21.5); null until they add one. */
+  username?: string | null;
   /** FreeFounders staff: may open the owner console (/console). */
   isStaff: boolean;
 }

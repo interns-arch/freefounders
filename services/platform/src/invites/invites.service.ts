@@ -22,6 +22,8 @@ export const acceptSchema = z.object({
   signupToken: z.string().min(20).max(200).optional(),
   fullName: z.string().trim().min(1, 'Enter your name').max(120).optional(),
   password: z.string().min(1).max(200).optional(),
+  /** A new account chooses its username (PLAN.md §21.5). */
+  username: z.string().trim().max(60).optional(),
   client: z.enum(['web', 'mobile']).default('web'),
 });
 
@@ -149,7 +151,7 @@ export class InvitesService {
     let checked: Awaited<ReturnType<AccountsService['checkSignup']>> | undefined;
     if (body.signupToken) {
       if (!body.password) throw badRequest('Enter your password', { password: 'Required' });
-      checked = await this.accounts.checkSignup(body.signupToken, body.password, meta.ip, body.fullName);
+      checked = await this.accounts.checkSignup(body.signupToken, body.password, meta.ip, body.fullName, body.username);
       account = checked.existing;
     } else {
       if (!caller) throw new HttpException({ statusCode: 401, message: 'Please sign in' }, 401);
