@@ -29,7 +29,7 @@ TASKS_SETTINGS_KEY=$(rnd 32)
 FAKE_GATEWAY_SECRET=$(rnd 24)
 # First company (created once by README step 5) and the staff account for /console.
 FF_COMPANY_CODE=DEMO
-FF_COMPANY_NAME=FreeFounders Demo
+FF_COMPANY_NAME="FreeFounders Demo"
 FF_OWNER_LOGIN=owner
 FF_OWNER_EMAIL=owner@freefounders.demo
 FF_OWNER_PASSWORD=Ff-$(rnd 9)
