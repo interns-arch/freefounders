@@ -1,0 +1,1 @@
+{"match":[{"host":["kaampilot.com","www.kaampilot.com"]}],"handle":[{"handler":"subroute","routes":[{"handle":[{"handler":"encode","encodings":{"gzip":{}}},{"handler":"reverse_proxy","upstreams":[{"dial":"172.17.0.1:7395"}]}]}]}],"terminal":true}

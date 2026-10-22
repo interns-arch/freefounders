@@ -153,3 +153,12 @@ webhooks for Test and Live).
   front (Caddy with a real site name) to get them; then set `COOKIE_SECURE=true` and `DEMO_MODE=0` for real use.
 - No backups yet: `data/postgres` lives only on this disk. Before real data: a nightly
   `ff.sh exec -T postgres pg_dumpall -U postgres | gzip > …` to S3.
+
+## kaampilot.com through the shared Caddy (2026-10-22)
+https://kaampilot.com is served by the server's shared Caddy container `problem-app-caddy-1` (ports 80/443), which
+forwards to this stack's gateway on host port 7395. Another team sometimes reloads that Caddy from its old,
+bind-mounted Caddyfile, which drops routes added through its admin API. `kaampilot-caddy-watchdog.sh` (cron, every
+minute, installed as `/opt/freefounders/kaampilot-caddy-watchdog.sh`) puts back only the kaampilot route
+(`kaampilot-route.json`) when it is missing and FreeFounders is up; log in `/opt/freefounders/kaampilot-caddy-watchdog.log`.
+Same pattern as `/home/ubuntu/pulse-caddy-watchdog.sh`. The host Caddyfile (`/home/ubuntu/problem-app/Caddyfile`) also
+has the kaampilot block for the day that container is restarted.
