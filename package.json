@@ -1,7 +1,7 @@
 {
   "name": "freefounders",
   "private": true,
-  "description": "FreeFounders: one login for Tasks and Assets (web app + Android app)",
+  "description": "Kaampilot: one login for Tasks and Assets (web app + Android app)",
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",

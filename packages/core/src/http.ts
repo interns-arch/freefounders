@@ -116,7 +116,7 @@ export function createHttp(base: string): Http {
         body: isForm ? (body as FormData) : body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch {
-      throw new ApiError(0, 'Cannot reach FreeFounders. Check your connection.');
+      throw new ApiError(0, 'Cannot reach Kaampilot. Check your connection.');
     }
     if (res.status === 401 && !retried) {
       if (await session.refresh()) return send(method, path, body, query, raw, true);
@@ -156,7 +156,7 @@ export function createHttp(base: string): Http {
   };
 }
 
-/** The three APIs on the shared FreeFounders address. */
+/** The three APIs on the shared Kaampilot address. */
 export const platformApi = createHttp('/api/platform');
 export const tasksApi = createHttp('/tasks/api');
 export const assetsApi = createHttp('/assets/api');

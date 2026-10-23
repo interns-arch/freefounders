@@ -1,4 +1,4 @@
-"""Roles from the FreeFounders role builder reach Tasks: the internal
+"""Roles from the Kaampilot role builder reach Tasks: the internal
 endpoints, and every "who is an admin / who may approve" question honours them."""
 import uuid
 

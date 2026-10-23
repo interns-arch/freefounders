@@ -499,6 +499,28 @@ describe('Razorpay seats, cancel and the billing clock', () => {
     assert.equal(s.state, 'active');
   });
 
+  test('switch to Free: an active Razorpay plan is cancelled there at once and ends at the period end; past due → Free now, cancelled there', async () => {
+    const { accessToken } = await signup('ravi@free.test', 'Free Switch Traders');
+    const c = await buy(accessToken);
+    rzp.calls.length = 0;
+    const res = await call('POST', '/billing/free', { token: accessToken });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual(rzpCalls('POST', `/subscriptions/${c.subscriptionId}/cancel`)[0].body, { cancel_at_cycle_end: false });
+    assert.deepEqual([res.body.state, res.body.cancelAtPeriodEnd, res.body.freeFrom], ['cancelled', true, 'period_end']);
+
+    const pd = await signup('ravi@freepd.test', 'Free Past Due Traders');
+    const c2 = await buy(pd.accessToken);
+    await webhook('subscription.halted', subEntity(c2.subscriptionId, { status: 'halted' }));
+    assert.equal((await subOf(pd.companyId)).state, 'past_due');
+    rzp.calls.length = 0;
+    const res2 = await call('POST', '/billing/free', { token: pd.accessToken });
+    assert.equal(res2.status, 200, JSON.stringify(res2.body));
+    assert.equal(rzpCalls('POST', `/subscriptions/${c2.subscriptionId}/cancel`).length, 1);
+    assert.deepEqual([res2.body.plan, res2.body.state, res2.body.freeFrom], ['free', 'active', 'now']);
+    const s = await subOf(pd.companyId);
+    assert.deepEqual([s.gateway, s.gatewaySubscriptionId], [null, null]);
+  });
+
   test('billing clock without webhooks: looks the renewal up at Razorpay (paid → new period; not yet → waits; halted → past_due)', async () => {
     const billing = app.get(BillingService);
     const { accessToken, companyId } = await signup('ravi@clock.test', 'Clock Traders');

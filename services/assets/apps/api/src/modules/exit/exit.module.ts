@@ -11,12 +11,15 @@ import type { Actor } from '../../common/actor';
 import { CurrentActor, ZodPipe } from '../../common/http';
 import { AssetsModule } from '../assets/assets.module';
 import { ExitService } from './exit.service';
+import { Exportable } from '../../common/export';
+import { EXPORTS } from '../../common/export-specs';
 
 @Controller('exit-cases')
 export class ExitController {
   constructor(private readonly exits: ExitService) {}
 
   @Get()
+  @Exportable(EXPORTS.exits)
   list(@CurrentActor() actor: Actor, @Query() q: Record<string, string>) {
     return this.exits.list(actor, q);
   }

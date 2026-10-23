@@ -7,7 +7,10 @@ import {
   useMarkAllTaskNotificationsRead,
   useMarkTaskNotificationRead,
   useTaskNotifications,
+  tasksExports,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { Bell, Mail, MessageCircle, X } from '@/components/icons';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
@@ -62,6 +65,7 @@ export function NotificationsPage() {
         title="Notifications"
         actions={
           <>
+            <DownloadMenu target={tasksExports.notifications()} filename={fileSlug('tasks', 'notifications', todayStamp())} empty={!!q.data && rows.length === 0} loading={!q.data && !q.error} size="default" />
             {rows.some((n) => !n.read_at) && (
               <Button variant="outline" onClick={() => readAll.mutate()} disabled={busy}>
                 Mark all read

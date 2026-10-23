@@ -12,6 +12,8 @@ import type { QueueItem } from '@freefounders/core/assets';
 import { useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, relativeTime } from '@/lib/utils';
 import { Segmented } from '@/components/common/controls';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
 
 const ORDER: Priority[] = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
 const LABEL: Record<Priority, string> = { URGENT: 'Urgent', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
@@ -44,7 +46,33 @@ export default function QueuePage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Priority queue" description="Everything waiting on the IT team — most urgent first, then overdue, then oldest. Refreshes every 30 seconds." />
+      <PageHeader
+        title="Priority queue"
+        description="Everything waiting on the IT team — most urgent first, then overdue, then oldest. Refreshes every 30 seconds."
+        actions={
+          <DownloadMenu
+            filename={fileSlug('assets', 'queue', f.kind, f.priority, todayStamp())}
+            rows={() => ({
+              title: 'Priority queue',
+              header: ['Kind', 'Number', 'Title', 'Details', 'Priority', 'Status', 'Due', 'Overdue', 'Assigned to', 'Raised on'],
+              rows: (q.data?.items ?? []).map((i) => [
+                KINDS.find((k) => k.value === i.kind)?.label ?? i.kind,
+                i.number,
+                i.title,
+                i.detail,
+                LABEL[i.priority],
+                (i.kind === 'ONBOARDING' ? JOINER_TEXT[i.status] : STATUS_TEXT[i.status]) ?? i.status,
+                i.dueDate,
+                i.overdue,
+                i.assigneeName,
+                new Date(i.createdAt),
+              ]),
+            })}
+            empty={q.data?.items.length === 0}
+            loading={!q.data}
+          />
+        }
+      />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {ORDER.map((p) => {

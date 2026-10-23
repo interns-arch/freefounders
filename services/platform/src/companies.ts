@@ -7,8 +7,8 @@
 //   npm run company -- reset --code DEMO --keep-owner [--no-staff]
 //                              LOCAL TEST DATA ONLY: delete everyone but the owner(s) and their records in every app,
 //                              archive every role but Admin and Member (back to defaults). Refused on a non-local database.
-//   npm run company -- staff --email someone@freefounders.in [--off]
-//                              mark an account (made by sign-up) as FreeFounders staff: it opens the owner console
+//   npm run company -- staff --email someone@kaampilot.com [--off]
+//                              mark an account (made by sign-up) as Kaampilot staff: it opens the owner console
 // In multi-company mode each app keeps a company's data in its own schema; `create` and `sync` ask the apps
 // (TASKS_INTERNAL_URL, ASSETS_INTERNAL_URL) to create it. Without a password one is generated, printed once,
 // (they can change it from the account menu; nothing forces it). The steps are shared with self-serve sign-up
@@ -101,7 +101,7 @@ async function main() {
         .where(sql`lower(${accounts.email}) = ${email}`)
         .returning({ id: accounts.id });
       if (!a) throw new Error(`No account with the email ${email} (they sign up first)`);
-      console.log(`✔ ${email} ${opts.off === 'true' ? 'is no longer' : 'is now'} FreeFounders staff (owner console)`);
+      console.log(`✔ ${email} ${opts.off === 'true' ? 'is no longer' : 'is now'} Kaampilot staff (owner console)`);
       return;
     }
 

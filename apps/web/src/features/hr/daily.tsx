@@ -3,11 +3,13 @@
  * "Daily attendance" (any date). Tiles count and filter, search finds a name / phone / employee ID, HR marks a day by hand.
  */
 import { errorMessage, useAccess } from '@freefounders/core';
-import { type ManualMarkStatus, type TeamDayRow, useHrConfig, useManualMark, useTeamDay } from '@freefounders/core/hr';
+import { type ManualMarkStatus, type TeamDayRow, hrExports, useHrConfig, useManualMark, useTeamDay } from '@freefounders/core/hr';
+import { fileSlug } from '@freefounders/core/export';
 import { CalendarCheck, CalendarOff, ChevronLeft, ChevronRight, Clock3, LogOut, Palmtree, Radio, RefreshCw, UserRoundX } from '@/components/icons';
 import { type ComponentType, type FormEvent, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { type Column, DataTable } from '@/components/common/data-table';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState } from '@/components/common/page';
 import { SearchField } from '@/components/common/search-field';
 import { ShowMore, useShowMore } from '@/components/common/show-more';
@@ -238,6 +240,12 @@ export function TeamDayView({ live }: { live: boolean }) {
             </Button>
           )}
         </span>
+        <DownloadMenu
+          filename={fileSlug('attendance', live ? 'live' : 'daily', date, department, filter !== 'all' && filter, q)}
+          target={hrExports.teamDay(live ? undefined : date, { q, department }, filter)}
+          loading={!data}
+          empty={!!data && shown.length === 0}
+        />
       </div>
 
       <OkNote>{msg}</OkNote>

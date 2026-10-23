@@ -1,4 +1,4 @@
-"""Roles from the database (FreeFounders Phase 3): same answers as the old
+"""Roles from the database (Kaampilot Phase 3): same answers as the old
 hard-coded matrix, and editable, combinable and scoped from now on."""
 from django.test import TestCase
 

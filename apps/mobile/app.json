@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "FreeFounders",
-    "slug": "freefounders",
-    "version": "1.1.0",
+    "name": "Kaampilot",
+    "slug": "kaampilot",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "freefounders",
@@ -11,10 +11,10 @@
     "ios": {
       "bundleIdentifier": "com.freefounders.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "FreeFounders takes a selfie when you punch in or out, and lets you take photos for attachments.",
-        "NSLocationWhenInUseUsageDescription": "FreeFounders checks that you are at your office when you punch in or out.",
-        "NSMicrophoneUsageDescription": "FreeFounders listens when you speak a task (Voice draft).",
-        "NSSpeechRecognitionUsageDescription": "FreeFounders turns the task you speak into text (Voice draft)."
+        "NSCameraUsageDescription": "Kaampilot takes a selfie when you punch in or out, and lets you take photos for attachments.",
+        "NSLocationWhenInUseUsageDescription": "Kaampilot checks that you are at your office when you punch in or out.",
+        "NSMicrophoneUsageDescription": "Kaampilot listens when you speak a task (Voice draft).",
+        "NSSpeechRecognitionUsageDescription": "Kaampilot turns the task you speak into text (Voice draft)."
       }
     },
     "android": {
@@ -29,13 +29,15 @@
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM"
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION"
       ],
       "predictiveBackGestureEnabled": false,
-      "versionCode": 2
+      "versionCode": 3
     },
     "plugins": [
       "expo-router",
@@ -44,7 +46,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "FreeFounders takes a selfie when you punch in or out, because your company keeps a photo of every punch.",
+          "cameraPermission": "Kaampilot takes a selfie when you punch in or out, because your company keeps a photo of every punch.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
@@ -52,7 +54,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "FreeFounders checks that you are at your office when you punch in or out."
+          "locationWhenInUsePermission": "Kaampilot checks that you are at your office when you punch in or out."
         }
       ],
       [
@@ -62,6 +64,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76,
           "dark": {
+            "image": "./assets/images/splash-icon-dark.png",
             "backgroundColor": "#09090b"
           }
         }
@@ -70,12 +73,19 @@
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "FreeFounders listens when you speak a task (Voice draft).",
-          "speechRecognitionPermission": "FreeFounders turns the task you speak into text (Voice draft).",
+          "microphonePermission": "Kaampilot listens when you speak a task (Voice draft).",
+          "speechRecognitionPermission": "Kaampilot turns the task you speak into text (Voice draft).",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox",
             "com.google.android.tts"
           ]
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#4f46e5"
         }
       ],
       [
@@ -91,7 +101,12 @@
       "tsconfigPaths": false
     },
     "extra": {
-      "webUrl": "http://192.168.2.72:8080"
-    }
+      "webUrl": "https://kaampilot.com",
+      "router": {},
+      "eas": {
+        "projectId": "60e32c42-a4a8-4828-9d06-19dea131faef"
+      }
+    },
+    "owner": "interncartrends-team"
   }
 }

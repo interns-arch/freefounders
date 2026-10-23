@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { type Caller, CurrentCaller, Needs, uuidParam, ZodPipe } from '../common/http';
+import { exportFile, exportFormat } from '../common/export';
 import { PEOPLE_SCREEN } from '../roles/platform-permissions';
 import { deletePersonSchema, grantSchema, type PersonCreate, personCreateSchema, type PersonUpdate, personUpdateSchema, PeopleService, setLoginSchema } from './people.service';
 
@@ -11,8 +12,15 @@ export class PeopleController {
 
   @Needs(...PEOPLE_SCREEN)
   @Get()
-  list(@CurrentCaller() caller: Caller, @Query('search') search?: string) {
-    return this.people.list(caller, typeof search === 'string' ? search : '');
+  async list(@CurrentCaller() caller: Caller, @Query('search') search?: string, @Query('export') exp?: string) {
+    const q = typeof search === 'string' ? search : '';
+    // ?export=xlsx|csv: every person matching the search, as a file (PLAN.md §19.31)
+    const format = exportFormat(exp);
+    if (format) {
+      const { header, rows } = await this.people.exportRows(caller, q);
+      return exportFile(format, 'people', header, rows);
+    }
+    return this.people.list(caller, q);
   }
 
   @Needs('people.manage')

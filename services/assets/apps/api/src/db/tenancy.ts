@@ -1,4 +1,4 @@
-// FreeFounders multi-company mode: one Postgres schema per company (PLAN.md §14).
+// Kaampilot multi-company mode: one Postgres schema per company (PLAN.md §14).
 // Off unless TENANCY=schemas. Each company's schema (co_<code>) holds the full set of Assets tables;
 // a request is pinned to one schema and its search_path holds only that schema. Without a company the
 // path is the empty `ff_none` schema, so a query fails instead of reading anyone's data.

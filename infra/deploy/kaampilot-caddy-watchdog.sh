@@ -5,7 +5,7 @@
 DIR=/opt/freefounders
 LOG=$DIR/kaampilot-caddy-watchdog.log
 C=problem-app-caddy-1
-# FreeFounders itself must be up, else there is nothing to route to.
+# Kaampilot itself must be up, else there is nothing to route to.
 curl -sf -m 5 http://127.0.0.1:7395/api/platform/health >/dev/null || exit 0
 docker exec $C wget -qO- http://127.0.0.1:2019/config/apps/http/servers/srv0/routes 2>/dev/null | grep -q kaampilot && exit 0
 docker cp $DIR/kaampilot-route.json $C:/tmp/kaampilot-route.json >/dev/null 2>&1

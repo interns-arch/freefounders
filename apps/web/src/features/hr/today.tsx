@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { ErrorNote, OkNote, Tile, fmtTime } from '../tasks/general/parts';
 import { AttendanceChip, hrs } from './parts';
 import { usePunch } from './punch';
+import { PunchReminderCard } from './reminder';
 
 export function TodayTab() {
   const p = usePunch();
@@ -121,6 +122,8 @@ export function TodayTab() {
         <Tile icon={Timer} tone="warning" label="Worked" value={hrs(a?.working_minutes)} />
         <Tile icon={Activity} tone="neutral" label="Status" value={a ? <AttendanceChip status={a.status} /> : '—'} alert={!!a?.is_late} />
       </div>
+      {/* Phone app only (PLAN.md §19.32): nothing in a browser. */}
+      {punches && <PunchReminderCard />}
       {p.camera}
     </div>
   );

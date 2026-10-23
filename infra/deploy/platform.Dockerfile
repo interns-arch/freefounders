@@ -1,4 +1,4 @@
-# FreeFounders Platform API (NestJS). Build context: services/platform (see docker-compose.yml).
+# Kaampilot Platform API (NestJS). Build context: services/platform (see docker-compose.yml).
 FROM node:22-slim AS build
 WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=512

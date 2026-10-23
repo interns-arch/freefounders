@@ -1,5 +1,5 @@
 /**
- * The bridge to the FreeFounders phone app (PLAN.md §19.17). On Android the app is this web app inside a native shell
+ * The bridge to the Kaampilot phone app (PLAN.md §19.17). On Android the app is this web app inside a native shell
  * (apps/mobile, react-native-webview). The shell sets `window.FreeFoundersApp = { platform, version }` before the page
  * loads and answers requests sent with `window.ReactNativeWebView.postMessage`:
  *
@@ -9,16 +9,32 @@
  * location → {latitude, longitude, accuracy}; photo {title, optional} → "data:image/jpeg;base64,…" (null = "punch without
  * a photo", only when optional; error "cancelled" when closed); download {filename, mime, base64} → {saved: true};
  * print {html} → {printed: true} (Android's print dialog, which can also save a PDF); voice {lang} → {text} (the phone's
- * speech recogniser, after Android's microphone pop-up; app 1.1.0+), voice-stop → stops it ("Done").
+ * speech recogniser, after Android's microphone pop-up; app 1.1.0+), voice-stop → stops it ("Done");
+ * reminder-set {settings} / reminder-get / reminder-skip-today / reminder-off → ReminderState, reminder-test {mode}
+ * (punch-in reminder = local notifications on the phone; app 1.2.0+ with 'reminders' in `capabilities`, PLAN.md §19.32).
  * In a normal browser none of this is used and every caller keeps its browser behaviour.
  */
 
 export interface AppInfo {
   platform: 'android' | 'ios';
   version: string;
+  /** What the shell can do (app 1.2.0+), e.g. 'reminders'. Older apps leave it out. */
+  capabilities?: string[];
 }
 
-export type AppRequestType = 'location' | 'photo' | 'download' | 'print' | 'open-settings' | 'voice' | 'voice-stop';
+export type AppRequestType =
+  | 'location'
+  | 'photo'
+  | 'download'
+  | 'print'
+  | 'open-settings'
+  | 'voice'
+  | 'voice-stop'
+  | 'reminder-set'
+  | 'reminder-get'
+  | 'reminder-skip-today'
+  | 'reminder-off'
+  | 'reminder-test';
 
 interface Reply {
   id: string;
@@ -27,7 +43,7 @@ interface Reply {
   error?: string;
   /** Why it failed, when the person can fix it: a permission the phone blocked (settings = only in the phone's Settings). */
   code?: 'permission' | 'unavailable';
-  permission?: 'location' | 'camera' | 'microphone';
+  permission?: 'location' | 'camera' | 'microphone' | 'notifications';
   settings?: boolean;
 }
 
@@ -46,10 +62,13 @@ export function appInfo(): AppInfo | null {
 
 export const isInApp = () => appInfo() !== null;
 
+/** Inside an app whose shell can do this (see AppInfo.capabilities). */
+export const appCan = (capability: string) => !!appInfo()?.capabilities?.includes(capability);
+
 /** An answer from the app that says no (`code` is "cancelled", "timeout" or "failed"). */
 export class AppRequestError extends Error {
   /** Set when the phone blocked a permission: which one, and whether only the phone's Settings can allow it again. */
-  blocked?: { permission: 'location' | 'camera' | 'microphone'; settings: boolean };
+  blocked?: { permission: 'location' | 'camera' | 'microphone' | 'notifications'; settings: boolean };
   /** The app cannot do it here (no speech service, or an app from before voice). */
   unavailable?: boolean;
   constructor(
@@ -69,6 +88,11 @@ const TIMEOUTS: Record<AppRequestType, number> = {
   'open-settings': 30_000,
   voice: 3 * 60_000, // includes the microphone question; listening stops by itself after 2 minutes
   'voice-stop': 15_000,
+  'reminder-set': 2 * 60_000, // includes Android's notification pop-up
+  'reminder-get': 15_000,
+  'reminder-skip-today': 15_000,
+  'reminder-off': 15_000,
+  'reminder-test': 2 * 60_000,
 };
 
 const pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -102,7 +126,7 @@ function onMessage(event: Event) {
 /** Asks the phone app for something (see the protocol above). Rejects with AppRequestError. */
 export function appRequest<T>(type: AppRequestType, payload: Record<string, unknown> = {}, timeoutMs = TIMEOUTS[type]): Promise<T> {
   const bridge = isInApp() ? window.ReactNativeWebView : undefined;
-  if (!bridge) return Promise.reject(new AppRequestError('Not running inside the FreeFounders app.'));
+  if (!bridge) return Promise.reject(new AppRequestError('Not running inside the Kaampilot app.'));
   if (!listening) {
     // Android's WebView delivers the shell's answers on `document`, iOS on `window`.
     document.addEventListener('message', onMessage);
@@ -200,4 +224,40 @@ export async function printPage(): Promise<void> {
 /** Phone app: opens this app's page in the phone's Settings (to allow a blocked permission). */
 export async function openAppSettings(): Promise<void> {
   if (isInApp()) await appRequest('open-settings').catch(() => {});
+}
+
+// ─── Punch-in reminder (PLAN.md §19.32) ───────────────────────────────────
+
+export type ReminderMode = 'vibrate' | 'ring' | 'ring-vibrate';
+
+export interface ReminderSettings {
+  enabled: boolean;
+  /** "HH:MM", the phone's local time. */
+  time: string;
+  /** ISO weekdays: 1 = Monday … 7 = Sunday. */
+  days: number[];
+  mode: ReminderMode;
+  /** Remind again this many minutes later if not punched in (0 = off). */
+  followUpMinutes: number;
+}
+
+/** What the phone answers to every reminder request. */
+export interface ReminderState {
+  settings: ReminderSettings | null;
+  permission: 'granted' | 'ask' | 'blocked' | 'unavailable';
+  /** ISO time of the next reminder. */
+  next: string | null;
+  /** "YYYY-MM-DD" when today was skipped (already checked in). */
+  skipped: string | null;
+}
+
+let skippedOn = '';
+/** After a check-in in the app: no more reminders today (they ring again tomorrow). Once a day per page; never fails. */
+export function skipTodaysReminder(): void {
+  const today = new Date().toDateString();
+  if (!appCan('reminders') || skippedOn === today) return;
+  skippedOn = today;
+  void appRequest('reminder-skip-today').catch(() => {
+    skippedOn = '';
+  });
 }

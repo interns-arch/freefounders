@@ -1,5 +1,6 @@
 from django.db.models import Q
 from django.utils import timezone
+from config.exports import ExportMixin
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -28,9 +29,17 @@ def log(lead, type_, actor=None, body="", payload=None):
     return LeadEvent.objects.create(lead=lead, type=type_, actor=actor, body=body, payload=payload or {})
 
 
-class LeadViewSet(viewsets.ModelViewSet):
+class LeadViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = LeadSerializer
+    export_name = "leads"
+    export_columns = [
+        ("Customer", "customer_name"), ("Company", "company"), ("Phone", "phone"), ("Email", "email"),
+        ("Requirement", "requirement"), ("Source", "source_display"), ("Department", "department_display"),
+        ("Stage", "status_display"), ("Priority", "priority_display"), ("Assigned to", "assigned_to_detail.name"),
+        ("Created by", "created_by_detail.name"), ("Follow-up", "follow_up_at"), ("Estimated value", "estimated_value"),
+        ("Follow-up overdue", "is_overdue"), ("Created", "created_at"),
+    ]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):

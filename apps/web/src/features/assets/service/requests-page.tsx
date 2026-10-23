@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Avatar, Card } from '@/components/ui/primitives';
-import { OnboardingTable } from '@/features/assets/onboarding/onboarding-page';
+import { OnboardingDownload, OnboardingTable } from '@/features/assets/onboarding/onboarding-page';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { errorMessage } from '@freefounders/core';
 import { useAuth } from '@/features/assets/lib/auth';
@@ -28,6 +28,9 @@ import type { AssetRequest } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, relativeTime } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 const TABS = [
   { value: 'PENDING,APPROVED', label: 'Open' },
@@ -64,7 +67,7 @@ export default function RequestsPage() {
   if (joiners) {
     return (
       <div>
-        <PageHeader title="Requests" description="New joiners from HR: approve what they need, then assign it all before their first day." />
+        <PageHeader title="Requests" description="New joiners from HR: approve what they need, then assign it all before their first day." actions={<OnboardingDownload defaultStatus="SUBMITTED,APPROVED" />} />
         {switcher}
         <OnboardingTable
           defaultStatus="SUBMITTED,APPROVED"
@@ -207,11 +210,19 @@ function AssetRequests({ switcher }: { switcher: React.ReactNode }) {
         title="Asset requests"
         description="Employees ask, managers approve, IT fulfils by assigning an asset."
         actions={
-          can('request:create') && (
-            <Button variant="cta" size="sm" onClick={() => quickAdd.open('request')}>
-              <Plus /> New request
-            </Button>
-          )
+          <>
+            <DownloadMenu
+              filename={fileSlug('assets', 'requests', f.status, f.priority, f.search, todayStamp())}
+              target={assetsExports.requests(listFilters)}
+              empty={q.data?.total === 0}
+              loading={!q.data}
+            />
+            {can('request:create') && (
+              <Button variant="cta" size="sm" onClick={() => quickAdd.open('request')}>
+                <Plus /> New request
+              </Button>
+            )}
+          </>
         }
       />
       {switcher}

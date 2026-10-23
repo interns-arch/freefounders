@@ -76,7 +76,7 @@ export function GettingStarted({ access, welcome }: { access: Access; welcome?: 
     {
       id: 'phone',
       title: 'Install the phone app',
-      text: 'On Android, open this address in Chrome and choose “Add to Home screen”, or install the FreeFounders app your admin shares.',
+      text: 'On Android, open this address in Chrome and choose “Add to Home screen”, or install the Kaampilot app your admin shares.',
       done: phoneDone,
       manual: true,
     },

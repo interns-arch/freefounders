@@ -1,4 +1,4 @@
-"""Events for the FreeFounders Platform (PLAN.md section 17.4)."""
+"""Events for the Kaampilot Platform (PLAN.md section 17.4)."""
 from datetime import timedelta
 
 from django.utils import timezone

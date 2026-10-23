@@ -279,6 +279,7 @@ export class AssetsService {
           consumable: assetTypes.consumable,
           locationId: assets.locationId,
           locationName: locations.name,
+          photoId: PhotosService.firstPhotoId(),
         })
         .from(assets)
         .innerJoin(assetTypes, eq(assetTypes.id, assets.assetTypeId))

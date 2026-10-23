@@ -1,8 +1,10 @@
 /** HR → Approvals (leave + corrections). Who is in today lives in live.tsx / daily.tsx (PLAN.md §19.15). */
 import { errorMessage } from '@freefounders/core';
-import { usePendingCorrections, usePendingLeaves, useReviewHrRequest } from '@freefounders/core/hr';
+import { hrExports, usePendingCorrections, usePendingLeaves, useReviewHrRequest } from '@freefounders/core/hr';
+import { todayStamp } from '@freefounders/core/export';
 import { Check, ClipboardCheck, Inbox, Palmtree, X } from '@/components/icons';
 import { useState } from 'react';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +29,7 @@ export function ApprovalsTab() {
           </span>
           <h2 className="text-[15px] font-bold tracking-tight">Leave requests ({leaves.data?.length ?? '…'})</h2>
           {!!leaves.data?.length && <CountPill tone="warning">{leaves.data.length}</CountPill>}
+          <DownloadMenu className="ml-auto" filename={`attendance-approvals-leave-pending-${todayStamp()}`} target={hrExports.pendingLeave()} loading={!leaves.data} empty={leaves.data?.length === 0} />
         </div>
         {!leaves.data && <Skeleton className="h-24" />}
         {leaves.data?.length === 0 && (
@@ -43,10 +46,15 @@ export function ApprovalsTab() {
                 remark={remarks[`leave${l.id}`] ?? ''}
                 setRemark={(v) => setRemarks((p) => ({ ...p, [`leave${l.id}`]: v }))}
                 busy={review.isPending}
-                onDecide={(decision) => review.mutate({ kind: 'leave', id: l.id, decision, remarks: remarks[`leave${l.id}`] ?? '' })}
-                title={`${l.user_detail?.name} — ${l.leave_type_name} (${l.days} day${l.days > 1 ? 's' : ''})`}
+                onDecide={(decision, beyondBalance) => review.mutate({ kind: 'leave', id: l.id, decision, remarks: remarks[`leave${l.id}`] ?? '', beyondBalance })}
+                title={`${l.user_detail?.name} — ${l.leave_type_name} (${leaveDaysText(l)})`}
                 person={l.user_detail?.name}
-                tag={`${l.leave_type_name} · ${l.days} day${l.days > 1 ? 's' : ''}`}
+                tag={`${l.leave_type_name} · ${leaveDaysText(l)}`}
+                overBalance={
+                  l.balance_check?.over
+                    ? `Beyond balance: ${l.user_detail?.name ?? 'This person'} has ${l.balance_check.available} day(s) of ${l.leave_type_name} left; this request needs ${l.balance_check.needs}.`
+                    : undefined
+                }
                 sub={l.reason}
                 meta={`${fmtDay(l.start_date)} – ${fmtDay(l.end_date)}`}
               />
@@ -61,6 +69,13 @@ export function ApprovalsTab() {
           </span>
           <h2 className="text-[15px] font-bold tracking-tight">Attendance corrections ({corrections.data?.length ?? '…'})</h2>
           {!!corrections.data?.length && <CountPill tone="warning">{corrections.data.length}</CountPill>}
+          <DownloadMenu
+            className="ml-auto"
+            filename={`attendance-approvals-corrections-pending-${todayStamp()}`}
+            target={hrExports.pendingCorrections()}
+            loading={!corrections.data}
+            empty={corrections.data?.length === 0}
+          />
         </div>
         {!corrections.data && <Skeleton className="h-24" />}
         {corrections.data?.length === 0 && (
@@ -92,7 +107,15 @@ export function ApprovalsTab() {
   );
 }
 
-/** One request waiting for a decision: who, what, why, the remarks box and Approve / Reject. */
+const leaveDaysText = (l: { days: number; half_day?: boolean; leave_days?: number }) => {
+  const n = l.half_day ? 0.5 : (l.leave_days ?? l.days);
+  return n === 0.5 ? 'half day' : `${n} day${n === 1 ? '' : 's'}`;
+};
+
+/**
+ * One request waiting for a decision: who, what, why, the remarks box and Approve / Reject. Leave beyond the person's
+ * balance shows a warning and "Approve beyond balance" instead of Approve (the override is logged on the request).
+ */
 function ApprovalRow({
   kind,
   title,
@@ -104,6 +127,7 @@ function ApprovalRow({
   setRemark,
   busy,
   onDecide,
+  overBalance,
 }: {
   kind: 'leave' | 'correction';
   title: string;
@@ -114,7 +138,8 @@ function ApprovalRow({
   remark: string;
   setRemark: (v: string) => void;
   busy: boolean;
-  onDecide: (decision: 'approved' | 'rejected') => void;
+  onDecide: (decision: 'approved' | 'rejected', beyondBalance?: boolean) => void;
+  overBalance?: string;
 }) {
   return (
     <Card className={cn('border-l-4 p-3 sm:p-4', kind === 'leave' ? 'border-l-info' : 'border-l-warning')}>
@@ -131,14 +156,25 @@ function ApprovalRow({
               <Chip tone={kind === 'leave' ? 'info' : 'warning'}>{tag}</Chip>
               {meta}
             </div>
+            {overBalance && (
+              <p role="status" className="mt-2 rounded-md border border-warning/30 bg-warning/8 px-2.5 py-1.5 text-xs font-medium">
+                {overBalance}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
           <Input aria-label={`Remarks for ${title}`} placeholder="Remarks…" className="sm:w-48" value={remark} onChange={(e) => setRemark(e.target.value)} />
           <div className="grid grid-cols-2 gap-1.5 sm:flex">
-            <Button size="sm" variant="success" aria-label={`Approve ${title}`} disabled={busy} onClick={() => onDecide('approved')}>
-              <Check /> Approve
-            </Button>
+            {overBalance ? (
+              <Button size="sm" variant="outline" aria-label={`Approve ${title} beyond balance`} disabled={busy} onClick={() => onDecide('approved', true)}>
+                <Check /> Approve beyond balance
+              </Button>
+            ) : (
+              <Button size="sm" variant="success" aria-label={`Approve ${title}`} disabled={busy} onClick={() => onDecide('approved')}>
+                <Check /> Approve
+              </Button>
+            )}
             <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" aria-label={`Reject ${title}`} disabled={busy} onClick={() => onDecide('rejected')}>
               <X /> Reject
             </Button>

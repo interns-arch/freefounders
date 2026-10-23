@@ -1,9 +1,11 @@
 /**
  * /billing/invoices/:id: a printable GST tax invoice (PLAN.md §20.6): seller and buyer with GSTIN, place of supply,
- * lines with SAC, CGST + SGST (same state) or IGST, total in words. Print / save as PDF from the browser; in the phone
- * app through the native print bridge.
+ * lines with SAC, CGST + SGST (same state) or IGST, total in words. Download PDF (made by the Platform, PLAN.md §19.31) or
+ * print; in the phone app through the native bridge.
  */
-import { formatInr, inrInWords, type Invoice, type Party, useInvoice } from '@freefounders/core/billing';
+import { billingExports, formatInr, inrInWords, type Invoice, type Party, useInvoice } from '@freefounders/core/billing';
+import { fileSlug } from '@freefounders/core/export';
+import { DownloadButton } from '@/components/common/download-menu';
 import { ArrowLeft, Printer } from '@/components/icons';
 import { Link, useParams } from 'react-router';
 import { ErrorState, PageLoader } from '@/components/common/page';
@@ -23,9 +25,12 @@ export function InvoicePage() {
           </Link>
         </Button>
         {q.data && (
-          <Button onClick={() => void printPage()}>
-            <Printer /> Print
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <DownloadButton size="default" filename={fileSlug('invoice', q.data.number)} target={billingExports.invoicePdf(q.data.id)} />
+            <Button onClick={() => void printPage()}>
+              <Printer /> Print
+            </Button>
+          </div>
         )}
       </div>
       <main id="content" className="mx-auto max-w-[820px]">

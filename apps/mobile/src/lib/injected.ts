@@ -1,6 +1,6 @@
 /**
  * The script the shell puts into every page before it loads (react-native-webview `injectedJavaScriptBeforeContentLoaded`).
- * It tells the web app it runs inside the FreeFounders app (`window.FreeFoundersApp`, read by
+ * It tells the web app it runs inside the Kaampilot app (`window.FreeFoundersApp`, read by
  * apps/web/src/lib/native-bridge.ts) and fills three gaps of Android's WebView:
  *   1. pull-to-refresh: reports whether the touched content is scrolled to the top (the shell only refreshes then);
  *   2. `navigator.geolocation.getCurrentPosition` answered by the app's GPS (a WebView refuses it on plain http);
@@ -13,6 +13,8 @@ export interface AppInfo {
   platform: 'android' | 'ios';
   version: string;
   camera: CameraState;
+  /** What this shell can do (1.2.0+), e.g. 'reminders'; the web app shows the punch-in reminder only when listed. */
+  capabilities?: string[];
 }
 
 /**

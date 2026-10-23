@@ -1,6 +1,6 @@
-# FreeFounders: UI functionality specification
+# Kaampilot: UI functionality specification
 
-**What this is.** Every screen of the FreeFounders web app as it works today (Phase 6, `apps/web`): who can open it, what it
+**What this is.** Every screen of the Kaampilot web app as it works today (Phase 6, `apps/web`): who can open it, what it
 shows, every action, every form field and every rule. It describes **what the UI must do, not how it should look**. Use it to
 design a completely new UI; when the new design is built, this document is the checklist that nothing was lost.
 
@@ -164,6 +164,12 @@ updated in the same change. Removing a function is not.
 - **Standard blocks**: load error ("Couldn't load this", the message, "Try again") · empty (icon, title, optional
   description and action) · page loader (skeleton) · confirm dialog (title, optional description, "Cancel", a confirm
   button labelled per use, default "Confirm"; can be destructive).
+- **Download** (PLAN.md §19.31): every list / report screen has one "Download" menu in its header (or its section's
+  header): Excel (.xlsx) / CSV, plus PDF / ZIP where offered (payslips, invoices). The file has ALL rows matching the
+  current filters, search, sort, tab and date range (up to 50 000), not just the visible page; disabled with "Nothing to
+  download for these filters" when nothing matches; allowed in read-only mode. Each payslip (My salary, Payroll → a run)
+  and each invoice has its own "PDF" button; a payroll run also offers "All payslips (ZIP of PDFs)" and "(one PDF)".
+  File names `<area>-<screen>-<filters>-<date>.<ext>`; in the phone app the file goes to the app's share/save sheet.
 
 ### 1.1 Sign-in model
 - One sign-in for all apps. The access token lasts 15 minutes and lives in memory only; it is renewed from an httpOnly
@@ -179,7 +185,7 @@ updated in the same change. Removing a function is not.
 - Module switch: on unless the server says off. A Tasks capability counts only if its module is on (`leads.*`,
   `quotations.*` need Leads; `intake.*` needs AI inbox). An Assets permission check passes if the person has ANY of the
   listed permissions.
-- Brand: `{name, short name (falls back to name), colour, logo}`; without it, FreeFounders defaults.
+- Brand: `{name, short name (falls back to name), colour, logo}`; without it, Kaampilot defaults.
 
 ### 1.3 Route map
 | URL | Screen | Guard |
@@ -202,10 +208,12 @@ updated in the same change. Removing a function is not.
 - **URL** `/login` (`?next=<in-app path>`). **Who** anyone.
 - **Auto sign-in**: on open it tries to renew silently (another tab, or a still-valid cookie); if that works it goes to
   `next` (or `/`).
-- **Shows**: FreeFounders logo and name (the company is not known yet). Large screens: a side panel with the headline "Run
-  your whole team from one place.", three points ("Tasks, checklists and approvals", "Attendance and leave", "Assets,
-  joiners and exits") and "One sign-in for every FreeFounders app.". Form title "Sign in", subtitle "One login for Tasks and
-  Assets.".
+- **Shows** (PLAN.md §19.35): the Kaampilot lockup "kaampilot.com" (the company is not known yet). Large screens: a side
+  panel with "For Indian SMEs · 5 to 500 people", the headline "Your team's kaam, on autopilot.", the value line, a
+  **Start free** button, a small drawn preview (punch card + task list), four benefits (Selfie + GPS punch, Tasks with
+  approvals, Assets/joiners/exits, Payroll from attendance) and the trust line (Made in India · Data stays in India ·
+  Works on low-end Android). Phones: lockup + one line above the form; "New to Kaampilot? Start free", the benefits
+  and the trust line under it. Form title "Sign in".
 - **Fields**: "Email, username or employee ID" (text, required, autofocus, trimmed) · "Password" (password, required).
 - **Actions**: "Sign in" (disabled while either field is empty or while signing in; spinner) → `next` or `/`. Help text:
   "Forgot your password? Ask your company admin to reset it." (no reset flow: admins reset passwords).
@@ -231,7 +239,7 @@ updated in the same change. Removing a function is not.
 
 ### Change password / first-time password
 - **URL** `/account`; `?first=1` forced mode (also when the server says the password must change); `?next=<path>` where to
-  go after a forced change. Outside the menus; FreeFounders logo.
+  go after a forced change. Outside the menus; Kaampilot logo.
 - **Texts**: forced — "Choose a new password", "Your password was set by an admin. Pick your own before you continue.";
   normal — "Change password", "Your other devices will be signed out; this one stays signed in.".
 - **Fields** (all required): "Current password", "New password", "New password again".
@@ -244,7 +252,7 @@ updated in the same change. Removing a function is not.
 - **Current workspace** from the path: `/tasks…` Tasks, `/assets…` Assets, `/people` `/roles` `/settings` `/account` Admin.
 - **Workspaces offered**: each app the person has, plus Admin for owners/admins. Opening a workspace they may not use →
   `/?choose`.
-- **Page title**: "{company short name} · {Tasks | Assets | Admin}" (or "FreeFounders · …").
+- **Page title**: "{company short name} · {Tasks | Assets | Admin}" (or "Kaampilot · …").
 - **Brand**: the company colour replaces the primary colour; the logo (or the first letter of the short name, or "FF").
 - **Assets photos**: when the person has Assets, the shell also obtains the Assets photo cookie.
 - **Sidebar**, in order:
@@ -281,7 +289,7 @@ updated in the same change. Removing a function is not.
 ### Errors
 - **Page not found** (unknown path): "Page not found", "This page does not exist or was moved.", "Go to the start" (→ `/`).
 - **Crash / new version** (full page): when the app was updated while open — "A new version is available", "Reload to get the
-  latest FreeFounders."; otherwise "Something went wrong" + the message. Button "Reload".
+  latest Kaampilot."; otherwise "Something went wrong" + the message. Button "Reload".
 
 ### Admin workspace menu
 | Label | URL | Show-rule |
@@ -1237,7 +1245,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
   - "Department" and "Reports to".
   - Note: "Department and "reports to" come from the company's People directory. "Reports to" decides who approves this person's change requests."
   - Button "Edit in People & access" (goes to `/people`).
-- "New Tasks password (blank = keep)": password field. Help: "Only for signing in to a standalone Tasks install; FreeFounders sign-in passwords are reset in People & access."
+- "New Tasks password (blank = keep)": password field. Help: "Only for signing in to a standalone Tasks install; Kaampilot sign-in passwords are reset in People & access."
 - Buttons: "Cancel", "Save changes". Server errors show inline.
 
 **Dialog: "Delete {name} permanently?"**
@@ -1506,7 +1514,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 | "Late after (minutes of grace)" | number | 0–240 | 15 |
 | "Half day below (hours)" | number, step 0.5 | 0.5–24 | 4 |
 | "Full day (hours)" | number, step 0.5 | 1–24 | 8 |
-| "Photo at check-in / check-out" | select: "Off" / "Optional" / "Required at every punch" | — | off (FreeFounders companies are set up with "required") |
+| "Photo at check-in / check-out" | select: "Off" / "Optional" / "Required at every punch" | — | off (Kaampilot companies are set up with "required") |
 | "Leave and corrections are approved by" | select: "Approvers in the person's department" / "The person's manager (reports to) first" | — | department |
 | "Remind approvers after (hours; 0 = never)" | number | 0–720 | 24 |
 | "Keep photos for (days)" | number | 1–3650 | 90 |
@@ -2303,7 +2311,8 @@ Exit case statuses: OPEN ("In progress"), COMPLETED, CANCELLED.
 - "Warranty / expiry" with "(expired)" or "(<n> days left)"; flagged within 30 days.
 - Added.
 - Notes (if any).
-- Photos (if any; asset photos).
+
+**"Photos (n)" card** (§19.34): the asset's own photos as thumbnails (tap = full-size viewer with caption, previous / next, Download, and Delete + confirmation for `asset:edit`); "Add photo" (`asset:edit`) opens "Add photos of this asset" — Take photo (phone camera; the app's back camera) · Choose from gallery · Cancel, caption for the first photo, "Save n photos"; "n of 6", disabled at 6. The same dialog opens by itself after "Add asset" when no photo was picked in the form (Skip closes it); the edit form shows the gallery too. The assets list shows the first photo instead of the type icon.
 
 **Tabs**
 - **"Timeline"**: the asset's history (§16).

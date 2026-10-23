@@ -1,6 +1,7 @@
 /** Links (old pages/Links.jsx): shared bookmark collections, favourites and group-scoped links. Module `links`. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tasksApi } from '../http';
+import { linksQuery } from './exports';
 import type { UserBrief } from './types';
 
 export interface LinkCollection {
@@ -46,11 +47,7 @@ export function useLinkCollections() {
 
 /** GET /links/?search=&collection=&favorites=true — the links I can see (not paginated). */
 export function useLinks(filters: LinkFilters = {}) {
-  const q = {
-    search: filters.search?.trim() || undefined,
-    collection: filters.collection || undefined,
-    favorites: filters.favorites ? 'true' : undefined,
-  };
+  const q = linksQuery(filters);
   return useQuery({ queryKey: ['links', 'list', q], queryFn: () => tasksApi.get<Link[]>('/links/', q) });
 }
 

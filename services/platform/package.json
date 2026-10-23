@@ -2,7 +2,7 @@
   "name": "@freefounders/platform",
   "version": "0.1.0",
   "private": true,
-  "description": "FreeFounders Platform: companies, people, single login",
+  "description": "Kaampilot Platform: companies, people, single login",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p .",

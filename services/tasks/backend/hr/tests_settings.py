@@ -101,6 +101,17 @@ class PunchPhotoTests(_Base):
         self.assertFalse(Attendance.objects.filter(user=self.member).exists())
         self.assertEqual(self.as_(self.member).get("/api/attendance/today/").json()["photo"], "required")
 
+    def test_optional_accepts_a_punch_without_a_photo(self):
+        """"Skip photo" in the browser and the phone app (PLAN.md §19): optional means a check-in without a photo works."""
+        self.set_photo("optional")
+        self.assertEqual(self.as_(self.member).get("/api/attendance/today/").json()["photo"], "optional")
+        res = self.as_(self.member).post("/api/attendance/check_in/", {}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertFalse(res.json()["has_check_in_photo"])
+        res = self.as_(self.member).post("/api/attendance/check_out/", {"photo": None}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertFalse(res.json()["has_check_out_photo"])
+
     def test_photo_is_stored_and_shown_only_to_people_who_may_see_the_record(self):
         self.set_photo("required")
         res = self.as_(self.member).post("/api/attendance/check_in/", {"photo": PHOTO}, format="json")

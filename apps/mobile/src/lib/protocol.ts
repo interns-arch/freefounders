@@ -1,13 +1,20 @@
 /**
- * The bridge between the FreeFounders web app and this shell (PLAN.md §19.17). Pure functions only (no React Native), so
+ * The bridge between the Kaampilot web app and this shell (PLAN.md §19.17). Pure functions only (no React Native), so
  * the unit tests can run them under plain Node. The web side is apps/web/src/lib/native-bridge.ts.
  *
  *   web → app (request)  {"id": "r1", "type": "location"}
  *                        {"id": "r2", "type": "photo", "title": "Check in", "optional": false}
+ *                        {"id": "r2", "type": "photo", "title": "Asset photo", "facing": "back"}   (back camera; default front)
  *                        {"id": "r3", "type": "download", "filename": "report.xlsx", "mime": "…", "base64": "…"}
  *                        {"id": "r4", "type": "print", "html": "<html>…"}
  *                        {"id": "r5", "type": "voice", "lang": "en-IN" | "hi-IN"}   the phone's speech recogniser (mic pop-up)
  *                        {"id": "r6", "type": "voice-stop"}                          "Done": stop listening, r5 gets the words
+ *                        {"id": "r7", "type": "reminder-set", "settings": {"enabled": true, "time": "09:20", "days": [1,2,3,4,5,6],
+ *                                     "mode": "vibrate" | "ring" | "ring-vibrate", "followUpMinutes": 10}}   punch-in reminder (§19.32)
+ *                        {"id": "r8", "type": "reminder-get"}          settings on this phone + notification permission
+ *                        {"id": "r9", "type": "reminder-skip-today"}   checked in: no more reminders today, back tomorrow
+ *                        {"id": "rA", "type": "reminder-off"}
+ *                        {"id": "rB", "type": "reminder-test", "mode": "ring-vibrate"}   one reminder in 5 seconds
  *   web → app (event, from the injected script; no answer)
  *                        {"type": "scroll", "atTop": true}          pull-to-refresh only when the page is at the top
  *                        {"type": "camera-for-files"}               a file picker wants the camera option
@@ -18,16 +25,25 @@
  *                        {"id": "r5", "ok": true, "data": {"text": "Rahul ko kal 5 baje tak quotation bhejna hai"}}
  *                        {"id": "r5", "ok": false, "error": "…", "code": "permission", "permission": "microphone", "settings": true}
  *                        {"id": "r5", "ok": false, "error": "…", "code": "unavailable"}   (no speech service / Expo Go)
+ *                        {"id": "r7", "ok": true, "data": {"settings": {…}, "permission": "granted", "next": "2026-10-23T09:20:00.000Z"}}
+ *                        {"id": "r7", "ok": false, "error": "…", "code": "permission", "permission": "notifications", "settings": true}
  */
+
+import { type ReminderMode, type ReminderSettings, parseReminderSettings, reminderMode } from './reminder-plan.ts';
 
 export type AppRequest =
   | { id: string; type: 'location' }
   | { id: string; type: 'open-settings' }
-  | { id: string; type: 'photo'; title: string; optional: boolean }
+  | { id: string; type: 'photo'; title: string; optional: boolean; facing: 'front' | 'back' }
   | { id: string; type: 'download'; filename: string; mime: string; base64: string }
   | { id: string; type: 'print'; html: string }
   | { id: string; type: 'voice'; lang: VoiceLang }
-  | { id: string; type: 'voice-stop' };
+  | { id: string; type: 'voice-stop' }
+  | { id: string; type: 'reminder-set'; settings: ReminderSettings }
+  | { id: string; type: 'reminder-get' }
+  | { id: string; type: 'reminder-skip-today' }
+  | { id: string; type: 'reminder-off' }
+  | { id: string; type: 'reminder-test'; mode: ReminderMode };
 
 /** The languages the voice draft offers (Indian English, Hindi). */
 export const VOICE_LANGS = ['en-IN', 'hi-IN'] as const;
@@ -68,7 +84,14 @@ export function parseMessage(raw: unknown): Parsed {
     case 'photo':
       return {
         kind: 'request',
-        request: { id, type: 'photo', title: str(m.title) && m.title.trim() ? m.title.trim().slice(0, 60) : 'Selfie', optional: m.optional === true },
+        request: {
+          id,
+          type: 'photo',
+          title: str(m.title) && m.title.trim() ? m.title.trim().slice(0, 60) : 'Selfie',
+          optional: m.optional === true,
+          // Selfies (punch) use the front camera; photos of things (assets) the back one (PLAN.md §19.34).
+          facing: m.facing === 'back' ? 'back' : 'front',
+        },
       };
     case 'download': {
       if (!str(m.base64) || !m.base64) return { kind: 'invalid', id, error: 'The file is empty.' };
@@ -83,8 +106,19 @@ export function parseMessage(raw: unknown): Parsed {
       return { kind: 'request', request: { id, type: 'voice', lang: voiceLang(m.lang) } };
     case 'voice-stop':
       return { kind: 'request', request: { id, type: 'voice-stop' } };
+    case 'reminder-set': {
+      const r = parseReminderSettings(m.settings);
+      if (!r.ok) return { kind: 'invalid', id, error: r.error };
+      return { kind: 'request', request: { id, type: 'reminder-set', settings: r.settings } };
+    }
+    case 'reminder-get':
+    case 'reminder-skip-today':
+    case 'reminder-off':
+      return { kind: 'request', request: { id, type: m.type } };
+    case 'reminder-test':
+      return { kind: 'request', request: { id, type: 'reminder-test', mode: reminderMode(m.mode) } };
     default:
-      return { kind: 'invalid', id, error: `This app cannot do "${String(m.type)}". Update the FreeFounders app.` };
+      return { kind: 'invalid', id, error: `This app cannot do "${String(m.type)}". Update the Kaampilot app.` };
   }
 }
 
@@ -106,7 +140,7 @@ export function originOf(url: string): string | null {
 }
 
 /**
- * Where a page load should go. Pages of the FreeFounders server stay in the app; other sites, phone numbers, e-mail and
+ * Where a page load should go. Pages of the Kaampilot server stay in the app; other sites, phone numbers, e-mail and
  * WhatsApp open in the phone's own apps. `about:blank`, `javascript:` (runs in the same page) and the server's own
  * `blob:` addresses stay. Everything else is blocked: a `data:` page (it would get the app's powers) and, inside a frame,
  * any other site (a frame must never start another app on its own).
@@ -136,7 +170,7 @@ export function isPaymentPage(url: string): boolean {
 }
 
 /**
- * A payment starts when a top-level page of Razorpay loads and ends when the page is back on the FreeFounders server
+ * A payment starts when a top-level page of Razorpay loads and ends when the page is back on the Kaampilot server
  * (Razorpay posts the result there). Other pages in between (the bank) keep the current state.
  */
 export function paymentStep(url: string, server: string, paying: boolean): boolean {
@@ -167,7 +201,7 @@ export function upiAppUrl(url: string): string | null {
 /** What to open outside the app for a link: the UPI app address for a UPI link, else the link itself. */
 export const outsideUrl = (url: string) => upiAppUrl(url) ?? url;
 
-/** True when a bridge message comes from a page of the FreeFounders server (any other page is ignored). */
+/** True when a bridge message comes from a page of the Kaampilot server (any other page is ignored). */
 export function fromServer(pageUrl: string | undefined, server: string): boolean {
   return typeof pageUrl === 'string' && originOf(pageUrl) !== null && originOf(pageUrl) === originOf(server);
 }

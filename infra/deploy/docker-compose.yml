@@ -1,4 +1,4 @@
-# FreeFounders on a shared Docker host (open demo, plain http). Use it through ./ff.sh, which sets the project name,
+# Kaampilot on a shared Docker host (open demo, plain http). Use it through ./ff.sh, which sets the project name,
 # the env file (FF_HOME/.env, mode 600, never in git) and this file. README.md has the whole procedure.
 #
 # Only the gateway publishes a port (FF_PORT, default 7395). Databases and APIs sit on an internal network with no

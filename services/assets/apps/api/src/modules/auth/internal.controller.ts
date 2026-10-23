@@ -54,10 +54,10 @@ const companySchema = z.object({
   name: z.string().trim().min(1).max(200),
 });
 
-const PLATFORM_ACTOR: Actor = { userId: null, name: 'FreeFounders Platform', email: null, employeeId: null, roleName: 'System', permissions: new Set() };
+const PLATFORM_ACTOR: Actor = { userId: null, name: 'Kaampilot Platform', email: null, employeeId: null, roleName: 'System', permissions: new Set() };
 
 /**
- * Internal API the FreeFounders Platform calls; not for browsers. Authenticated by a 60-second Platform
+ * Internal API the Kaampilot Platform calls; not for browsers. Authenticated by a 60-second Platform
  * service token (audience assets-internal), checked here because the route is otherwise public.
  */
 @Controller('internal')
@@ -147,7 +147,7 @@ export class InternalController {
     return rows.map((r) => ({ value: r.name, label: r.name, description: r.description }));
   }
 
-  /** The permissions Assets offers to the FreeFounders role builder. */
+  /** The permissions Assets offers to the Kaampilot role builder. */
   @Public()
   @Get('permissions')
   async permissions(@Req() req: AuthedRequest) {
@@ -230,7 +230,7 @@ export class InternalController {
         if (existing) {
           // Another local role already has this name: keep both by marking the Platform's copy.
           const [clash] = await db.select({ id: roles.id }).from(roles).where(and(sql`lower(${roles.name}) = lower(${r.name})`, ne(roles.id, existing.id))).limit(1);
-          await db.update(roles).set(clash ? { ...values, name: `${r.name} (FreeFounders)` } : values).where(eq(roles.id, existing.id));
+          await db.update(roles).set(clash ? { ...values, name: `${r.name} (Kaampilot)` } : values).where(eq(roles.id, existing.id));
           byPlatformId.set(r.id, existing.id);
         } else {
           const [created] = await db.insert(roles).values({ ...values, isSystem: false }).returning({ id: roles.id });
@@ -309,7 +309,7 @@ export class InternalController {
 
     const [role] = input.appRole
       ? await db.select().from(roles).where(sql`lower(${roles.name}) = lower(${input.appRole})`).limit(1)
-      : // No role chosen: the company's FreeFounders owners/admins run Assets too. Once the role builder has synced,
+      : // No role chosen: the company's Kaampilot owners/admins run Assets too. Once the role builder has synced,
         // the built-in role carries its role-builder name ("Employee (Assets)"); the person's real permissions
         // come from the roles the Platform sends right after.
         await db
@@ -371,7 +371,7 @@ export class InternalController {
       entityId: row.id,
       entityLabel: row.email ?? row.name,
       action: 'CREATED',
-      summary: `User ${row.email ?? row.name} created from FreeFounders Platform`,
+      summary: `User ${row.email ?? row.name} created from Kaampilot Platform`,
     });
     return { userId: row.id, created: true };
   }
@@ -403,7 +403,7 @@ export class InternalController {
       entityLabel: emp.fullName,
       employeeId: emp.id,
       action: 'CREATED',
-      summary: `${emp.fullName} (${employeeCode}) added with their FreeFounders login`,
+      summary: `${emp.fullName} (${employeeCode}) added with their Kaampilot login`,
     });
     return emp.id;
   }

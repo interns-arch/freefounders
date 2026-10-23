@@ -1,6 +1,7 @@
 import { type Access, useMarkNotificationsRead, useNotifications, useSignOut } from '@freefounders/core';
-import { Bell, CheckCheck, ChevronDown, Feather, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
+import { AlarmClock, Bell, CheckCheck, ChevronDown, Feather, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
 import { CompanyMenuItems } from '@/features/account/switcher';
+import { isInApp } from '@/lib/native-bridge';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -16,32 +17,37 @@ import {
 } from '@/components/ui/overlays';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlays';
 import { Avatar } from '@/components/ui/primitives';
+import { BrandMark, BrandWordmark } from '@/components/brand';
 import { type LiteChoice, useLite } from '@/lib/lite';
 import { cn } from '@/lib/utils';
 
 /**
- * FreeFounders mark, or the company's logo and short name (Settings Center). `onPrimary`: drawn on the blue sign-in
- * panel (white mark and name in light mode; that panel is deep navy in dark mode, where the normal look is used).
+ * The company's logo and short name (Settings Center), or the Kaampilot logo (mark + wordmark, PLAN.md §19.35) when the
+ * company has none set / before sign-in.
  */
-export function Logo({ company, compact = false, subtitle, onPrimary = false }: { company?: Access['brand']; compact?: boolean; subtitle?: string; onPrimary?: boolean }) {
+export function Logo({ company, compact = false, subtitle }: { company?: Access['brand']; compact?: boolean; subtitle?: string }) {
+  if (!company && compact) return <BrandMark size={32} title="Kaampilot" />;
   return (
     <span className="flex min-w-0 items-center gap-2.5">
       {company?.logoUrl ? (
         <img src={company.logoUrl} alt="" className="h-8 max-w-20 shrink-0 rounded-md bg-white object-contain p-0.5 ring-1 ring-border" />
-      ) : (
-        <span
-          aria-hidden
-          className={cn(
-            'grid size-8 shrink-0 place-items-center rounded-md text-[13px] font-extrabold',
-            onPrimary ? 'bg-primary-foreground text-primary dark:bg-primary dark:text-primary-foreground' : 'bg-primary text-primary-foreground',
-          )}
-        >
-          {company ? company.shortName.slice(0, 1).toUpperCase() : 'FF'}
+      ) : company ? (
+        <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-[13px] font-extrabold text-primary-foreground">
+          {company.shortName.slice(0, 1).toUpperCase()}
         </span>
+      ) : (
+        <BrandMark size={32} />
       )}
       {!compact && (
         <span className="min-w-0 leading-tight">
-          <span className={cn('block truncate text-[15.5px] font-extrabold tracking-tight', onPrimary && 'text-primary-foreground dark:text-foreground')}>{company?.shortName ?? 'FreeFounders'}</span>
+          {company ? (
+            <span className="block truncate text-[15.5px] font-extrabold tracking-tight">{company.shortName}</span>
+          ) : (
+            <span className="block">
+              <span className="sr-only">Kaampilot</span>
+              <BrandWordmark height={22} className="translate-y-px" />
+            </span>
+          )}
           {subtitle && <span className="block truncate font-mono text-[11px] tracking-wider text-muted-foreground uppercase">{subtitle}</span>}
         </span>
       )}
@@ -231,6 +237,12 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         {access.platform?.account?.isStaff && (
           <DropdownMenuItem onSelect={() => navigate('/console')}>
             <Gauge className="size-4" /> Owner console
+          </DropdownMenuItem>
+        )}
+        {/* Phone app only (PLAN.md §19.32): the punch-in reminder lives on the phone. */}
+        {isInApp() && access.tasks.can('attendance.punch') && (
+          <DropdownMenuItem onSelect={() => navigate('/attendance/reminder')}>
+            <AlarmClock className="size-4" /> Punch-in reminder
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onSelect={() => navigate('/account')}>

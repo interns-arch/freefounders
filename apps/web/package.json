@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "FreeFounders web app: sign-in, Tasks, HR and Assets in one place (PLAN.md §18)",
+  "description": "Kaampilot web app: sign-in, Tasks, HR and Assets in one place (PLAN.md §18)",
   "scripts": {
     "dev": "vite",
     "build": "node ../../scripts/check-web-rules.mjs && tsc --noEmit -p tsconfig.json && vite build && node ../../scripts/check-sw.mjs",

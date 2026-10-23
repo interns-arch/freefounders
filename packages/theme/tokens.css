@@ -1,5 +1,5 @@
 /*
- * FreeFounders design tokens (PLAN.md §6 rule 2, §18, §19, §19.22). The ONLY place colours, radius and fonts are defined.
+ * Kaampilot design tokens (PLAN.md §6 rule 2, §18, §19, §19.22). The ONLY place colours, radius and fonts are defined.
  * The web app maps these to Tailwind (apps/web/src/index.css); the mobile app reads the same values from
  * src/tokens.ts. Change the look of the whole product here. A company's brand colour (Settings Center) overrides
  * --primary (and --brand-2, --ring) at run time, in both modes; the --cta colour stays.

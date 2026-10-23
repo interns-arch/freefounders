@@ -1,20 +1,18 @@
 import { ApiError, type ChooseCompany, errorMessage, session, useSignIn } from '@freefounders/core';
-import { CheckCircle2, Eye, EyeOff, Package, ShieldCheck } from '@/components/icons';
+import { Eye, EyeOff } from '@/components/icons';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { ChooseCompanyCard } from '@/features/account/choose-company';
-import { Logo } from '../shell-parts';
 import { safeNext } from '../session-guard';
+import { BrandFooter, BrandHeader, BrandPanel } from './login-brand';
 
-const POINTS = [
-  { icon: ShieldCheck, text: 'Attendance and leave' },
-  { icon: CheckCircle2, text: 'Tasks, checklists and approvals' },
-  { icon: Package, text: 'Assets, joiners and exits' },
-];
-
-/** Sign in (PLAN.md §19.14): one short form, the login field focused, a show-password button; then straight to Home (or ?next=). */
+/**
+ * Sign in (PLAN.md §19.14), the front page of kaampilot.com (§19.35): one short form, the login field focused, a
+ * show-password button; then straight to Home (or ?next=). Desktop: the brand panel on the left (what Kaampilot is, a
+ * small preview, "Start free"); phones: a compact header above the form.
+ */
 export function LoginPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -57,33 +55,11 @@ export function LoginPage() {
   const watchCaps = (e: KeyboardEvent<HTMLInputElement>) => setCapsLock(e.getModifierState?.('CapsLock') ?? false);
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      {/* Desktop only: a flat trust-blue panel (deep navy in dark mode). Phones get just the form. */}
-      <aside className="hidden bg-primary text-primary-foreground lg:flex lg:flex-col lg:justify-between lg:p-12 dark:border-r dark:border-border dark:bg-card dark:text-card-foreground" aria-hidden>
-        <Logo onPrimary />
-        <div className="max-w-md space-y-7">
-          <span className="inline-flex items-center gap-2 rounded-sm border border-primary-foreground/35 px-3 py-1 font-mono text-[11px] font-semibold tracking-widest uppercase dark:border-primary/35 dark:text-primary">
-            One sign-in · every app
-          </span>
-          <p className="text-[2.6rem] leading-[1.1] font-extrabold tracking-tight dark:text-foreground">Run your whole team from one place.</p>
-          <ul className="space-y-3">
-            {POINTS.map((p) => (
-              <li key={p.text} className="flex items-center gap-3 text-[15px] font-medium">
-                <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary-foreground/12 dark:bg-primary/12 dark:text-primary">
-                  <p.icon className="size-[18px]" />
-                </span>
-                {p.text}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="text-sm">FreeFounders</p>
-      </aside>
-      <main id="content" className="flex items-center justify-center bg-background p-4 sm:p-6">
+    <div className="min-h-dvh bg-background lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)]">
+      <BrandPanel />
+      <main id="content" className="flex min-h-dvh items-start justify-center px-4 py-6 sm:items-center sm:p-6">
         <div className="w-full max-w-[400px]">
-          <div className="mb-5 flex justify-center lg:hidden">
-            <Logo />
-          </div>
+          <BrandHeader />
           {choose ? (
             <ChooseCompanyCard choose={choose} onDone={() => navigate(next ?? '/', { replace: true })} onBack={() => setChoose(null)} />
           ) : (
@@ -178,13 +154,15 @@ export function LoginPage() {
             </p>
           </form>
           )}
-          <p className="mt-5 text-center text-sm text-muted-foreground">
-            New to FreeFounders?{' '}
+          {/* Desktop has "Start free" in the brand panel (one link of that name per screen). */}
+          <p className="mt-5 text-center text-sm text-muted-foreground lg:hidden">
+            New to Kaampilot?{' '}
             <Link to="/signup" className="font-semibold text-primary hover:underline">
               Start free
             </Link>
           </p>
           <p className="mt-2 text-center text-xs text-muted-foreground">Signed in with a username or employee ID? Your company admin resets those passwords.</p>
+          <BrandFooter />
         </div>
       </main>
     </div>

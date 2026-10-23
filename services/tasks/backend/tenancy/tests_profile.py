@@ -1,4 +1,4 @@
-"""Company profile from the FreeFounders Settings Center (PLAN.md section 16):
+"""Company profile from the Kaampilot Settings Center (PLAN.md section 16):
 module switches are enforced on the server, branding reaches /me and emails,
 and an install that never received a profile behaves exactly as before."""
 from unittest import mock

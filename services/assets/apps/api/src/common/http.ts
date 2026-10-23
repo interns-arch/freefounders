@@ -11,6 +11,7 @@ import type { Request } from 'express';
 import type { ZodType } from 'zod';
 import type { Permission } from '@eam/shared';
 import type { Actor } from './actor';
+import { EXPORT_MAX } from './export';
 
 export const IS_PUBLIC = 'eam:public';
 export const PERMISSIONS_KEY = 'eam:permissions';
@@ -68,8 +69,10 @@ export interface ListParams {
 }
 
 export function listParams(q: Record<string, unknown>, defaults: { sort: string; dir?: 'asc' | 'desc'; pageSize?: number }): ListParams {
-  const page = Math.max(1, Number.parseInt(String(q.page ?? '1'), 10) || 1);
-  const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(q.pageSize ?? defaults.pageSize ?? 25), 10) || 25));
+  // A download (?export=xlsx|csv, PLAN.md §19.31) is every matching row, not one page.
+  const exporting = q.export === 'xlsx' || q.export === 'csv';
+  const page = exporting ? 1 : Math.max(1, Number.parseInt(String(q.page ?? '1'), 10) || 1);
+  const pageSize = exporting ? EXPORT_MAX : Math.min(200, Math.max(1, Number.parseInt(String(q.pageSize ?? defaults.pageSize ?? 25), 10) || 25));
   const search = typeof q.search === 'string' ? q.search.trim().slice(0, 200) : '';
   const sort = typeof q.sort === 'string' && q.sort ? q.sort : defaults.sort;
   const dir = q.dir === 'asc' || q.dir === 'desc' ? q.dir : (defaults.dir ?? 'desc');

@@ -21,13 +21,19 @@ from .models import (
 from .serializers import (
     GroupSerializer, LinkCollectionSerializer, LinkSerializer, NoticeSerializer,
 )
+from config.exports import ExportMixin
 from tenancy.company_settings import company_env
 
 
-class GroupViewSet(viewsets.ModelViewSet):
+class GroupViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = GroupSerializer
     pagination_class = None
+    export_name = "groups"
+    export_columns = [
+        ("Name", "name"), ("Description", "description"), ("Category", "category"), ("Owner", "owner_detail.name"),
+        ("Members", "member_count"), ("Member names", "members_detail"), ("Active", "active"), ("Created", "created_at"),
+    ]
 
     def get_queryset(self):
         # members_detail is read on every row (the task form fills Assign to
@@ -115,9 +121,15 @@ class GroupViewSet(viewsets.ModelViewSet):
         })
 
 
-class NoticeViewSet(viewsets.ModelViewSet):
+class NoticeViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [HasPermission.of("notices.view", "notices.publish")]
     serializer_class = NoticeSerializer
+    export_name = "notices"
+    export_columns = [
+        ("Title", "title"), ("Category", "category"), ("Priority", "priority_display"), ("Status", "status_display"),
+        ("Audience", "audience_display"), ("Published", "publish_at"), ("Expires", "expire_at"),
+        ("Author", "author_detail.name"), ("Read", "read"), ("Content", "content"), ("Created", "created_at"),
+    ]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     pagination_class = None
 
@@ -327,10 +339,16 @@ class LinkCollectionViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class LinkViewSet(viewsets.ModelViewSet):
+class LinkViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [HasPermission.of("links.view", "links.manage")]
     serializer_class = LinkSerializer
     pagination_class = None
+    export_name = "links"
+    export_columns = [
+        ("Title", "title"), ("Address", "url"), ("Collection", "collection_name"), ("Group", "group_name"),
+        ("Description", "description"), ("Added by", "added_by_detail.name"), ("Favourite", "favorited"),
+        ("Added", "created_at"),
+    ]
 
     def get_queryset(self):
         qs = visible_links(self.request.user)

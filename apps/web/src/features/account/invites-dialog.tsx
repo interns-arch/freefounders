@@ -72,7 +72,7 @@ export function InvitesDialog({ open, onClose, companyName }: { open: boolean; o
   };
 
   const live = (invites.data ?? []).filter((i) => (i.status ?? 'active') === 'active' && i.active !== false && !i.revoked && !i.revokedAt);
-  const share = made ? `https://wa.me/?text=${encodeURIComponent(`Join ${companyName ?? 'us'} on FreeFounders: ${made}`)}` : '';
+  const share = made ? `https://wa.me/?text=${encodeURIComponent(`Join ${companyName ?? 'us'} on Kaampilot: ${made}`)}` : '';
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && (setMade(null), onClose())}>

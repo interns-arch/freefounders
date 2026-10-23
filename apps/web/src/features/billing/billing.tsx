@@ -24,12 +24,14 @@ import {
   useCancelSubscription,
   useDevAdvance,
   useDevRenew,
+  billingExports,
   useInvoices,
   usePlans,
   useResumeSubscription,
   useSaveBillingProfile,
   useSetSeats,
   useStartCheckout,
+  useSwitchToFree,
 } from '@freefounders/core/billing';
 import { APP_NAMES } from '@freefounders/core/admin';
 import { Check, CreditCard, FileText, Timer, Wrench } from '@/components/icons';
@@ -39,6 +41,8 @@ import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { ErrorState, PageHeader, PageLoader } from '@/components/common/page';
+import { DownloadButton, DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Card } from '@/components/ui/primitives';
@@ -222,6 +226,7 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
     return cur?.key ?? shown.find((p) => p.key === 'suite')?.key ?? shown.find(isPaidPlan)?.key ?? shown[0]?.key ?? '';
   });
   const plan = shown.find((p) => p.key === selected);
+  const current = plans.find((p) => p.key === b.plan);
   const min = plan ? Math.max(planMinSeats(plan), isPaidPlan(plan) ? b.seats.used : 1) : 1;
   const max = plan ? planMaxSeats(plan) : null;
   const [seats, setSeats] = useState(() => Math.max(b.seats.paid || 0, b.seats.used, 5));
@@ -234,8 +239,39 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
   const tooMany = !!plan && max != null && b.seats.used > max;
   const needsReadOnlyCta = b.state === 'read_only' || b.state === 'suspended' || b.state === 'past_due';
 
+  const confirm = useConfirm();
+  const toFree = useSwitchToFree();
+  const [freeError, setFreeError] = useState<string | null>(null);
+  useEffect(() => setFreeError(null), [selected]);
+  const paidNow = !!current && isPaidPlan(current) && (b.state === 'active' || b.state === 'cancelled');
+
+  /** Free needs no payment: the server checks that the company fits it (users, Assets) and says what to switch off. */
+  const goFree = async () => {
+    if (!plan) return;
+    const limits = `up to ${max ?? 3} users with Attendance and Tasks; the Assets app is switched off for the company (nothing is deleted, it comes back with a paid plan)`;
+    const ok = await confirm({
+      title: 'Switch to the Free plan?',
+      description: paidNow
+        ? `Your ${b.planName ?? planLabel(b.plan, plans)} plan keeps working until ${formatDate(b.currentPeriodEnd)} and is not renewed. Then the company moves to Free: ${limits}. Nothing more is charged.`
+        : b.state === 'trialing'
+          ? `The trial ends now and the company moves to Free: ${limits}. No payment is needed.`
+          : `The company moves to Free now and can be used again (read-only ends): ${limits}. No payment is needed.`,
+      confirmText: 'Switch to Free',
+    });
+    if (!ok.confirmed) return;
+    setFreeError(null);
+    toFree.mutate(undefined, {
+      onSuccess: (r) => toast.success(r?.freeFrom === 'period_end' ? `Moves to Free on ${formatDate(r.currentPeriodEnd)}` : 'You are on the Free plan'),
+      onError: (e) => {
+        setFreeError(errorMessage(e));
+        toast.error(errorMessage(e));
+      },
+    });
+  };
+
   const go = () => {
     if (!plan) return;
+    if (!isPaidPlan(plan)) return void goFree();
     checkout.mutate(
       { plan: plan.key, interval, seats: isPaidPlan(plan) ? seats : Math.max(1, b.seats.used) },
       {
@@ -324,7 +360,13 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
             ) : (
               <p className="text-sm text-muted-foreground">
                 {plan.name} is free for up to {max ?? '—'} users{plan.apps.length ? ` with ${appsText(plan.apps)}` : ''}.
-                {tooMany && <span className="mt-1 block font-medium text-destructive">You have {b.seats.used} users: switch some off first, or choose a paid plan.</span>}
+                {tooMany && !freeError && <span className="mt-1 block font-medium text-destructive">You have {b.seats.used} users: switch some off first, or choose a paid plan.</span>}
+                {freeError && (
+                  <span role="alert" className="mt-1 block font-medium text-destructive">
+                    {freeError}
+                  </span>
+                )}
+                {b.cancelAtPeriodEnd && !freeError && <span className="mt-1 block">Moves to Free on {formatDate(b.currentPeriodEnd)} if it fits.</span>}
               </p>
             )}
           </div>
@@ -362,8 +404,8 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
               allowReadOnly={needsReadOnlyCta}
               size="lg"
               className="mt-3 h-11 w-full"
-              disabled={(isCurrent(plan) && (!isPaidPlan(plan) || seats === b.seats.paid)) || tooMany || (b.checkoutGateway === null && isPaidPlan(plan))}
-              loading={checkout.isPending}
+              disabled={(isCurrent(plan) && (!isPaidPlan(plan) || seats === b.seats.paid)) || (!isPaidPlan(plan) && b.cancelAtPeriodEnd) || (b.checkoutGateway === null && isPaidPlan(plan))}
+              loading={checkout.isPending || toFree.isPending}
               onClick={go}
             >
               <CreditCard /> {isPaidPlan(plan) ? 'Continue to payment' : `Switch to ${plan.name}`}
@@ -462,9 +504,27 @@ function Invoices() {
     { key: 'period', header: 'Period', hideOnMobile: true, cell: (r) => (r.periodStart ? `${formatDate(r.periodStart)} – ${formatDate(r.periodEnd)}` : '—') },
     { key: 'total', header: 'Total', className: 'text-right', headerClassName: 'text-right', cell: (r) => <span className="font-mono tabular-nums">{formatInr(r.total, true)}</span> },
     { key: 'status', header: 'Status', cell: (r) => <span className="capitalize">{r.status ?? 'paid'}</span> },
+    {
+      key: 'pdf',
+      header: <span className="sr-only">PDF</span>,
+      className: 'text-right',
+      cell: (r) => (
+        // the row opens the invoice; the button only downloads
+        <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <DownloadButton filename={fileSlug('invoice', r.number)} target={billingExports.invoicePdf(r.id)} aria-label={`Download invoice ${r.number} as PDF`}>
+            PDF
+          </DownloadButton>
+        </span>
+      ),
+    },
   ];
   return (
-    <Section id="invoices" title="Invoices" description="GST tax invoices. Open one to print or save it as PDF.">
+    <Section
+      id="invoices"
+      title="Invoices"
+      description="GST tax invoices. Open one to print, or download it as PDF."
+      actions={<DownloadMenu filename={fileSlug('billing-invoices', todayStamp())} target={billingExports.invoices()} empty={q.data?.length === 0} loading={!q.data} />}
+    >
       <DataTable
         columns={columns}
         rows={q.data}

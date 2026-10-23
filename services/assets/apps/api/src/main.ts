@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { companyMiddleware } from './common/company.middleware';
 import { AllExceptionsFilter } from './common/exception.filter';
+import { ExportInterceptor } from './common/export';
 import { DbService } from './db/db.service';
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -50,6 +51,8 @@ export async function createApp() {
   // Multi-company mode only (TENANCY=schemas): every API request runs in its company's schema.
   app.use('/api', companyMiddleware(app.get(DbService)));
   app.useGlobalFilters(new AllExceptionsFilter());
+  // ?export=xlsx|csv on the list routes marked @Exportable (PLAN.md §19.31)
+  app.useGlobalInterceptors(new ExportInterceptor(app.get(Reflector)));
   app.enableShutdownHooks();
 
   return app;

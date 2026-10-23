@@ -1,8 +1,8 @@
-// `npm run dev` (repo root): the whole FreeFounders suite on http://localhost:8080 with single login,
+// `npm run dev` (repo root): the whole Kaampilot suite on http://localhost:8080 with single login,
 // in multi-company mode (one schema per company in Tasks and Assets, PLAN.md §14).
 //
 // Starts: PostgreSQL (:5434, Platform + Tasks), Platform API (:4000), Tasks API (:8000) + worker, Assets API (:3000),
-// the FreeFounders web app (:5176) and the gateway
+// the Kaampilot web app (:5176) and the gateway
 // (:8080) that puts them on one address.
 // Once everything answers, every company is set up in its apps (`company sync`). Ctrl+C stops everything.
 // First time: `npm run setup` (installs every part's dependencies).
@@ -92,9 +92,9 @@ console.log('• Migrating Tasks (every company)…');
 execFileSync(TASKS_PY, ['manage.py', 'migrate_companies'], { cwd: at('services/tasks/backend'), env: { ...process.env, ...djangoEnv }, stdio: 'ignore' });
 start('tasks', TASKS_PY, ['manage.py', 'runserver', '127.0.0.1:8000'], { cwd: 'services/tasks/backend', env: djangoEnv });
 start('tasks-job', TASKS_PY, ['manage.py', 'run_worker'], { cwd: 'services/tasks/backend', env: djangoEnv });
-// Assets API (every screen is in the FreeFounders web app, PLAN.md §19.10).
+// Assets API (every screen is in the Kaampilot web app, PLAN.md §19.10).
 start('assets', 'npm', ['run', 'dev'], { cwd: 'services/assets', env: { ...shared, PUBLIC_URL: process.env.PUBLIC_URL ?? 'http://localhost:8080' } });
-// The FreeFounders web app (apps/web): everything else on :8080.
+// The Kaampilot web app (apps/web): everything else on :8080.
 start('web', 'npx', ['vite', '--host', '127.0.0.1', '--port', '5176', '--strictPort'], { cwd: 'apps/web' });
 
 await startGateway(8080);
@@ -128,7 +128,7 @@ if (ready.every(Boolean)) {
   console.error('✖ Not every service started; companies were not synced.');
 }
 console.log(`
-  ✔ FreeFounders is starting on  http://localhost:8080
+  ✔ Kaampilot is starting on  http://localhost:8080
     Sign in as  owner  /  Demo@1234  (first run: give yourself Tasks and Assets in People & access)
     Phone app on the same Wi-Fi: ${LAN_HOSTS.map((h) => `http://${h}:8080`).join('  ') || '(no LAN address found)'}  (npm run mobile)
     Multi-company mode: each company's Tasks and Assets data lives in its own schema.

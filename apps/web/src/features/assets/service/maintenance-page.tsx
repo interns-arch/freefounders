@@ -22,6 +22,9 @@ import type { MaintenanceRecord } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, formatMoney } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 const TABS = [
   { value: 'IN_PROGRESS,SCHEDULED', label: 'Active' },
@@ -116,11 +119,19 @@ export default function MaintenancePage() {
         title="Maintenance"
         description="Repairs, servicing and inspections. Assets return to their holder (or to Available) when work completes."
         actions={
-          manage && (
-            <Button variant="cta" size="sm" onClick={() => quickAdd.open('maintenance')}>
-              <Plus /> Log maintenance
-            </Button>
-          )
+          <>
+            <DownloadMenu
+              filename={fileSlug('assets', 'maintenance', f.status, f.type, f.priority, f.search, todayStamp())}
+              target={assetsExports.maintenance(f)}
+              empty={q.data?.total === 0}
+              loading={!q.data}
+            />
+            {manage && (
+              <Button variant="cta" size="sm" onClick={() => quickAdd.open('maintenance')}>
+                <Plus /> Log maintenance
+              </Button>
+            )}
+          </>
         }
       />
       <div className="mb-3 flex gap-1 overflow-x-auto pb-1 no-scrollbar">

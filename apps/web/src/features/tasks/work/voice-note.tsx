@@ -10,7 +10,7 @@ import { AppRequestError, appInfo, appRequest, isInApp, openAppSettings } from '
  * Voice draft (replaced the AI draft; original app d0a1bdf, ed023cf, ba5c94e): speak a task instead of typing it.
  *
  * The words are worked out on the device, so it costs nothing and needs no AI key:
- *   - the FreeFounders phone app (1.1.0+) → the phone's own speech recogniser, after Android's "Allow microphone?" pop-up
+ *   - the Kaampilot phone app (1.1.0+) → the phone's own speech recogniser, after Android's "Allow microphone?" pop-up
  *     (bridge request `voice`; a WebView on the office's http:// address gets no microphone itself);
  *   - Chrome / Edge / Safari on https or localhost → the browser's speech recognition (asks for the microphone first);
  *   - anything else (an older app, the http:// address, Firefox) → a box to speak into with the phone keyboard's mic.

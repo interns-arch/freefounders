@@ -1,6 +1,8 @@
 /** /tasks/intake — the AI inbox: inbound WhatsApp / Gmail messages, how the AI read them, and the lead each became (old pages/Intake.jsx). */
 import { errorMessage, useAccess } from '@freefounders/core';
-import { INTAKE_CHANNELS, INTAKE_STATUSES, type InboundMessage, type IntakeChannel, type IntakeStatus, useIntakeMessages, useSimulateIntake } from '@freefounders/core/tasks';
+import { INTAKE_CHANNELS, INTAKE_STATUSES, type InboundMessage, type IntakeChannel, type IntakeStatus, tasksExports, useIntakeMessages, useSimulateIntake } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { Bot, Mail, MessageCircle, Send } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -26,6 +28,14 @@ export function IntakePage() {
         className="mb-0"
         title="AI inbox"
         description="Incoming WhatsApp and Gmail messages, how the AI classified them, and the lead each became. Channels go live once their credentials are set for the company."
+        actions={
+          <DownloadMenu
+            target={tasksExports.intake({ channel, status })}
+            filename={fileSlug('tasks', 'ai-inbox', channel, status, todayStamp())}
+            empty={q.data?.length === 0}
+            loading={!q.data && !q.error}
+          />
+        }
       />
       {canSimulate && <Simulator />}
       <div className="flex flex-wrap items-center gap-2">

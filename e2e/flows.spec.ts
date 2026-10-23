@@ -85,7 +85,7 @@ test('an Assets ticket becomes a Tasks task for the IT owner, linked back to the
   const stamp = Date.now().toString(36);
   const person = await makePerson(request, owner, stamp);
   try {
-    // The person raises a ticket in Assets with their FreeFounders sign-in.
+    // The person raises a ticket in Assets with their Kaampilot sign-in.
     const first = await token(request, `e2e-leaver-${stamp}`, 'E2e@123456');
     await request.post('/api/platform/auth/change-password', { headers: auth(first), data: { currentPassword: 'E2e@123456', newPassword: 'E2e@654321' } });
     const mine = await token(request, `e2e-leaver-${stamp}`, 'E2e@654321');

@@ -31,6 +31,10 @@ async function bigPhoto(page: Page): Promise<Buffer> {
   return Buffer.from(b64, 'base64');
 }
 
+/** A tiny valid PNG (1×1) for a second asset photo. */
+const smallPng = () =>
+  Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+
 async function token(request: APIRequestContext, login = OWNER.login, password = OWNER.password): Promise<string> {
   const res = await request.post('/api/platform/auth/login', { data: { login, password, client: 'mobile' }, headers: XRW });
   expect(res.ok(), await res.text()).toBeTruthy();
@@ -144,6 +148,31 @@ test('add an asset with a photo from the Add menu, then open it: details, photo 
     }, `/assets/api/assets/${assetId}/photos/${detail.photos[0].id}`);
     expect(Math.max(stored.width, stored.height)).toBe(1600);
     expect(stored.size, `${original.length} → ${stored.size} bytes`).toBeLessThan(Math.min(original.length / 4, 600 * 1024));
+
+    // Asset photos (PLAN.md §19.34): add one from the asset page (gallery picker, caption), see it, then delete it.
+    const photosCard = page.getByRole('heading', { name: /^Photos \(1\)$/ }).locator('..').locator('..');
+    await expect(photosCard.getByText('1 of 6')).toBeVisible();
+    await photosCard.getByRole('button', { name: 'Add photo' }).click();
+    const addDialog = page.getByRole('dialog', { name: 'Add photos of this asset' });
+    await expect(addDialog.getByRole('button', { name: 'Take photo' })).toBeVisible();
+    await addDialog.getByLabel('Photos from the gallery').setInputFiles({ name: 'side.png', mimeType: 'image/png', buffer: smallPng() });
+    await addDialog.getByLabel('Caption').fill('Side view');
+    await addDialog.getByRole('button', { name: 'Save photo' }).click();
+    await expect(page.getByText('1 photo saved')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Photos \(2\)$/ })).toBeVisible();
+    const after = await (await request.get(`/assets/api/assets/${assetId}/photos`, { headers: auth(owner) })).json();
+    expect(after.map((p: { caption: string | null }) => p.caption)).toEqual([null, 'Side view']);
+    // The list shows the first photo as the thumbnail.
+    const row = (await (await request.get(`/assets/api/assets?ids=${assetId}`, { headers: auth(owner) })).json()).items[0];
+    expect(row.photoId).toBe(after[0].id);
+    // Open the new one in the viewer (its caption is the title) and delete it.
+    await page.getByRole('button', { name: 'Asset photo · Side view' }).click();
+    const viewer = page.getByRole('dialog', { name: 'Side view' });
+    await viewer.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog', { name: 'Delete this photo?' }).getByRole('button', { name: 'Delete photo' }).click();
+    await expect(page.getByText('Photo deleted')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Photos \(1\)$/ })).toBeVisible();
+    expect((await (await request.get(`/assets/api/assets/${assetId}/photos`, { headers: auth(owner) })).json()).length).toBe(1);
 
     // Scanning its code opens it: /assets/scan/<code>.
     await page.goto(`/assets/scan/${encodeURIComponent(detail.assetTag)}`);

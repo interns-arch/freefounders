@@ -1,4 +1,4 @@
-// Delete a person (Admin -> People & access -> "Delete user"), called by the FreeFounders Platform:
+// Delete a person (Admin -> People & access -> "Delete user"), called by the Kaampilot Platform:
 // DELETE /api/internal/people/:personId. Runs in ONE transaction in the company schema the request is pinned to
 // (multi-company mode), so either all of it happens or nothing does. Photo files on disk of deleted rows are removed
 // after the transaction has committed.
@@ -77,7 +77,7 @@ import {
 } from '../../db/schema';
 import { uploadDir } from '../assets/photos.service';
 
-const PLATFORM = 'FreeFounders Platform';
+const PLATFORM = 'Kaampilot Platform';
 const DELETED = 'Deleted user';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

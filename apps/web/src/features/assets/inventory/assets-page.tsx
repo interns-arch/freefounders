@@ -15,6 +15,8 @@ import { useNavigate } from 'react-router';
 import { AssetStatusBadge, HolderLabel } from '@/components/common/badges';
 import { type Column, DataTable, Pagination } from '@/components/common/data-table';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
 import { Combobox } from '@/features/assets/components/pickers';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
@@ -22,13 +24,25 @@ import { Card, Skeleton } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { useAssetList, useAssetType, useAssetTypes, useCategories, usePrefetchAsset } from '@freefounders/core/assets';
+import { assetsExports, photoUrl, useAssetList, useAssetType, useAssetTypes, useCategories, usePrefetchAsset } from '@freefounders/core/assets';
 import type { AssetListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate, formatNumber, relativeTime } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { BulkDialog, type BulkKind } from './bulk-dialog';
 import { AttributeFilters } from './attribute-filters';
+
+/** The asset's first photo in place of its type icon (PLAN.md §19.34). */
+function AssetThumb({ asset, size = 'md' }: { asset: AssetListItem; size?: 'md' | 'lg' }) {
+  return (
+    <img
+      src={photoUrl({ assetId: asset.id, id: asset.photoId! })}
+      alt=""
+      loading="lazy"
+      className={cn('shrink-0 rounded-md border bg-muted object-cover', size === 'lg' ? 'size-12' : 'size-9')}
+    />
+  );
+}
 
 const STATUS_TABS: (AssetStatus | 'ALL')[] = ['ALL', 'AVAILABLE', 'ASSIGNED', 'IN_INVENTORY', 'IN_MAINTENANCE', 'RETURNED', 'PURCHASED', 'RECEIVED', 'LOST', 'RETIRED', 'DISPOSED'];
 
@@ -86,7 +100,7 @@ export default function AssetsPage() {
       sortKey: 'name',
       cell: (a) => (
         <div className="flex min-w-56 items-center gap-3">
-          <AssetIcon icon={a.typeIcon ?? a.categoryIcon} color={a.categoryColor} />
+          {a.photoId ? <AssetThumb asset={a} /> : <AssetIcon icon={a.typeIcon ?? a.categoryIcon} color={a.categoryColor} />}
           <div className="min-w-0">
             <div className="truncate font-medium transition group-hover:text-primary">{a.name}</div>
             <div className="truncate text-xs text-muted-foreground">
@@ -186,6 +200,12 @@ export default function AssetsPage() {
         description={data ? `${formatNumber(data.total)} ${f.status ? ASSET_STATUS_LABELS[f.status as AssetStatus]?.toLowerCase() ?? '' : ''} assets` : 'Everything the company owns, leases, stores or assigns.'}
         actions={
           <>
+            <DownloadMenu
+              filename={fileSlug('assets', seesAll ? 'assets' : 'my-assets', selectedType.data?.name, f.status, f.search, todayStamp())}
+              target={assetsExports.assets(f)}
+              empty={data?.total === 0}
+              loading={!data}
+            />
             <Button variant="outline" size="sm" onClick={() => navigate('/assets/scan')}>
               <ScanLine /> Scan
             </Button>
@@ -358,7 +378,7 @@ export default function AssetsPage() {
                     className={cn('group flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-4 text-left transition hover:border-primary/40 hover:shadow-card-lg', selected.has(a.id) && 'border-primary ring-1 ring-primary/30')}
                   >
                     <div className="flex items-start gap-3">
-                      <AssetIcon icon={a.typeIcon ?? a.categoryIcon} color={a.categoryColor} size="lg" />
+                      {a.photoId ? <AssetThumb asset={a} size="lg" /> : <AssetIcon icon={a.typeIcon ?? a.categoryIcon} color={a.categoryColor} size="lg" />}
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium group-hover:text-primary">{a.name}</p>
                         <p className="truncate font-mono text-xs text-muted-foreground">{a.assetTag}</p>

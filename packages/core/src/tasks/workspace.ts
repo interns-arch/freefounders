@@ -3,6 +3,7 @@
 // Every query key starts with 'tasks', 'task-completions' or 'task-change-requests' so useInvalidateTasks() reloads it.
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, type DrfPage, type Query, resultsOf, tasksApi } from '../http';
+import { workListQuery } from './exports';
 import { type TaskCategory, useInvalidateTasks } from './tasks';
 import type { Task, TaskFrequency, TaskPriority, TaskScope, TaskStatus, UserBrief } from './types';
 
@@ -310,20 +311,7 @@ export function useWorkTaskList(params: WorkListParams, options: { enabled?: boo
     queryKey: ['tasks', 'work-list', params],
     enabled: options.enabled ?? true,
     queryFn: async (): Promise<WorkList> => {
-      const q: Query = {
-        page_size: 200,
-        scope: params.scope,
-        status: params.status,
-        overdue: params.overdue ? 'true' : undefined,
-        done: params.done,
-        recurring: params.recurring ? 'true' : undefined,
-        range: params.range,
-        start: params.start,
-        end: params.end,
-        assigned_to: params.assigned_to,
-        department: params.department,
-        search: params.search,
-      };
+      const q: Query = { page_size: 200, ...workListQuery(params) };
       const d = await tasksApi.get<(DrfPage<WorkTask> & { range_from?: string; range_to?: string }) | WorkTask[]>('/tasks/', q);
       const page = Array.isArray(d) ? null : d;
       return { rows: resultsOf(d), range_from: page?.range_from ?? null, range_to: page?.range_to ?? null };

@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, Inject, Module, Param, ParseUUIDPipe, Pa
 import type { Actor } from '../../common/actor';
 import { CurrentActor, RequirePermissions, ZodPipe } from '../../common/http';
 import { type OrgKind, OrgService } from './org.service';
+import { Exportable } from '../../common/export';
+import { orgExport } from '../../common/export-specs';
 
 /** Builds a REST controller for one kind of master data (all share the same shape). */
 function orgController(kind: OrgKind): Type<unknown> {
@@ -10,6 +12,7 @@ function orgController(kind: OrgKind): Type<unknown> {
     constructor(@Inject(OrgService) private readonly org: OrgService) {}
 
     @Get()
+    @Exportable(orgExport(kind))
     list(@Query() q: Record<string, string>) {
       return this.org.list(kind, q);
     }

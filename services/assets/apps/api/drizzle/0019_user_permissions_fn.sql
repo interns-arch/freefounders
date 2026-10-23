@@ -1,4 +1,4 @@
--- FreeFounders roles (PLAN.md section 15): a user's permissions. When the role builder gave the user roles
+-- Kaampilot roles (PLAN.md section 15): a user's permissions. When the role builder gave the user roles
 -- (user_roles), only those count (archived roles give nothing); otherwise the user's own role does.
 -- A plain SQL body (not BEGIN ATOMIC) is resolved with the caller's search_path, so in multi-company mode it reads
 -- the company's own tables.

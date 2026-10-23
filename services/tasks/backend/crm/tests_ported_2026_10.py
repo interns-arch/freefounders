@@ -1,4 +1,4 @@
-"""Tasks changes ported from the original app on 2026-10-20 (PLAN.md §19.30), adapted to FreeFounders:
+"""Tasks changes ported from the original app on 2026-10-20 (PLAN.md §19.30), adapted to Kaampilot:
 "Super Admin" is the Owner here (accounts.access.is_owner = holds tasks.delete_admin_work; in these standalone
 tests that is the built-in Super Admin role, as the Platform's hidden Owner role is in a company).
 

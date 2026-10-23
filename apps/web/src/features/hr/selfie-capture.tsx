@@ -1,6 +1,7 @@
 /**
  * Selfie dialog for check-in / check-out: the company keeps a photo of every punch (PLAN.md §16.4). No face matching
- * (founder, 2026-10-12; PLAN.md §19.18). Calls onCapture(photo) with a JPEG data URL.
+ * (founder, 2026-10-12; PLAN.md §19.18). Calls onCapture(photo) with a JPEG data URL. When the company's photo is
+ * optional, `onSkip` adds "Skip photo" (also when the camera cannot start), like the phone app; when required, no skip.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -15,12 +16,15 @@ export function SelfieCapture({
   hint,
   onCapture,
   onClose,
+  onSkip,
 }: {
   title: string;
   action: string;
   hint?: string;
   onCapture: (photo: string) => void;
   onClose: () => void;
+  /** The photo is optional: punch without one. */
+  onSkip?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -74,6 +78,11 @@ export function SelfieCapture({
     onClose();
   };
 
+  const skip = () => {
+    stop();
+    onSkip?.();
+  };
+
   const capture = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -96,12 +105,18 @@ export function SelfieCapture({
         </div>
         {err ? <ErrorNote>{err}</ErrorNote> : <p className="text-sm text-muted-foreground" role="status">{status}</p>}
         <p id="selfie-note" className="text-xs text-muted-foreground">
-          A photo is saved with your attendance. Only you and the people who manage attendance can see it.
+          {onSkip ? 'A photo is optional here. ' : ''}A photo is saved with your attendance. Only you and the people who manage
+          attendance can see it.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={close}>
             Cancel
           </Button>
+          {onSkip && (
+            <Button variant="outline" onClick={skip}>
+              Skip photo
+            </Button>
+          )}
           <Button size="lg" disabled={!ready} onClick={capture}>
             {action}
           </Button>

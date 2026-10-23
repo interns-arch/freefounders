@@ -4,6 +4,8 @@ import type { Actor } from '../common/actor';
 import { CurrentActor, listFilter, listParams, RequirePermissions, uuidParam } from '../common/http';
 import { HistoryService } from './history.service';
 import { NotificationsService } from './notifications.service';
+import { Exportable } from '../common/export';
+import { EXPORTS } from '../common/export-specs';
 
 @Controller('history')
 export class HistoryController {
@@ -11,6 +13,7 @@ export class HistoryController {
 
   @Get()
   @RequirePermissions('history:view')
+  @Exportable(EXPORTS.history)
   list(@Query() q: Record<string, string>) {
     const params = listParams(q, { sort: 'occurredAt', pageSize: 50 });
     const entityType = (HISTORY_ENTITY_TYPES as readonly string[]).includes(q.entityType) ? q.entityType : undefined;

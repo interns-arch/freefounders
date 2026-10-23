@@ -15,12 +15,15 @@ import type { Actor } from '../../common/actor';
 import { badRequest, CurrentActor, RequirePermissions, ZodPipe } from '../../common/http';
 import { ExitModule } from '../exit/exit.module';
 import { EmployeesService } from './employees.service';
+import { Exportable } from '../../common/export';
+import { EXPORTS } from '../../common/export-specs';
 
 @Controller('employees')
 export class EmployeesController {
   constructor(private readonly employees: EmployeesService) {}
 
   @Get()
+  @Exportable(EXPORTS.employees)
   list(@CurrentActor() actor: Actor, @Query() q: Record<string, string>) {
     return this.employees.list(actor, q);
   }

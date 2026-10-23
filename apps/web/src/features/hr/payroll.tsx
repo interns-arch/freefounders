@@ -1,6 +1,7 @@
 /**
  * Attendance → My Salary (payroll.self, module `payroll`) and Payroll (payroll.run / payroll.salaries): old pages/Payroll.jsx.
- * Payroll has three parts: monthly runs (draft → recalculate → finalise → CSV), salary structures and advances.
+ * Payroll has three parts: monthly runs (draft → recalculate → finalise → Excel/CSV, payslip PDFs), salary structures and
+ * advances. Every list has a Download and each payslip downloads as a PDF (PLAN.md §19.31).
  */
 import { errorMessage, useAccess } from '@freefounders/core';
 import {
@@ -13,7 +14,7 @@ import {
   useAdvances,
   useCreatePayrollRun,
   useDeleteAdvance,
-  useExportPayrollRun,
+  payrollExports,
   useMyPayslips,
   usePayrollRunAction,
   usePayrollRuns,
@@ -21,23 +22,43 @@ import {
   useSalaryStructures,
 } from '@freefounders/core/hr';
 import { useTeamDirectory } from '@freefounders/core/tasks';
-import { Banknote, Download, FileText, Play, Trash2 } from '@/components/icons';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { Banknote, FileText, Play, Trash2 } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
+import { DownloadButton, DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { Chip, ErrorNote, OkNote, Panel, Segmented, Tile } from '../tasks/general/parts';
-import { downloadBlob } from '../tasks/shared/csv';
+import { Chip, ErrorNote, OkNote, Panel, SectionHead, Segmented, Tile } from '../tasks/general/parts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const inr = (n: string | number | null | undefined) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 const fmtDate = (d: string | null | undefined) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const monthName = (r: { month: number; year: number }) => `${MONTHS[r.month - 1]} ${r.year}`;
 const num = (v: string | number | null | undefined) => Number(v || 0);
+const ym = (r: { month: number; year: number }) => `${r.year}-${String(r.month).padStart(2, '0')}`;
+const slipName = (s: Payslip, who?: string) => `payslip-${ym(s)}-${fileSlug(who ?? s.user_detail?.name ?? s.user_detail?.username ?? String(s.user)) || s.id}`;
+
+/** "Download" for one payroll month: its sheet (Excel/CSV) and every payslip as a ZIP of PDFs or one combined PDF. */
+function RunDownload({ run, size = 'xs' }: { run: PayrollRun; size?: 'xs' | 'sm' }) {
+  return (
+    <DownloadMenu
+      size={size}
+      ariaLabel={`Download ${monthName(run)}`}
+      filename={`payroll-${ym(run)}`}
+      target={payrollExports.runSheet(run.id)}
+      empty={!run.payslip_count}
+      extra={[
+        { label: 'All payslips (ZIP of PDFs)', format: 'zip', filename: `payslips-${ym(run)}`, target: payrollExports.runPayslips(run.id, 'zip') },
+        { label: 'All payslips (one PDF)', format: 'pdf', filename: `payslips-${ym(run)}`, target: payrollExports.runPayslips(run.id, 'pdf') },
+      ]}
+    />
+  );
+}
 
 /* ─────────────── Payroll (Run payroll; Salaries and advances — PLAN.md §19.19) ─────────────── */
 
@@ -71,7 +92,6 @@ function Runs() {
   const runs = usePayrollRuns();
   const create = useCreatePayrollRun();
   const act = usePayrollRunAction();
-  const exportRun = useExportPayrollRun();
   const confirm = useConfirm();
   const [openId, setOpenId] = useState<number | null>(null);
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -131,10 +151,6 @@ function Runs() {
       },
     );
   };
-  const exportCsv = (r: PayrollRun) => {
-    setErr('');
-    exportRun.mutate(r.id, { onSuccess: (blob) => downloadBlob(`payroll-${r.year}-${String(r.month).padStart(2, '0')}.csv`, blob), onError: fail });
-  };
 
   if (runs.error) return <ErrorState error={runs.error} onRetry={() => runs.refetch()} />;
   if (!runs.data) return <Skeleton className="h-64 max-w-5xl" />;
@@ -172,6 +188,7 @@ function Runs() {
         <Button type="submit" loading={create.isPending}>
           <Play /> Run payroll
         </Button>
+        <DownloadMenu className="ml-auto" filename={`payroll-runs-${todayStamp()}`} target={payrollExports.runs()} empty={runs.data.length === 0} />
       </form>
       <ErrorNote>{err}</ErrorNote>
       <OkNote>{msg}</OkNote>
@@ -217,9 +234,7 @@ function Runs() {
                           Finalise
                         </Button>
                       )}
-                      <Button size="xs" variant="outline" aria-label={`Download CSV for ${monthName(r)}`} onClick={() => exportCsv(r)} disabled={exportRun.isPending}>
-                        <Download /> CSV
-                      </Button>
+                      <RunDownload run={r} />
                     </div>
                   </TD>
                 </TR>
@@ -235,6 +250,7 @@ function Runs() {
               {monthName(open)} <span className="font-normal text-muted-foreground">— {slips.data?.length ?? 0} payslip(s)</span>
             </>
           }
+          actions={<RunDownload run={open} size="sm" />}
           bodyClassName="px-0 sm:px-0"
         >
           {slips.error && <ErrorNote className="mx-4">{errorMessage(slips.error)}</ErrorNote>}
@@ -254,6 +270,7 @@ function Runs() {
                   <TH className="text-right">Advance</TH>
                   <TH className="text-right">Other</TH>
                   <TH className="text-right">Net</TH>
+                  <TH />
                 </TR>
               </THead>
               <TBody>
@@ -271,6 +288,11 @@ function Runs() {
                     <TD className="text-right tabular-nums">{inr(s.advance_deduction)}</TD>
                     <TD className="text-right tabular-nums">{inr(s.other_deduction)}</TD>
                     <TD className="text-right font-medium tabular-nums">{inr(s.net_payable)}</TD>
+                    <TD>
+                      <DownloadButton filename={slipName(s)} target={payrollExports.payslipPdf(s.id)} aria-label={`Download PDF payslip of ${s.user_detail?.name}`}>
+                        PDF
+                      </DownloadButton>
+                    </TD>
                   </TR>
                 ))}
               </TBody>
@@ -368,6 +390,7 @@ function Salaries() {
           </div>
         </form>
       </Panel>
+      <SectionHead actions={<DownloadMenu filename={`payroll-salaries-${todayStamp()}`} target={payrollExports.salaries()} empty={rows.data.length === 0} />}>Salaries</SectionHead>
       {rows.data.length === 0 ? (
         <Card>
           <EmptyState icon={Banknote} title="No salaries set yet" />
@@ -475,6 +498,7 @@ function Advances() {
           </div>
         </form>
       </Panel>
+      <SectionHead actions={<DownloadMenu filename={`payroll-advances-${todayStamp()}`} target={payrollExports.advances()} empty={rows.data.length === 0} />}>Advances</SectionHead>
       {rows.data.length === 0 ? (
         <Card>
           <EmptyState icon={Banknote} title="No advances recorded" />
@@ -545,6 +569,7 @@ export function MySalaryTab() {
       ) : (
         salary.data && <p className="text-sm text-muted-foreground">Your salary hasn’t been set yet — ask HR.</p>
       )}
+      <SectionHead actions={<DownloadMenu filename={`attendance-my-payslips-${todayStamp()}`} target={payrollExports.myPayslips(me.id)} empty={slips.data.length === 0} />}>Payslips</SectionHead>
       {slips.data.length === 0 ? (
         <Card>
           <EmptyState icon={FileText} title="No payslips yet" description="They appear here once HR finalises the month." />
@@ -573,10 +598,13 @@ export function MySalaryTab() {
                   <TD className="text-right tabular-nums">{inr(s.total_deductions)}</TD>
                   <TD className="text-right font-medium tabular-nums">{inr(s.net_payable)}</TD>
                   <TD>
-                    <div className="flex justify-end">
+                    <div className="flex flex-wrap justify-end gap-1.5">
                       <Button size="xs" variant="outline" aria-label={`${openId === s.id ? 'Hide' : 'Details of'} payslip ${monthName(s)}`} onClick={() => setOpenId(openId === s.id ? null : s.id)}>
                         {openId === s.id ? 'Hide' : 'Details'}
                       </Button>
+                      <DownloadButton filename={slipName(s, me.username)} target={payrollExports.payslipPdf(s.id)} aria-label={`Download PDF payslip ${monthName(s)}`}>
+                        PDF
+                      </DownloadButton>
                     </div>
                   </TD>
                 </TR>
@@ -585,12 +613,12 @@ export function MySalaryTab() {
           </Table>
         </Card>
       )}
-      {open && <PayslipDetail slip={open} name={me.first_name || me.username} />}
+      {open && <PayslipDetail slip={open} name={me.first_name || me.username} file={slipName(open, me.username)} />}
     </div>
   );
 }
 
-function PayslipDetail({ slip: s, name }: { slip: Payslip; name: string }) {
+function PayslipDetail({ slip: s, name, file }: { slip: Payslip; name: string; file: string }) {
   const b = s.breakdown ?? {};
   const rows: Array<[string, React.ReactNode, boolean?]> = [
     ['Present days', b.present ?? '—'],
@@ -605,7 +633,14 @@ function PayslipDetail({ slip: s, name }: { slip: Payslip; name: string }) {
     ...(num(s.other_deduction) > 0 ? ([['Other deduction', `− ${inr(s.other_deduction)}`, true]] as Array<[string, React.ReactNode, boolean]>) : []),
   ];
   return (
-    <Panel title={`Payslip — ${monthName(s)} · ${name}`}>
+    <Panel
+      title={`Payslip — ${monthName(s)} · ${name}`}
+      actions={
+        <DownloadButton size="sm" filename={file} target={payrollExports.payslipPdf(s.id)}>
+          Download PDF
+        </DownloadButton>
+      }
+    >
       <dl className="divide-y text-sm">
         {rows.map(([label, value, deduction]) => (
           <div key={label} className="flex items-center justify-between gap-3 py-2">

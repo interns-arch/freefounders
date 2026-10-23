@@ -7,7 +7,9 @@ import { AuthService, hashPassword } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
 import { accountUsernameTaken, lockUsername, usernameConflict } from '../accounts/username';
-import { accounts, type AppKey, APPS, companies, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
+import { accounts, type AppKey, APPS, companies, departments, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
+import { EXPORT_MAX, when } from '../common/export';
+import type { SheetCell } from '../common/sheet';
 import { assertNewSeat, assertSeatFor } from '../billing/seats';
 import { ProvisionClient } from '../provision/provision.client';
 import { RolesService } from '../roles/roles.service';
@@ -113,7 +115,7 @@ export class PeopleService {
     private readonly moduleRef: ModuleRef,
   ) {}
 
-  async list(caller: Caller, search = '') {
+  async list(caller: Caller, search = '', limit = 500) {
     const db = this.dbs.db;
     const q = search.trim().toLowerCase().slice(0, 100);
     const rows = await db
@@ -136,7 +138,7 @@ export class PeopleService {
         ),
       )
       .orderBy(asc(people.fullName))
-      .limit(500);
+      .limit(limit);
     const grants = rows.length
       ? await db
           .select({ personId: personApps.personId, app: personApps.app })
@@ -162,6 +164,41 @@ export class PeopleService {
       roleIds: held.filter((h) => h.personId === r.person.id).map((h) => h.roleId),
       extraAccess: personal.some((x) => x.personId === r.person.id),
     }));
+  }
+
+  /**
+   * The People list as spreadsheet rows (PLAN.md §19.31): the same search and company as the screen, every match
+   * (up to EXPORT_MAX), with department, manager and role names resolved.
+   */
+  async exportRows(caller: Caller, search = '') {
+    const list = await this.list(caller, search, EXPORT_MAX);
+    const db = this.dbs.db;
+    const depts = await db.select({ id: departments.id, name: departments.name }).from(departments).where(eq(departments.companyId, caller.companyId));
+    const roleRows = await db.select({ id: roles.id, name: roles.name }).from(roles).where(eq(roles.companyId, caller.companyId));
+    const managers = await db.select({ id: people.id, fullName: people.fullName }).from(people).where(eq(people.companyId, caller.companyId));
+    const dept = new Map(depts.map((d) => [d.id, d.name]));
+    const role = new Map(roleRows.map((r) => [r.id, r.name]));
+    const manager = new Map(managers.map((m) => [m.id, m.fullName]));
+    const header = ['Name', 'Employee ID', 'Username', 'Email', 'Mobile', 'Level', 'Department', 'Designation', 'Reports to', 'Join date', 'Last working date', 'Roles', 'Apps', 'Extra access', 'Status', 'Last sign-in'];
+    const rows: SheetCell[][] = list.map((p) => [
+      p.fullName,
+      p.employeeCode,
+      p.login?.username ?? null,
+      p.email,
+      p.mobile,
+      p.platformRole,
+      p.departmentId ? (dept.get(p.departmentId) ?? null) : null,
+      p.designation,
+      p.reportsTo ? (manager.get(p.reportsTo) ?? null) : null,
+      when(p.joinDate),
+      when(p.lastWorkingDate),
+      p.roleIds.map((id) => role.get(id)).filter(Boolean).join(', '),
+      p.apps.join(', '),
+      p.extraAccess,
+      p.status === 'active' ? 'Active' : p.status === 'inactive' ? 'Inactive' : p.status,
+      when(p.login?.lastLoginAt ?? null),
+    ]);
+    return { header, rows };
   }
 
   private view(p: typeof people.$inferSelect) {

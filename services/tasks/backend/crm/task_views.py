@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.access import is_admin, users_with
+from config.exports import ExportMixin
 from config.throttles import AIThrottle
 from accounts.models import User, Role
 from accounts.permissions import HasCapability, has_capability
@@ -447,9 +448,21 @@ def _range_bounds(name, now):
     return None, None  # all
 
 
-class TaskViewSet(viewsets.ModelViewSet):
+class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = TaskSerializer
+    # Downloads (PLAN.md §19.31): ?export=xlsx|csv = every task matching the list's filters.
+    export_name = "tasks"
+    export_columns = [
+        ("Code", "code"), ("Title", "title"), ("Assigned to", "assigned_to_detail.name"),
+        ("Assigned by", "created_by_detail.name"), ("Department", "department"), ("Category", "category"),
+        ("Group", "group_name"), ("Status", "status_display"), ("Priority", "priority_display"),
+        ("Repeats", "frequency_display"), ("Due", "due_at"), ("Overdue", "is_overdue"),
+        ("Effort (min)", "effort_minutes"), ("Assignee estimate (min)", "assignee_estimate_minutes"),
+        ("Actual (min)", "actual_minutes"), ("Progress %", "progress_percent"), ("Completed", "completed_at"),
+        ("Completion note", "completion_note"), ("Description", "description"), ("Lead", "lead_name"),
+        ("Parent task", "parent_code"), ("Created", "created_at"), ("Deleted", "deleted_at"),
+    ]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
@@ -2584,7 +2597,7 @@ def _notify_bulk_accepted(reviewer_id, remarks, by_submitter):
                link="/tasks", link_label="Open my tasks")
 
 
-class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
+class TaskCompletionViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
     """Work submitted as done, waiting for the giver to accept it.
 
       ?scope=inbox  -> waiting for ME to review (default)
@@ -2596,6 +2609,14 @@ class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     permission_classes = [IsAuthenticated]
     serializer_class = TaskCompletionSerializer
+    export_name = "task-reviews"
+    export_columns = [
+        ("Code", "task_code"), ("Task", "task_title"), ("Submitted by", "submitted_by.name"), ("Note", "note"),
+        ("Status", "status_display"), ("Due", "task_due_at"), ("Effort (min)", "task_effort_minutes"),
+        ("Actual (min)", "task_actual_minutes"), ("Reviewer", "approver_detail.name"),
+        ("Reviewed by", "reviewed_by.name"), ("Remarks", "remarks"), ("Reviewed at", "reviewed_at"),
+        ("Submitted", "created_at"),
+    ]
 
     def get_queryset(self):
         user = self.request.user
@@ -2612,6 +2633,9 @@ class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(approver=user)
         if self.request.query_params.get("task"):
             qs = qs.filter(task_id=self.request.query_params["task"])
+        if str(self.request.query_params.get("submitted_by", "")).isdigit():
+            # the To accept screen's person filter (its download, PLAN.md §19.31)
+            qs = qs.filter(submitted_by_id=self.request.query_params["submitted_by"])
         state = self.request.query_params.get("status")
         if state:
             qs = qs.filter(status=state)
@@ -2728,7 +2752,7 @@ class TaskCompletionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"accepted": accepted, "skipped": len(ids) - accepted})
 
 
-class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
+class TaskChangeRequestViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
     """Modification Requests. Scopes:
       ?scope=inbox  -> requests waiting for ME to approve (default)
       ?scope=mine   -> requests I raised
@@ -2736,6 +2760,14 @@ class TaskChangeRequestViewSet(viewsets.ReadOnlyModelViewSet):
     POST /{id}/review {decision: approved|rejected, remarks} applies it."""
     permission_classes = [IsAuthenticated]
     serializer_class = TaskChangeRequestSerializer
+    export_name = "task-requests"
+    export_columns = [
+        ("Code", "task_code"), ("Task", "task_title"), ("Assignee", "task_assignee_name"),
+        ("Given by", "task_created_by_name"), ("Requested by", "requested_by.name"), ("Changes", "changes_display"),
+        ("Reason", "reason"), ("Status", "status_display"), ("Escalated", "escalated"),
+        ("Reviewed by", "reviewed_by.name"), ("Remarks", "remarks"), ("Reviewed at", "reviewed_at"),
+        ("Raised", "created_at"),
+    ]
 
     def get_queryset(self):
         user = self.request.user
@@ -3078,11 +3110,16 @@ class TaskSettingsView(viewsets.ViewSet):
         return Response(ser.data)
 
 
-class TaskTemplateViewSet(viewsets.ModelViewSet):
+class TaskTemplateViewSet(ExportMixin, viewsets.ModelViewSet):
     """Templates: everyone reads/uses, the Task templates permission manages."""
     serializer_class = TaskTemplateSerializer
     queryset = TaskTemplate.objects.select_related("created_by").all()
     pagination_class = None
+    export_name = "task-templates"
+    export_columns = [
+        ("Name", "name"), ("Category", "category"), ("Task title", "title"), ("Description", "description"),
+        ("Priority", "priority"), ("Repeats", "frequency"), ("Created by", "created_by.name"), ("Created", "created_at"),
+    ]
 
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
@@ -3093,10 +3130,15 @@ class TaskTemplateViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class TaskActivityViewSet(viewsets.ReadOnlyModelViewSet):
+class TaskActivityViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
     """The Activities feed, scoped to tasks the user can see."""
     permission_classes = [IsAuthenticated]
     serializer_class = TaskActivitySerializer
+    export_name = "task-activities"
+    export_columns = [
+        ("When", "created_at"), ("Code", "task_code"), ("Task", "task_title"), ("Assignee", "task_assignee"),
+        ("By", "actor.name"), ("Kind", "kind"), ("Activity", "text"),
+    ]
 
     def get_queryset(self):
         qs = TaskActivity.objects.select_related("actor", "task", "task__assigned_to").filter(

@@ -7,8 +7,8 @@
  */
 import { errorMessage } from '@freefounders/core';
 import { type AttendanceToday, useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
-import { useRef, useState } from 'react';
-import { AppRequestError, appRequest, isInApp, openAppSettings } from '@/lib/native-bridge';
+import { useEffect, useRef, useState } from 'react';
+import { AppRequestError, appRequest, isInApp, openAppSettings, skipTodaysReminder } from '@/lib/native-bridge';
 import { LocationBlockedError, currentPosition } from './device';
 import { SelfieCapture } from './selfie-capture';
 import { UniformPrompt } from './uniform-prompt';
@@ -55,6 +55,8 @@ export function usePunch(onDone?: (which: Which) => void) {
       { which, ...pos, ...(photo ? { photo } : {}), ...(uniform !== undefined ? { uniform } : {}) },
       {
         onSuccess: () => {
+          // Phone app: checked in → no more punch-in reminders today (PLAN.md §19.32).
+          if (which === 'check_in') skipTodaysReminder();
           setMsg(which === 'check_in' ? 'Checked in ✅' : 'Checked out ✅');
           onDone?.(which);
         },
@@ -80,6 +82,11 @@ export function usePunch(onDone?: (which: Which) => void) {
   };
 
   const data: AttendanceToday | undefined = q.data;
+  // Checked in somewhere else (a computer, or before this app had reminders): today's reminders are not needed either.
+  const checkedInToday = !!data?.attendance?.check_in;
+  useEffect(() => {
+    if (checkedInToday) skipTodaysReminder();
+  }, [checkedInToday]);
   // With punch photos switched on, the camera step comes first.
   const usesCamera = !!data && !!data.photo && data.photo !== 'off';
   const proceed = (which: Which) => {
@@ -124,6 +131,16 @@ export function usePunch(onDone?: (which: Which) => void) {
           setCamFor(null);
           void send(w, photo);
         }}
+        // Optional photo: "Skip photo" punches without one (the phone app's camera allows the same); required: no skip.
+        onSkip={
+          data.photo === 'optional'
+            ? () => {
+                const w = camFor;
+                setCamFor(null);
+                void send(w);
+              }
+            : undefined
+        }
       />
     ) : null;
   // Every dialog of the punch (uniform question, browser camera); the screens render it once.

@@ -158,7 +158,7 @@ export class AuthService {
   }
 
   /**
-   * Builds the Actor from a FreeFounders Platform access token. The token names this app's user id
+   * Builds the Actor from a Kaampilot Platform access token. The token names this app's user id
    * (`apps.assets`); that user must be linked to the token's person and still active. Permissions come
    * from the user's role here, exactly as for a cookie session.
    */

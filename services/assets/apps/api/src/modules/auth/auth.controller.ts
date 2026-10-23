@@ -9,12 +9,12 @@ import { tenancyEnabled } from '../../db/tenancy';
 import { bearerToken, platformEnabled } from './platform-token';
 
 /**
- * Multi-company mode: people sign in through the FreeFounders Platform only. The app's own password login and password
+ * Multi-company mode: people sign in through the Kaampilot Platform only. The app's own password login and password
  * change stay off even when a request names a company (e.g. a hand-made `<companyId>~…` session cookie), so an old
  * Assets password can never open a company after the Platform changed or reset it.
  */
 function assertOwnLoginAllowed() {
-  if (tenancyEnabled()) throw new UnauthorizedException({ statusCode: 401, code: 'no_company', message: 'Sign in through FreeFounders' });
+  if (tenancyEnabled()) throw new UnauthorizedException({ statusCode: 401, code: 'no_company', message: 'Sign in through Kaampilot' });
 }
 
 @Controller('auth')
@@ -41,7 +41,7 @@ export class AuthController {
     return { ok: true };
   }
 
-  /** FreeFounders single login: `Authorization: Bearer <platform token>` in, short session cookie out. */
+  /** Kaampilot single login: `Authorization: Bearer <platform token>` in, short session cookie out. */
   @Public()
   @Post('platform-session')
   @HttpCode(200)

@@ -37,7 +37,7 @@ async function joinWithNewAccount(browser: Browser, url: string, email: string, 
   const page = await ctx.newPage();
   try {
     await page.goto(url);
-    await expect(page.getByRole('heading', { name: `Join ${company} on FreeFounders` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `Join ${company} on Kaampilot` })).toBeVisible();
     await page.getByRole('button', { name: 'Create my account' }).click();
     await page.getByLabel('Email or mobile number').fill(email);
     await page.getByRole('button', { name: 'Continue' }).click();
@@ -66,7 +66,7 @@ async function buySuite(page: Page) {
   await expect(page.getByText('Test mode', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^Pay ₹/ }).click();
   await expect(page.getByRole('heading', { name: 'Payment successful' })).toBeVisible();
-  await page.getByRole('link', { name: 'Back to FreeFounders' }).click();
+  await page.getByRole('link', { name: 'Back to Kaampilot' }).click();
   await page.waitForURL(/\/billing$/);
   await expect(page.getByRole('region', { name: 'Current plan' }).getByText('Active', { exact: true })).toBeVisible();
 }

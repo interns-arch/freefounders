@@ -2,7 +2,7 @@
   "name": "@freefounders/core",
   "version": "0.1.0",
   "private": true,
-  "description": "FreeFounders shared logic for the web and mobile apps: HTTP client, sign-in session, typed APIs, data hooks, permissions. No DOM, no UI.",
+  "description": "Kaampilot shared logic for the web and mobile apps: HTTP client, sign-in session, typed APIs, data hooks, permissions. No DOM, no UI.",
   "exports": {
     ".": "./src/index.ts",
     "./admin": "./src/admin/index.ts",
@@ -10,7 +10,8 @@
     "./hr": "./src/hr/index.ts",
     "./assets": "./src/assets/index.ts",
     "./account": "./src/account/index.ts",
-    "./billing": "./src/billing/index.ts"
+    "./billing": "./src/billing/index.ts",
+    "./export": "./src/export/index.ts"
   },
   "scripts": {
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"test/*.test.mjs\""

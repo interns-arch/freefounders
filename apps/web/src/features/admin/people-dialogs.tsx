@@ -559,7 +559,7 @@ export function ResetPasswordDialog({ person, onClose }: { person: Person; onClo
   };
 
   const share = done
-    ? `https://wa.me/?text=${encodeURIComponent(`Your FreeFounders sign-in: username ${done.username} password ${done.password} ${window.location.origin}`)}`
+    ? `https://wa.me/?text=${encodeURIComponent(`Your Kaampilot sign-in: username ${done.username} password ${done.password} ${window.location.origin}`)}`
     : '';
 
   return (

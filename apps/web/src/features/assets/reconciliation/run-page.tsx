@@ -15,6 +15,8 @@ import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDateTime } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { STATUS_META } from './summary';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug } from '@freefounders/core/export';
 
 const TABS: { value: string; label: string; match: (i: ReconItem) => boolean; whenEmpty?: boolean }[] = [
   { value: '', label: 'Needs attention', match: (i) => i.status !== 'MATCHED' },
@@ -28,6 +30,8 @@ const TABS: { value: string; label: string; match: (i: ReconItem) => boolean; wh
   { value: 'ALL', label: 'All', match: () => true },
 ];
 const TILES: ReconStatus[] = ['MATCHED', 'MISMATCH', 'MISSING_IN_SYSTEM', 'MISSING_IN_DUMP'];
+
+const SOURCE_SLUG = { AIRTEL: 'airtel', SALARYBOX: 'salary-box' } as const;
 
 /** One check: counts by status, a filter per status, search, and (Airtel) adding missing connections to the SIM register. */
 export default function ReconRunPage() {
@@ -81,11 +85,29 @@ export default function ReconRunPage() {
         title={`${RECON_SOURCE_LABELS[run.source]} check`}
         description={`${run.fileName} · ${run.rowCount} rows · ${formatDateTime(run.createdAt)}${run.createdByName ? ` · by ${run.createdByName}` : ''}${run.repairedRows ? ` · ${run.repairedRows} broken rows joined` : ''}`}
         actions={
-          addable.length > 0 && (
-            <Button size="sm" onClick={addAll} loading={add.isPending}>
-              <CardSim /> Add {addable.length} to SIM register
-            </Button>
-          )
+          <>
+            <DownloadMenu
+              filename={fileSlug('assets', 'reconciliation', SOURCE_SLUG[run.source], run.createdAt.slice(0, 10), tab.value || 'all', f.search)}
+              rows={() => ({
+                title: 'Reconciliation',
+                header: ['Result', 'Key', 'Row', 'Details', 'Linked to', 'Issues'],
+                rows: items.map((i) => [
+                  STATUS_META[i.status].label,
+                  i.key,
+                  i.title,
+                  i.subtitle,
+                  i.entity?.label,
+                  i.issues.map((x) => `${x.label}: file ${x.dump ?? '—'} / system ${x.system ?? '—'}`).join('; '),
+                ]),
+              })}
+              empty={!items.length}
+            />
+            {addable.length > 0 && (
+              <Button size="sm" onClick={addAll} loading={add.isPending}>
+                <CardSim /> Add {addable.length} to SIM register
+              </Button>
+            )}
+          </>
         }
       />
 

@@ -53,7 +53,7 @@ export function PayPage() {
           {razorpay || !s ? (
             <span className="flex items-center gap-2 text-sm font-bold">
               <Lock className="size-4 text-primary" aria-hidden />
-              FreeFounders · Secure payment
+              Kaampilot · Secure payment
             </span>
           ) : (
             <>
@@ -81,7 +81,7 @@ export function PayPage() {
             <h1 className="text-xl font-bold">Payment link not found</h1>
             <p className="mt-1 text-sm text-muted-foreground">{q.error ? errorMessage(q.error) : 'This payment session does not exist or has expired.'}</p>
             <Button asChild className="mt-5 w-full">
-              <Link to="/billing">Back to FreeFounders</Link>
+              <Link to="/billing">Back to Kaampilot</Link>
             </Button>
           </div>
         ) : razorpay ? (
@@ -91,7 +91,7 @@ export function PayPage() {
         )}
       </main>
       <footer className="pb-6 text-center font-mono text-[11px] tracking-wider text-muted-foreground uppercase">
-        {razorpay ? 'Payments by Razorpay · GST invoice from FreeFounders' : s ? 'FakePay · simulated gateway for testing FreeFounders' : ''}
+        {razorpay ? 'Payments by Razorpay · GST invoice from Kaampilot' : s ? 'FakePay · simulated gateway for testing Kaampilot' : ''}
       </footer>
     </div>
   );
@@ -102,7 +102,7 @@ function OrderSummary({ s }: { s: CheckoutSession }) {
   return (
     <div className="border-b p-5">
       <p className="text-sm text-muted-foreground">Paying</p>
-      <h1 className="text-lg font-bold">FreeFounders</h1>
+      <h1 className="text-lg font-bold">Kaampilot</h1>
       <p className="text-sm text-muted-foreground">
         {s.planName ?? s.plan} · {INTERVAL_LABELS[s.interval] ?? s.interval} · {s.seats} users · for {s.companyName}
       </p>
@@ -196,7 +196,7 @@ function RazorpayPay({ s, sessionId }: { s: CheckoutSession; sessionId: string }
         )}
         <p className="text-[13px] text-muted-foreground">
           Pay by UPI, card or net banking. This sets up AutoPay: after this payment, Razorpay charges the plan each {interval} until you cancel in
-          Billing. Your GST invoice comes from FreeFounders.
+          Billing. Your GST invoice comes from Kaampilot.
         </p>
         {!o && (
           <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
@@ -327,7 +327,7 @@ function Result({ outcome, total, test }: { outcome: FakeOutcome; total: number;
               : 'This payment link has closed. Nothing was charged: start again from Billing.'}
       </p>
       <Button asChild size="lg" className="mt-5 h-11 w-full">
-        <Link to="/billing">Back to FreeFounders</Link>
+        <Link to="/billing">Back to Kaampilot</Link>
       </Button>
     </div>
   );

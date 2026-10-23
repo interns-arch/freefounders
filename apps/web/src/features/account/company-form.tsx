@@ -44,7 +44,7 @@ export function CompanyForm({
   useEffect(() => {
     if (nameError) setErrors((e) => ({ ...e, name: nameError }));
   }, [nameError]);
-  // Unique across FreeFounders (PLAN.md §21.6): checked while typing, Create waits for "Available".
+  // Unique across Kaampilot (PLAN.md §21.6): checked while typing, Create waits for "Available".
   const check = useCompanyNameCheck(value.name);
   const nameBlocked = !!errors.name || (!!value.name.trim() && !check.ok);
   const set = <K extends keyof CompanyInput>(k: K, v: CompanyInput[K]) => {

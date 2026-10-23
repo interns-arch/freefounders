@@ -109,7 +109,7 @@ export class TicketsService {
         { type: 'TICKET_CREATED', title: `${number}: ${row.title}`, body: `${row.priority} · ${row.type}${assetLabel}`, link: `/tickets?open=${row.id}` },
         actor.userId,
       );
-      // FreeFounders: the Platform turns it into a task for the IT owner (PLAN.md §17.4).
+      // Kaampilot: the Platform turns it into a task for the IT owner (PLAN.md §17.4).
       const owners = await db
         .select({ personId: users.platformPersonId })
         .from(users)

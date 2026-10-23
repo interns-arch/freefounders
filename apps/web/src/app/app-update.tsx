@@ -39,14 +39,15 @@ export function AppUpdatePrompt() {
         <DialogHeader>
           <DialogTitle>Update the app — one time</DialogTitle>
           <DialogDescription>
-            A new version of the FreeFounders app is ready (you have {version}). It adds <strong>voice tasks</strong>: speak a task and the form fills itself.
+            A new version of the Kaampilot app is ready (you have {version}). It adds <strong>punch-in reminders</strong> (the phone rings or vibrates if you forget to punch in) and{' '}
+            <strong>voice tasks</strong> (speak a task and the form fills itself).
             After this update, changes keep arriving on their own.
           </DialogDescription>
         </DialogHeader>
         <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
           <li>Tap <strong className="text-foreground">Update now</strong>: your phone&rsquo;s browser opens and downloads it.</li>
           <li>Open the download and tap <strong className="text-foreground">Update</strong>. If the phone asks, allow &ldquo;install unknown apps&rdquo; for the browser.</li>
-          <li>Open FreeFounders again: you stay signed in.</li>
+          <li>Open Kaampilot again: you stay signed in.</li>
         </ol>
         <DialogFooter>
           <Button variant="outline" onClick={close}>

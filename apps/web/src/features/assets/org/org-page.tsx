@@ -14,6 +14,9 @@ import { useAssetsCache, useDeleteOrg, useOrgList } from '@freefounders/core/ass
 import type { OrgEntity } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { ORG_META, type OrgKind } from './org-form';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 const TITLES: Record<OrgKind, { title: string; description: string }> = {
   company: { title: 'Companies', description: 'Legal entities that own or hold assets.' },
@@ -113,9 +116,12 @@ export default function OrgPage({ kind }: { kind: OrgKind }) {
         title={TITLES[kind].title}
         description={TITLES[kind].description}
         actions={
-          <Button variant="cta" size="sm" onClick={() => quickAdd.open(kind)}>
-            <Plus /> Add {meta.label.toLowerCase()}
-          </Button>
+          <>
+            <DownloadMenu filename={fileSlug('assets', meta.path, f.search, todayStamp())} target={assetsExports.org(meta.path, f)} empty={q.data?.total === 0} loading={!q.data} />
+            <Button variant="cta" size="sm" onClick={() => quickAdd.open(kind)}>
+              <Plus /> Add {meta.label.toLowerCase()}
+            </Button>
+          </>
         }
       />
       <Card className="overflow-hidden">

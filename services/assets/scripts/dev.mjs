@@ -1,4 +1,4 @@
-// `npm run dev` — database and API (auto-restart) in one command. The screens are the FreeFounders web app (apps/web).
+// `npm run dev` — database and API (auto-restart) in one command. The screens are the Kaampilot web app (apps/web).
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import net from 'node:net';

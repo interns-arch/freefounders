@@ -73,6 +73,66 @@ test('admins brand the company and switch modules; Tasks follows', async ({ page
   }
 });
 
+test('photo optional: "Skip photo" checks in without one; required: no skip', async ({ browser, request }) => {
+  const owner = await token(request);
+  const stamp = Date.now().toString(36);
+  const login = `e2e-skip-${stamp}`;
+  const temp = 'E2e@123456';
+  const password = 'E2e@654321';
+  const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false } })).ok()).toBeTruthy();
+  const created = await request.post('/api/platform/people', {
+    headers: auth(owner),
+    data: { fullName: `E2E Skip ${stamp}`, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+  });
+  expect(created.status()).toBe(201);
+  const personId = (await created.json()).person.id;
+  const roles = (await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ id: string; code?: string }>;
+  const member = roles.find((r) => r.code === 'ff_member')!;
+  expect((await request.put(`/api/platform/people/${personId}/roles`, { headers: auth(owner), data: { roleIds: [member.id] } })).ok()).toBeTruthy();
+  const first = await token(request, login, temp);
+  expect((await request.post('/api/platform/auth/change-password', { headers: auth(first), data: { currentPassword: temp, newPassword: password } })).ok()).toBeTruthy();
+
+  try {
+    const context = await browser.newContext({ permissions: ['camera'] });
+    const page = await context.newPage();
+    await page.goto('/');
+    await signIn(page, login, password);
+    await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+    // Required: the camera step has no way round it.
+    await page.goto('/tasks/hr');
+    await page.getByRole('button', { name: /Check in/ }).click();
+    await answerUniform(page);
+    const camera = page.getByRole('dialog', { name: 'Check in' });
+    await expect(camera).toBeVisible();
+    await expect(camera.getByRole('button', { name: 'Check in' })).toBeVisible();
+    await expect(camera.getByRole('button', { name: 'Skip photo' })).toHaveCount(0);
+    await camera.getByRole('button', { name: 'Cancel' }).click();
+    await expect(camera).toHaveCount(0);
+
+    // Optional: "Skip photo" checks in without a photo.
+    expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'optional' } })).ok()).toBeTruthy();
+    // The screen keeps today's answer for 20 s (also across a reload, PLAN.md §19.18): after that it asks again.
+    await page.waitForTimeout(20_500);
+    await page.reload();
+    await page.getByRole('button', { name: /Check in/ }).click();
+    await answerUniform(page);
+    await expect(camera).toBeVisible();
+    await expect(camera.getByText(/A photo is optional here/)).toBeVisible();
+    await camera.getByRole('button', { name: 'Skip photo' }).click();
+    await expect(page.getByText('Checked in ✅')).toBeVisible();
+    const today = await (await request.get('/tasks/api/attendance/today/', { headers: auth(await token(request, login, password)) })).json();
+    expect(today.attendance.check_in).toBeTruthy();
+    expect(today.attendance.has_check_in_photo).toBe(false);
+    await context.close();
+  } finally {
+    const restore = Object.fromEntries(['photo', 'geofence_enabled'].map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+    await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
+    await request.put(`/api/platform/people/${personId}/roles`, { headers: auth(owner), data: { roleIds: [] } });
+    await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
+  }
+});
+
 test('a photo is taken at check-in and HR sees it', async ({ browser, request }) => {
   const owner = await token(request);
   const stamp = Date.now().toString(36);

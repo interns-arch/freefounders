@@ -1,6 +1,6 @@
 // What every Assets company starts with: system roles, the company itself, a main store, departments and the
 // starter asset catalog. Used by the seed script (standalone install) and, in multi-company mode, when the
-// FreeFounders Platform sets up a new company (POST /api/internal/companies).
+// Kaampilot Platform sets up a new company (POST /api/internal/companies).
 import { SYSTEM_ROLES } from '@eam/shared';
 import type { Actor } from '../common/actor';
 import type { Executor } from '../db/db.service';

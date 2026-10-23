@@ -111,9 +111,16 @@ test('Payroll and My Salary are Attendance tabs for the owner; a draft payroll r
       await expect(row.getByText('Draft')).toBeVisible();
       await expect(row.getByRole('button', { name: `Finalise ${MONTHS[free - 1]} ${runYear}` })).toBeVisible();
       await expect(page.getByRole('heading', { name: new RegExp(`^${MONTHS[free - 1]} ${runYear} — \\d+ payslip`) })).toBeVisible();
-      const download = page.waitForEvent('download');
-      await row.getByRole('button', { name: `Download CSV for ${MONTHS[free - 1]} ${runYear}` }).click();
-      expect((await download).suggestedFilename()).toBe(`payroll-${runYear}-${String(free).padStart(2, '0')}.csv`);
+      // Download (PLAN.md §19.31): the month's sheet as CSV, or disabled when the run has no payslips
+      const slipCount = Number((await row.getByRole('cell').nth(3).innerText()).trim());
+      const menu = row.getByRole('button', { name: new RegExp(`^Download ${MONTHS[free - 1]} ${runYear}`) });
+      if (slipCount === 0) await expect(menu).toBeDisabled();
+      else {
+        await menu.click();
+        const download = page.waitForEvent('download');
+        await page.getByRole('menuitem', { name: /^CSV/ }).click();
+        expect((await download).suggestedFilename()).toBe(`payroll-${runYear}-${String(free).padStart(2, '0')}.csv`);
+      }
     }
 
     await parts.getByRole('button', { name: 'Salaries' }).click();

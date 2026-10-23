@@ -276,5 +276,5 @@ export const APP_SETTINGS_LINKS: Record<AppKey, Array<{ label: string; href: str
 
 export const LOGO_MAX_BYTES = 512 * 1024;
 
-/** What the colour picker shows when the company keeps the FreeFounders colours. */
+/** What the colour picker shows when the company keeps the Kaampilot colours. */
 export const DEFAULT_BRAND_COLOUR = '#2457f5';

@@ -5,7 +5,7 @@
 //   /tasks/api/*            → Tasks API (Django)    (/tasks stripped)
 //   /media/*                → Tasks uploads (Django)
 //   /assets/api/*           → Assets API (NestJS)   (/assets stripped)
-//   everything else         → FreeFounders web app (Vite, apps/web): /, /tasks/…, /assets/…, /people …
+//   everything else         → Kaampilot web app (Vite, apps/web): /, /tasks/…, /assets/…, /people …
 import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';

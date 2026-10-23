@@ -1,13 +1,15 @@
 /** HR → My leave (balances, requests, apply / cancel) and Holidays. */
 import { errorMessage, useAccess } from '@freefounders/core';
-import { type LeaveRequest, type LeaveType, useAddHoliday, useApplyLeave, useCancelLeave, useDeleteHoliday, useHolidays, useLeaveBalances, useLeaveTypes, useMyLeaves } from '@freefounders/core/hr';
+import { type LeaveBalance, type LeaveRequest, type LeaveType, hrExports, useAddHoliday, useApplyLeave, useCancelLeave, useDeleteHoliday, useHolidays, useLeaveBalances, useLeaveTypes, useMyLeaves } from '@freefounders/core/hr';
 import { CalendarDays, CalendarHeart, Plus } from '@/components/icons';
 import { useState } from 'react';
+import { todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
-import { Card, Skeleton } from '@/components/ui/primitives';
+import { Card, Checkbox, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Chip, ErrorNote, SectionHead, type Tone, fmtDay } from '../tasks/general/parts';
 import { compressImage } from '@/lib/compress-image';
@@ -73,7 +75,7 @@ export function MyLeaveTab() {
           );
         })}
       </div>
-      <SectionHead>Requests</SectionHead>
+      <SectionHead actions={<DownloadMenu filename={`attendance-my-leave-${todayStamp()}`} target={hrExports.myLeave()} empty={rows.length === 0} />}>Requests</SectionHead>
       {cancel.error && <ErrorNote>{errorMessage(cancel.error)}</ErrorNote>}
       {rows.length === 0 ? (
         <Card>
@@ -102,7 +104,7 @@ export function MyLeaveTab() {
                   <TD className="whitespace-nowrap">
                     {fmtDay(l.start_date)} – {fmtDay(l.end_date)}
                   </TD>
-                  <TD>{l.days}</TD>
+                  <TD>{l.half_day ? '½' : (l.leave_days ?? l.days)}</TD>
                   <TD>
                     <LeaveStatusChip l={l} />
                   </TD>
@@ -124,20 +126,31 @@ export function MyLeaveTab() {
         </Card>
       )}
       <Dialog open={applying} onOpenChange={setApplying}>
-        <DialogContent className="max-w-lg">{applying && types.data && <ApplyForm types={types.data} onClose={() => setApplying(false)} />}</DialogContent>
+        <DialogContent className="max-w-lg">{applying && types.data && <ApplyForm types={types.data} balances={balances.data ?? []} onClose={() => setApplying(false)} />}</DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function ApplyForm({ types, onClose }: { types: LeaveType[]; onClose: () => void }) {
+/** What is left of a leave type: "2 days left" (pending counted), or no limit for unpaid / no-quota types. */
+function leftText(b: LeaveBalance | undefined, t: LeaveType): string {
+  if (b?.limited === false) return 'no limit';
+  const left = b?.available ?? b?.balance;
+  if (left == null) return `${t.annual_quota}/yr`;
+  return `${left} day${left === 1 ? '' : 's'} left`;
+}
+
+function ApplyForm({ types, balances, onClose }: { types: LeaveType[]; balances: LeaveBalance[]; onClose: () => void }) {
   const [f, setF] = useState({ leave_type: String(types[0]?.id ?? ''), start_date: '', end_date: '', reason: '' });
+  const [halfDay, setHalfDay] = useState(false);
   const [doc, setDoc] = useState<File | null>(null);
   const apply = useApplyLeave();
   const selected = types.find((t) => String(t.id) === f.leave_type);
+  const balance = balances.find((b) => String(b.leave_type) === f.leave_type);
+  const oneDay = !!f.start_date && f.start_date === f.end_date;
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    apply.mutate({ ...f, ...(doc ? { document: doc } : {}) }, { onSuccess: onClose });
+    apply.mutate({ ...f, ...(oneDay && halfDay ? { half_day: true } : {}), ...(doc ? { document: doc } : {}) }, { onSuccess: onClose });
   };
   return (
     <form onSubmit={submit} className="grid gap-4">
@@ -147,13 +160,23 @@ function ApplyForm({ types, onClose }: { types: LeaveType[]; onClose: () => void
       </DialogHeader>
       <div className="grid gap-1.5">
         <Label htmlFor="lv-type">Leave type *</Label>
-        <NativeSelect id="lv-type" value={f.leave_type} onChange={(e) => setF({ ...f, leave_type: e.target.value })}>
+        <NativeSelect id="lv-type" value={f.leave_type} onChange={(e) => setF({ ...f, leave_type: e.target.value })} aria-describedby="lv-left">
           {types.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.name} ({t.annual_quota}/yr)
+              {t.name} ({leftText(
+                balances.find((b) => b.leave_type === t.id),
+                t,
+              )})
             </option>
           ))}
         </NativeSelect>
+        {selected && (
+          <p id="lv-left" className="text-xs text-muted-foreground">
+            {balance?.limited === false
+              ? `${selected.name} has no limit.`
+              : `${leftText(balance, selected)} this year${balance?.pending ? ` (${balance.pending} waiting for approval counted)` : ''}.`}
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
@@ -165,6 +188,12 @@ function ApplyForm({ types, onClose }: { types: LeaveType[]; onClose: () => void
           <Input id="lv-to" type="date" value={f.end_date} min={f.start_date || undefined} onChange={(e) => setF({ ...f, end_date: e.target.value })} />
         </div>
       </div>
+      {oneDay && (
+        <label htmlFor="lv-half" className="flex items-center gap-2 text-sm">
+          <Checkbox id="lv-half" checked={halfDay} onCheckedChange={(v) => setHalfDay(v === true)} />
+          Half day (counts 0.5)
+        </label>
+      )}
       <div className="grid gap-1.5">
         <Label htmlFor="lv-reason">Reason *</Label>
         <Input id="lv-reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
@@ -208,6 +237,25 @@ export function HolidaysTab() {
 
   return (
     <div className="max-w-2xl space-y-4">
+      <SectionHead
+        actions={
+          <DownloadMenu
+            filename={`attendance-holidays-${todayStamp()}`}
+            loading={!q.data}
+            empty={q.data?.length === 0}
+            rows={() => ({
+              title: 'Holidays',
+              header: ['Holiday', 'Date', 'Day'],
+              rows: (q.data ?? []).map((h) => {
+                const d = new Date(`${h.date}T00:00:00`);
+                return [h.name, d, d.toLocaleDateString('en-IN', { weekday: 'long' })];
+              }),
+            })}
+          />
+        }
+      >
+        Holidays
+      </SectionHead>
       {canManage && (
         <form
           className="flex flex-wrap items-end gap-2 rounded-xl border bg-card p-3 shadow-card"

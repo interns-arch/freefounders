@@ -1,4 +1,4 @@
-"""Internal API the FreeFounders Platform calls; not for browsers.
+"""Internal API the Kaampilot Platform calls; not for browsers.
 
 POST /api/internal/provision -- the Platform gives a person access to Tasks.
 Finds that person's user here (already linked, else same email, else same
@@ -131,7 +131,7 @@ def roles(request):
 
 
 # ---------------------------------------------------------------------------
-# Roles from the FreeFounders role builder (PLAN.md section 15)
+# Roles from the Kaampilot role builder (PLAN.md section 15)
 # ---------------------------------------------------------------------------
 
 @api_view(["GET"])
@@ -156,7 +156,7 @@ def access(request):
 
 
 # ---------------------------------------------------------------------------
-# Company profile from the FreeFounders Settings Center (PLAN.md section 16)
+# Company profile from the Kaampilot Settings Center (PLAN.md section 16)
 # ---------------------------------------------------------------------------
 
 @api_view(["GET"])

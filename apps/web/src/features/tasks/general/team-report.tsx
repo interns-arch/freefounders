@@ -4,7 +4,9 @@
  */
 import { errorMessage } from '@freefounders/core';
 import { type ChangeRequestLeader, type TeamReportRow, useChangeRequestLeaders, useSendOverdueEmail, useTeamReport } from '@freefounders/core/tasks';
-import { ChevronDown, ChevronRight, Download, Mail, TriangleAlert } from '@/components/icons';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { ChevronDown, ChevronRight, Mail, TriangleAlert } from '@/components/icons';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { Fragment, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Link } from 'react-router';
@@ -15,7 +17,6 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { downloadCSV } from '../shared/csv';
 import { fmtEffort } from '../shared/format';
 import { type CustomRange, RangePicker } from '../shared/range-picker';
 import { ScoreRing } from '../shared/score-ring';
@@ -109,20 +110,20 @@ export function TeamReportPage() {
     });
   };
 
-  const exportCSV = () =>
-    downloadCSV(
-      `team-performance-${range}.csv`,
-      ['Rank', 'Name', 'Role', 'Department', 'Score', 'Change', 'On-time %', 'Attendance %', 'Leave days', 'Total', 'Completed', 'On time', 'Delayed', 'Pending', 'In progress', 'Overdue', 'Time assigned', 'Time earned', 'Time spent', 'Sent back', 'Extensions asked', 'Mistakes', 'Open now', 'Overdue now'],
-      rows.map((r, i) => [
-        r.score === null ? '' : i + 1,
+  // The report holds every person already, so the file is made here (Excel + CSV, PLAN.md §19.31).
+  const sheet = () => ({
+    title: 'Team performance',
+    header: ['Rank', 'Name', 'Role', 'Department', 'Score', 'Change', 'On-time %', 'Attendance %', 'Leave days', 'Total', 'Completed', 'On time', 'Delayed', 'Pending', 'In progress', 'Overdue', 'Time assigned', 'Time earned', 'Time spent', 'Sent back', 'Extensions asked', 'Mistakes', 'Open now', 'Overdue now'],
+    rows: rows.map((r, i) => [
+        r.score === null ? null : i + 1,
         r.name,
         r.role,
         r.department,
-        r.score ?? '',
-        r.score_delta ?? '',
-        r.on_time_rate ?? '',
-        r.attendance_rate ?? '',
-        r.leave_days ?? '',
+        r.score ?? null,
+        r.score_delta ?? null,
+        r.on_time_rate ?? null,
+        r.attendance_rate ?? null,
+        r.leave_days ?? null,
         r.total,
         r.completed,
         r.in_time,
@@ -139,7 +140,7 @@ export function TeamReportPage() {
         r.open_tasks,
         r.open_overdue,
       ]),
-    );
+  });
 
   const colours = { good: themeColour('success'), mid: themeColour('warning'), bad: themeColour('destructive') };
 
@@ -152,11 +153,12 @@ export function TeamReportPage() {
             <Button size="sm" variant="outline" onClick={sendOverdueEmail} loading={mail.isPending} title="Also goes out automatically every Monday at 10 AM">
               <Mail /> {mail.isPending ? 'Sending…' : 'Email weekly update'}
             </Button>
-            {rows.length > 0 && (
-              <Button size="sm" variant="outline" onClick={exportCSV}>
-                <Download /> Export CSV
-              </Button>
-            )}
+            <DownloadMenu
+              rows={sheet}
+              filename={fileSlug('tasks', 'team-performance', range === 'custom' ? `${custom.start}-to-${custom.end}` : range, todayStamp())}
+              empty={!!data && rows.length === 0}
+              loading={!data && !q.error}
+            />
           </>
         }
         className="mb-0"

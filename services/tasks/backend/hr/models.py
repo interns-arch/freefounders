@@ -67,7 +67,7 @@ class Attendance(models.Model):
     leave_request = models.ForeignKey("hr.LeaveRequest", null=True, blank=True,
                                       on_delete=models.SET_NULL, related_name="attendance_days")
     note = models.CharField(max_length=300, blank=True, default="")
-    # Photo taken at the punch (FreeFounders, PLAN.md §16.4); emptied after the retention period.
+    # Photo taken at the punch (Kaampilot, PLAN.md §16.4); emptied after the retention period.
     check_in_photo = models.FileField(upload_to=attendance_photo_path, blank=True, default="")
     check_out_photo = models.FileField(upload_to=attendance_photo_path, blank=True, default="")
     # Answer to the company's uniform question at check-in (PLAN.md §19.27); empty when it was not asked.
@@ -178,6 +178,8 @@ class LeaveRequest(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()
     days = models.PositiveIntegerField(default=1)
+    # Half a day (one working day only): counts 0.5 against the balance (`days` stays 1).
+    half_day = models.BooleanField(default=False)
     reason = models.TextField(max_length=1000)
     document = models.FileField(upload_to="leave_docs/", null=True, blank=True)
     status = models.CharField(max_length=10, choices=LeaveStatus.choices,
@@ -189,7 +191,17 @@ class LeaveRequest(models.Model):
     # Approval reminders (PLAN.md §17.2): when the approver was reminded, and when it went to HR.
     reminded_at = models.DateTimeField(null=True, blank=True)
     escalated_at = models.DateTimeField(null=True, blank=True)
+    # Approved (or marked by HR) beyond the leave balance with the explicit override: who and when.
+    beyond_balance = models.BooleanField(default=False)
+    beyond_balance_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                          on_delete=models.SET_NULL, related_name="leaves_beyond_balance")
+    beyond_balance_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def leave_days(self) -> float:
+        """What this request takes from the balance: 0.5 for a half day, else its working days."""
+        return 0.5 if self.half_day else float(self.days)
 
     class Meta:
         ordering = ["-created_at"]

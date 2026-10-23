@@ -15,7 +15,7 @@ import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-t
 /** The Platform acting on a company's behalf for a cross-app rule: may do anything, recorded under its own name. */
 const PLATFORM: Actor = {
   userId: null,
-  name: 'FreeFounders automation',
+  name: 'Kaampilot automation',
   email: null,
   employeeId: null,
   roleName: 'System',
@@ -29,7 +29,7 @@ const linkSchema = z.object({ assigneePersonId: z.string().uuid().nullable().opt
 const resolveSchema = z.object({ resolution: z.string().max(2000).nullable().optional() });
 
 /**
- * What the FreeFounders Platform's cross-app rules need from Assets (PLAN.md §17.4). Platform service token only.
+ * What the Kaampilot Platform's cross-app rules need from Assets (PLAN.md §17.4). Platform service token only.
  */
 @Controller('internal')
 export class InternalFlowsController {

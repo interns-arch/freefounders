@@ -25,7 +25,7 @@ export const GST_RATE = 18;
 /** Who sells (env, with clearly fake defaults for testing). */
 export function seller(): GstParty {
   return {
-    name: process.env.SELLER_NAME?.trim() || 'FreeFounders Technologies Pvt Ltd (test)',
+    name: process.env.SELLER_NAME?.trim() || 'Kaampilot (test)',
     gstin: process.env.SELLER_GSTIN?.trim() || '27AAAAA0000A1Z5',
     state: stateName(process.env.SELLER_STATE) ?? 'Maharashtra',
     address: process.env.SELLER_ADDRESS?.trim() || 'Test address, Pune, Maharashtra 411001 (not a real business)',

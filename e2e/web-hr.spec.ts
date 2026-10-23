@@ -150,7 +150,9 @@ test('leave is applied for and approved in Approvals', async ({ browser, request
     await page.goto('/tasks/hr?tab=leave');
     await page.getByRole('button', { name: 'Apply for leave' }).click();
     const dialog = page.getByRole('dialog', { name: 'Apply for leave' });
-    await dialog.getByLabel('Leave type *').selectOption({ label: `${typeName} (10/yr)` });
+    // The remaining balance is shown next to the type (PLAN.md §19.33).
+    await dialog.getByLabel('Leave type *').selectOption({ label: `${typeName} (10 days left)` });
+    await expect(dialog.getByText('10 days left this year.')).toBeVisible();
     await dialog.getByLabel('From *').fill('2026-12-14');
     await dialog.getByLabel('To *').fill('2026-12-15');
     await dialog.getByLabel('Reason *').fill('Family function');

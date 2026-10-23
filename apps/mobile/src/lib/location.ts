@@ -30,10 +30,10 @@ export async function currentPosition(): Promise<PositionResult> {
   if (!perm.granted && perm.canAskAgain) perm = await Location.requestForegroundPermissionsAsync();
   if (!perm.granted) {
     return perm.canAskAgain
-      ? { ok: false, message: 'FreeFounders needs your location (your company checks that you are at the office). Tap "Allow location" and choose "Allow".', permission: true }
+      ? { ok: false, message: 'Kaampilot needs your location (your company checks that you are at the office). Tap "Allow location" and choose "Allow".', permission: true }
       : {
           ok: false,
-          message: 'Location is blocked for this app. Open the phone’s Settings → Apps → FreeFounders (or Expo Go) → Permissions → Location, choose "Allow only while using the app", then try again.',
+          message: 'Location is blocked for this app. Open the phone’s Settings → Apps → Kaampilot (or Expo Go) → Permissions → Location, choose "Allow only while using the app", then try again.',
           openSettings: true,
           permission: true,
         };

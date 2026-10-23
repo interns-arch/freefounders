@@ -8,6 +8,9 @@ import { Input, NativeSelect } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/primitives';
 import { useActivity } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 /** Organisation-wide, append-only activity log. */
 export default function ActivityPage() {
@@ -23,6 +26,14 @@ export default function ActivityPage() {
           <span className="inline-flex items-center gap-1.5">
             <ShieldCheck className="size-4 text-success" /> Immutable: the database rejects any edit or deletion of history.
           </span>
+        }
+        actions={
+          <DownloadMenu
+            filename={fileSlug('assets', 'activity', f.entityType, f.from, f.to, f.search, todayStamp())}
+            target={assetsExports.activity(f)}
+            empty={q.data?.total === 0}
+            loading={!q.data}
+          />
         }
       />
       <Card>

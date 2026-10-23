@@ -18,7 +18,10 @@ import {
   useTaskDepartments,
   useTaskRoleOptions,
   useTeamDirectory,
+  tasksExports,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { Megaphone, Paperclip, Pin, Plus, Send, TriangleAlert } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
@@ -91,6 +94,12 @@ function NoticeFeed() {
           ]}
         />
         <SearchField className="relative min-w-48 flex-1" label="Search notices" placeholder="Search notices…" value={search} onChange={setSearch} />
+        <DownloadMenu
+          target={tasksExports.notices({ read: filter, search })}
+          filename={fileSlug('tasks', 'notices', filter === 'true' ? 'read' : filter === 'false' ? 'unread' : 'all', todayStamp())}
+          empty={q.data?.length === 0}
+          loading={!q.data && !q.error}
+        />
       </div>
       {q.error && <ErrorState error={q.error} onRetry={() => q.refetch()} />}
       {!q.data && !q.error && <Skeleton className="h-40" />}
@@ -216,9 +225,13 @@ function NoticeManage() {
 
   return (
     <div className="space-y-3">
-      <Button variant="cta" onClick={() => setEditing('new')}>
-        <Plus /> New notice
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="cta" onClick={() => setEditing('new')}>
+          <Plus /> New notice
+        </Button>
+        <span className="flex-1" />
+        <DownloadMenu target={tasksExports.managedNotices()} filename={fileSlug('tasks', 'notices', 'manage', todayStamp())} empty={q.data.length === 0} />
+      </div>
       <ErrorNote>{err}</ErrorNote>
       <OkNote>{sent}</OkNote>
       {q.data.length === 0 ? (

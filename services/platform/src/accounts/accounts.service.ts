@@ -50,12 +50,12 @@ const expired = () => new BadRequestException({ message: 'Your sign-up has expir
 const invalidIdentifier = () => badRequest('Enter a valid email or a 10-digit Indian mobile number', { identifier: 'Enter a valid email or mobile number' });
 /** Forgot password with something that is not an email or mobile number: a username or employee ID made by an admin. */
 const adminResets = () =>
-  badRequest('Usernames and employee IDs are reset by your company admin. Ask them to reset your password, or enter the email or mobile number of your FreeFounders account.', {
+  badRequest('Usernames and employee IDs are reset by your company admin. Ask them to reset your password, or enter the email or mobile number of your Kaampilot account.', {
     identifier: 'Enter the email or mobile number of your account',
   });
 const askAdmin = () =>
   badRequest('This email signs in with a login your company admin made, so only your admin can reset its password. Ask them to reset it.', { code: 'Admin login' });
-const noAccount = () => badRequest('There is no FreeFounders account with this email or mobile number. Check it, or sign up instead.', { code: 'No account' });
+const noAccount = () => badRequest('There is no Kaampilot account with this email or mobile number. Check it, or sign up instead.', { code: 'No account' });
 
 /**
  * Accounts (PLAN.md §21): sign-up by one-time code, forgot password, and new companies for an account. Sign-in with an

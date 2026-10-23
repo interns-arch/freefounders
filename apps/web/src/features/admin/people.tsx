@@ -1,6 +1,9 @@
 import { errorMessage, useAccess, usePlatformMe } from '@freefounders/core';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
 import { SearchField } from '@/components/common/search-field';
+import { DownloadMenu } from '@/components/common/download-menu';
 import {
+  adminExports,
   PLATFORM_ROLE_LABELS,
   type Person,
   usePeople,
@@ -222,7 +225,15 @@ export function PeoplePage() {
         title="People & access"
         description={`Everyone at ${me?.company.name ?? 'your company'}: their login and their roles. Roles decide which apps they can open.`}
         actions={
-          can('people.manage') && (
+          <>
+            <DownloadMenu
+              filename={fileSlug('admin-people', query || 'all', todayStamp())}
+              target={adminExports.people(query)}
+              empty={people.data?.length === 0}
+              loading={!people.data}
+              size="default"
+            />
+            {can('people.manage') && (
             <>
               <Button variant="outline" onClick={() => setInviting(true)}>
                 <Link2 /> Invite link
@@ -231,7 +242,8 @@ export function PeoplePage() {
                 <Plus /> Add person
               </Button>
             </>
-          )
+            )}
+          </>
         }
       />
       <div className="flex flex-wrap items-center gap-3">

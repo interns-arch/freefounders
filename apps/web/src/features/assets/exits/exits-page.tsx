@@ -12,6 +12,9 @@ import type { ExitCaseListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 const TABS = [
   { value: 'OPEN', label: 'In progress' },
@@ -106,7 +109,11 @@ export default function ExitsPage() {
 
   return (
     <div>
-      <PageHeader title="Employee exits" description="Asset recovery for people on notice. Exits can’t complete until every asset is cleared." />
+      <PageHeader
+        title="Employee exits"
+        description="Asset recovery for people on notice. Exits can’t complete until every asset is cleared."
+        actions={<DownloadMenu filename={fileSlug('assets', 'exits', f.status, f.search, todayStamp())} target={assetsExports.exits(f)} empty={q.data?.total === 0} loading={!q.data} />}
+      />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <StatTile label="Exits in progress" value={openItems.length} icon={LogOut} tone="amber" loading={open.isLoading} hint="Checklists still open" />
         <StatTile label="Assets still to recover" value={pending} icon={PackageSearch} tone={pending ? 'red' : 'green'} loading={open.isLoading} hint="Pending + missing" />

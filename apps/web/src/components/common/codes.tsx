@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
  */
 export function useQrLinks() {
   const q = useAssetsConfig();
-  // Assets pages live at /assets/ on the FreeFounders address.
+  // Assets pages live at /assets/ on the Kaampilot address.
   const base = (q.data?.publicUrl || window.location.origin) + '/assets';
   const host = new URL(base).hostname;
   return {

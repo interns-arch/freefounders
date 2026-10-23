@@ -5,7 +5,7 @@ import { ffEvents } from '../db/schema';
 import { platformEnabled } from '../modules/auth/platform-token';
 
 /**
- * Events for the FreeFounders Platform (PLAN.md §17.4). Written in the same transaction as the change they
+ * Events for the Kaampilot Platform (PLAN.md §17.4). Written in the same transaction as the change they
  * describe; the Platform reads them with GET /api/internal/events and runs its cross-app rules. Nothing is
  * written in a standalone install.
  */

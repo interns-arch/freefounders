@@ -22,9 +22,15 @@ test('requests: location, photo, download, print', () => {
   assert.deepEqual(parseMessage('{"id":"r1","type":"location"}'), { kind: 'request', request: { id: 'r1', type: 'location' } });
   assert.deepEqual(parseMessage('{"id":"r2","type":"photo","title":" Check in ","optional":true}'), {
     kind: 'request',
-    request: { id: 'r2', type: 'photo', title: 'Check in', optional: true },
+    request: { id: 'r2', type: 'photo', title: 'Check in', optional: true, facing: 'front' },
   });
-  assert.deepEqual(parseMessage('{"id":"r2","type":"photo"}'), { kind: 'request', request: { id: 'r2', type: 'photo', title: 'Selfie', optional: false } });
+  assert.deepEqual(parseMessage('{"id":"r2","type":"photo"}'), { kind: 'request', request: { id: 'r2', type: 'photo', title: 'Selfie', optional: false, facing: 'front' } });
+  // Photos of things (asset photos) ask for the back camera; anything else means the front one.
+  assert.deepEqual(parseMessage('{"id":"r2","type":"photo","title":"Asset photo","facing":"back"}'), {
+    kind: 'request',
+    request: { id: 'r2', type: 'photo', title: 'Asset photo', optional: false, facing: 'back' },
+  });
+  assert.deepEqual(parseMessage('{"id":"r2","type":"photo","facing":"sideways"}'), { kind: 'request', request: { id: 'r2', type: 'photo', title: 'Selfie', optional: false, facing: 'front' } });
   assert.deepEqual(parseMessage(JSON.stringify({ id: 'r3', type: 'download', filename: 'a.csv', mime: 'text/csv;charset=utf-8', base64: 'YQ==' })), {
     kind: 'request',
     request: { id: 'r3', type: 'download', filename: 'a.csv', mime: 'text/csv', base64: 'YQ==' },
@@ -76,7 +82,7 @@ test('replies are what apps/web/src/lib/native-bridge.ts reads', () => {
   assert.deepEqual(JSON.parse(replyError('r2', 'cancelled')), { id: 'r2', ok: false, error: 'cancelled' });
 });
 
-test('links: the FreeFounders server stays inside, everything else opens outside', () => {
+test('links: the Kaampilot server stays inside, everything else opens outside', () => {
   const s = 'http://192.168.137.1:8080';
   assert.equal(linkTarget('http://192.168.137.1:8080/attendance', s), 'inside');
   assert.equal(linkTarget('http://192.168.137.1:8080', s), 'inside');
@@ -155,13 +161,13 @@ test('payments (PLAN.md §21.4): Razorpay pages stay in the app, also in a frame
   assert.equal(linkTarget('https://api.razorpay.com/v1/payments/create/checkout', s, true), 'inside', 'redirect mode');
 
   // UPI: upi:// and Android intent:// for a UPI app open outside, even from Razorpay's frame.
-  const intent = 'intent://pay?pa=merchant@razorpay&pn=FreeFounders&am=584.10&cu=INR#Intent;scheme=upi;package=com.phonepe.app;end';
+  const intent = 'intent://pay?pa=merchant@razorpay&pn=Kaampilot&am=584.10&cu=INR#Intent;scheme=upi;package=com.phonepe.app;end';
   assert.equal(linkTarget('upi://pay?pa=merchant@razorpay&am=1.00', s, false), 'outside');
   assert.equal(linkTarget(intent, s, false), 'outside');
-  assert.equal(upiAppUrl(intent), 'upi://pay?pa=merchant@razorpay&pn=FreeFounders&am=584.10&cu=INR');
+  assert.equal(upiAppUrl(intent), 'upi://pay?pa=merchant@razorpay&pn=Kaampilot&am=584.10&cu=INR');
   assert.equal(upiAppUrl('intent://pay?pa=x#Intent;package=com.google.android.apps.nbu.paisa.user;scheme=tez;end'), 'tez://pay?pa=x');
   assert.equal(upiAppUrl('phonepe://pay?pa=x'), 'phonepe://pay?pa=x');
-  assert.equal(outsideUrl(intent), 'upi://pay?pa=merchant@razorpay&pn=FreeFounders&am=584.10&cu=INR');
+  assert.equal(outsideUrl(intent), 'upi://pay?pa=merchant@razorpay&pn=Kaampilot&am=584.10&cu=INR');
   assert.equal(outsideUrl('tel:+919876543210'), 'tel:+919876543210');
   // Anything else stays as before: other intents never from a frame, other sites never in a frame.
   assert.equal(upiAppUrl('intent://scan/#Intent;scheme=zxing;end'), null);

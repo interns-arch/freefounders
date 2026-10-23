@@ -1,6 +1,6 @@
 """Role duties (PLAN.md §17.3): what a role is responsible for, created as tasks for everyone holding it.
 
-The duties come from the FreeFounders role builder with the roles (PUT /api/internal/access). The worker
+The duties come from the Kaampilot role builder with the roles (PUT /api/internal/access). The worker
 calls create_duty_tasks() on working days. Each duty makes at most one task per person per period
 (DutyRun remembers), so running it again never creates a second one.
 

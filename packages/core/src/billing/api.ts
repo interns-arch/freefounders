@@ -9,6 +9,8 @@ import type {
   CheckoutInput,
   CheckoutSession,
   CheckoutStarted,
+  ConsoleAuditFilters,
+  ConsoleAuditPage,
   ConsoleCompany,
   ConsoleSummary,
   FakeOutcome,
@@ -17,6 +19,7 @@ import type {
   InvoiceSummary,
   Plan,
   RazorpayHandlerResponse,
+  SwitchToFreeResult,
 } from './types';
 
 export const billingKeys = {
@@ -29,6 +32,7 @@ export const billingKeys = {
   console: ['console'] as const,
   consoleSummary: ['console', 'summary'] as const,
   consoleCompanies: ['console', 'companies'] as const,
+  consoleAudit: (f: ConsoleAuditFilters) => ['console', 'audit', f.company ?? '', f.action ?? '', f.page ?? 1, f.pageSize ?? 25] as const,
 };
 
 export const billingApi = {
@@ -42,6 +46,8 @@ export const billingApi = {
   setSeats: (seats: number) => platformApi.post<unknown>('/billing/seats', { seats }),
   cancel: () => platformApi.post<unknown>('/billing/cancel'),
   resume: () => platformApi.post<unknown>('/billing/resume'),
+  /** The Free plan without payment (now, or at the end of a paid period); 400 with what to switch off when it does not fit. */
+  switchToFree: () => platformApi.post<SwitchToFreeResult>('/billing/free'),
   invoices: () => platformApi.get<InvoiceSummary[]>('/billing/invoices'),
   invoice: (id: string) => platformApi.get<Invoice>(`/billing/invoices/${encodeURIComponent(id)}`),
   devAdvance: (days: number) => platformApi.post<unknown>('/billing/dev/advance', { days }),
@@ -49,6 +55,14 @@ export const billingApi = {
 
   consoleSummary: () => platformApi.get<ConsoleSummary>('/console/summary'),
   consoleCompanies: () => platformApi.get<ConsoleCompany[]>('/console/companies'),
+  consoleAudit: (f: ConsoleAuditFilters) => {
+    const q = new URLSearchParams();
+    if (f.company) q.set('company', f.company);
+    if (f.action) q.set('action', f.action);
+    q.set('page', String(f.page ?? 1));
+    q.set('pageSize', String(f.pageSize ?? 25));
+    return platformApi.get<ConsoleAuditPage>(`/console/audit?${q.toString()}`);
+  },
   consoleTrial: (id: string, days: number) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/trial`, { days }),
   consolePlan: (id: string, plan: string, seats: number) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/plan`, { plan, seats }),
   consoleStatus: (id: string, status: string) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/status`, { status }),
@@ -130,6 +144,11 @@ export function useCancelSubscription() {
   const after = useAfterBillingChange();
   return useMutation({ mutationFn: billingApi.cancel, onSuccess: after });
 }
+/** Switch to the Free plan (no payment): `freeFrom` says whether it is now or at the end of the paid period. */
+export function useSwitchToFree() {
+  const after = useAfterBillingChange();
+  return useMutation({ mutationFn: billingApi.switchToFree, onSuccess: after });
+}
 export function useResumeSubscription() {
   const after = useAfterBillingChange();
   return useMutation({ mutationFn: billingApi.resume, onSuccess: after });
@@ -145,13 +164,17 @@ export function useDevRenew() {
   return useMutation({ mutationFn: billingApi.devRenew, onSuccess: after });
 }
 
-// ─── owner console (FreeFounders staff) ─────────────────────────────────────
+// ─── owner console (Kaampilot staff) ─────────────────────────────────────
 
 export function useConsoleSummary(enabled = true) {
   return useQuery({ queryKey: billingKeys.consoleSummary, queryFn: billingApi.consoleSummary, enabled });
 }
 export function useConsoleCompanies(enabled = true) {
   return useQuery({ queryKey: billingKeys.consoleCompanies, queryFn: billingApi.consoleCompanies, enabled });
+}
+/** The owner console's "Recent actions" (staff audit log), newest first. */
+export function useConsoleAudit(filters: ConsoleAuditFilters, enabled = true) {
+  return useQuery({ queryKey: billingKeys.consoleAudit(filters), queryFn: () => billingApi.consoleAudit(filters), enabled, placeholderData: (prev) => prev });
 }
 export function useConsoleAction() {
   const qc = useQueryClient();

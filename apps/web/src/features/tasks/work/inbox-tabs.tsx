@@ -9,7 +9,10 @@ import {
   useReviewChangeRequest,
   useReviewCompletion,
   useWorkTaskList,
+  tasksExports,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { ArrowUp, CheckCircle2, ClipboardCheck, Clock, Paperclip, RotateCcw, Trash2 } from '@/components/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
@@ -146,12 +149,21 @@ export function ReviewsTab({ href }: { href: (id: number) => string }) {
 
   return (
     <div className="max-w-4xl space-y-4">
-      <Segmented
-        label="Which reviews"
-        value={scope}
-        onChange={setScope}
-        options={[['inbox', 'To accept'], ['mine', 'My submissions'], ...(isAdmin ? [['all', 'All (log)'] as ['all', string]] : [])]}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented
+          label="Which reviews"
+          value={scope}
+          onChange={setScope}
+          options={[['inbox', 'To accept'], ['mine', 'My submissions'], ...(isAdmin ? [['all', 'All (log)'] as ['all', string]] : [])]}
+        />
+        <span className="flex-1" />
+        <DownloadMenu
+          target={tasksExports.reviews(scope, inbox ? person : undefined)}
+          filename={fileSlug('tasks', 'to-accept', scope, inbox && personName, todayStamp())}
+          empty={!q.isLoading && shown.length === 0}
+          loading={q.isLoading}
+        />
+      </div>
       {inbox && rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <NativeSelect aria-label="Submitted by" className="w-auto" value={person} onChange={(e) => setPerson(e.target.value)} title="Show one person's submissions">
@@ -330,12 +342,21 @@ export function RequestsTab({ href }: { href: (id: number) => string }) {
 
   return (
     <div className="max-w-4xl space-y-4">
-      <Segmented
-        label="Which requests"
-        value={scope}
-        onChange={setScope}
-        options={[['inbox', 'To approve'], ['mine', 'My requests'], ...(isAdmin ? [['all', 'All (log)'] as ['all', string]] : [])]}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented
+          label="Which requests"
+          value={scope}
+          onChange={setScope}
+          options={[['inbox', 'To approve'], ['mine', 'My requests'], ...(isAdmin ? [['all', 'All (log)'] as ['all', string]] : [])]}
+        />
+        <span className="flex-1" />
+        <DownloadMenu
+          target={tasksExports.requests(scope)}
+          filename={fileSlug('tasks', 'requests', scope, todayStamp())}
+          empty={!q.isLoading && rows.length === 0}
+          loading={q.isLoading}
+        />
+      </div>
       <Card className="overflow-hidden">
         {q.isLoading ? (
           <Loading />
@@ -422,9 +443,17 @@ export function DeletedTab() {
   const more = useShowMore(rows);
   return (
     <div className="max-w-3xl space-y-3">
-      <p className="flex items-start gap-2 text-sm text-muted-foreground">
-        <Trash2 className="mt-0.5 size-4 shrink-0" aria-hidden /> Deleted tasks are never destroyed — they rest here, restorable any time.
-      </p>
+      <div className="flex flex-wrap items-start gap-2">
+        <p className="flex flex-1 items-start gap-2 text-sm text-muted-foreground">
+          <Trash2 className="mt-0.5 size-4 shrink-0" aria-hidden /> Deleted tasks are never destroyed — they rest here, restorable any time.
+        </p>
+        <DownloadMenu
+          target={tasksExports.tasks({ scope: 'deleted' })}
+          filename={fileSlug('tasks', 'deleted', todayStamp())}
+          empty={!q.isLoading && rows.length === 0}
+          loading={q.isLoading}
+        />
+      </div>
       <Card className="overflow-hidden">
         {q.isLoading ? (
           <Loading />

@@ -16,7 +16,10 @@ import {
   useLeads,
   useTeamPeople,
   useUpdateLead,
+  tasksExports,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { AlarmClock, Clock, IndianRupee, Plus, RefreshCw, Target, Trophy } from '@/components/icons';
 import { type Dispatch, type SetStateAction, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -82,9 +85,17 @@ export function LeadsPage() {
         title="Leads"
         description="Every enquiry from first contact to won or lost. Drag a card to move it along, or open it to work on it."
         actions={
-          <Button variant="cta" onClick={() => setAdding(true)}>
-            <Plus /> Add lead
-          </Button>
+          <>
+            <DownloadMenu
+              target={tasksExports.leads({ search, priority, source, assigned_to: assignee, overdue, status: stage })}
+              filename={fileSlug('tasks', 'leads', stage, priority, source, overdue && 'overdue', todayStamp())}
+              empty={!!leads.data && rows.filter((l) => !stage || l.status === stage).length === 0}
+              loading={!leads.data && !leads.error}
+            />
+            <Button variant="cta" onClick={() => setAdding(true)}>
+              <Plus /> Add lead
+            </Button>
+          </>
         }
       />
 

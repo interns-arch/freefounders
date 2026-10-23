@@ -382,6 +382,29 @@ describe('people administration', () => {
     assert.equal((await call('PATCH', `/people/${ids.otherShared}`, { token, body: { fullName: 'Hacked' } })).status, 404);
   });
 
+  test('download (PLAN.md §19.31): the search applies, only this company, typed formulas neutralised; members refused', async () => {
+    const { token } = await login('admin@acme.test');
+    const fred = await call('POST', '/people', { token, body: { fullName: '=HYPERLINK("http://x","Fred Formula")', email: 'fred@acme.test' } });
+    assert.equal(fred.status, 201, JSON.stringify(fred.body));
+    const get = (q: string, t = token) => fetch(`${base}/people${q}`, { headers: { authorization: `Bearer ${t}` } });
+    const one = await get('?export=csv&search=fred');
+    assert.equal(one.status, 200);
+    assert.match(one.headers.get('content-type') ?? '', /text\/csv/);
+    assert.match(one.headers.get('content-disposition') ?? '', /people\.csv/);
+    const lines = (await one.text()).trim().split(/\r?\n/);
+    assert.equal(lines.length, 2, 'header + the one match');
+    assert.match(lines[0]!, /^\ufeff?Name,Employee ID,Username,Email/);
+    assert.ok(lines[1]!.startsWith(`"'=HYPERLINK(`), `formula neutralised: ${lines[1]}`);
+    const everyone = (await call('GET', '/people', { token })).body as Array<{ id: string }>;
+    const all = (await (await get('?export=csv')).text()).trim().split(/\r?\n/);
+    assert.equal(all.length - 1, everyone.length, 'every person of this company, nobody else');
+    const xlsx = Buffer.from(await (await get('?export=xlsx&search=fred')).arrayBuffer());
+    assert.equal(xlsx.subarray(0, 2).toString(), 'PK', 'an xlsx (zip)');
+    assert.equal((await get('?export=csv', (await login('mia')).token)).status, 403);
+    const del = await call('DELETE', `/people/${fred.body.person.id}`, { token, body: { confirm: '=HYPERLINK("http://x","Fred Formula")' } });
+    assert.equal(del.status, 200, JSON.stringify(del.body));
+  });
+
   test('identifier clashes are refused', async () => {
     const { token } = await login('admin@acme.test');
     const dupEmail = await call('POST', '/people', { token, body: { fullName: 'Dup', email: 'MIA@acme.test' } });

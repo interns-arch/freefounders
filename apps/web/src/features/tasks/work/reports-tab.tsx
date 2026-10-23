@@ -1,12 +1,13 @@
 import { useAccess } from '@freefounders/core';
 import { type ReportRow, useEffortDisputes, useEmployeesReport, useTaskDashboard, useTimeReport } from '@freefounders/core/tasks';
-import { BarChart3, Download, Lightbulb, Scale, Timer } from '@/components/icons';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { BarChart3, Lightbulb, Scale, Timer } from '@/components/icons';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { type ReactNode, useState } from 'react';
 import { EmptyState, ErrorState } from '@/components/common/page';
-import { Button } from '@/components/ui/button';
 import { Badge, Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { RangePicker, ScoreRing, downloadCSV, fmtEffort, pct, rangeParams, rangeReady } from '@/features/tasks/shared';
+import { RangePicker, ScoreRing, fmtEffort, pct, rangeParams, rangeReady } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { Segmented, StatusPill, TaskCode } from './task-bits';
@@ -115,12 +116,13 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
   const rows: ReportRow[] = fromDashboard ? ((dash.data?.categories ?? []) as ReportRow[]) : (report.data?.rows ?? []);
   const loaded = fromDashboard ? !!dash.data : !!report.data;
 
-  const exportCSV = () =>
-    downloadCSV(
-      `report-${tab}-${range}.csv`,
-      ['Name', 'Total', 'Score', 'Overdue', 'Pending', 'In progress', 'Completed', 'In time', 'Delayed'],
-      rows.map((r) => [r.name || r.label || r.group || r.category || r.date, r.total, r.score ?? '', r.overdue, r.pending, r.in_progress, r.completed, r.in_time, r.delayed]),
-    );
+  // The report already holds every row, so the file is made here (Excel + CSV, PLAN.md §19.31).
+  const tabLabel = REPORT_TABS.find(([v]) => v === tab)?.[1] ?? tab;
+  const sheet = () => ({
+    title: `Report ${tabLabel}`,
+    header: ['Name', 'Total', 'Score', 'Overdue', 'Pending', 'In progress', 'Completed', 'In time', 'Delayed'],
+    rows: rows.map((r) => [r.name || r.label || r.group || r.category || r.date, r.total, r.score ?? null, r.overdue, r.pending, r.in_progress, r.completed, r.in_time, r.delayed]),
+  });
 
   const firstCell = (r: ReportRow): ReactNode => {
     if (tab === 'monthly') return <strong>{r.label}</strong>;
@@ -169,11 +171,12 @@ export function ReportsTab({ onProfile }: { onProfile: (id: number, name: string
       <div className="flex flex-wrap items-center gap-2">
         <RangePicker range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
         <span className="flex-1" />
-        {rows.length > 0 && (
-          <Button variant="outline" size="sm" onClick={exportCSV}>
-            <Download /> Export CSV
-          </Button>
-        )}
+        <DownloadMenu
+          rows={sheet}
+          filename={fileSlug('tasks', 'report', tabLabel, range === 'custom' ? `${custom.start}-to-${custom.end}` : range, todayStamp())}
+          empty={loaded && rows.length === 0}
+          loading={ready && !loaded}
+        />
       </div>
       {q.error ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
@@ -237,7 +240,20 @@ export function TimeTab() {
   const q = useTimeReport(range);
   return (
     <div className="max-w-3xl space-y-4">
-      <Segmented label="Period" value={range} onChange={setRange} options={TIME_RANGES} className="max-w-full overflow-x-auto" />
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented label="Period" value={range} onChange={setRange} options={TIME_RANGES} className="max-w-full overflow-x-auto" />
+        <span className="flex-1" />
+        <DownloadMenu
+          rows={() => ({
+            title: 'Time report',
+            header: ['Person', 'Done', 'Time earned (min)', 'Time spent (min)', 'Difference (min)', 'Tasks without effort'],
+            rows: (q.data?.rows ?? []).map((r) => [r.name, r.done, r.time_earned_minutes, r.time_spent_minutes, r.time_spent_minutes - r.time_earned_minutes, r.no_effort_tasks]),
+          })}
+          filename={fileSlug('tasks', 'time-report', range, todayStamp())}
+          empty={!!q.data && q.data.rows.length === 0}
+          loading={!q.data}
+        />
+      </div>
       <p className="flex items-start gap-2 rounded-lg border bg-card px-3 py-2.5 text-[13px] text-muted-foreground">
         <Timer className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
         <span>
@@ -303,7 +319,20 @@ export function DisputesTab() {
   const q = useEffortDisputes(rangeParams(range, custom), ready);
   return (
     <div className="max-w-4xl space-y-4">
-      <RangePicker range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
+      <div className="flex flex-wrap items-center gap-2">
+        <RangePicker range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
+        <span className="flex-1" />
+        <DownloadMenu
+          rows={() => ({
+            title: 'Effort disputes',
+            header: ['Code', 'Task', 'Assignee', 'Assigned by', 'Assigner said (min)', 'Assignee said (min)', 'Actually took (min)', 'Status'],
+            rows: (q.data?.rows ?? []).map((r) => [r.code, r.title, r.assignee, r.assigner, r.effort_minutes, r.estimate_minutes, r.actual_minutes, r.status]),
+          })}
+          filename={fileSlug('tasks', 'disputes', range === 'custom' ? `${custom.start}-to-${custom.end}` : range, todayStamp())}
+          empty={!!q.data && q.data.rows.length === 0}
+          loading={ready && !q.data}
+        />
+      </div>
       <p className="flex items-start gap-2 rounded-lg border bg-card px-3 py-2.5 text-[13px] text-muted-foreground">
         <Scale className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
         <span>Where the assigner and the assignee disagreed on how long a task takes — &ldquo;Amit said 1 hour, Bhavna said 4&rdquo;. Sorted by the size of the disagreement; the Actual column settles the argument.</span>

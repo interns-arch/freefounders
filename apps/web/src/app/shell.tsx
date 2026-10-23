@@ -151,7 +151,7 @@ export function AppShell() {
 
   useEffect(() => {
     const short = access.brand?.shortName;
-    document.title = short ? `${short} · ${title}` : `FreeFounders · ${title}`;
+    document.title = short ? `${short} · ${title}` : `Kaampilot · ${title}`;
   }, [access.brand?.shortName, title]);
 
   const workspaces = useMemo(() => workspacesFor(access.apps, access.admin.any), [access.apps, access.admin.any]);

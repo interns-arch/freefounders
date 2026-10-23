@@ -51,7 +51,7 @@ export function companyMiddleware(dbs: DbService) {
         res.status(401).json({
           statusCode: 401,
           code: 'no_company',
-          message: companyId ? 'This company is not set up in Assets' : 'Sign in through FreeFounders',
+          message: companyId ? 'This company is not set up in Assets' : 'Sign in through Kaampilot',
         });
         return;
       }

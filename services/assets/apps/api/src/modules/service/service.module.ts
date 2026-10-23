@@ -20,12 +20,15 @@ import { MaintenanceService } from './maintenance.service';
 import { QueueService } from './queue.service';
 import { RequestsService } from './requests.service';
 import { TicketsService } from './tickets.service';
+import { Exportable } from '../../common/export';
+import { EXPORTS } from '../../common/export-specs';
 
 @Controller('requests')
 export class RequestsController {
   constructor(private readonly requests: RequestsService) {}
 
   @Get()
+  @Exportable(EXPORTS.requests)
   list(@CurrentActor() actor: Actor, @Query() q: Record<string, string>) {
     return this.requests.list(actor, q);
   }
@@ -64,6 +67,7 @@ export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}
 
   @Get()
+  @Exportable(EXPORTS.tickets)
   list(@CurrentActor() actor: Actor, @Query() q: Record<string, string>) {
     return this.tickets.list(actor, q);
   }
@@ -89,6 +93,7 @@ export class MaintenanceController {
   constructor(private readonly maintenance: MaintenanceService) {}
 
   @Get()
+  @Exportable(EXPORTS.maintenance)
   list(@CurrentActor() actor: Actor, @Query() q: Record<string, string>) {
     return this.maintenance.list(actor, q);
   }

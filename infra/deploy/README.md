@@ -1,4 +1,4 @@
-# Deploying FreeFounders on a shared Docker host
+# Deploying Kaampilot on a shared Docker host
 
 The whole suite in one Docker Compose project (`freefounders`) that publishes **one port** (`FF_PORT`, default 7395)
 and touches nothing else on the machine. First used on the CarTrends EC2 box (2026-10-21) as an **open demo** over
@@ -159,6 +159,6 @@ https://kaampilot.com is served by the server's shared Caddy container `problem-
 forwards to this stack's gateway on host port 7395. Another team sometimes reloads that Caddy from its old,
 bind-mounted Caddyfile, which drops routes added through its admin API. `kaampilot-caddy-watchdog.sh` (cron, every
 minute, installed as `/opt/freefounders/kaampilot-caddy-watchdog.sh`) puts back only the kaampilot route
-(`kaampilot-route.json`) when it is missing and FreeFounders is up; log in `/opt/freefounders/kaampilot-caddy-watchdog.log`.
+(`kaampilot-route.json`) when it is missing and Kaampilot is up; log in `/opt/freefounders/kaampilot-caddy-watchdog.log`.
 Same pattern as `/home/ubuntu/pulse-caddy-watchdog.sh`. The host Caddyfile (`/home/ubuntu/problem-app/Caddyfile`) also
 has the kaampilot block for the day that container is restarted.

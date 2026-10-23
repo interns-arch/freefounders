@@ -1,4 +1,4 @@
-"""What the FreeFounders Platform's cross-app rules need from Tasks (PLAN.md §17.4). Platform service token only.
+"""What the Kaampilot Platform's cross-app rules need from Tasks (PLAN.md §17.4). Platform service token only.
 
 GET  /api/internal/events?after=<id>   the outbox (tenancy/outbox.py)
 POST /api/internal/tasks               a task for a person, linked to something in another app (an Assets ticket)

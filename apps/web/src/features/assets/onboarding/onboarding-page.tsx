@@ -16,6 +16,9 @@ import type { OnboardingListItem } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 export function JoinsIn({ date, className }: { date: string; className?: string }) {
   const d = daysUntil(date) ?? 0;
@@ -124,6 +127,20 @@ export function OnboardingTable({ tabs, defaultStatus, empty }: { tabs: { value:
   );
 }
 
+/** Download of the joiner list exactly as OnboardingTable shows it (same URL filters, so the same cached query). */
+export function OnboardingDownload({ defaultStatus }: { defaultStatus: string }) {
+  const { values: f } = useUrlFilters({ status: defaultStatus, page: '1', pageSize: '25' });
+  const q = useOnboardingList(f);
+  return (
+    <DownloadMenu
+      filename={fileSlug('assets', 'new-joiners', f.status, f.search, todayStamp())}
+      target={assetsExports.onboarding(f)}
+      empty={q.data?.total === 0}
+      loading={!q.data}
+    />
+  );
+}
+
 /** HR's page: add joiners and follow them until they join. */
 export default function OnboardingPage() {
   const quickAdd = useQuickAdd();
@@ -135,7 +152,13 @@ export default function OnboardingPage() {
   );
   return (
     <div>
-      <PageHeader title="New joiners" description="Tell IT who is joining and what they need. IT approves it, assigns everything, and you mark them as joined on day 1." actions={newJoiner} />
+      <PageHeader title="New joiners" description="Tell IT who is joining and what they need. IT approves it, assigns everything, and you mark them as joined on day 1." actions={
+          <>
+            <OnboardingDownload defaultStatus="DRAFT,SUBMITTED,APPROVED" />
+            {newJoiner}
+          </>
+        }
+      />
       <OnboardingTable
         defaultStatus="DRAFT,SUBMITTED,APPROVED"
         tabs={[

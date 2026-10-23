@@ -19,7 +19,7 @@ export function grabPhoto(video: HTMLVideoElement): string {
 }
 
 /**
- * The phone's position, or {} when it is denied/unavailable (the server then decides). Inside the FreeFounders phone app
+ * The phone's position, or {} when it is denied/unavailable (the server then decides). Inside the Kaampilot phone app
  * the app's GPS is used (a WebView only allows the browser's geolocation on https); with `required`, the app's reason
  * (location blocked, GPS off, no fix in 10 s) is thrown instead of returning {}.
  */

@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
+import { mistakesQuery } from './exports';
 import type { UserBrief } from './types';
 
 export type MistakeSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -205,14 +206,7 @@ export interface MistakeSuggestion {
 
 /** GET /mistakes/?status=&severity=&important= — what this person may see (own / department / all). */
 export function useMistakes(filters: MistakeFilters = {}) {
-  const q = {
-    status: filters.status || undefined,
-    severity: filters.severity || undefined,
-    important: filters.important ? 'true' : undefined,
-    employee: filters.employee || undefined,
-    category: filters.category || undefined,
-    page_size: 100,
-  };
+  const q = { ...mistakesQuery(filters), page_size: 100 };
   return useQuery({ queryKey: ['mistakes', 'list', q], queryFn: async () => resultsOf(await tasksApi.get<DrfPage<Mistake> | Mistake[]>('/mistakes/', q)) });
 }
 

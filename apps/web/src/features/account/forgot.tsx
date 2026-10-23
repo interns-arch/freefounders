@@ -47,7 +47,7 @@ export function ForgotPage() {
       return setFieldError(
         identifier.includes('@') || /^[+\d\s()-]+$/.test(identifier.trim())
           ? 'Enter a valid email, or a 10-digit mobile number.'
-          : 'Enter the email or mobile number of your FreeFounders account. A username or employee ID is reset by your company admin.',
+          : 'Enter the email or mobile number of your Kaampilot account. A username or employee ID is reset by your company admin.',
       );
     }
     setFieldError(null);

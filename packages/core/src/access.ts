@@ -16,7 +16,7 @@ export interface MeAccount {
   mobile: string | null;
   /** Sign-in name chosen by the person (PLAN.md §21.5); null until they add one. */
   username?: string | null;
-  /** FreeFounders staff: may open the owner console (/console). */
+  /** Kaampilot staff: may open the owner console (/console). */
   isStaff: boolean;
 }
 
@@ -162,7 +162,7 @@ export interface Access {
   readOnly: boolean;
   /** May open Billing: the owner, or a role with "Manage billing". */
   canManageBilling: boolean;
-  /** Company brand from the Settings Center (null = FreeFounders defaults). */
+  /** Company brand from the Settings Center (null = Kaampilot defaults). */
   brand: { name: string; shortName: string; colour: string | null; logoUrl: string | null } | null;
 }
 

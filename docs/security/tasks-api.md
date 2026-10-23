@@ -78,7 +78,7 @@ Multi-company regressions added in `tenancy/tests_security.py` (Postgres):
 | Low | Admin task PATCH does not re-check `lead` or `parent` visibility, as create does. Some bad query parameters (`?user=abc`, `?from=x`) return 500. | Small follow-ups. |
 | Low | Other N+1s: the users list (capabilities per user), SOP list, payroll-run payslip counts and links (favourite per row). These are company-sized lists. | Optimise when lists grow. |
 | Low | Some older tests write uploads into `backend/media/task_files/` (no temporary `MEDIA_ROOT`). | Test hygiene; the new tests use a temporary folder. |
-| Low | Password change in the old app login does not end its other sessions. Leave quota is not enforced. | Old login only (Platform sign-in is used in FreeFounders mode). Quota: product decision. |
+| Low | Password change in the old app login does not end its other sessions. Leave quota is not enforced. | Old login only (Platform sign-in is used in Kaampilot mode). Quota: product decision. |
 
 ## New settings (all optional)
 

@@ -1,6 +1,6 @@
 import type { Permission } from '@eam/shared';
 
-/** One line under each Assets permission in the FreeFounders role builder (PLAN.md §19.19). */
+/** One line under each Assets permission in the Kaampilot role builder (PLAN.md §19.19). */
 export const PERMISSION_HINTS: Record<Permission, string> = {
   'dashboard:view': 'The organisation dashboard: totals, alerts and recent activity.',
   'asset:view': 'See every asset, not only the ones they hold.',

@@ -12,7 +12,9 @@ import {
 import { randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { EXPORT_MAX } from '../common/export';
 import { notFound, type Caller } from '../common/http';
+import type { SheetCell } from '../common/sheet';
 import { CompanySetupService } from '../company/setup.service';
 import { CompanyService } from '../company/company.service';
 import { DbService, type Executor } from '../db/db.service';
@@ -35,6 +37,7 @@ import {
   personApps,
   plans,
   seatChanges,
+  staffAudit,
   subscriptions,
 } from '../db/schema';
 import {
@@ -333,7 +336,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const buyerState = (await this.buyer(caller.companyId)).state;
     const tax = gst(lines, buyerState);
     if (gateway.name === 'razorpay' && tax.total < 100) {
-      throw new BadRequestException('Nothing to pay now: the unused time on your current plan covers this change. Choose it near the end of the period, or contact FreeFounders support.');
+      throw new BadRequestException('Nothing to pay now: the unused time on your current plan covers this change. Choose it near the end of the period, or contact Kaampilot support.');
     }
     const [session] = await this.dbs.db
       .insert(checkoutSessions)
@@ -417,7 +420,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       subscriptionId: s.gatewayRef!,
       amount: s.total,
       currency: 'INR',
-      name: 'FreeFounders',
+      name: 'Kaampilot',
       description: `${planName}, ${intervalLabel(s.interval)}, ${s.seats} users`,
       prefill: { name: who?.name ?? profile?.legalName ?? companyName, email: profile?.email ?? who?.accountEmail ?? who?.email ?? '', contact: who?.mobile ?? '' },
       notes: { companyId: s.companyId, sessionId: s.id },
@@ -822,8 +825,22 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   // ─── invoices ───────────────────────────────────────────────────────────
 
   async invoices(companyId: string) {
-    const rows = await this.dbs.db.select().from(invoices).where(eq(invoices.companyId, companyId)).orderBy(desc(invoices.issuedAt), desc(invoices.seq)).limit(200);
+    const rows = await this.invoiceRows(companyId, 200);
     return rows.map((r) => ({ id: r.id, number: r.number, issuedAt: iso(r.issuedAt), periodStart: iso(r.periodStart), periodEnd: iso(r.periodEnd), subtotal: r.subtotal, tax: r.cgst + r.sgst + r.igst, total: r.total, status: r.status }));
+  }
+
+  private invoiceRows(companyId: string, limit: number) {
+    return this.dbs.db.select().from(invoices).where(eq(invoices.companyId, companyId)).orderBy(desc(invoices.issuedAt), desc(invoices.seq)).limit(limit);
+  }
+
+  /** The company's invoices as spreadsheet rows (PLAN.md §19.31), rupees as numbers. */
+  async invoicesSheet(companyId: string) {
+    const rows = await this.invoiceRows(companyId, EXPORT_MAX);
+    const rs = (paise: number) => Math.round(paise) / 100;
+    return {
+      header: ['Invoice no.', 'Date', 'Period from', 'Period to', 'Place of supply', 'Buyer', 'Buyer GSTIN', 'Taxable value (Rs.)', 'CGST (Rs.)', 'SGST (Rs.)', 'IGST (Rs.)', 'Total (Rs.)', 'Status'],
+      rows: rows.map((r) => [r.number, r.issuedAt, r.periodStart, r.periodEnd, r.placeOfSupply, r.buyer.name, r.buyer.gstin, rs(r.subtotal), rs(r.cgst), rs(r.sgst), rs(r.igst), rs(r.total), r.status] as SheetCell[]),
+    };
   }
 
   async invoice(companyId: string, id: string) {
@@ -859,16 +876,76 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   /** Moves to Free when the company fits it: at most the Free plan's seats, and nobody uses an app Free lacks. */
   private async fitsFree(tx: Executor, companyId: string): Promise<boolean> {
+    return (await this.freeFit(tx, companyId)).ok;
+  }
+
+  /**
+   * Does the company fit the Free plan, and if not, what to switch off (the same rule as trial end / cancel → Free):
+   * at most the Free plan's seats in use, and no active person holding an app Free lacks (Assets).
+   */
+  private async freeFit(tx: Executor, companyId: string): Promise<{ ok: boolean; over: number; extraApps: string[]; message: string | null }> {
     const free = await this.plan('free');
     const used = await seatsUsed(this.dbs, companyId);
-    if (free.maxSeats !== null && used > free.maxSeats) return false;
+    const over = free.maxSeats !== null ? Math.max(0, used - free.maxSeats) : 0;
     const held = await tx
-      .selectDistinct({ app: personApps.app })
+      .select({ app: personApps.app, holders: sql<number>`count(distinct ${people.id})::int` })
       .from(personApps)
       .innerJoin(people, eq(people.id, personApps.personId))
       .innerJoin(companies, eq(companies.id, people.companyId))
-      .where(and(eq(people.companyId, companyId), eq(people.status, 'active'), sql`${personApps.app} = any(${companies.enabledApps})`));
-    return held.every((h) => free.apps.includes(h.app));
+      .where(and(eq(people.companyId, companyId), eq(people.status, 'active'), sql`${personApps.app} = any(${companies.enabledApps})`))
+      .groupBy(personApps.app);
+    const extra = held.filter((h) => !free.apps.includes(h.app));
+    const extraApps = extra.map((h) => h.app);
+    if (!over && !extraApps.length) return { ok: true, over, extraApps, message: null };
+    const label = (a: string) => `${a.charAt(0).toUpperCase()}${a.slice(1)}`;
+    const appNames = extraApps.map((a) => `the ${label(a)} app`).join(' and ');
+    const what = [over ? `${over} ${over === 1 ? 'person' : 'people'}` : '', appNames].filter(Boolean).join(' and ');
+    // The company cannot switch an app off by itself: the app is taken away from the people who have it.
+    const how = extra.map((h) => ` (Admin → People: take ${label(h.app)} away from the ${h.holders === 1 ? 'person who has' : `${h.holders} people who have`} it)`).join('');
+    return { ok: false, over, extraApps, message: `The Free plan is for up to ${free.maxSeats ?? 3} users using Attendance and Tasks. Switch off ${what} first${how}.` };
+  }
+
+  /**
+   * POST billing/free: the owner chooses the Free plan (no payment). Only when the company fits it (freeFit).
+   * Trialing, past due or read-only → Free now (read-only ends); an active paid plan → cancelled at the end of the paid
+   * period, then Free (the billing clock, as for Cancel; a Razorpay subscription is cancelled there now, as Cancel does);
+   * already cancelled → nothing more to do. Free switches the Assets app off for the company (applyEntitlements).
+   */
+  async switchToFree(companyId: string) {
+    const after: After = [];
+    let when: 'now' | 'period_end' = 'now';
+    await this.dbs.tx(async (tx) => {
+      const sub = await this.lockSub(tx, companyId);
+      const plan = await this.plan(sub.plan);
+      if (plan.code === 'free') throw new BadRequestException('This company is already on the Free plan.');
+      if (plan.code === 'complimentary') throw new BadRequestException('This company has a complimentary plan. Contact Kaampilot support to change it.');
+      if (sub.state === 'suspended') throw new BadRequestException('This company is suspended. Contact Kaampilot support.');
+      const fit = await this.freeFit(tx, companyId);
+      if (!fit.ok) throw new BadRequestException({ message: fit.message, errors: { plan: fit.message } });
+      const now = companyNow(sub);
+      const razorpaySub = sub.gateway === 'razorpay' ? sub.gatewaySubscriptionId : null;
+      if (sub.state === 'cancelled') {
+        when = 'period_end';
+        return;
+      }
+      if (isPaid(plan) && sub.state === 'active') {
+        // Inside the transaction, like Cancel: if Razorpay refuses, nothing changes here.
+        if (razorpaySub) await this.razorpay().cancel(razorpaySub).catch((err) => this.razorpayFailed(err, 'cancel'));
+        await tx.update(subscriptions).set({ state: 'cancelled', stateSince: now, cancelAtPeriodEnd: true, nextPeriodSeats: null, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
+        when = 'period_end';
+        return;
+      }
+      if (!['trialing', 'past_due', 'read_only'].includes(sub.state)) throw new BadRequestException('The Free plan cannot be chosen now.');
+      if (razorpaySub) await this.razorpay().cancel(razorpaySub).catch((err) => this.razorpayFailed(err, 'cancel'));
+      await tx
+        .update(subscriptions)
+        .set({ plan: 'free', state: 'active', stateSince: now, seats: 0, nextPeriodSeats: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, gateway: null, gatewaySubscriptionId: null, updatedAt: new Date() })
+        .where(eq(subscriptions.companyId, companyId));
+      const free = await this.plan('free');
+      after.push(() => this.applyEntitlements(companyId, free));
+    });
+    for (const fn of after) await fn();
+    return { ...(await this.view(companyId)), freeFrom: when };
   }
 
   /** One step of the state machine for one company; true when something changed (call again until false). */
@@ -1079,7 +1156,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ─── owner console (FreeFounders staff) ─────────────────────────────────
+  // ─── owner console (Kaampilot staff) ─────────────────────────────────
 
   private mrrOf(sub: { state: string; seats: number; interval: string }, plan: { priceMonthly: number; priceYearly: number }) {
     if (!['active', 'past_due', 'cancelled'].includes(sub.state) || plan.priceMonthly === 0) return 0;
@@ -1231,9 +1308,124 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return (await this.consoleCompanies()).find((c) => c.id === companyId);
   }
 
-  /** Only FreeFounders staff accounts open the owner console. */
-  async assertStaff(caller: Caller) {
-    const [row] = await this.dbs.db.execute<{ is_staff: boolean }>(sql`select a.is_staff from platform.people p join platform.accounts a on a.id = p.account_id where p.id = ${caller.personId}`).then((r) => r.rows);
-    if (!row?.is_staff) throw new ForbiddenException('FreeFounders staff only');
+  /** Only Kaampilot staff accounts open the owner console; returns who it is (for the audit log). */
+  async assertStaff(caller: Caller): Promise<StaffActor> {
+    const [row] = await this.dbs.db
+      .execute<{ id: string; email: string | null; mobile: string | null; is_staff: boolean }>(
+        sql`select a.id, a.email, a.mobile, a.is_staff from platform.people p join platform.accounts a on a.id = p.account_id where p.id = ${caller.personId}`,
+      )
+      .then((r) => r.rows);
+    if (!row?.is_staff) throw new ForbiddenException('Kaampilot staff only');
+    return { accountId: row.id, email: row.email ?? row.mobile };
+  }
+
+  // ─── owner console audit log (PLAN.md §21.7) ────────────────────────────
+
+  private async consoleSnapshot(companyId: string) {
+    const [r] = await this.dbs.db
+      .select({ code: companies.code, plan: subscriptions.plan, state: subscriptions.state, seats: subscriptions.seats, trialEndsAt: subscriptions.trialEndsAt, currentPeriodEnd: subscriptions.currentPeriodEnd })
+      .from(companies)
+      .leftJoin(subscriptions, eq(subscriptions.companyId, companies.id))
+      .where(eq(companies.id, companyId))
+      .limit(1);
+    if (!r) return null;
+    return { code: r.code, state: { plan: r.plan ?? 'complimentary', state: r.state ?? 'active', seats: r.seats ?? 0, trialEndsAt: iso(r.trialEndsAt), currentPeriodEnd: iso(r.currentPeriodEnd) } };
+  }
+
+  /**
+   * Runs one console change and writes one staff_audit row for it: who, from where, what was asked, the company's plan
+   * before and after. A change that fails (404, bad plan) writes nothing.
+   */
+  async consoleAction<T>(staff: StaffActor, ip: string | undefined, action: ConsoleAction, companyId: string, input: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
+    const before = await this.consoleSnapshot(companyId);
+    const result = await run();
+    const afterState = await this.consoleSnapshot(companyId);
+    await this.dbs.db.insert(staffAudit).values({
+      staffAccountId: staff.accountId,
+      staffEmail: staff.email,
+      action,
+      companyId,
+      companyCode: afterState?.code ?? before?.code ?? null,
+      details: { input, before: before?.state ?? null, after: afterState?.state ?? null },
+      ip: ip ?? null,
+    });
+    return result;
+  }
+
+  /** GET console/audit?export=xlsx|csv: every matching action (same filters), newest first. */
+  async consoleAuditSheet(q: z.infer<typeof auditQuerySchema>) {
+    const { rows } = await this.consoleAudit({ ...q, page: 1, pageSize: EXPORT_MAX });
+    const val = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+    return {
+      header: ['When', 'Action', 'Company', 'Code', 'Staff', 'IP', 'Asked', 'Plan before', 'Plan after', 'State before', 'State after', 'Users after', 'Trial ends after'],
+      rows: rows.map((r) => {
+        const d = r.details as { input?: Record<string, unknown>; before?: Record<string, unknown> | null; after?: Record<string, unknown> | null };
+        return [
+          r.at ? new Date(r.at) : null,
+          r.action,
+          r.companyName ?? '',
+          r.companyCode ?? '',
+          r.staffEmail ?? '',
+          r.ip ?? '',
+          d.input ? JSON.stringify(d.input) : '',
+          val(d.before?.plan),
+          val(d.after?.plan),
+          val(d.before?.state),
+          val(d.after?.state),
+          val(d.after?.seats),
+          d.after?.trialEndsAt ? new Date(String(d.after.trialEndsAt)) : null,
+        ] as SheetCell[];
+      }),
+    };
+  }
+
+  /** GET console/audit: newest first, filtered by company (id or code) and action, paginated. */
+  async consoleAudit(q: z.infer<typeof auditQuerySchema>) {
+    const where = and(
+      q.company ? (/^[0-9a-f-]{36}$/i.test(q.company) ? eq(staffAudit.companyId, q.company) : sql`upper(${staffAudit.companyCode}) = ${q.company.toUpperCase()}`) : undefined,
+      q.action ? eq(staffAudit.action, q.action) : undefined,
+    );
+    const [{ total }] = await this.dbs.db.select({ total: sql<number>`count(*)::int` }).from(staffAudit).where(where);
+    const rows = await this.dbs.db
+      .select({ row: staffAudit, companyName: companies.name })
+      .from(staffAudit)
+      .leftJoin(companies, eq(companies.id, staffAudit.companyId))
+      .where(where)
+      .orderBy(desc(staffAudit.at), desc(staffAudit.id))
+      .limit(q.pageSize)
+      .offset((q.page - 1) * q.pageSize);
+    return {
+      total,
+      page: q.page,
+      pageSize: q.pageSize,
+      actions: CONSOLE_ACTIONS,
+      rows: rows.map(({ row: r, companyName }) => ({
+        id: r.id,
+        at: iso(r.at),
+        staffAccountId: r.staffAccountId,
+        staffEmail: r.staffEmail,
+        action: r.action,
+        companyId: r.companyId,
+        companyCode: r.companyCode,
+        companyName,
+        details: r.details,
+        ip: r.ip,
+      })),
+    };
   }
 }
+
+/** The staff account behind a console request. */
+export interface StaffActor {
+  accountId: string;
+  email: string | null;
+}
+/** Every mutating owner-console action (each writes one staff_audit row). */
+export const CONSOLE_ACTIONS = ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate'] as const;
+export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
+export const auditQuerySchema = z.object({
+  company: z.string().trim().max(80).optional(),
+  action: z.enum(CONSOLE_ACTIONS).optional(),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(25),
+});

@@ -41,7 +41,7 @@ def cfg():
         "geofence_enabled": _env("GEOFENCE_ENABLED", "false").lower() == "true",
         # Face check is permanently off (PLAN.md §19.18); reported for older clients.
         "face_enabled": False,
-        # Punch-in photo (PLAN.md §16.4): off | optional | required. FreeFounders companies get
+        # Punch-in photo (PLAN.md §16.4): off | optional | required. Kaampilot companies get
         # "required" when they are set up; a standalone install keeps it off.
         "photo": _env("ATTENDANCE_PHOTO", "off").lower() if _env("ATTENDANCE_PHOTO", "off").lower() in PHOTO_MODES else "off",
         "photo_retention_days": int(_env("ATTENDANCE_PHOTO_RETENTION_DAYS", "90") or 90),
@@ -338,25 +338,74 @@ def revoke_leave_attendance(leave: LeaveRequest):
     Attendance.objects.filter(leave_request=leave, check_in__isnull=True).delete()
 
 
+def _num(value) -> float | int:
+    """0.5 stays 0.5, 2.0 becomes 2 (balances read like the leave they count)."""
+    value = float(value)
+    return int(value) if value.is_integer() else value
+
+
+def leave_allowance(user, leave_type):
+    """Days of this type the person may take (in the year, or banked for comp-off); None = no limit.
+    Unpaid (LWP) types and paid types without a quota (0) are unlimited."""
+    if leave_type.is_comp_off:
+        from .models import CompOff
+        return float(sum(c.days for c in CompOff.objects.filter(user=user)))
+    if not leave_type.paid or leave_type.annual_quota <= 0:
+        return None
+    return float(leave_type.annual_quota)
+
+
+def leave_taken(user, leave_type, year, exclude_pk=None):
+    """(approved, pending) days of this type in the year (comp-off: ever); half days count 0.5.
+    Rejected and cancelled requests do not count."""
+    qs = LeaveRequest.objects.filter(user=user, leave_type=leave_type,
+                                     status__in=[LeaveStatus.APPROVED, LeaveStatus.PENDING])
+    if not leave_type.is_comp_off:
+        qs = qs.filter(start_date__year=year)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    approved = pending = 0.0
+    for leave in qs:
+        if leave.status == LeaveStatus.APPROVED:
+            approved += leave.leave_days
+        else:
+            pending += leave.leave_days
+    return approved, pending
+
+
+def leave_balance_check(user, leave_type, start_date, needs, exclude_pk=None):
+    """Would a request of `needs` days fit the balance? None for unlimited types, else
+    {available, needs, over} where available = allowance - approved - pending (other requests)."""
+    allowance = leave_allowance(user, leave_type)
+    if allowance is None:
+        return None
+    approved, pending = leave_taken(user, leave_type, start_date.year, exclude_pk)
+    available = max(0.0, allowance - approved - pending)
+    return {"available": _num(available), "needs": _num(needs), "over": needs > available + 1e-9}
+
+
+def balance_message(check, leave_type, who=None) -> str:
+    """"You have 2 day(s) of Casual left; this request needs 3." (or "Asha has …" for someone else)."""
+    subject = f"{who} has" if who else "You have"
+    return (f"{subject} {check['available']} day(s) of {leave_type.name} left; "
+            f"this request needs {check['needs']}.")
+
+
 def leave_balances(user, year=None):
     from .models import LeaveType
     year = year or timezone.localdate().year
     out = []
     for lt in LeaveType.objects.filter(active=True):
-        used = sum(
-            l.days for l in LeaveRequest.objects.filter(
-                user=user, leave_type=lt, status=LeaveStatus.APPROVED,
-                start_date__year=year)
-        )
-        pending = sum(
-            l.days for l in LeaveRequest.objects.filter(
-                user=user, leave_type=lt, status=LeaveStatus.PENDING,
-                start_date__year=year)
-        )
+        used, pending = leave_taken(user, lt, year)
+        allowance = leave_allowance(user, lt)
+        quota = lt.annual_quota if allowance is None or not lt.is_comp_off else allowance
         out.append({
             "leave_type": lt.id, "name": lt.name, "paid": lt.paid,
-            "quota": lt.annual_quota, "used": used, "pending": pending,
-            "balance": max(0, lt.annual_quota - used),
+            "quota": _num(quota), "used": _num(used), "pending": _num(pending),
+            "balance": _num(max(0, quota - used)),
+            # Enforced when applying (PLAN.md §19): limited types only; available = quota - approved - pending.
+            "limited": allowance is not None,
+            "available": _num(max(0.0, allowance - used - pending)) if allowance is not None else None,
         })
     return out
 

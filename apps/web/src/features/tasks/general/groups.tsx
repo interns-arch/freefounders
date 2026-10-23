@@ -1,6 +1,8 @@
 /** /tasks/groups — team workspaces (old pages/Groups.jsx). ?group=<id> opens one group. */
 import { errorMessage, useAccess } from '@freefounders/core';
-import { type Group, useAddGroupMembers, useArchiveGroup, useGroupDashboard, useGroups, useRemoveGroupMember, useSaveGroup, useSetTaskStatus, useTaskList, useTaskRoleOptions, useTeamPeople } from '@freefounders/core/tasks';
+import { type Group, tasksExports, useAddGroupMembers, useArchiveGroup, useGroupDashboard, useGroups, useRemoveGroupMember, useSaveGroup, useSetTaskStatus, useTaskList, useTaskRoleOptions, useTeamPeople } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { ArrowLeft, ArrowRight, Boxes, Link2, Plus } from '@/components/icons';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -44,11 +46,14 @@ export function GroupsPage() {
         title="Groups"
         description="Team workspaces: shared tasks, members and a dashboard."
         actions={
-          canCreate && (
-            <Button variant="cta" onClick={() => setAdding(true)}>
-              <Plus /> New group
-            </Button>
-          )
+          <>
+            <DownloadMenu target={tasksExports.groups()} filename={fileSlug('tasks', 'groups', todayStamp())} empty={q.data.length === 0} />
+            {canCreate && (
+              <Button variant="cta" onClick={() => setAdding(true)}>
+                <Plus /> New group
+              </Button>
+            )}
+          </>
         }
       />
       {q.data.length === 0 ? (

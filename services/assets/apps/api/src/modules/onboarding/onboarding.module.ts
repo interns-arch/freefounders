@@ -23,6 +23,8 @@ import { CurrentActor, RequirePermissions, ZodPipe } from '../../common/http';
 import { AssetsModule } from '../assets/assets.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { OnboardingService } from './onboarding.service';
+import { Exportable } from '../../common/export';
+import { EXPORTS } from '../../common/export-specs';
 
 const addItemsSchema = z.object({ items: z.array(onboardingItemSchema).min(1).max(50) });
 
@@ -32,6 +34,7 @@ export class OnboardingController {
   constructor(private readonly onboarding: OnboardingService) {}
 
   @Get()
+  @Exportable(EXPORTS.onboarding)
   list(@CurrentActor() actor: Actor, @Query() q: Record<string, string>) {
     return this.onboarding.list(actor, q);
   }

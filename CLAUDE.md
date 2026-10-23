@@ -2,6 +2,8 @@
 
 Read `PLAN.md` first. It is the source of truth for decisions and the phase roadmap.
 
+**Brand**: people see **Kaampilot** (kaampilot.com; logo in `apps/web/public/brand/`, `src/components/brand.tsx`); code identifiers stay `freefounders` (`@freefounders/*`, token audience, `window.FreeFoundersApp`, `com.freefounders.app`, `ff-*` keys). Never show "FreeFounders" to a person (PLAN.md §19.35).
+
 ## What this repo is
 A **new application** built from copies of two existing apps. The originals keep
 running standalone and must **never be modified** from here:
@@ -21,7 +23,7 @@ services/platform/  NestJS: companies, people, single login (EdDSA tokens + JWKS
 services/tasks/     Django 6 API (backend/)
 services/assets/    NestJS API (apps/api) + shared Zod (packages/shared, also used by apps/web)
 apps/web/           THE web app (Phase 6, PLAN.md §18): sign-in, Home, Admin, Tasks, HR, Assets screens
-apps/mobile/        Android app = the web app in a native Expo shell (WebView + bridge: punch GPS/selfie, downloads, print; PLAN.md §19.17)
+apps/mobile/        Android app = the web app in a native Expo shell (WebView + bridge: punch GPS/selfie, downloads, print, voice, punch-in reminders; PLAN.md §19.17, §19.32)
 packages/core/      shared logic for web + mobile: HTTP client, session, typed APIs + hooks per area (no DOM)
 packages/theme/     design tokens (tokens.css for web, src/tokens.ts; src/tokens.native.ts = generated hex copy for mobile; all checked)
 infra/gateway/      dev-gateway.mjs (one address, routed by path) + Caddyfile (prod draft)

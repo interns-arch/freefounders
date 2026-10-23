@@ -1,4 +1,4 @@
-"""The company profile from the FreeFounders Platform (PLAN.md section 16).
+"""The company profile from the Kaampilot Platform (PLAN.md section 16).
 
 The Platform owns the company's names, brand colour, logo and module
 switches, and pushes a copy here (PUT /api/internal/company). It is kept in

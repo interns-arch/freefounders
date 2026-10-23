@@ -105,7 +105,7 @@ export const accounts = platform.table(
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }).notNull().defaultNow(),
-    /** FreeFounders staff: the owner console (/console). */
+    /** Kaampilot staff: the owner console (/console). */
     isStaff: boolean('is_staff').notNull().default(false),
     ...timestamps,
   },
@@ -590,4 +590,24 @@ export const seatChanges = platform.table(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('seat_changes_company_idx').on(t.companyId)],
+);
+
+/**
+ * What Kaampilot staff did in the owner console (PLAN.md §21.7): one row per change (extend trial, set plan / seats,
+ * suspend, reactivate). Read only by staff (GET console/audit).
+ */
+export const staffAudit = platform.table(
+  'staff_audit',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+    staffAccountId: uuid('staff_account_id').references(() => accounts.id, { onDelete: 'set null' }),
+    staffEmail: text('staff_email'),
+    action: text('action').notNull(),
+    companyId: uuid('company_id'),
+    companyCode: text('company_code'),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
+    ip: text('ip'),
+  },
+  (t) => [index('staff_audit_at_idx').on(t.at), index('staff_audit_company_idx').on(t.companyId, t.at)],
 );

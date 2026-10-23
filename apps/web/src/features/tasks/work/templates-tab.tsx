@@ -14,9 +14,12 @@ import {
   useDirectoryCreateTasks,
   useDirectoryIndustries,
   useDirectoryTemplates,
+  tasksExports,
   useTaskTemplates,
   useTeamPeople,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { ArrowLeft, LayoutTemplate, ListChecks, Plus, Repeat, Search, Trash2 } from '@/components/icons';
 import { useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -50,11 +53,15 @@ export function TemplatesTab({ onUse }: { onUse: (t: TaskTemplate) => void }) {
 
   return (
     <div className="max-w-4xl space-y-4">
-      {canManage && (
-        <Button variant="cta" onClick={() => setAdding(true)}>
-          <Plus /> New template
-        </Button>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {canManage && (
+          <Button variant="cta" onClick={() => setAdding(true)}>
+            <Plus /> New template
+          </Button>
+        )}
+        <span className="flex-1" />
+        <DownloadMenu target={tasksExports.templates()} filename={fileSlug('tasks', 'templates', todayStamp())} empty={!q.isLoading && (q.data ?? []).length === 0} loading={q.isLoading} />
+      </div>
       {q.isLoading ? (
         <Skeleton className="h-40" />
       ) : q.error ? (

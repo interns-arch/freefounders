@@ -1,6 +1,6 @@
 /**
  * Where the APIs are and how to reach them. The web app needs nothing (same address, cookies). The mobile app
- * (Phase 7) sets `origin` to the FreeFounders address and gives a `refreshStore` (secure storage), because it
+ * (Phase 7) sets `origin` to the Kaampilot address and gives a `refreshStore` (secure storage), because it
  * keeps the refresh token itself instead of in a cookie.
  */
 export interface RefreshStore {

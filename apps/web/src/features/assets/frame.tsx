@@ -41,7 +41,7 @@ const SHORTCUTS: [string, string][] = [
 ];
 
 /**
- * Around every Assets screen (the old Assets app shell, minus what the FreeFounders shell already has): the "+ Add"
+ * Around every Assets screen (the old Assets app shell, minus what the Kaampilot shell already has): the "+ Add"
  * forms, the search palette, the Assets keyboard shortcuts and USB scanner input, and a slim toolbar
  * (search · scan · + Add) at the top of the page.
  */

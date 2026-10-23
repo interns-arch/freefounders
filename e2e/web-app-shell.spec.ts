@@ -59,16 +59,36 @@ async function newPerson(request: APIRequestContext, owner: string) {
   };
 }
 
-type Logged = { type?: string; id?: string; title?: string; optional?: boolean; filename?: string; mime?: string; base64?: string; lang?: string };
+type Logged = {
+  type?: string;
+  id?: string;
+  title?: string;
+  optional?: boolean;
+  filename?: string;
+  mime?: string;
+  base64?: string;
+  lang?: string;
+  mode?: string;
+  settings?: { enabled: boolean; time: string; days: number[]; mode: string; followUpMinutes: number };
+};
 
 /** A context that looks like the Android shell: phone size, the app marker and a fake native bridge. */
-async function shellContext(browser: Browser, opts: { locationBlocked?: boolean; version?: string } = {}) {
+async function shellContext(browser: Browser, opts: { locationBlocked?: boolean; version?: string; capabilities?: string[] } = {}) {
   const ctx = await browser.newContext(PHONE);
-  await ctx.addInitScript(({ blocked, version }: { blocked: boolean; version: string }) => {
+  await ctx.addInitScript(({ blocked, version, capabilities }: { blocked: boolean; version: string; capabilities: string[] | null }) => {
     const w = window as unknown as Record<string, unknown>;
     const log: unknown[] = [];
     w.__shellLog = log;
-    w.FreeFoundersApp = { platform: 'android', version, camera: 'granted' };
+    w.FreeFoundersApp = { platform: 'android', version, camera: 'granted', ...(capabilities ? { capabilities } : {}) };
+    // The punch-in reminder kept "on the phone" (PLAN.md §19.32): survives reloads like the app's storage.
+    const stored = () => {
+      try {
+        return JSON.parse(localStorage.getItem('__e2eReminder') || 'null');
+      } catch {
+        return null;
+      }
+    };
+    const reminderState = (skipped: string | null = null) => ({ settings: stored(), permission: 'granted', next: null, skipped });
     const reply = (r: unknown) => setTimeout(() => document.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(r) })), 30);
     w.ReactNativeWebView = {
       postMessage(raw: string) {
@@ -94,10 +114,22 @@ async function shellContext(browser: Browser, opts: { locationBlocked?: boolean;
         // the phone's speech recogniser (app 1.1.0+), after Android's microphone pop-up
         if (m.type === 'voice') return reply({ id: m.id, ok: true, data: { text: 'stock check karna hai kal 5 baje tak 30 minute' } });
         if (m.type === 'voice-stop') return reply({ id: m.id, ok: true, data: { stopped: true } });
+        // the punch-in reminder (app 1.2.0+)
+        if (m.type === 'reminder-get' || m.type === 'reminder-skip-today') return reply({ id: m.id, ok: true, data: reminderState(m.type === 'reminder-skip-today' ? 'today' : null) });
+        if (m.type === 'reminder-set') {
+          localStorage.setItem('__e2eReminder', JSON.stringify((m as { settings?: unknown }).settings));
+          return reply({ id: m.id, ok: true, data: { ...reminderState(), next: new Date(Date.now() + 86_400_000).toISOString() } });
+        }
+        if (m.type === 'reminder-off') {
+          const s = stored();
+          if (s) localStorage.setItem('__e2eReminder', JSON.stringify({ ...s, enabled: false }));
+          return reply({ id: m.id, ok: true, data: reminderState() });
+        }
+        if (m.type === 'reminder-test') return reply({ id: m.id, ok: true, data: { at: new Date(Date.now() + 5000).toISOString() } });
         return reply({ id: m.id, ok: false, error: `unknown ${m.type}` });
       },
     };
-  }, { blocked: !!opts.locationBlocked, version: opts.version ?? 'e2e' });
+  }, { blocked: !!opts.locationBlocked, version: opts.version ?? 'e2e', capabilities: opts.capabilities ?? null });
   return ctx;
 }
 
@@ -241,4 +273,77 @@ test('an app older than the server needs asks once to update; Later hides it for
   await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / }).or(page.getByRole('heading').first())).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Update the app — one time' })).toHaveCount(0);
   await ctx.close();
+});
+
+
+test('punch-in reminder: only in an app that can do it; saving sends reminder-set; a check-in sends reminder-skip-today', async ({ browser, request }) => {
+  const owner = await token(request);
+  const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
+  const keys = ['photo', 'geofence_enabled', 'uniform_check'];
+  const restore = Object.fromEntries(keys.filter((k) => hrBefore[k]).map((k) => [k, hrBefore[k].custom ? hrBefore[k].value : '']));
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'off', geofence_enabled: false } })).ok()).toBeTruthy();
+  const person = await newPerson(request, owner);
+  try {
+    // A normal browser: no reminder card on Today; its own page says it works in the phone app.
+    const web = await browser.newContext(PHONE);
+    const wp = await web.newPage();
+    await wp.goto('/');
+    await signIn(wp, person.login, person.password);
+    await expect(wp.getByRole('button', { name: 'Check in' })).toBeVisible();
+    await expect(wp.getByRole('region', { name: 'Punch-in reminder' })).toHaveCount(0);
+    await wp.goto('/attendance/reminder');
+    await expect(wp.getByText(/Punch-in reminders work in the Kaampilot phone app/)).toBeVisible();
+    await web.close();
+
+    // An app from before reminders (no capabilities): a note to update, nothing sent.
+    const old = await shellContext(browser, { version: '1.1.0' });
+    const op = await old.newPage();
+    await op.goto('/');
+    await signIn(op, person.login, person.password);
+    await expect(op.getByText(/Punch-in reminders need the latest Kaampilot app/)).toBeVisible();
+    expect((await shellLog(op)).some((m) => m.type?.startsWith('reminder'))).toBe(false);
+    await old.close();
+
+    // App 1.2.0: the card, defaults from the company (10 min before office start), save → reminder-set.
+    const today = await (await request.get('/tasks/api/attendance/today/', { headers: auth(await token(request, person.login, person.password)) })).json();
+    const [h, mi] = String(today.work_start).split(':').map(Number);
+    const t = (h * 60 + mi - 10 + 1440) % 1440;
+    const expectedTime = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+    const ctx = await shellContext(browser, { version: '1.2.0', capabilities: ['location', 'photo', 'download', 'print', 'voice', 'reminders'] });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await signIn(page, person.login, person.password);
+    await expect(page).toHaveURL(/\/attendance/);
+    const card = page.getByRole('region', { name: 'Punch-in reminder' });
+    await expect(card).toBeVisible();
+    await card.getByRole('switch', { name: 'Punch-in reminder' }).click();
+    await expect(card.getByText('Reminder saved on this phone.')).toBeVisible();
+    await expect(card.getByLabel('Remind me at')).toHaveValue(expectedTime);
+    await card.getByLabel('Remind me at').fill('08:45');
+    await card.getByRole('button', { name: 'Vibrate', exact: true }).click();
+    await card.getByRole('button', { name: 'Sun', exact: true }).click();
+    await card.getByRole('button', { name: 'Save reminder' }).click();
+    await expect
+      .poll(async () => (await shellLog(page)).filter((m) => m.type === 'reminder-set').at(-1)?.settings)
+      .toEqual(expect.objectContaining({ enabled: true, time: '08:45', mode: 'vibrate', followUpMinutes: 10, days: expect.arrayContaining([7]) }));
+    await card.getByRole('button', { name: 'Send a test reminder now' }).click();
+    await expect.poll(async () => (await shellLog(page)).filter((m) => m.type === 'reminder-test')).toEqual([expect.objectContaining({ mode: 'vibrate' })]);
+
+    // The account menu opens the same settings on their own page.
+    await page.getByRole('button', { name: 'Your account' }).click();
+    await page.getByRole('menuitem', { name: 'Punch-in reminder' }).click();
+    await expect(page).toHaveURL(/\/attendance\/reminder$/);
+    await expect(page.getByRole('region', { name: 'Punch-in reminder' }).getByLabel('Remind me at')).toHaveValue('08:45');
+
+    // A check-in in the app cancels the rest of today's reminders.
+    await page.goto('/attendance');
+    await page.getByRole('button', { name: 'Check in' }).click();
+    await answerUniform(page);
+    await expect(page.getByText('Checked in ✅')).toBeVisible();
+    await expect.poll(async () => (await shellLog(page)).filter((m) => m.type === 'reminder-skip-today').length).toBeGreaterThan(0);
+    await ctx.close();
+  } finally {
+    await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
+    await person.remove();
+  }
 });

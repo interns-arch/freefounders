@@ -1,4 +1,4 @@
-# FreeFounders gateway for the open demo on the shared server: plain http on :7395 (no certificate yet), the same
+# Kaampilot gateway for the open demo on the shared server: plain http on :7395 (no certificate yet), the same
 # path routing as infra/gateway/dev-gateway.mjs and the prod draft infra/gateway/Caddyfile:
 #   /api/platform/*  Platform (path kept)      /tasks/api/*  Tasks (/tasks stripped)      /media/*  Tasks
 #   /assets/api/*    Assets (/assets stripped) everything else: the web app (apps/web/dist, mounted at /srv/web)

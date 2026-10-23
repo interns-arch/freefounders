@@ -319,7 +319,8 @@ class LeaveAndCorrectionTests(SecurityBase):
     def setUp(self):
         super().setUp()
         from hr.models import LeaveType
-        self.lt = LeaveType.objects.create(name="Casual leave")
+        # A quota big enough for the 30-day stretch below (the balance is enforced since PLAN.md §19.33).
+        self.lt = LeaveType.objects.create(name="Casual leave", annual_quota=60)
         day = timezone.localdate() + timedelta(days=14)
         while day.weekday() >= 5:
             day += timedelta(days=1)

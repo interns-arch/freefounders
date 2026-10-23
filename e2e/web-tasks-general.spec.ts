@@ -41,7 +41,7 @@ test('team performance shows attendance and leave days per person', async ({ pag
   await expect(page.getByRole('heading', { name: 'Team Performance' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Attendance' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Leave days' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Email weekly update' })).toBeVisible();
   // Open one person's breakdown.
   await page.getByRole('button', { name: 'Demo Owner' }).first().click();

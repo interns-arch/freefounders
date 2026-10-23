@@ -14,7 +14,10 @@ import {
   useLinkCollections,
   useLinks,
   useToggleLinkFavorite,
+  tasksExports,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { ExternalLink, FolderPlus, Link2, Plus, Star, Trash2 } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
@@ -73,9 +76,17 @@ export function LinksPage() {
         title="Links"
         description="Company bookmarks, grouped in collections. Star the ones you use most."
         actions={
-          <Button variant="cta" onClick={() => setAdding(true)}>
-            <Plus /> Add link
-          </Button>
+          <>
+            <DownloadMenu
+              target={tasksExports.links({ search, collection, favorites: onlyFav })}
+              filename={fileSlug('tasks', 'links', collection && all?.find((c) => c.id === collection)?.name, onlyFav && 'favourites', todayStamp())}
+              empty={rows?.length === 0}
+              loading={!rows}
+            />
+            <Button variant="cta" onClick={() => setAdding(true)}>
+              <Plus /> Add link
+            </Button>
+          </>
         }
       />
       <div className="flex flex-wrap items-center gap-2">

@@ -18,6 +18,8 @@ import { DbService } from '../../db/db.service';
 import { employees, roles, users } from '../../db/schema';
 import { diffChanges, HistoryService } from '../../core/history.service';
 import { AuthService } from '../auth/auth.service';
+import { Exportable } from '../../common/export';
+import { EXPORTS } from '../../common/export-specs';
 
 const publicUser = {
   id: users.id,
@@ -188,6 +190,7 @@ export class UsersController {
   constructor(private readonly admin: AdminService) {}
 
   @Get()
+  @Exportable(EXPORTS.users)
   list(@Query() q: Record<string, string>) {
     return this.admin.listUsers(q);
   }

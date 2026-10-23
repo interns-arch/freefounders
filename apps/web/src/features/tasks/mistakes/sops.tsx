@@ -5,6 +5,8 @@
 import { errorMessage, useAccess } from '@freefounders/core';
 import { SearchField } from '@/components/common/search-field';
 import { type Sop, useRetireSop, useSaveSop, useSops, useTaskDepartments } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { BookOpen, Plus } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';
@@ -67,6 +69,16 @@ export function SopRegister() {
           Show retired versions
         </label>
         <span className="flex-1" />
+        <DownloadMenu
+          rows={() => ({
+            title: 'Processes (SOP)',
+            header: ['Title', 'Department', 'Category', 'Version', 'Current', 'Owner', 'Steps', 'Mistakes citing it', 'Process steps', 'Checks', 'Common errors', 'Updated'],
+            rows: shown.map((s) => [s.title, s.department_display, s.category, s.version, s.active, s.owner_name, s.step_count, s.mistake_count, s.steps, s.checks, s.common_errors, s.updated_at ? new Date(s.updated_at) : null]),
+          })}
+          filename={fileSlug('tasks', 'sops', showAll && 'with-retired', term, todayStamp())}
+          empty={!!sops.data && shown.length === 0}
+          loading={!sops.data && !sops.error}
+        />
         {canEdit && (
           <Button variant="cta" onClick={() => setEditing('new')}>
             <Plus /> Write a process

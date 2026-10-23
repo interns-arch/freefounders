@@ -14,15 +14,15 @@ import { WeakPasswordNote } from '@/components/common/weak-password-note';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { Logo } from '@/app/shell-parts';
+import { BrandLockup } from '@/components/brand';
 
 /** The page around a public step: logo, one card, a quiet footer. Phones: full width with 16 px gutters, no sideways scroll. */
 export function AuthFrame({ children, footer, wide = false }: { children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <header className="flex h-16 items-center justify-between px-4 sm:px-8">
-        <Link to="/login" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" aria-label="FreeFounders">
-          <Logo />
+        <Link to="/login" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" aria-label="Kaampilot: sign in">
+          <BrandLockup size={30} domain />
         </Link>
       </header>
       <main id="content" className="flex flex-1 items-start justify-center px-4 pt-4 pb-10 sm:items-center sm:pt-0">
@@ -159,7 +159,7 @@ export function UsernameField({
 }
 
 /**
- * Company name (PLAN.md §21.6: unique across FreeFounders) with its live check: "Available", the server's message, or
+ * Company name (PLAN.md §21.6: unique across Kaampilot) with its live check: "Available", the server's message, or
  * "Checking…". `error`: a local or submit-time message (409 taken), shown until the name is changed.
  */
 export function CompanyNameField({

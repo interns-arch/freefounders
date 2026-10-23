@@ -1,6 +1,7 @@
 /** Leads & quotations (old pages/Leads.jsx): /leads/, its sub-resources and /quotations/:id/. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
+import { leadsQuery } from './exports';
 import type { UserBrief } from './types';
 
 export type LeadStatus = 'new' | 'contacted' | 'quotation_sent' | 'negotiation' | 'won' | 'lost';
@@ -143,15 +144,7 @@ export const leadKeys = {
 
 /** GET /leads/?search=&priority=&source=&assigned_to=&overdue=true (up to 300, like the old board). */
 export function useLeads(filters: LeadFilters = {}, options: { enabled?: boolean } = {}) {
-  const q = {
-    search: filters.search?.trim() || undefined,
-    status: filters.status || undefined,
-    priority: filters.priority || undefined,
-    source: filters.source || undefined,
-    assigned_to: filters.assigned_to || undefined,
-    department: filters.department || undefined,
-    overdue: filters.overdue ? 'true' : undefined,
-  };
+  const q = leadsQuery(filters);
   return useQuery({
     queryKey: leadKeys.list(q),
     queryFn: () => tasksApi.get<DrfPage<Lead> | Lead[]>('/leads/', { page_size: 300, ...q }).then(resultsOf),

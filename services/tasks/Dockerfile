@@ -1,4 +1,4 @@
-# The Tasks API (Django/gunicorn). The screens are the FreeFounders web app (apps/web), served by the gateway.
+# The Tasks API (Django/gunicorn). The screens are the Kaampilot web app (apps/web), served by the gateway.
 # Mirrors what render-build.sh does on Render, so the two stay interchangeable.
 FROM python:3.13-slim
 

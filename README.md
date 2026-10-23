@@ -1,4 +1,4 @@
-# FreeFounders
+# Kaampilot
 
 One subscription, one login, two apps: **Tasks** (task automation + HR) and **Assets**
 (asset management). Web + Android. Built for Indian businesses.

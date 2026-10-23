@@ -1,8 +1,10 @@
 /** HR → My attendance: the month as a calendar, a day's punches (with photos) and correction requests. */
 import { errorMessage } from '@freefounders/core';
-import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, useAttendanceMonth, useRequestCorrection } from '@freefounders/core/hr';
+import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, hrExports, useAttendanceMonth, useRequestCorrection } from '@freefounders/core/hr';
+import { fileSlug } from '@freefounders/core/export';
 import { AlertCircle, CalendarCheck, CalendarX, Clock3, ChevronLeft, ChevronRight, Palmtree, Sun, Timer } from '@/components/icons';
 import { useState } from 'react';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
@@ -85,11 +87,19 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
           <ChevronRight />
         </Button>
         {userName && <span className="text-sm font-medium text-muted-foreground">· {userName}</span>}
-        {data && (
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-sm bg-primary/8 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
-            <Timer className="size-3.5" /> Total {data.total_hours} h
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {data && (
+            <span className="inline-flex items-center gap-1.5 rounded-sm bg-primary/8 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
+              <Timer className="size-3.5" /> Total {data.total_hours} h
+            </span>
+          )}
+          <DownloadMenu
+            filename={fileSlug('attendance', userName ?? 'my-attendance', `${year}-${String(month).padStart(2, '0')}`)}
+            target={hrExports.month(year, month, userId)}
+            loading={!data}
+            empty={!!data && !data.days.length}
+          />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
         <Tile icon={CalendarCheck} tone="success" label="Present" value={t.present || 0} />

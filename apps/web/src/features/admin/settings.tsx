@@ -101,7 +101,7 @@ function ProfileCard({ company }: { company: CompanySettings }) {
   const remove = useRemoveLogo();
   const fileRef = useRef<HTMLInputElement>(null);
   const fail = (err: unknown) => setError(errorMessage(err));
-  // Unique across FreeFounders (PLAN.md §21.6): a new name is checked while typing; the current one never blocks Save.
+  // Unique across Kaampilot (PLAN.md §21.6): a new name is checked while typing; the current one never blocks Save.
   const check = useCompanyNameCheck(name, { rename: true, current: company.name });
   const [nameError, setNameError] = useState<string | null>(null);
   const nameProblem = nameError ?? (['taken', 'invalid', 'error'].includes(check.state) ? check.message : null);

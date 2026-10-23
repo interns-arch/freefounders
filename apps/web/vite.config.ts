@@ -8,7 +8,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 // data saved in an older shape.
 const BUILD_ID = process.env.FF_BUILD_ID || new Date().toISOString().replace(/\D/g, '').slice(0, 14);
 
-// The FreeFounders web app (PLAN.md §18). Served at "/" on the shared address; the gateway sends the APIs
+// The Kaampilot web app (PLAN.md §18). Served at "/" on the shared address; the gateway sends the APIs
 // (/api/platform, /tasks/api, /assets/api, /media) to their services. Dev: http://localhost:8080 (through the gateway).
 export default defineConfig({
   plugins: [

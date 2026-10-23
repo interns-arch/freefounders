@@ -114,7 +114,7 @@ export class RazorpayGateway implements PaymentGateway {
       period: sub.interval === 'year' ? 'yearly' : 'monthly',
       interval: 1,
       item: {
-        name: `FreeFounders ${sub.planName} (${sub.interval === 'year' ? 'yearly' : 'monthly'}, per user)`,
+        name: `Kaampilot ${sub.planName} (${sub.interval === 'year' ? 'yearly' : 'monthly'}, per user)`,
         amount: sub.unitAmount,
         currency: 'INR',
         description: `₹${(sub.unitPrice / 100).toFixed(2)} + 18% GST per user`,
@@ -136,7 +136,7 @@ export class RazorpayGateway implements PaymentGateway {
       quantity: sub.seats,
       start_at: unix(sub.firstPeriodEnd),
       expire_by: unix(req.expiresAt),
-      // FreeFounders sends its own GST invoice; Razorpay still mails payment receipts.
+      // Kaampilot sends its own GST invoice; Razorpay still mails payment receipts.
       customer_notify: true,
       addons: [{ item: { name: req.description.slice(0, 250), amount: req.amount, currency: 'INR' } }],
       notes: { companyId: req.companyId, sessionId: req.sessionId, plan: sub.planCode, interval: sub.interval, seats: String(sub.seats) },

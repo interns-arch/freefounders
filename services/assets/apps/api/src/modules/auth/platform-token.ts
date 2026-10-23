@@ -1,4 +1,4 @@
-// FreeFounders Platform sign-in: verifies the Platform's EdDSA (Ed25519) tokens against its published keys.
+// Kaampilot Platform sign-in: verifies the Platform's EdDSA (Ed25519) tokens against its published keys.
 // Off unless PLATFORM_JWKS_URL (or PLATFORM_JWKS, the key set inline as JSON) is set.
 import { createLocalJWKSet, createRemoteJWKSet, decodeProtectedHeader, type JWTPayload, jwtVerify } from 'jose';
 

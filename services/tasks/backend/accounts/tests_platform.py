@@ -1,4 +1,4 @@
-"""FreeFounders Platform sign-in: Platform tokens work next to the app's own login."""
+"""Kaampilot Platform sign-in: Platform tokens work next to the app's own login."""
 import json
 import time
 import uuid

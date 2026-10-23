@@ -39,7 +39,7 @@ export class ConfigController {
   ) {}
 
   /**
-   * Public app settings: the address printed into QR codes, the company shown on screens, and (FreeFounders) the
+   * Public app settings: the address printed into QR codes, the company shown on screens, and (Kaampilot) the
    * company's brand and which modules are on. No company is known before sign-in in multi-company mode.
    */
   @Public()

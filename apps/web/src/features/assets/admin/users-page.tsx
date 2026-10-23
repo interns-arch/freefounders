@@ -18,6 +18,9 @@ import { useAssetsCache, useAssetsUsers, useRoles, useSaveAssetsUser } from '@fr
 import type { UserRow } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { relativeTime } from '@/lib/utils';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 export default function UsersPage() {
   const { values: f, set } = useUrlFilters({ page: '1', pageSize: '25' });
@@ -51,9 +54,12 @@ export default function UsersPage() {
         title="Users"
         description="Who can sign in, and with which role."
         actions={
-          <Button variant="cta" size="sm" onClick={() => setEditing('new')}>
-            <Plus /> Add user
-          </Button>
+          <>
+            <DownloadMenu filename={fileSlug('assets', 'users', f.search, todayStamp())} target={assetsExports.users(f)} empty={q.data?.total === 0} loading={!q.data} />
+            <Button variant="cta" size="sm" onClick={() => setEditing('new')}>
+              <Plus /> Add user
+            </Button>
+          </>
         }
       />
       <Card className="overflow-hidden">

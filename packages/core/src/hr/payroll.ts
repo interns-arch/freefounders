@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tasksApi } from '../http';
 import type { UserBrief } from '../tasks/types';
+import type { ExportTarget } from '../export';
 
 /** Money and day counts come from the API as decimal strings ("12500.00"). */
 export type Money = string;
@@ -154,11 +155,6 @@ export function usePayrollRunAction() {
   });
 }
 
-/** GET /payroll-runs/:id/export/ — the CSV as a Blob (needs the token, so not a plain link). */
-export function useExportPayrollRun() {
-  return useMutation({ mutationFn: (id: number) => tasksApi.blob(`/payroll-runs/${id}/export/`) });
-}
-
 /**
  * GET /payslips/?user=<me> — my payslips. The API gives hr.manage every payslip (drafts too), so the person's own id is
  * passed and only finalised runs are kept, exactly what everyone else gets.
@@ -170,3 +166,18 @@ export function useMyPayslips(userId: number | undefined) {
     enabled: userId != null,
   });
 }
+
+/**
+ * Payroll downloads (PLAN.md §19.31): one payslip as PDF, a run's payslips as a ZIP of PDFs or one combined PDF, and
+ * Excel/CSV of the runs, a run's payslips, salaries, advances and my payslips. Same permission checks as viewing.
+ */
+export const payrollExports = {
+  payslipPdf: (id: number): ExportTarget => ({ api: 'tasks', path: `/payslips/${id}/pdf/`, param: 'none', formats: ['pdf'] }),
+  runPayslips: (runId: number, bundle: 'zip' | 'pdf'): ExportTarget => ({ api: 'tasks', path: `/payroll-runs/${runId}/payslips_pdf/`, query: { bundle }, param: 'none', formats: [bundle] }),
+  runSheet: (runId: number): ExportTarget => ({ api: 'tasks', path: `/payroll-runs/${runId}/export/` }),
+  runs: (): ExportTarget => ({ api: 'tasks', path: '/payroll-runs/' }),
+  salaries: (): ExportTarget => ({ api: 'tasks', path: '/salary-structures/' }),
+  advances: (): ExportTarget => ({ api: 'tasks', path: '/advances/' }),
+  /** Only finalised months, as My salary shows. */
+  myPayslips: (userId: number): ExportTarget => ({ api: 'tasks', path: '/payslips/', query: { user: userId, status: 'finalised' } }),
+};

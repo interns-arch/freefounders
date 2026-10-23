@@ -1,6 +1,6 @@
 """Pins every request to its company's schema (multi-company mode only).
 
-The company comes from the FreeFounders token: the access token (`cid`) for
+The company comes from the Kaampilot token: the access token (`cid`) for
 the app's own API, the service token for /api/internal/*. Anything without a
 company runs against the empty ff_none schema, and API calls without one are
 refused up front with a clear 401 instead of a database error. That includes
@@ -51,7 +51,7 @@ class CompanyMiddleware:
             if found:
                 request.company_id, schema = company_id, found
             elif request.path.startswith(("/api/", "/admin/")):
-                detail = "This company is not set up in Tasks" if company_id else "Sign in through FreeFounders"
+                detail = "This company is not set up in Tasks" if company_id else "Sign in through Kaampilot"
                 return JsonResponse({"detail": detail, "code": "no_company"}, status=401)
 
         token = schemas.activate(schema)

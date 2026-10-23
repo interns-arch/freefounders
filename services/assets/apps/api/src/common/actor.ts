@@ -9,7 +9,7 @@ export interface Actor {
   employeeId: string | null;
   roleName: string;
   permissions: ReadonlySet<Permission>;
-  /** FreeFounders Platform sign-in: the company's subscription is read-only (token claim `ro`), so writes are refused. */
+  /** Kaampilot Platform sign-in: the company's subscription is read-only (token claim `ro`), so writes are refused. */
   readOnly?: boolean;
 }
 

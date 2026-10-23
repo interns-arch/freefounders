@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from django.db.models import Q
 from django.utils import timezone
+from config.exports import ExportMixin
 from rest_framework import status as http, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -68,9 +69,21 @@ def can_review(user, mistake) -> bool:
             and mistake.department == user.department)
 
 
-class MistakeViewSet(viewsets.ModelViewSet):
+class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [HasPermission.of(*IN_MODULE)]
     serializer_class = MistakeSerializer
+    export_name = "mistakes"
+    export_columns = [
+        ("Code", "code"), ("Employee", "employee_detail.name"), ("Department", "department"), ("Category", "category"),
+        ("Severity", "severity_display"), ("Type", "classification_display"), ("Description", "description"),
+        ("Impact", "impact"), ("Financial loss", "financial_loss"), ("Status", "status_display"),
+        ("Occurrence", "occurrence_level"), ("Escalation level", "escalation_level"), ("Repeat of", "repeat_of_code"),
+        ("Manager", "manager_detail.name"), ("Logged by", "reported_by_detail.name"), ("Explanation", "explanation"),
+        ("Root cause", "root_cause_display"), ("Corrective action", "corrective_action"),
+        ("Preventive action", "preventive_action"), ("SOP", "sop_name"), ("Task", "task_code"),
+        ("Corrective task", "corrective_task_code"), ("Reply due", "sla_due_at"), ("Reply overdue", "sla_overdue"),
+        ("Resolved", "resolved_at"), ("Logged", "created_at"),
+    ]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
@@ -551,11 +564,17 @@ class MistakeViewSet(viewsets.ModelViewSet):
                          "weekly": send_weekly_founder_digest(force=True)})
 
 
-class SOPViewSet(viewsets.ModelViewSet):
+class SOPViewSet(ExportMixin, viewsets.ModelViewSet):
     """The written-process register. Everyone reads it — an employee needs to
     be able to look up how a job is done. Managers/admin write it."""
     serializer_class = SOPSerializer
     pagination_class = None
+    export_name = "sops"
+    export_columns = [
+        ("Title", "title"), ("Department", "department_display"), ("Category", "category"), ("Version", "version"),
+        ("Current", "active"), ("Owner", "owner_name"), ("Steps", "step_count"), ("Mistakes citing it", "mistake_count"),
+        ("Process steps", "steps"), ("Checks", "checks"), ("Common errors", "common_errors"), ("Updated", "updated_at"),
+    ]
 
     def get_permissions(self):
         if self.request.method in ("GET", "HEAD", "OPTIONS"):

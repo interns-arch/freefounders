@@ -91,6 +91,8 @@ export interface AssetListItem {
   qrCode: string;
   name: string;
   status: AssetStatus;
+  /** The asset's first photo (its thumbnail), when it has one (PLAN.md §19.34). */
+  photoId?: string | null;
   /** One-time item (joining kit, stationery): given away, no return. */
   consumable?: boolean;
   condition: Condition;
@@ -163,6 +165,9 @@ export interface AllocationPhoto {
   /** image/jpeg, image/webp or image/png (older rows; optional for an older API). */
   mimeType?: string;
   uploadedByName: string | null;
+  /** Asset photos (kind ASSET, PLAN.md §19.34): one-line caption and display order; absent from an older API. */
+  caption?: string | null;
+  sortOrder?: number;
   createdAt: string;
 }
 
@@ -432,7 +437,7 @@ export interface AssetRequest {
 
 export interface Ticket {
   id: string;
-  /** FreeFounders: the Tasks task working on it. */
+  /** Kaampilot: the Tasks task working on it. */
   linkedTask?: { ref: string; url: string } | null;
   number: string;
   title: string;

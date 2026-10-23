@@ -23,6 +23,9 @@ import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDateTime, relativeTime } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { safeHref } from '@/lib/safe-url';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 const TYPE_ICON: Record<string, { icon: typeof LifeBuoy; tone: string }> = {
   ISSUE: { icon: LifeBuoy, tone: 'bg-info/10 text-info dark:bg-info/16' },
@@ -82,11 +85,19 @@ export default function TicketsPage() {
         title="Tickets"
         description="Issues, damage, loss and repair requests raised against assets."
         actions={
-          can('ticket:create') && (
-            <Button variant="cta" size="sm" onClick={() => quickAdd.open('ticket')}>
-              <Plus /> Raise ticket
-            </Button>
-          )
+          <>
+            <DownloadMenu
+              filename={fileSlug('assets', 'tickets', f.status, f.type, f.priority, f.search, todayStamp())}
+              target={assetsExports.tickets(f)}
+              empty={q.data?.total === 0}
+              loading={!q.data}
+            />
+            {can('ticket:create') && (
+              <Button variant="cta" size="sm" onClick={() => quickAdd.open('ticket')}>
+                <Plus /> Raise ticket
+              </Button>
+            )}
+          </>
         }
       />
       <div className="mb-3 flex flex-wrap items-center gap-1">
@@ -183,7 +194,7 @@ function TicketSheet({ id, onClose }: { id: string | null; onClose: () => void }
                   { label: 'Details', value: t.description },
                   { label: 'Asset', value: t.assetId ? <Link className="text-primary hover:underline" to={`/assets/assets/${t.assetId}`}>{t.assetTag} · {t.assetName}</Link> : null },
                   { label: 'Assignee', value: t.assigneeName },
-                  // FreeFounders: the Tasks task working on this ticket (a full page link: it is another app).
+                  // Kaampilot: the Tasks task working on this ticket (a full page link: it is another app).
                   ...(t.linkedTask ? [{ label: 'Task', value: <a className="text-primary hover:underline" href={safeHref(t.linkedTask.url)}>{t.linkedTask.ref} in Tasks</a> }] : []),
                   ...(t.resolvedAt ? [{ label: 'Resolved', value: formatDateTime(t.resolvedAt) }] : []),
                 ]}

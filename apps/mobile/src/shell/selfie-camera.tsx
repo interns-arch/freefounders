@@ -32,6 +32,7 @@ export function SelfieCamera({
   visible,
   title,
   optional,
+  facing = 'front',
   onCancel,
   onDone,
 }: {
@@ -39,6 +40,8 @@ export function SelfieCamera({
   title: string;
   /** The company keeps a photo when there is one, but does not require it. */
   optional: boolean;
+  /** front = a selfie (punch); back = a photo of something (an asset). */
+  facing?: 'front' | 'back';
   onCancel: () => void;
   /** A JPEG data URL, or null = punch without a photo (only when optional). */
   onDone: (photo: string | null) => void;
@@ -121,11 +124,11 @@ export function SelfieCamera({
           <CameraView
             ref={camera}
             style={StyleSheet.absoluteFill}
-            facing="front"
+            facing={facing}
             animateShutter={false}
             onCameraReady={() => setReady(true)}
             onMountError={(e) => setError(e.message || 'The camera could not start.')}
-            accessibilityLabel="Front camera preview"
+            accessibilityLabel={facing === 'front' ? 'Front camera preview' : 'Camera preview'}
           />
         </View>
         {error ? <Note tone="danger">{error}</Note> : null}

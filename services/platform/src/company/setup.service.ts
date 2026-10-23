@@ -137,7 +137,7 @@ export class CompanySetupService {
    * `company -- reset --code X --keep-owner` (PLAN.md §19.28), for local test companies only: everyone but the owner(s)
    * is deleted with every record of theirs in every app (the same "delete everything" path as Admin → People →
    * Delete), Tasks' users that belong to no person go too, every role but Admin and Member is archived, and Admin and
-   * Member start again from their default permissions. With `keepStaff`, FreeFounders staff accounts keep their
+   * Member start again from their default permissions. With `keepStaff`, Kaampilot staff accounts keep their
    * membership (no roles, no apps) so they can still open the owner console. Company settings, departments, asset
    * catalogue, leave types, locations and HR rules stay.
    */

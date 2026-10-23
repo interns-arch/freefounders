@@ -1,4 +1,4 @@
-// Imports an existing single-company install (CarTrends) into FreeFounders as one company (PLAN.md §14.6).
+// Imports an existing single-company install (CarTrends) into Kaampilot as one company (PLAN.md §14.6).
 //
 //   node scripts/import-company.mjs --code CARTRENDS --name "CarTrends Autoparts Pvt Ltd" \
 //        --tasks-source postgres://…/cartrends_tasks_copy  [--assets-source postgres://…/cartrends_assets_copy] \
@@ -53,7 +53,7 @@ if (!/^[A-Z][A-Z0-9_]{1,40}$/.test(CODE) || !NAME || (!opts['tasks-source'] && !
 }
 
 // Tables that are not copied: framework bookkeeping, ids that differ per database, old sessions/tokens
-// (everyone signs in through the Platform now) and tables that only exist in FreeFounders.
+// (everyone signs in through the Platform now) and tables that only exist in Kaampilot.
 const SKIP = {
   tasks: new Set([
     'django_migrations', 'django_content_type', 'auth_permission', 'auth_group_permissions', 'accounts_user_user_permissions',
@@ -271,8 +271,8 @@ try {
     const p = plans[app];
     console.log(`${app}: ${p.copy.length} tables, ${p.copy.reduce((n, t) => n + t.rows, 0)} rows`);
     for (const t of p.copy.filter((x) => x.rows)) console.log(`   ${t.table.padEnd(40)} ${String(t.rows).padStart(8)}`);
-    if (p.missingTables.length) console.log(`   ⚠ tables with data that FreeFounders does not have: ${p.missingTables.join(', ')}`);
-    if (p.droppedColumns.length) console.log(`   ⚠ columns FreeFounders does not have: ${p.droppedColumns.join(', ')}`);
+    if (p.missingTables.length) console.log(`   ⚠ tables with data that Kaampilot does not have: ${p.missingTables.join(', ')}`);
+    if (p.droppedColumns.length) console.log(`   ⚠ columns Kaampilot does not have: ${p.droppedColumns.join(', ')}`);
   }
 
   // People.
@@ -291,7 +291,7 @@ try {
       const v = lower(p.person[field]);
       if (!v) continue;
       if (taken[field].has(v) || seen[field].has(v)) {
-        review.push([`${field} clash`, who, `${v} is already used on FreeFounders; left blank, set one in People & access`]);
+        review.push([`${field} clash`, who, `${v} is already used on Kaampilot; left blank, set one in People & access`]);
         p.person[field] = null;
       } else seen[field].add(v);
     }

@@ -10,7 +10,7 @@ PORT="${FF_PORT:-7395}"
 rnd() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 umask 077
 cat > "$ENV" <<VARS
-# FreeFounders secrets for this server. Mode 600; never commit, never copy into the repo.
+# Kaampilot secrets for this server. Mode 600; never commit, never copy into the repo.
 FF_HOME=$FF_HOME
 FF_PORT=$PORT
 PUBLIC_WEB_URL=http://$PUBLIC_HOST:$PORT
@@ -35,7 +35,7 @@ RAZORPAY_KEY_SECRET=
 RAZORPAY_WEBHOOK_SECRET=
 # First company (created once by README step 5) and the staff account for /console.
 FF_COMPANY_CODE=DEMO
-FF_COMPANY_NAME="FreeFounders Demo"
+FF_COMPANY_NAME="Kaampilot Demo"
 FF_OWNER_LOGIN=owner
 FF_OWNER_EMAIL=owner@freefounders.demo
 FF_OWNER_PASSWORD=Ff-$(rnd 9)

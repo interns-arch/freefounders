@@ -29,7 +29,7 @@ export class AuthGuard implements CanActivate {
         req.sessionId = session.id;
       }
     }
-    // FreeFounders Platform sign-in: `Authorization: Bearer <platform token>` (cookie sessions still work).
+    // Kaampilot Platform sign-in: `Authorization: Bearer <platform token>` (cookie sessions still work).
     if (!req.actor) {
       const bearer = bearerToken(req.headers.authorization);
       if (bearer && platformEnabled()) req.actor = (await this.auth.resolvePlatformToken(bearer)) ?? undefined;
@@ -38,7 +38,7 @@ export class AuthGuard implements CanActivate {
     const targets = [ctx.getHandler(), ctx.getClass()];
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
     if (!req.actor) throw new UnauthorizedException('Please sign in');
-    // FreeFounders Platform: a read-only subscription (token claim `ro`, carried into the session) can look, not change.
+    // Kaampilot Platform: a read-only subscription (token claim `ro`, carried into the session) can look, not change.
     if (req.actor.readOnly && !SAFE_METHODS.has(req.method)) {
       throw new HttpException({ statusCode: 402, message: READ_ONLY_MESSAGE }, 402);
     }

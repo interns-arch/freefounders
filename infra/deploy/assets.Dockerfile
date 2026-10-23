@@ -1,4 +1,4 @@
-# FreeFounders Assets API (NestJS, npm workspace). Build context: services/assets (see docker-compose.yml).
+# Kaampilot Assets API (NestJS, npm workspace). Build context: services/assets (see docker-compose.yml).
 FROM node:22-slim AS build
 WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=512

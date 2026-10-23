@@ -25,7 +25,7 @@ const USERNAME_RE = /^[a-z][a-z0-9._-]{2,29}$/;
 /** Names that would look official or collide with routes. `owner` stays usable by existing admin-made logins only. */
 export const RESERVED_USERNAMES = new Set([
   'admin', 'administrator', 'admins', 'owner', 'owners', 'support', 'help', 'helpdesk', 'staff', 'root', 'system', 'sysadmin',
-  'superuser', 'super', 'moderator', 'mod', 'freefounders', 'free-founders', 'free_founders', 'free.founders', 'founder',
+  'superuser', 'super', 'moderator', 'mod', 'freefounders', 'free-founders', 'free_founders', 'free.founders', 'kaampilot', 'kaam-pilot', 'kaam_pilot', 'kaam.pilot', 'founder',
   'founders', 'api', 'www', 'mail', 'email', 'postmaster', 'hostmaster', 'webmaster', 'abuse', 'security', 'billing',
   'payments', 'invoice', 'invoices', 'account', 'accounts', 'login', 'logout', 'signin', 'signup', 'register', 'join',
   'console', 'settings', 'platform', 'tasks', 'assets', 'attendance', 'hr', 'me', 'null', 'undefined', 'anonymous',
@@ -39,7 +39,7 @@ export const normaliseUsername = (raw: string | null | undefined) => (raw ?? '')
 export function usernameShape(raw: string | null | undefined): { ok: true; value: string } | { ok: false; reason: Exclude<UsernameProblem, 'taken'> } {
   const value = normaliseUsername(raw);
   if (!USERNAME_RE.test(value)) return { ok: false, reason: 'invalid' };
-  if (RESERVED_USERNAMES.has(value) || value.startsWith('freefounders') || value.startsWith('admin')) return { ok: false, reason: 'reserved' };
+  if (RESERVED_USERNAMES.has(value) || value.startsWith('freefounders') || value.startsWith('kaampilot') || value.startsWith('admin')) return { ok: false, reason: 'reserved' };
   return { ok: true, value };
 }
 

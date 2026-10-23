@@ -5,7 +5,9 @@ import {
   type DelegatedSummary,
   type PersonOption,
   type WorkTask,
+  type WorkListParams,
   errorData,
+  tasksExports,
   useDelegatedSummary,
   useSetTaskStatus,
   useTaskAssignees,
@@ -13,7 +15,9 @@ import {
   useToggleTaskFollow,
   useWorkTaskList,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
 import { AlarmClock, ClipboardList, Plus, Repeat, UserRound, X } from '@/components/icons';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, ErrorState } from '@/components/common/page';
@@ -33,6 +37,9 @@ type PersonRow = PersonOption & { role_display?: string; department_display?: st
 
 /** ?status= in the address → the API's status list. */
 const STATUS_API: Record<string, string> = { open: 'open,in_progress', in_progress: 'in_progress', done: 'done', all: '' };
+
+/** The screen's part of a download's file name (tasks-my-tasks-open-2026-10-22.xlsx). */
+const SCOPE_FILE: Record<ListScope, string> = { my: 'my-tasks', all: 'all-tasks', delegated: 'delegated', subscribed: 'subscribed' };
 
 const EMPTY: Record<ListScope, string> = {
   my: 'No tasks assigned to you here.',
@@ -76,19 +83,17 @@ export function TaskListTab({
   const summary = useDelegatedSummary(scope === 'delegated');
 
   const customReady = range !== 'custom' || (!!custom.start && !!custom.end);
-  const list = useWorkTaskList(
-    {
-      scope,
-      status: STATUS_API[status],
-      overdue,
-      done: fDone || undefined,
-      recurring,
-      ...(scope === 'all' && range !== 'all' ? { range, ...(range === 'custom' ? custom : {}) } : {}),
-      ...(scope === 'all' || scope === 'delegated' ? { assigned_to: person || undefined } : {}),
-      ...(scope === 'all' ? { department: dept || undefined, search: values.q || undefined } : {}),
-    },
-    { enabled: customReady },
-  );
+  const listParams: WorkListParams = {
+    scope,
+    status: STATUS_API[status],
+    overdue,
+    done: fDone || undefined,
+    recurring,
+    ...(scope === 'all' && range !== 'all' ? { range, ...(range === 'custom' ? custom : {}) } : {}),
+    ...(scope === 'all' || scope === 'delegated' ? { assigned_to: person || undefined } : {}),
+    ...(scope === 'all' ? { department: dept || undefined, search: values.q || undefined } : {}),
+  };
+  const list = useWorkTaskList(listParams, { enabled: customReady });
   // Reading order (original app 3903b4b): open work first, then what is overdue, then what is done; the server's
   // order (newest first) is kept inside each group (the sort is stable).
   const rows = useMemo(() => {
@@ -181,6 +186,12 @@ export function TaskListTab({
           </span>
         )}
         <span className="flex-1" />
+        <DownloadMenu
+          target={tasksExports.tasks(listParams)}
+          filename={fileSlug('tasks', SCOPE_FILE[scope], status, overdue && 'overdue', recurring && 'recurring', fDone, scope === 'all' && range !== 'all' && (range === 'custom' ? `${custom.start}-to-${custom.end}` : range), todayStamp())}
+          empty={!list.isLoading && customReady && rows.length === 0}
+          loading={list.isLoading || !customReady}
+        />
         {scope !== 'all' && (
           <Button variant="cta" onClick={onAdd}>
             <Plus /> Add task

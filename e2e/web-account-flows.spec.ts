@@ -264,7 +264,7 @@ test('forgot password: an unknown email looks the same until the code, then says
   await page.getByRole('button', { name: 'Send code' }).click();
   await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'There is no FreeFounders account with this email or mobile number.' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'There is no Kaampilot account with this email or mobile number.' })).toBeVisible();
 });
 
 test('the email of an admin-made login: sign-up says to sign in; forgot says to ask the admin', async ({ page, request }) => {
@@ -403,7 +403,9 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   await page.getByRole('button', { name: `Actions for ${companyB}` }).click();
   await page.getByRole('menuitem', { name: /Suspend/ }).click();
   await page.getByRole('button', { name: 'Suspend', exact: true }).click();
-  await expect(page.getByRole('row', { name: new RegExp(companyB) }).getByText(/Suspended/i)).toBeVisible();
+  // The companies table (the "Recent actions" log below it lists the same company too).
+  const companiesTable = page.getByRole('table').first();
+  await expect(companiesTable.getByRole('row', { name: new RegExp(companyB) }).getByText(/Suspended/i)).toBeVisible();
 
   // The owner of the suspended company lands on Billing.
   const token = await apiToken(request, mobile, NEW_PASSWORD, companyB);
@@ -413,7 +415,23 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   await page.getByRole('button', { name: `Actions for ${companyB}` }).click();
   await page.getByRole('menuitem', { name: /Reactivate/ }).click();
   await page.getByRole('button', { name: 'Reactivate', exact: true }).click();
-  await expect(page.getByRole('row', { name: new RegExp(companyB) }).getByText(/Suspended/i)).toHaveCount(0);
+  await expect(companiesTable.getByRole('row', { name: new RegExp(companyB) }).getByText(/Suspended/i)).toHaveCount(0);
+
+  // Every action is in "Recent actions" (PLAN.md §21.7), newest first; filters by company and action.
+  const log = page.getByRole('region', { name: 'Recent actions' });
+  const companyValue = await log.getByLabel('Company').locator('option', { hasText: companyB }).first().getAttribute('value');
+  await log.getByLabel('Company').selectOption(companyValue!);
+  const rows = log.getByRole('row');
+  await expect(rows.nth(1)).toContainText('Reactivated');
+  await expect(rows.nth(2)).toContainText('Suspended');
+  await expect(rows.nth(3)).toContainText('Extended trial');
+  await expect(rows.nth(1)).toContainText('staff@freefounders.test');
+  await log.getByLabel('Action').selectOption({ label: 'Suspended' });
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1)).toContainText(/suspended/);
+  // Not for anyone else: the owner of a company gets 403.
+  const ownerToken = await apiToken(request, mobile, NEW_PASSWORD, companyB);
+  expect((await request.get('/api/platform/console/audit', { headers: { ...H, authorization: `Bearer ${ownerToken}` } })).status()).toBe(403);
 });
 
 for (const width of [390, 320]) {

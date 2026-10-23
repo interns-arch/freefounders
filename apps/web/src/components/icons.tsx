@@ -83,6 +83,7 @@
  *   FileSignature         ContractsIcon
  *   FileSpreadsheet       Xls01Icon
  *   FileText              File02Icon
+ *   FileCsv / FilePdf / FileZip   Csv01Icon / Pdf01Icon / Zip01Icon
  *   FileUp                FileUploadIcon
  *   Fingerprint           FingerPrintIcon
  *   FireExtinguisher      FireExtinguisherIcon
@@ -299,6 +300,9 @@ import {
   DashedLineCircleIcon,
   Delete02Icon,
   Download04Icon,
+  Csv01Icon,
+  Pdf01Icon,
+  Zip01Icon,
   DragDropVerticalIcon,
   ElectricPlugsIcon,
   FeatherIcon,
@@ -528,6 +532,9 @@ export const Feather = icon(FeatherIcon, 'Feather');
 export const FileBadge = icon(Certificate01Icon, 'FileBadge');
 export const FileSignature = icon(ContractsIcon, 'FileSignature');
 export const FileSpreadsheet = icon(Xls01Icon, 'FileSpreadsheet');
+export const FileCsv = icon(Csv01Icon, 'FileCsv');
+export const FilePdf = icon(Pdf01Icon, 'FilePdf');
+export const FileZip = icon(Zip01Icon, 'FileZip');
 export const FileText = icon(File02Icon, 'FileText');
 export const FileUp = icon(FileUploadIcon, 'FileUp');
 export const Fingerprint = icon(FingerPrintIcon, 'Fingerprint');

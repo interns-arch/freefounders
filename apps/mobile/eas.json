@@ -6,12 +6,31 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_WEB_URL": "http://192.168.2.72:8080" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_WEB_URL": "https://kaampilot.com",
+        "EXPO_PUBLIC_LOCK_SERVER": "1"
+      }
     },
     "production": {
-      "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_LOCK_SERVER": "1" }
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_WEB_URL": "https://kaampilot.com",
+        "EXPO_PUBLIC_LOCK_SERVER": "1"
+      }
+    },
+    "lan": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_WEB_URL": "http://192.168.2.72:8080"
+      }
     }
   }
 }

@@ -1,9 +1,11 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, Res, StreamableFile } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { exportFile, exportFormat } from '../common/export';
 import { type Caller, CurrentCaller, Needs, Public, ReadOnlyOk, uuidParam, ZodPipe } from '../common/http';
 import {
   advanceSchema,
+  auditQuerySchema,
   BillingService,
   checkoutSchema,
   outcomeSchema,
@@ -12,6 +14,7 @@ import {
   renewSchema,
   seatsSchema,
 } from './billing.service';
+import { invoicePdf } from './invoice-pdf';
 
 const statusSchema = z.object({ status: z.enum(['active', 'suspended']) });
 const trialSchema = z.object({ days: z.number().int().min(1).max(365) });
@@ -97,6 +100,13 @@ export class BillingController {
     return this.billing.cancel(caller.companyId);
   }
 
+  /** The Free plan without payment, when the company fits it (now, or at the end of a paid period). */
+  @Post('free')
+  @HttpCode(200)
+  free(@CurrentCaller() caller: Caller) {
+    return this.billing.switchToFree(caller.companyId);
+  }
+
   @Post('resume')
   @HttpCode(200)
   resume(@CurrentCaller() caller: Caller) {
@@ -104,13 +114,27 @@ export class BillingController {
   }
 
   @Get('invoices')
-  invoices(@CurrentCaller() caller: Caller) {
+  async invoices(@CurrentCaller() caller: Caller, @Query('export') exp?: string) {
+    // ?export=xlsx|csv: every invoice of the company as a file (PLAN.md §19.31)
+    const format = exportFormat(exp);
+    if (format) {
+      const { header, rows } = await this.billing.invoicesSheet(caller.companyId);
+      return exportFile(format, 'invoices', header, rows);
+    }
     return this.billing.invoices(caller.companyId);
   }
 
   @Get('invoices/:id')
   invoice(@CurrentCaller() caller: Caller, @Param('id') id: string) {
     return this.billing.invoice(caller.companyId, uuidParam(id));
+  }
+
+  /** The tax invoice as a PDF: the same check as the invoice itself (this company's only, billing.manage). */
+  @Get('invoices/:id/pdf')
+  async invoicePdf(@CurrentCaller() caller: Caller, @Param('id') id: string) {
+    const inv = await this.billing.invoice(caller.companyId, uuidParam(id));
+    const name = `invoice-${inv.number.replace(/[^A-Za-z0-9-]+/g, '-')}.pdf`;
+    return new StreamableFile(invoicePdf(inv), { type: 'application/pdf', disposition: `attachment; filename="${name}"` });
   }
 
   /** Dev tools (BILLING_DEV_TOOLS=1): 404 otherwise. */
@@ -127,7 +151,10 @@ export class BillingController {
   }
 }
 
-/** Owner console (PLAN.md §21.1): FreeFounders staff accounts only. */
+/**
+ * Owner console (PLAN.md §21.1): Kaampilot staff accounts only. Every change writes one row in the staff audit log
+ * (§21.7), which only staff can read (GET console/audit).
+ */
 @ReadOnlyOk()
 @Controller('console')
 export class ConsoleController {
@@ -145,24 +172,41 @@ export class ConsoleController {
     return this.billing.consoleCompanies();
   }
 
+  /** Recent actions: `?company=<id or code>&action=&page=&pageSize=`, newest first. */
+  @Get('audit')
+  async audit(@CurrentCaller() caller: Caller, @Query(new ZodPipe(auditQuerySchema)) q: z.infer<typeof auditQuerySchema>, @Query('export') exp?: string) {
+    await this.billing.assertStaff(caller);
+    // ?export=xlsx|csv: every action matching the filters as a file (PLAN.md §19.31)
+    const format = exportFormat(exp);
+    if (format) {
+      const { header, rows } = await this.billing.consoleAuditSheet(q);
+      return exportFile(format, 'console-actions', header, rows);
+    }
+    return this.billing.consoleAudit(q);
+  }
+
   @Post('companies/:id/trial')
   @HttpCode(200)
-  async trial(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(trialSchema)) body: z.infer<typeof trialSchema>) {
-    await this.billing.assertStaff(caller);
-    return this.billing.consoleTrial(uuidParam(id), body.days);
+  async trial(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string, @Body(new ZodPipe(trialSchema)) body: z.infer<typeof trialSchema>) {
+    const staff = await this.billing.assertStaff(caller);
+    const companyId = uuidParam(id);
+    return this.billing.consoleAction(staff, req.ip, 'trial.extend', companyId, body, () => this.billing.consoleTrial(companyId, body.days));
   }
 
   @Post('companies/:id/plan')
   @HttpCode(200)
-  async plan(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(planSchema)) body: z.infer<typeof planSchema>) {
-    await this.billing.assertStaff(caller);
-    return this.billing.consolePlan(uuidParam(id), body.plan, body.seats);
+  async plan(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string, @Body(new ZodPipe(planSchema)) body: z.infer<typeof planSchema>) {
+    const staff = await this.billing.assertStaff(caller);
+    const companyId = uuidParam(id);
+    return this.billing.consoleAction(staff, req.ip, 'plan.set', companyId, body, () => this.billing.consolePlan(companyId, body.plan, body.seats));
   }
 
   @Post('companies/:id/status')
   @HttpCode(200)
-  async status(@CurrentCaller() caller: Caller, @Param('id') id: string, @Body(new ZodPipe(statusSchema)) body: z.infer<typeof statusSchema>) {
-    await this.billing.assertStaff(caller);
-    return this.billing.consoleStatus(uuidParam(id), body.status);
+  async status(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string, @Body(new ZodPipe(statusSchema)) body: z.infer<typeof statusSchema>) {
+    const staff = await this.billing.assertStaff(caller);
+    const companyId = uuidParam(id);
+    const action = body.status === 'suspended' ? 'company.suspend' : 'company.reactivate';
+    return this.billing.consoleAction(staff, req.ip, action, companyId, body, () => this.billing.consoleStatus(companyId, body.status));
   }
 }

@@ -20,7 +20,7 @@ class CompanySetting(models.Model):
 
 
 class OutboxEvent(models.Model):
-    """An event for the FreeFounders Platform (PLAN.md §17.4); it reads them with GET /api/internal/events and
+    """An event for the Kaampilot Platform (PLAN.md §17.4); it reads them with GET /api/internal/events and
     runs its cross-app rules. Only written when the app runs with Platform sign-in."""
 
     type = models.CharField(max_length=60)

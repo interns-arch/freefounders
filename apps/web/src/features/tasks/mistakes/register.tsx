@@ -21,7 +21,10 @@ import {
   useMistakes,
   useReviewMistake,
   useSops,
+  tasksExports,
 } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { Flag, PartyPopper, Plus, Sparkles, TriangleAlert } from '@/components/icons';
 import { useEffect, useId, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -91,6 +94,12 @@ export function MistakeRegister() {
           </Button>
         )}
         <span className="flex-1" />
+        <DownloadMenu
+          target={tasksExports.mistakes(filters)}
+          filename={fileSlug('tasks', 'mistakes', filters.status, filters.severity, filters.important && 'action-required', todayStamp())}
+          empty={q.data?.length === 0}
+          loading={!q.data && !q.error}
+        />
         <Button variant="cta" onClick={() => setShowLog(true)}>
           <Plus /> Log mistake
         </Button>

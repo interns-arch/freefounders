@@ -1,4 +1,4 @@
-// FreeFounders Platform sign-in tests. Run with `npm test`; shares the throwaway `eam_test` database
+// Kaampilot Platform sign-in tests. Run with `npm test`; shares the throwaway `eam_test` database
 // with integration.test.ts, so it only adds its own rows and never assumes an empty database.
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -278,7 +278,7 @@ describe('internal roles', () => {
   });
 });
 
-describe('roles from the FreeFounders role builder', () => {
+describe('roles from the Kaampilot role builder', () => {
   const push = async (version: number, rolesIn: unknown[], people: unknown[]) =>
     call('PUT', '/internal/access', await service(), { version, roles: rolesIn, people });
 

@@ -32,7 +32,7 @@ class Role(models.TextChoices):
     LEGAL = "legal", "Legal"
     HR_EXECUTIVE = "hr_executive", "HR Executive"
     HR_MANAGER = "hr_manager", "HR Manager"
-    # Neutral value for users whose roles come from the FreeFounders Platform (PLAN.md §19.28): only Admin and Member
+    # Neutral value for users whose roles come from the Kaampilot Platform (PLAN.md §19.28): only Admin and Member
     # are built in there, and what someone can do comes from the roles' permissions, never from this field. No
     # built-in role here, no capabilities of its own.
     MEMBER = "member", "Member"
@@ -137,7 +137,7 @@ class User(AbstractUser):
         default=False,
         help_text="Works on the weekly off day -- used by HR for comp-off accrual.",
     )
-    # The FreeFounders Platform person this login belongs to. Set when the
+    # The Kaampilot Platform person this login belongs to. Set when the
     # Platform provisions the user; Platform tokens are only accepted for a
     # user whose id here matches the token's subject.
     platform_person_id = models.UUIDField(null=True, blank=True, unique=True, editable=False)
@@ -163,10 +163,10 @@ class User(AbstractUser):
 
 
 # ---------------------------------------------------------------------------
-# FreeFounders roles (PLAN.md section 15). Roles live in the database so a
+# Kaampilot roles (PLAN.md section 15). Roles live in the database so a
 # company admin can build their own; today's 20 roles are seeded with exactly
 # the capabilities in accounts.permissions.ROLE_CAPABILITIES. `User.role`
-# stays as the primary role; a user whose roles come from the FreeFounders
+# stays as the primary role; a user whose roles come from the Kaampilot
 # Platform has rows in UserAccessRole, and then only those count.
 # ---------------------------------------------------------------------------
 

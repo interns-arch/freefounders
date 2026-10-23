@@ -15,7 +15,7 @@ import { normaliseIdentifier } from './accounts/identifier';
 import { resetUsernameChecks } from './accounts/username';
 import { resetCompanyNameChecks } from './company/company-name';
 import { DbService } from './db/db.service';
-import { accounts, billingProfiles, checkoutSessions, companies, invites, otpCodes, people, personApps, seatChanges, subscriptions } from './db/schema';
+import { accounts, billingProfiles, checkoutSessions, companies, invites, otpCodes, people, personApps, seatChanges, staffAudit, subscriptions } from './db/schema';
 import { createApp } from './main';
 
 const SECRET = 'test-fakepay-secret-0123456789';
@@ -561,6 +561,32 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
     assert.equal((await call('GET', `/billing/checkout/${s.id}`, { token: other.accessToken })).status, 404);
     assert.equal((await call('POST', `/billing/fake/${s.id}/complete`, { token: other.accessToken, body: { outcome: 'success' } })).status, 404);
   });
+
+  test('downloads (PLAN.md §19.31): the invoice list as xlsx/csv, each invoice as PDF; the same checks as viewing', async () => {
+    const get = (path: string, token: string) => fetch(base + path, { headers: { authorization: `Bearer ${token}` } });
+    const list = (await call('GET', '/billing/invoices', { token: owner })).body as Array<{ id: string; number: string }>;
+    assert.ok(list.length >= 2);
+    const csv = await get('/billing/invoices?export=csv', owner);
+    assert.equal(csv.status, 200);
+    const lines = (await csv.text()).trim().split(/\r?\n/);
+    assert.equal(lines.length, list.length + 1, 'header + every invoice');
+    assert.match(lines[0]!, /^\ufeff?Invoice no\.,Date/);
+    assert.ok(lines.slice(1).some((l) => l.startsWith(list[0]!.number)));
+    const xlsx = Buffer.from(await (await get('/billing/invoices?export=xlsx', owner)).arrayBuffer());
+    assert.equal(xlsx.subarray(0, 2).toString(), 'PK');
+    const pdf = await get(`/billing/invoices/${list[0]!.id}/pdf`, owner);
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+    const body = Buffer.from(await pdf.arrayBuffer()).toString('latin1');
+    assert.ok(body.startsWith('%PDF-1.4'));
+    assert.ok(body.includes(list[0]!.number), 'the invoice number is in the PDF');
+    assert.ok(body.includes('Tax invoice') && body.includes('Rupees'), 'title and amount in words');
+    // A member cannot download billing; another company gets 404 for this invoice.
+    assert.equal((await get('/billing/invoices?export=csv', ids.memberToken!)).status, 403);
+    assert.equal((await get(`/billing/invoices/${list[0]!.id}/pdf`, ids.memberToken!)).status, 403);
+    const other = await signup('other2@pay.test', { name: 'Other Pay Co 2' });
+    assert.equal((await get(`/billing/invoices/${list[0]!.id}/pdf`, other.accessToken)).status, 404);
+  });
 });
 
 describe('the billing clock (PLAN.md §21.1)', () => {
@@ -756,6 +782,149 @@ describe('owner console (staff only)', () => {
   });
 });
 
+describe('switch to Free from Billing (PLAN.md §21.7)', () => {
+  test('trialing and fits: Free now, the Assets app switched off; again is refused', async () => {
+    const out = await signup('free1@co.test', { name: 'Free Now Co', apps: ['tasks', 'assets'] });
+    await addSeatHolders(out.companyId, 2);
+    assert.deepEqual([...(await company(out.companyId)).enabledApps].sort(), ['assets', 'tasks']);
+    // The owner holds Assets (the trial is Suite): that does not fit Free until nobody uses Assets.
+    const held = await call('POST', '/billing/free', { token: out.accessToken });
+    assert.equal(held.status, 400);
+    assert.match(held.body.message, /Switch off the Assets app first/);
+    const [owner] = await dbs.db.select().from(people).where(and(eq(people.companyId, out.companyId), eq(people.platformRole, 'owner')));
+    await dbs.db.delete(personApps).where(and(eq(personApps.personId, owner.id), eq(personApps.app, 'assets')));
+    const res = await call('POST', '/billing/free', { token: out.accessToken });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual([res.body.plan, res.body.state, res.body.freeFrom, res.body.readOnly], ['free', 'active', 'now', false]);
+    assert.deepEqual(res.body.seats, { used: 3, paid: 0, limit: 3, nextPeriod: null });
+    assert.deepEqual((await company(out.companyId)).enabledApps, ['tasks'], 'Free has no Assets');
+    const again = await call('POST', '/billing/free', { token: out.accessToken });
+    assert.equal(again.status, 400);
+    assert.match(again.body.message, /already on the Free plan/);
+  });
+
+  test('does not fit: a clear message naming how many people and the Assets app; nothing changes', async () => {
+    const many = await signup('free2@co.test', { name: 'Free Too Many' });
+    await addSeatHolders(many.companyId, 4); // 5 in use
+    const r1 = await call('POST', '/billing/free', { token: many.accessToken });
+    assert.equal(r1.status, 400);
+    assert.equal(r1.body.message, 'The Free plan is for up to 3 users using Attendance and Tasks. Switch off 2 people first.');
+    assert.equal((await sub(many.companyId)).state, 'trialing');
+
+    const assetsCo = await signup('free3@co.test', { name: 'Free Assets Used', apps: ['tasks', 'assets'] });
+    await addSeatHolders(assetsCo.companyId, 1, 'assets');
+    const r2 = await call('POST', '/billing/free', { token: assetsCo.accessToken });
+    assert.equal(r2.status, 400);
+    assert.equal(r2.body.message, 'The Free plan is for up to 3 users using Attendance and Tasks. Switch off the Assets app first (Admin → People: take Assets away from the 2 people who have it).');
+
+    const both = await signup('free4@co.test', { name: 'Free Both', apps: ['tasks', 'assets'] });
+    await addSeatHolders(both.companyId, 3, 'assets');
+    const r3 = await call('POST', '/billing/free', { token: both.accessToken });
+    assert.equal(r3.body.message, 'The Free plan is for up to 3 users using Attendance and Tasks. Switch off 1 person and the Assets app first (Admin → People: take Assets away from the 4 people who have it).');
+    // Switching the Assets app off for the company makes it fit (its holders no longer count).
+    await dbs.db.update(companies).set({ enabledApps: ['tasks'] }).where(eq(companies.id, both.companyId));
+    assert.equal((await call('POST', '/billing/free', { token: both.accessToken })).body.plan, 'free');
+  });
+
+  test('active paid plan: Free at the end of the paid period (like cancel)', async () => {
+    const out = await signup('free5@co.test', { name: 'Free Later Co' });
+    await buy(out.accessToken, 'tasks', 5);
+    const res = await call('POST', '/billing/free', { token: out.accessToken });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual([res.body.plan, res.body.state, res.body.cancelAtPeriodEnd, res.body.freeFrom, res.body.nextCharge], ['tasks', 'cancelled', true, 'period_end', null]);
+    const twice = await call('POST', '/billing/free', { token: out.accessToken });
+    assert.equal(twice.body.freeFrom, 'period_end', 'already ending: nothing more to do');
+    const end = await call('POST', '/billing/dev/advance', { token: out.accessToken, body: { days: 32 } });
+    assert.deepEqual([end.body.plan, end.body.state], ['free', 'active']);
+  });
+
+  test('past due or read-only: Free now and read-only ends', async () => {
+    const pd = await signup('free6@co.test', { name: 'Free Past Due' });
+    await buy(pd.accessToken, 'tasks', 5);
+    await call('POST', '/billing/dev/renew', { token: pd.accessToken, body: { outcome: 'failure' } });
+    assert.equal((await sub(pd.companyId)).state, 'past_due');
+    const r1 = await call('POST', '/billing/free', { token: pd.accessToken });
+    assert.deepEqual([r1.body.plan, r1.body.state, r1.body.freeFrom, r1.body.seats.paid], ['free', 'active', 'now', 0]);
+
+    const ro = await signup('free7@co.test', { name: 'Free Read Only' });
+    await buy(ro.accessToken, 'tasks', 5);
+    await call('POST', '/billing/dev/renew', { token: ro.accessToken, body: { outcome: 'failure' } });
+    await call('POST', '/billing/dev/advance', { token: ro.accessToken, body: { days: 8 } });
+    assert.equal((await sub(ro.companyId)).state, 'read_only');
+    const fresh = (await login('free7@co.test')).body.accessToken;
+    assert.equal(decodeJwt(fresh).ro, true);
+    const r2 = await call('POST', '/billing/free', { token: fresh });
+    assert.equal(r2.status, 200, JSON.stringify(r2.body));
+    assert.deepEqual([r2.body.plan, r2.body.state, r2.body.readOnly], ['free', 'active', false]);
+    const after = (await login('free7@co.test')).body.accessToken;
+    assert.ok(!decodeJwt(after).ro, 'new tokens are not read-only');
+    assert.equal((await call('GET', '/auth/me', { token: after })).body.billing.readOnly, false);
+  });
+});
+
+describe('owner console audit log (PLAN.md §21.7)', () => {
+  test('every console action writes one row with the right details; only staff read the log, newest first, filtered, paginated', async () => {
+    const target = await signup('audit-target@co.test', { name: 'Audit Target Co' });
+    const other = await signup('audit-other@co.test', { name: 'Audit Other Co' });
+    const staff = await signup('audit-staff@ff.test', { name: 'Audit Staff Home' });
+    await dbs.db.update(accounts).set({ isStaff: true }).where(eq(accounts.email, 'audit-staff@ff.test'));
+    const [acc] = await dbs.db.select().from(accounts).where(eq(accounts.email, 'audit-staff@ff.test'));
+    const t = staff.accessToken;
+    const rowsFor = async (companyId: string) => (await dbs.db.select().from(staffAudit).where(eq(staffAudit.companyId, companyId))).sort((a, b) => a.at.getTime() - b.at.getTime());
+
+    assert.equal((await call('POST', `/console/companies/${target.companyId}/trial`, { token: t, body: { days: 5 } })).status, 200);
+    let rows = await rowsFor(target.companyId);
+    assert.equal(rows.length, 1);
+    const code = (await company(target.companyId)).code;
+    assert.deepEqual([rows[0].action, rows[0].staffAccountId, rows[0].staffEmail, rows[0].companyCode], ['trial.extend', acc.id, 'audit-staff@ff.test', code]);
+    const d0 = rows[0].details as any;
+    assert.deepEqual(d0.input, { days: 5 });
+    assert.equal(d0.before.state, 'trialing');
+    assert.ok(new Date(d0.after.trialEndsAt).getTime() > new Date(d0.before.trialEndsAt).getTime());
+    assert.ok(rows[0].ip, 'the address is kept');
+
+    await call('POST', `/console/companies/${target.companyId}/plan`, { token: t, body: { plan: 'tasks', seats: 7 } });
+    await call('POST', `/console/companies/${target.companyId}/status`, { token: t, body: { status: 'suspended' } });
+    await call('POST', `/console/companies/${target.companyId}/status`, { token: t, body: { status: 'active' } });
+    await call('POST', `/console/companies/${other.companyId}/status`, { token: t, body: { status: 'suspended' } });
+    rows = await rowsFor(target.companyId);
+    assert.deepEqual(rows.map((r) => r.action), ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate']);
+    const plan = rows[1].details as any;
+    assert.deepEqual([plan.input, plan.before.plan, plan.after.plan, plan.after.seats], [{ plan: 'tasks', seats: 7 }, 'suite', 'tasks', 7]);
+    assert.deepEqual([(rows[2].details as any).after.state, (rows[3].details as any).after.state], ['suspended', 'active']);
+    // A failed action (unknown company, unknown plan) writes nothing.
+    const before = (await dbs.db.select().from(staffAudit)).length;
+    assert.equal((await call('POST', `/console/companies/${randomUUID()}/trial`, { token: t, body: { days: 1 } })).status, 404);
+    assert.equal((await call('POST', `/console/companies/${target.companyId}/plan`, { token: t, body: { plan: 'nope', seats: 1 } })).status, 400);
+    assert.equal((await dbs.db.select().from(staffAudit)).length, before);
+
+    // Reading: staff only.
+    assert.equal((await call('GET', '/console/audit', { token: target.accessToken })).status, 403);
+    const all = await call('GET', '/console/audit', { token: t });
+    assert.equal(all.status, 200);
+    assert.equal(all.body.rows[0].companyId, other.companyId, 'newest first');
+    assert.equal(all.body.rows[0].action, 'company.suspend');
+    assert.ok(all.body.total >= 5);
+    assert.deepEqual(all.body.actions, ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate']);
+    const byCompany = await call('GET', `/console/audit?company=${target.companyId}`, { token: t });
+    assert.deepEqual(byCompany.body.rows.map((r: { action: string }) => r.action), ['company.reactivate', 'company.suspend', 'plan.set', 'trial.extend']);
+    assert.equal(byCompany.body.rows[0].companyName, 'Audit Target Co');
+    const byCode = await call('GET', `/console/audit?company=${code.toLowerCase()}&action=plan.set`, { token: t });
+    assert.deepEqual([byCode.body.total, byCode.body.rows[0].action], [1, 'plan.set']);
+    const page2 = await call('GET', `/console/audit?company=${target.companyId}&pageSize=3&page=2`, { token: t });
+    assert.deepEqual([page2.body.total, page2.body.page, page2.body.rows.length, page2.body.rows[0].action], [4, 2, 1, 'trial.extend']);
+    assert.equal((await call('GET', '/console/audit?action=delete.everything', { token: t })).status, 400);
+    // Download: the same filters as a file (staff only).
+    const csv = await fetch(`${base}/console/audit?company=${target.companyId}&export=csv`, { headers: { authorization: `Bearer ${t}` } });
+    assert.equal(csv.status, 200);
+    const text = await csv.text();
+    assert.match(text, /When.*Action.*Company/);
+    assert.equal((text.match(/trial\.extend|plan\.set|company\.suspend|company\.reactivate/g) ?? []).length, 4);
+    const denied = await fetch(`${base}/console/audit?export=csv`, { headers: { authorization: `Bearer ${target.accessToken}` } });
+    assert.equal(denied.status, 403);
+  });
+});
+
 describe('forgot password and codes (quality pass 2026-10-19)', () => {
   const old = (target: string) => dbs.db.update(otpCodes).set({ createdAt: new Date(Date.now() - 60_000) }).where(eq(otpCodes.target, target));
 
@@ -807,7 +976,7 @@ describe('forgot password and codes (quality pass 2026-10-19)', () => {
     assert.equal(a.status, 400);
     assert.match(a.body.message, /only your admin can reset/);
     const u = await call('POST', '/auth/reset/verify', { body: { otpId: unknown.body.otpId, code: unknown.body.devCode } });
-    assert.match(u.body.message, /no FreeFounders account/);
+    assert.match(u.body.message, /no Kaampilot account/);
   });
 
   test('an existing account signs up a second company without a name; a new account must give one', async () => {

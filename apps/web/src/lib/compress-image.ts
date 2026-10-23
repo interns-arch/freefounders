@@ -181,7 +181,8 @@ async function looksLikePhoto(blob: Blob): Promise<boolean> {
   return (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) || (b[0] === 0x89 && ascii(1, 4) === 'PNG') || (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP');
 }
 
-function dataUrlToBlob(url: string): Blob {
+/** A data: URL (e.g. a photo from the phone app's camera) as a Blob. */
+export function dataUrlToBlob(url: string): Blob {
   const [head, body = ''] = url.split(',', 2);
   const type = /^data:([^;,]+)/.exec(head)?.[1] ?? '';
   const bin = head.includes(';base64') ? atob(body) : decodeURIComponent(body);

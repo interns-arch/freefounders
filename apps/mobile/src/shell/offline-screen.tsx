@@ -1,5 +1,5 @@
 /**
- * "Can't reach FreeFounders": shown when the first page of the server does not load (no Wi-Fi, PC asleep, wrong
+ * "Can't reach Kaampilot": shown when the first page of the server does not load (no Wi-Fi, PC asleep, wrong
  * address). Try again, or change the server address (kept on this phone) — handy when testing on another network.
  */
 import { Ionicons } from '@expo/vector-icons';
@@ -48,7 +48,7 @@ export function OfflineScreen({
         <View style={{ alignItems: 'center', gap: 12 }}>
           <Ionicons name="cloud-offline-outline" size={56} color={p.mutedForeground} />
           <T size={24} weight="800" accessibilityRole="header" style={{ textAlign: 'center' }}>
-            Can’t reach FreeFounders
+            Can’t reach Kaampilot
           </T>
           <T muted style={{ textAlign: 'center' }}>
             The phone could not open
@@ -57,7 +57,7 @@ export function OfflineScreen({
             {server}
           </T>
           <T muted size={14} style={{ textAlign: 'center' }}>
-            Check that the phone is on the same Wi-Fi or hotspot as the FreeFounders computer and that FreeFounders is running there, then try again.
+            Check that the phone is on the same Wi-Fi or hotspot as the Kaampilot computer and that Kaampilot is running there, then try again.
           </T>
           {detail ? (
             <T muted size={12} style={{ textAlign: 'center' }}>
@@ -70,7 +70,7 @@ export function OfflineScreen({
           <View style={{ gap: 10 }}>
             <Note>
               Only enter the address your company gave you. The server at this address sees your password and can ask the app for
-              your location and camera. Nobody from FreeFounders or your company will ever ask you to change it by phone or chat.
+              your location and camera. Nobody from Kaampilot or your company will ever ask you to change it by phone or chat.
             </Note>
             <T weight="600" nativeID="server-label">
               Server address

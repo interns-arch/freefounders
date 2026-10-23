@@ -21,7 +21,7 @@ import { Barcode, QRCode, useQrLinks } from '@/components/common/codes';
 import { AttributeList } from '@/features/assets/components/dynamic-fields';
 import { DetailList, EmptyState, ErrorState, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Timeline } from '@/features/assets/components/timeline';
-import { PhotoStrip } from '@/features/assets/components/photos';
+import { AssetPhotosCard, PhotoStrip } from '@/features/assets/components/photos';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -264,11 +264,12 @@ export default function AssetDetailPage() {
                   },
                   { label: 'Added', value: formatDate(a.createdAt) },
                   ...(a.description ? [{ label: 'Notes', value: a.description, full: true }] : []),
-                  ...(a.photos.length ? [{ label: 'Photos', value: <PhotoStrip photos={a.photos} />, full: true }] : []),
                 ]}
               />
             </CardContent>
           </Card>
+
+          <AssetPhotosCard assetId={a.id} assetLabel={`${a.assetTag} · ${a.name}`} photos={a.photos} canEdit={can('asset:edit')} />
 
           <Card>
             <Tabs defaultValue="timeline">

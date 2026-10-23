@@ -17,6 +17,9 @@ import type { Employee } from '@freefounders/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate, formatNumber } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass, Segmented } from '@/components/common/controls';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { assetsExports } from '@freefounders/core/assets';
 
 const TABS: { value: string; label: string }[] = [
   { value: '', label: 'Current' },
@@ -131,6 +134,12 @@ export default function EmployeesPage() {
         description={q.data ? `${formatNumber(q.data.total)} ${f.status ? EMPLOYEE_STATUS_LABELS[f.status as EmployeeStatus]?.toLowerCase() : 'current'} employees` : 'People who can hold company assets.'}
         actions={
           <>
+            <DownloadMenu
+              filename={fileSlug('assets', 'employees', f.status, f.search, todayStamp())}
+              target={assetsExports.employees(f)}
+              empty={q.data?.total === 0}
+              loading={!q.data}
+            />
             {!!q.data?.items.length && (
               <Button size="sm" variant="outline" onClick={() => navigate(`/assets/id-cards?ids=${(selected.size ? [...selected] : q.data!.items.map((x) => x.id)).join(',')}`)}>
                 <Printer /> {selected.size ? `Print ${selected.size} ID cards` : 'Print ID cards'}

@@ -1,10 +1,11 @@
 /**
- * The FreeFounders phone app = the FreeFounders web app in a native shell (founder, 2026-10-12; PLAN.md §19.17).
+ * The Kaampilot phone app = the Kaampilot web app in a native shell (founder, 2026-10-12; PLAN.md §19.17).
  * The WebView shows the web app at the server address; the shell adds what a WebView cannot do on its own:
  *   - GPS and the front camera for the punch (bridge requests `location` / `photo`, see src/lib/protocol.ts),
  *   - saving files (`download` → share sheet) and printing (`print` → Android's print dialog),
  *   - the voice draft (`voice` → the phone's speech recogniser after Android's microphone pop-up, `voice-stop`),
- *   - Android back button, pull-to-refresh, links to other apps, splash + "Can't reach FreeFounders" screen.
+ *   - the punch-in reminder (`reminder-*` → local notifications, src/lib/reminders.ts; a tap opens /attendance),
+ *   - Android back button, pull-to-refresh, links to other apps, splash + "Can't reach Kaampilot" screen.
  * Sign-in is the web's own: its refresh cookie is kept by the WebView's cookie store between launches.
  */
 import Constants from 'expo-constants';
@@ -20,6 +21,7 @@ import { currentPosition } from '@/lib/location';
 import { printHtml, saveAndShare } from '@/lib/native-actions';
 import { askPermissionsAtStart } from '@/lib/permissions';
 import { listen, stopListening } from '@/lib/voice';
+import { type ReminderState, ReminderError, getReminder, installReminderHandler, notifications, pathOfResponse, refreshReminders, reminderOff, setReminder, skipToday, testReminder } from '@/lib/reminders';
 import { usePalette } from '@/lib/palette';
 import { type AppRequest, fromServer, linkTarget, originOf, outsideUrl, parseMessage, paymentStep, replyError, replyOk, upiAppUrl } from '@/lib/protocol';
 import { loadServerUrl, saveServerUrl } from '@/lib/server-url';
@@ -28,6 +30,23 @@ import { SelfieCamera } from './selfie-camera';
 import { T } from './ui';
 
 const VERSION = Constants.expoConfig?.version ?? '0.0.0';
+
+/** What this shell can do, so the web app shows only what works here (older shells report no list). */
+const CAPABILITIES = ['location', 'photo', 'download', 'print', 'voice', ...(notifications() ? ['reminders'] : [])];
+
+installReminderHandler();
+
+/** The page a tapped punch-in reminder opened the app with (cold start), once. */
+function launchPath(): string {
+  try {
+    const N = notifications();
+    const path = pathOfResponse(N?.getLastNotificationResponse());
+    if (path) N?.clearLastNotificationResponse();
+    return path ?? '/';
+  } catch {
+    return '/';
+  }
+}
 
 /**
  * The phone's own font size setting (Settings → Display → Font size) still enlarges the app's text, but at most 130 %:
@@ -54,6 +73,7 @@ export function Shell() {
   const [atTop, setAtTop] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selfie, setSelfie] = useState<PhotoRequest | null>(null);
+  const [startPath] = useState(launchPath);
 
   // The address to open, and location + camera asked once at start (Android pop-ups over the splash), before the
   // WebView is created; the camera answer also tells file pickers whether they may offer the camera.
@@ -63,6 +83,21 @@ export function Shell() {
       setCamera(cameraState(perm));
       setServer(url);
     })();
+    // Punch-in reminders: roll the plan forward (a skipped day back to weekly), at every start.
+    void refreshReminders();
+  }, []);
+
+  // A punch-in reminder tapped while the app is open (or in the background): open Attendance → Today.
+  useEffect(() => {
+    const N = notifications();
+    if (!N) return;
+    const sub = N.addNotificationResponseReceivedListener((r) => {
+      const path = pathOfResponse(r);
+      if (!path) return;
+      N.clearLastNotificationResponse();
+      web.current?.injectJavaScript(`location.assign(${JSON.stringify(path)});true;`);
+    });
+    return () => sub.remove();
   }, []);
 
   // The native splash stays until the first page is there (or cannot be), at most 10 s; then the shell's own spinner.
@@ -86,7 +121,7 @@ export function Shell() {
 
   // The injected script gives the app's powers to pages of this server only (it is rebuilt when the address changes).
   const script = useMemo(
-    () => (server && camera ? injectedScript({ platform: Platform.OS === 'ios' ? 'ios' : 'android', version: VERSION, camera }, originOf(server)) : ''),
+    () => (server && camera ? injectedScript({ platform: Platform.OS === 'ios' ? 'ios' : 'android', version: VERSION, camera, capabilities: CAPABILITIES }, originOf(server)) : ''),
     [server, camera],
   );
 
@@ -146,9 +181,22 @@ export function Shell() {
           case 'voice-stop':
             send(replyOk(r.id, { stopped: stopListening() }));
             return;
+          case 'reminder-set':
+          case 'reminder-get':
+          case 'reminder-skip-today':
+          case 'reminder-off': {
+            const state: ReminderState =
+              r.type === 'reminder-set' ? await setReminder(r.settings) : r.type === 'reminder-get' ? await getReminder() : r.type === 'reminder-off' ? await reminderOff() : await skipToday();
+            send(replyOk(r.id, state));
+            return;
+          }
+          case 'reminder-test':
+            send(replyOk(r.id, await testReminder(r.mode)));
+            return;
         }
       } catch (e) {
         const msg = e instanceof Error && e.message ? e.message : 'Something went wrong. Try again.';
+        if (e instanceof ReminderError) return send(replyError(r.id, msg, e.extra));
         send(replyError(r.id, msg));
         if (r.type === 'download') Alert.alert('The file could not be saved', msg);
         if (r.type === 'print') Alert.alert('Could not print', msg);
@@ -159,7 +207,7 @@ export function Shell() {
 
   const onMessage = useCallback(
     (e: WebViewMessageEvent) => {
-      // Only pages of the FreeFounders server may ask for location, camera, files or printing.
+      // Only pages of the Kaampilot server may ask for location, camera, files or printing.
       if (!server || !fromServer(e.nativeEvent.url, server)) return;
       const m = parseMessage(e.nativeEvent.data);
       if (m.kind === 'invalid') {
@@ -225,7 +273,7 @@ export function Shell() {
             <WebView
               key={`${server}#${attempt}`}
               ref={web}
-              source={{ uri: `${server}/` }}
+              source={{ uri: `${server}${startPath}` }}
               style={{ flex: 1, backgroundColor: p.background }}
               containerStyle={{ backgroundColor: p.background }}
               injectedJavaScriptBeforeContentLoaded={script}
@@ -278,6 +326,7 @@ export function Shell() {
         visible={!!selfie}
         title={selfie?.title ?? 'Selfie'}
         optional={!!selfie?.optional}
+        facing={selfie?.facing ?? 'front'}
         onCancel={() => {
           if (selfie) send(replyError(selfie.id, 'cancelled'));
           setSelfie(null);
@@ -296,11 +345,11 @@ function Splash({ overlay }: { overlay?: boolean }) {
   const p = usePalette();
   return (
     <View
-      accessibilityLabel="Opening FreeFounders"
+      accessibilityLabel="Opening Kaampilot"
       style={[{ alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: p.background }, overlay ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } : { flex: 1 }]}
     >
       <ActivityIndicator size="large" color={p.primary} />
-      <T muted>Opening FreeFounders…</T>
+      <T muted>Opening Kaampilot…</T>
     </View>
   );
 }

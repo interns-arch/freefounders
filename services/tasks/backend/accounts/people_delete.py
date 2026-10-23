@@ -1,6 +1,6 @@
 """Delete a person completely (Admin -> People & access -> "Delete user completely").
 
-DELETE /api/internal/people/<person_id> -- called by the FreeFounders Platform with its service token, inside the
+DELETE /api/internal/people/<person_id> -- called by the Kaampilot Platform with its service token, inside the
 token's company (the tenancy middleware picks the schema for every /api/internal/* call). The founder decided
 "delete everything": the person's user and every record that belongs to them go, even when reports for past
 months change. It cannot be undone. Everything happens in ONE transaction; files on disk that belonged to deleted
@@ -61,7 +61,7 @@ NULL -- the row belongs to someone else or to the company; only the pointer to t
   crm.TaskCategory.requested_by/created_by, crm.TaskSettings.updated_by, mistakes.MistakeSettings.updated_by,
   mistakes.MistakeCategory.created_by, mistakes.SOP.owner (an SOP someone else wrote), mistakes.Mistake.manager,
   workspace.Group.owner (a shared group stays with its members), workspace.LinkCollection.created_by (still holds
-  other people's links), hr.AttendanceCorrection.reviewed_by, hr.LeaveRequest.reviewed_by, hr.CompOff.created_by,
+  other people's links), hr.AttendanceCorrection.reviewed_by, hr.LeaveRequest.reviewed_by, hr.LeaveRequest.beyond_balance_by, hr.CompOff.created_by,
   hr.FaceProfile.enrolled_by, payroll.SalaryStructure/Advance/PayrollRun.created_by
   crm.AssignmentRule.member_ids (JSON list of user ids): the id is taken out of the list.
 
@@ -127,6 +127,7 @@ RELATIONS = {
     "hr.CompOff.created_by": NULL,
     "hr.LeaveRequest.user": DELETE,
     "hr.LeaveRequest.reviewed_by": NULL,
+    "hr.LeaveRequest.beyond_balance_by": NULL,
     "hr.FaceProfile.user": DELETE,
     "hr.FaceProfile.enrolled_by": NULL,
     # payroll

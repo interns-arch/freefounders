@@ -1,5 +1,5 @@
 /**
- * Browser preview of the phone app (`expo start` → http://localhost:8081). The phone app is the FreeFounders web app in
+ * Browser preview of the phone app (`expo start` → http://localhost:8081). The phone app is the Kaampilot web app in
  * a native WebView (PLAN.md §19.17), and a WebView only exists on phones, so in a browser we simply open the web app
  * itself. On this computer that is the dev gateway on localhost; elsewhere, the address the app is set to open.
  */
@@ -20,7 +20,7 @@ export function Shell() {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
       <ActivityIndicator />
-      <Text>Opening FreeFounders…</Text>
+      <Text>Opening Kaampilot…</Text>
     </View>
   );
 }

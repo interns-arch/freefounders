@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { attributesToForm, DynamicFields } from '@/features/assets/components/dynamic-fields';
 import { applyServerErrors, errorOf, Field, FormSection, useZodForm } from '@/components/common/form';
 import { FormSheet } from '@/components/common/form-sheet';
-import { PhotoPicker, uploadPhotos } from '@/features/assets/components/photos';
+import { AssetPhotos, AssetPhotosDialog, PhotoPicker, uploadPhotos } from '@/features/assets/components/photos';
 import { Combobox, EntityPicker, HolderPicker } from '@/features/assets/components/pickers';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
@@ -24,7 +24,7 @@ import { Separator, Skeleton, Switch } from '@/components/ui/primitives';
 import { errorMessage } from '@freefounders/core';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { type AssetDetail, useAssetsCache, useAssetType, useAssetTypes, useCompanies, useSaveAsset } from '@freefounders/core/assets';
+import { type AssetDetail, useAssetPhotos, useAssetsCache, useAssetType, useAssetTypes, useCompanies, useSaveAsset } from '@freefounders/core/assets';
 import { todayISO } from '@/lib/utils';
 import type { FormProps } from '../quick-add/quick-add';
 
@@ -47,6 +47,11 @@ export default function AssetForm({ open, onOpenChange, record, defaults }: Form
   const [holderId, setHolderId] = useState<string | null>(defaults?.holderId ?? null);
   const [holderError, setHolderError] = useState<string | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
+  /** Just added without photos: the "Add photos of this asset" step (PLAN.md §19.34) before the sheet closes. */
+  const [photoStep, setPhotoStep] = useState<{ id: string; label: string } | null>(null);
+  // Editing: the saved photos, kept fresh after a delete (the record passed in is a snapshot).
+  const savedPhotos = useAssetPhotos(editing ? asset.id : undefined);
+  const existingPhotos = editing ? (savedPhotos.data ?? asset.photos ?? []) : [];
 
   const schema = useMemo(() => (editing ? assetUpdateSchema : assetCreateSchema).extend({ attributes: buildAttributesSchema(fields) }), [editing, fields]);
 
@@ -115,9 +120,9 @@ export default function AssetForm({ open, onOpenChange, record, defaults }: Form
         : { ...values, assetTypeId: typeId, assignTo: assignNow && holderId ? { holderType, holderId } : null };
       try {
         const saved = await save.mutateAsync({ id: editing ? asset?.id : null, body });
-        if (!editing && photos.length) {
+        if (photos.length) {
           // The asset is already saved; a failed upload must not look like a failed save.
-          await uploadPhotos(saved.id, null, 'ASSET', photos).catch((err) => toast.error(`Asset added, but the photos did not upload: ${errorMessage(err)}`));
+          await uploadPhotos(saved.id, null, 'ASSET', photos).catch((err) => toast.error(`Asset ${editing ? 'updated' : 'added'}, but the photos did not upload: ${errorMessage(err)}`));
         }
         await cache.invalidateAssetData();
         if (editing) {
@@ -133,6 +138,9 @@ export default function AssetForm({ open, onOpenChange, record, defaults }: Form
           form.reset({ ...form.getValues(), name: '', serialNumber: '', attributes: attributesToForm(fields, {}) });
           setHolderId(null);
           setPhotos([]);
+        } else if (!photos.length) {
+          // No photos yet: offer to take some now (the phone's camera), then the sheet closes.
+          setPhotoStep({ id: saved.id, label: `${saved.assetTag} · ${saved.name}` });
         } else {
           onOpenChange(false);
         }
@@ -151,180 +159,199 @@ export default function AssetForm({ open, onOpenChange, record, defaults }: Form
   const e = (name: string) => errorOf(form, name);
 
   return (
-    <FormSheet
-      open={open}
-      onOpenChange={onOpenChange}
-      size="lg"
-      errors={form.formState.errors}
-      title={editing ? `Edit ${asset.assetTag}` : 'Add asset'}
-      description={editing ? asset.name : defaults?.holderLabel ? `It will be assigned to ${defaults.holderLabel}.` : 'Anything the company owns, leases, stores or uses.'}
-      onSubmit={submit(false)}
-      submitting={save.isPending}
-      submitLabel={editing ? 'Save changes' : 'Add asset'}
-      secondaryAction={
-        !editing && typeId ? (
-          <Button type="button" variant="secondary" disabled={save.isPending} onClick={() => submit(true)()}>
-            Save & add another
-          </Button>
-        ) : undefined
-      }
-    >
-      <Field label="Asset type" required hint={editing ? 'The type cannot change after creation.' : 'Pick what it is — the form adapts to the type.'}>
-        <Combobox
-          value={typeId}
-          onChange={(v) => setTypeId(v)}
-          options={typeOptions}
-          disabled={editing}
-          clearable={false}
-          placeholder="Laptop, Car, SIM Card, Helmet…"
-          searchPlaceholder="Search asset types…"
-          loading={types.isLoading}
+    <>
+      {photoStep && (
+        <AssetPhotosDialog
+          assetId={photoStep.id}
+          assetLabel={photoStep.label}
+          open
+          onOpenChange={() => undefined}
+          onDone={(saved) => {
+            setPhotoStep(null);
+            if (saved) navigate(`/assets/assets/${photoStep.id}`);
+            onOpenChange(false);
+          }}
         />
-      </Field>
+      )}
+      <FormSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        size="lg"
+        errors={form.formState.errors}
+        title={editing ? `Edit ${asset.assetTag}` : 'Add asset'}
+        description={editing ? asset.name : defaults?.holderLabel ? `It will be assigned to ${defaults.holderLabel}.` : 'Anything the company owns, leases, stores or uses.'}
+        onSubmit={submit(false)}
+        submitting={save.isPending}
+        submitLabel={editing ? 'Save changes' : 'Add asset'}
+        secondaryAction={
+          !editing && typeId ? (
+            <Button type="button" variant="secondary" disabled={save.isPending} onClick={() => submit(true)()}>
+              Save & add another
+            </Button>
+          ) : undefined
+        }
+      >
+        <Field label="Asset type" required hint={editing ? 'The type cannot change after creation.' : 'Pick what it is — the form adapts to the type.'}>
+          <Combobox
+            value={typeId}
+            onChange={(v) => setTypeId(v)}
+            options={typeOptions}
+            disabled={editing}
+            clearable={false}
+            placeholder="Laptop, Car, SIM Card, Helmet…"
+            searchPlaceholder="Search asset types…"
+            loading={types.isLoading}
+          />
+        </Field>
 
-      {!typeId ? (
-        <div className="flex items-start gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          <Info className="mt-0.5 size-4 shrink-0" />
-          <p>
-            Choose an asset type to continue. Missing one?{' '}
-            {can('catalog:manage') ? 'Create it under Settings → Asset catalog — no code changes needed.' : 'Ask an administrator to add it.'}
-          </p>
-        </div>
-      ) : type.isLoading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-9" />
-          <Skeleton className="h-9" />
-          <Skeleton className="h-24" />
-        </div>
-      ) : (
-        <>
-          <FormSection title="Basics">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Manufacturer / brand" error={e('manufacturer')}>
-                <Input placeholder="Dell, Honda, Canon…" {...form.register('manufacturer')} />
-              </Field>
-              <Field label="Model" error={e('model')}>
-                <Input placeholder="Latitude 7440" {...form.register('model')} />
-              </Field>
-              <Field label="Name" required error={e('name')} className="sm:col-span-2" hint="Shown everywhere. Filled from brand + model if left alone.">
-                <Input placeholder={type.data?.name} {...form.register('name')} />
-              </Field>
-              {!pooled && (
-                <Field label="Serial number" error={e('serialNumber')}>
-                  <Input className="font-mono" {...form.register('serialNumber')} />
+        {!typeId ? (
+          <div className="flex items-start gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            <Info className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Choose an asset type to continue. Missing one?{' '}
+              {can('catalog:manage') ? 'Create it under Settings → Asset catalog — no code changes needed.' : 'Ask an administrator to add it.'}
+            </p>
+          </div>
+        ) : type.isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-9" />
+            <Skeleton className="h-9" />
+            <Skeleton className="h-24" />
+          </div>
+        ) : (
+          <>
+            <FormSection title="Basics">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Manufacturer / brand" error={e('manufacturer')}>
+                  <Input placeholder="Dell, Honda, Canon…" {...form.register('manufacturer')} />
                 </Field>
-              )}
-              {pooled && (
-                <Field label="Quantity" required error={e('quantity')} hint={editing ? 'Total units, including assigned ones.' : 'How many units in stock.'}>
-                  <Input type="number" min={1} {...form.register('quantity')} />
+                <Field label="Model" error={e('model')}>
+                  <Input placeholder="Latitude 7440" {...form.register('model')} />
                 </Field>
-              )}
-              <Field label="Condition" error={e('condition')}>
-                <NativeSelect {...form.register('condition')}>
-                  {CONDITIONS.map((c) => (
-                    <option key={c} value={c}>
-                      {humanize(c)}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-              {!editing && (
-                <Field label="Starting status" error={e('status')} hint={assignNow ? 'Assigned right away.' : undefined}>
-                  <NativeSelect {...form.register('status')} disabled={assignNow}>
-                    {INITIAL_ASSET_STATUSES.filter((s) => !(pooled && s === 'IN_INVENTORY')).map((s) => (
-                      <option key={s} value={s}>
-                        {ASSET_STATUS_LABELS[s]}
+                <Field label="Name" required error={e('name')} className="sm:col-span-2" hint="Shown everywhere. Filled from brand + model if left alone.">
+                  <Input placeholder={type.data?.name} {...form.register('name')} />
+                </Field>
+                {!pooled && (
+                  <Field label="Serial number" error={e('serialNumber')}>
+                    <Input className="font-mono" {...form.register('serialNumber')} />
+                  </Field>
+                )}
+                {pooled && (
+                  <Field label="Quantity" required error={e('quantity')} hint={editing ? 'Total units, including assigned ones.' : 'How many units in stock.'}>
+                    <Input type="number" min={1} {...form.register('quantity')} />
+                  </Field>
+                )}
+                <Field label="Condition" error={e('condition')}>
+                  <NativeSelect {...form.register('condition')}>
+                    {CONDITIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {humanize(c)}
                       </option>
                     ))}
                   </NativeSelect>
                 </Field>
-              )}
-            </div>
-          </FormSection>
-
-          {fields.length > 0 && (
-            <>
-              <Separator />
-              <FormSection title={`${type.data?.name} details`} description="Custom fields defined for this type and its category.">
-                <DynamicFields fields={fields} form={form} />
-              </FormSection>
-            </>
-          )}
-
-          <Separator />
-          <FormSection title="Purchase & ownership">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Ownership" error={e('ownership')}>
-                <NativeSelect {...form.register('ownership')}>
-                  {OWNERSHIP_TYPES.map((o) => (
-                    <option key={o} value={o}>
-                      {humanize(o)}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-              <Field label="Vendor / supplier" error={e('vendorId')}>
-                <EntityPicker kind="VENDOR" value={(form.watch('vendorId') as string) || null} onChange={(v) => form.setValue('vendorId', v ?? '', { shouldDirty: true })} />
-              </Field>
-              <Field label="Invoice number" error={e('invoiceNumber')}>
-                <Input {...form.register('invoiceNumber')} />
-              </Field>
-              <Field label="Purchase date" error={e('purchaseDate')}>
-                <Input type="date" {...form.register('purchaseDate')} />
-              </Field>
-              <Field label="Warranty / expiry" error={e('warrantyExpiry')} hint="Warranty end, or expiry for licences and subscriptions.">
-                <Input type="date" {...form.register('warrantyExpiry')} />
-              </Field>
-            </div>
-            <Field label="Notes" error={e('description')}>
-              <Textarea rows={2} {...form.register('description')} />
-            </Field>
-          </FormSection>
-
-          {!editing && (
-            <>
-              <Separator />
-              <FormSection title="Photos">
-                <PhotoPicker files={photos} onChange={setPhotos} hint="Optional · up to 6 photos of the asset as it arrives" />
-              </FormSection>
-            </>
-          )}
-
-          {!editing && can('asset:assign') && (
-            <>
-              <Separator />
-              <section className="space-y-3">
-                <label className="flex cursor-pointer items-center justify-between gap-3">
-                  <span>
-                    <span className="flex items-center gap-2 text-sm font-semibold">
-                      <UserPlus className="size-4" /> Assign now
-                    </span>
-                    <span className="text-xs text-muted-foreground">Hand it to an employee, department or vendor in the same step.</span>
-                  </span>
-                  <Switch checked={assignNow} onCheckedChange={setAssignNow} />
-                </label>
-                {assignNow && (
-                  <div>
-                    <HolderPicker
-                      holderType={holderType}
-                      holderId={holderId}
-                      selectedLabel={holderId === defaults?.holderId ? defaults?.holderLabel : undefined}
-                      allowed={['EMPLOYEE', 'DEPARTMENT', 'VENDOR']}
-                      invalid={!!holderError}
-                      onChange={(t, id) => {
-                        setHolderType(t);
-                        setHolderId(id);
-                        setHolderError(null);
-                      }}
-                    />
-                    {holderError && <p className="mt-1 text-xs text-destructive">{holderError}</p>}
-                  </div>
+                {!editing && (
+                  <Field label="Starting status" error={e('status')} hint={assignNow ? 'Assigned right away.' : undefined}>
+                    <NativeSelect {...form.register('status')} disabled={assignNow}>
+                      {INITIAL_ASSET_STATUSES.filter((s) => !(pooled && s === 'IN_INVENTORY')).map((s) => (
+                        <option key={s} value={s}>
+                          {ASSET_STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </Field>
                 )}
-              </section>
-            </>
-          )}
-        </>
-      )}
-    </FormSheet>
+              </div>
+            </FormSection>
+
+            {fields.length > 0 && (
+              <>
+                <Separator />
+                <FormSection title={`${type.data?.name} details`} description="Custom fields defined for this type and its category.">
+                  <DynamicFields fields={fields} form={form} />
+                </FormSection>
+              </>
+            )}
+
+            <Separator />
+            <FormSection title="Purchase & ownership">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Ownership" error={e('ownership')}>
+                  <NativeSelect {...form.register('ownership')}>
+                    {OWNERSHIP_TYPES.map((o) => (
+                      <option key={o} value={o}>
+                        {humanize(o)}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="Vendor / supplier" error={e('vendorId')}>
+                  <EntityPicker kind="VENDOR" value={(form.watch('vendorId') as string) || null} onChange={(v) => form.setValue('vendorId', v ?? '', { shouldDirty: true })} />
+                </Field>
+                <Field label="Invoice number" error={e('invoiceNumber')}>
+                  <Input {...form.register('invoiceNumber')} />
+                </Field>
+                <Field label="Purchase date" error={e('purchaseDate')}>
+                  <Input type="date" {...form.register('purchaseDate')} />
+                </Field>
+                <Field label="Warranty / expiry" error={e('warrantyExpiry')} hint="Warranty end, or expiry for licences and subscriptions.">
+                  <Input type="date" {...form.register('warrantyExpiry')} />
+                </Field>
+              </div>
+              <Field label="Notes" error={e('description')}>
+                <Textarea rows={2} {...form.register('description')} />
+              </Field>
+            </FormSection>
+
+            <Separator />
+            <FormSection title="Photos">
+              {editing && <AssetPhotos assetId={asset.id} photos={existingPhotos} canEdit allowAdd={false} size="md" className="mb-3" />}
+              {(!editing || existingPhotos.length < 6) && (
+                <PhotoPicker
+                  files={photos}
+                  onChange={setPhotos}
+                  max={editing ? Math.max(0, 6 - existingPhotos.length) : 6}
+                  hint={editing ? `More photos are uploaded when you save${existingPhotos.length ? ` · ${6 - existingPhotos.length} more can be added` : ''}` : 'Optional · up to 6 photos of the asset as it arrives'}
+                />
+              )}
+            </FormSection>
+
+            {!editing && can('asset:assign') && (
+              <>
+                <Separator />
+                <section className="space-y-3">
+                  <label className="flex cursor-pointer items-center justify-between gap-3">
+                    <span>
+                      <span className="flex items-center gap-2 text-sm font-semibold">
+                        <UserPlus className="size-4" /> Assign now
+                      </span>
+                      <span className="text-xs text-muted-foreground">Hand it to an employee, department or vendor in the same step.</span>
+                    </span>
+                    <Switch checked={assignNow} onCheckedChange={setAssignNow} />
+                  </label>
+                  {assignNow && (
+                    <div>
+                      <HolderPicker
+                        holderType={holderType}
+                        holderId={holderId}
+                        selectedLabel={holderId === defaults?.holderId ? defaults?.holderLabel : undefined}
+                        allowed={['EMPLOYEE', 'DEPARTMENT', 'VENDOR']}
+                        invalid={!!holderError}
+                        onChange={(t, id) => {
+                          setHolderType(t);
+                          setHolderId(id);
+                          setHolderError(null);
+                        }}
+                      />
+                      {holderError && <p className="mt-1 text-xs text-destructive">{holderError}</p>}
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+          </>
+        )}
+      </FormSheet>
+    </>
   );
 }

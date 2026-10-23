@@ -1,4 +1,4 @@
-"""FreeFounders Platform sign-in.
+"""Kaampilot Platform sign-in.
 
 The Platform issues EdDSA (Ed25519) access tokens and publishes its public
 keys as JWKS. This class accepts those tokens alongside SimpleJWT: a token

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query, Res, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query, Res, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import {
@@ -25,6 +25,8 @@ import { AssetsService } from './assets.service';
 import { HoldersService } from './holders.service';
 import { LifecycleService } from './lifecycle.service';
 import { MAX_PHOTO_BYTES, MAX_PHOTOS_PER_UPLOAD, PhotosService, type UploadedPhoto } from './photos.service';
+import { Exportable } from '../../common/export';
+import { EXPORTS } from '../../common/export-specs';
 
 /** Photo types served inline, with their file extension. */
 const SERVABLE_PHOTO_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
@@ -39,6 +41,7 @@ export class AssetsController {
   ) {}
 
   @Get()
+  @Exportable(EXPORTS.assets)
   list(@CurrentActor() actor: Actor, @Query() q: Record<string, string>) {
     return this.assets.list(actor, q);
   }
@@ -114,9 +117,28 @@ export class AssetsController {
     @CurrentActor() actor: Actor,
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFiles() files: UploadedPhoto[] | undefined,
-    @Body() body: { allocationId?: string; kind?: string },
+    @Body() body: { allocationId?: string; kind?: string; caption?: string },
   ) {
-    return this.photos.upload(actor, id, body?.allocationId, body?.kind, files);
+    return this.photos.upload(actor, id, body?.allocationId, body?.kind, files, body?.caption);
+  }
+
+  /** The asset's own photos (kind ASSET), in display order (PLAN.md §19.34). */
+  @Get(':id/photos')
+  async listPhotos(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    await this.assets.assertCanView(actor, id);
+    return this.photos.listForAsset(id);
+  }
+
+  @Patch(':id/photos/:photoId')
+  async updatePhoto(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Param('photoId', ParseUUIDPipe) photoId: string, @Body() body: { caption?: unknown; sortOrder?: unknown }) {
+    await this.assets.assertCanView(actor, id);
+    return this.photos.update(actor, id, photoId, body ?? {});
+  }
+
+  @Delete(':id/photos/:photoId')
+  async deletePhoto(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Param('photoId', ParseUUIDPipe) photoId: string) {
+    await this.assets.assertCanView(actor, id);
+    return this.photos.remove(actor, id, photoId);
   }
 
   @Get(':id/photos/:photoId')

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render build script — prepares Django (API only; the screens are the FreeFounders web app, apps/web).
+# Render build script — prepares Django (API only; the screens are the Kaampilot web app, apps/web).
 set -o errexit
 
 echo "--- backend setup ---"

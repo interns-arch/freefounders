@@ -1,5 +1,5 @@
 /**
- * The FreeFounders web app's service worker (PLAN.md §19.18): keeps the app's own files on the phone, so the second
+ * The Kaampilot web app's service worker (PLAN.md §19.18): keeps the app's own files on the phone, so the second
  * launch starts at once and downloads almost nothing. Built by vite-plugin-pwa (injectManifest): `self.__WB_MANIFEST`
  * becomes the list of built files (index.html, /static/* scripts, styles and fonts) with their revisions.
  *

@@ -1,5 +1,5 @@
 /**
- * The FreeFounders sign-in (PLAN.md §13.4): a 15-minute access token kept in memory, renewed from the refresh
+ * The Kaampilot sign-in (PLAN.md §13.4): a 15-minute access token kept in memory, renewed from the refresh
  * token (an httpOnly cookie on the web; secure storage on mobile). One renewal at a time for everybody.
  */
 import { config } from './config';

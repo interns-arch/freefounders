@@ -249,7 +249,7 @@ export class OnboardingService {
   }
 
   /**
-   * FreeFounders new joiner (PLAN.md §17.4): an onboarding case for an employee record that already exists
+   * Kaampilot new joiner (PLAN.md §17.4): an onboarding case for an employee record that already exists
    * (made when the person was given Assets), optionally with a kit's items. Same flow as one HR plans by hand.
    */
   async createForEmployee(actor: Actor, employeeId: string, joinDate: string, kitId: string | null) {
@@ -260,7 +260,7 @@ export class OnboardingService {
       const caseNumber = await this.sequences.next('ONB', 5);
       const [c] = await db
         .insert(onboardingCases)
-        .values({ caseNumber, employeeId, joinDate, notes: 'Started by FreeFounders when the person was added', createdBy: actor.userId, createdByName: actor.name })
+        .values({ caseNumber, employeeId, joinDate, notes: 'Started by Kaampilot when the person was added', createdBy: actor.userId, createdByName: actor.name })
         .returning();
       if (kitId) {
         const [kit] = await db.select().from(onboardingKits).where(eq(onboardingKits.id, kitId));

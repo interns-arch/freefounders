@@ -21,11 +21,29 @@ import type { AssetType, Category, FieldDefinition } from '@freefounders/core/as
 import { useUrlFilters } from '@/lib/url-state';
 import { cn } from '@/lib/utils';
 import { FieldDialog } from './field-dialog';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp, type SheetData } from '@freefounders/core/export';
 
 function useInvalidateCatalog() {
   const cache = useAssetsCache();
   return () => cache.invalidate('categories', 'asset-types', 'asset-type', 'fields', 'filterable-fields');
 }
+/** The catalogue as one sheet: every asset type (as the tree filters it) with its category; empty categories too. */
+function catalogSheet(categories: Category[], types: AssetType[], f: string): SheetData {
+  const rows: SheetData['rows'] = [];
+  for (const c of categories) {
+    const list = types.filter((t) => t.categoryId === c.id && (!f || t.name.toLowerCase().includes(f) || c.name.toLowerCase().includes(f)));
+    if (!list.length && (!f || c.name.toLowerCase().includes(f))) rows.push([c.name, c.code, '', '', '', '', c.assetCount, null, c.fields.map((x) => x.label).join(', ')]);
+    for (const t of list)
+      rows.push([c.name, c.code, t.name, t.code, t.trackingMode === 'QUANTITY' ? 'By quantity' : 'One by one', t.consumable, t.assetCount, t.availableCount, c.fields.map((x) => x.label).join(', '), t.fieldCount]);
+  }
+  return {
+    title: 'Asset catalog',
+    header: ['Category', 'Category code', 'Asset type', 'Type code', 'Tracking', 'Consumable', 'Assets', 'Available', 'Category fields', 'Type fields'],
+    rows,
+  };
+}
+
 export default function CatalogPage() {
   const { values, set } = useUrlFilters();
   const categories = useCategories();
@@ -59,6 +77,12 @@ export default function CatalogPage() {
         description="Define any kind of asset — categories, types and their own fields. No code changes needed."
         actions={
           <>
+            <DownloadMenu
+              filename={fileSlug('assets', 'catalog', f, todayStamp())}
+              rows={() => catalogSheet(categories.data ?? [], types.data ?? [], f)}
+              empty={!types.data?.length && !categories.data?.length}
+              loading={!categories.data || !types.data}
+            />
             <Button size="sm" variant="outline" onClick={() => quickAdd.open('category')}>
               <Plus /> Category
             </Button>

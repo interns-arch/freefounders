@@ -331,6 +331,62 @@ describe('custody and lifecycle', () => {
     assert.ok(Buffer.from(await res.arrayBuffer()).equals(png));
   });
 
+  test('asset photos: caption, at most 6 per asset, order, delete by those who edit assets only (PLAN.md §19.34)', async () => {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 2)]);
+    const id = (await newDrone({ name: 'Gallery drone', attributes: { flight_time_min: 30, aviation_id: 'GAL-1' } })).body.id;
+    // Caption: one clean line; control characters go, HTML stays text (never run by a screen).
+    const first = await upload(`/assets/${id}/photos`, { kind: 'ASSET', caption: '  Front\u0000 view <b>x</b>\n' }, [png]);
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+    assert.equal(first.body[0].caption, 'Front view <b>x</b>');
+    assert.equal(first.body[0].sortOrder, 0);
+    assert.equal((await upload(`/assets/${id}/photos`, { kind: 'ASSET', caption: 'x'.repeat(121) }, [png])).status, 400);
+    // The cap counts photos already saved: 1 + 6 is refused, 1 + 5 fits, then nothing more.
+    assert.equal((await upload(`/assets/${id}/photos`, { kind: 'ASSET' }, [png, png, png, png, png, png])).status, 400);
+    const more = await upload(`/assets/${id}/photos`, { kind: 'ASSET' }, [png, png, png, png, png]);
+    assert.equal(more.status, 201);
+    assert.deepEqual(more.body.map((p: { sortOrder: number }) => p.sortOrder), [1, 2, 3, 4, 5]);
+    const full = await upload(`/assets/${id}/photos`, { kind: 'ASSET' }, [png]);
+    assert.equal(full.status, 400);
+    assert.match(full.body.message, /at most 6 photos/);
+    // GET /photos lists them in order; the list row carries the first one as its thumbnail.
+    const listed = await call('GET', `/assets/${id}/photos`);
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.length, 6);
+    assert.equal(listed.body[0].id, first.body[0].id);
+    const row = (await call('GET', `/assets?ids=${id}`)).body.items.find((a: { id: string }) => a.id === id);
+    assert.equal(row.photoId, first.body[0].id);
+    // Order and caption can be changed; a photo moved to the front becomes the thumbnail.
+    const last = more.body[4];
+    const moved = await call('PATCH', `/assets/${id}/photos/${last.id}`, { sortOrder: 0, caption: 'Serial plate' });
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    assert.equal(moved.body.sortOrder, 0);
+    assert.equal(moved.body.caption, 'Serial plate');
+    const reordered = (await call('GET', `/assets/${id}/photos`)).body;
+    assert.deepEqual(reordered.map((p: { id: string }) => p.id).slice(0, 2), [last.id, first.body[0].id]);
+    assert.deepEqual(reordered.map((p: { sortOrder: number }) => p.sortOrder), [0, 1, 2, 3, 4, 5]);
+    assert.equal((await call('PATCH', `/assets/${id}/photos/${last.id}`, { sortOrder: 9 })).status, 400);
+    assert.equal((await call('PATCH', `/assets/${id}/photos/${last.id}`, { caption: '' })).body.caption, null);
+    // Delete: Bob cannot see this asset (404), then holds it but cannot edit assets (403); an asset editor can.
+    assert.equal((await call('DELETE', `/assets/${id}/photos/${last.id}`, undefined, 'bob')).status, 404);
+    await call('POST', `/assets/${id}/assign`, { holderType: 'EMPLOYEE', holderId: ids.bob });
+    assert.equal((await call('DELETE', `/assets/${id}/photos/${last.id}`, undefined, 'bob')).status, 403);
+    assert.equal((await call('PATCH', `/assets/${id}/photos/${last.id}`, { caption: 'Mine' }, 'bob')).status, 403);
+    const gone = await call('DELETE', `/assets/${id}/photos/${last.id}`, undefined, 'it');
+    assert.equal(gone.status, 200, JSON.stringify(gone.body));
+    assert.equal((await fetch(`${base}/assets/${id}/photos/${last.id}`, { headers: { cookie: cookies.admin } })).status, 404);
+    assert.equal((await call('DELETE', `/assets/${id}/photos/${last.id}`)).status, 404);
+    assert.equal((await call('GET', `/assets/${id}`)).body.photos.length, 5);
+    assert.equal((await upload(`/assets/${id}/photos`, { kind: 'ASSET' }, [png])).status, 201);
+    // Handover / return photos are part of the assignment record: they cannot be deleted or edited this way.
+    const alloc = (await call('GET', `/assets/${id}`)).body.activeAllocations[0];
+    const handover = await upload(`/assets/${id}/photos`, { allocationId: alloc.id, kind: 'HANDOVER' }, [png]);
+    assert.equal(handover.status, 201);
+    assert.equal((await call('DELETE', `/assets/${id}/photos/${handover.body[0].id}`)).status, 403);
+    assert.equal((await call('PATCH', `/assets/${id}/photos/${handover.body[0].id}`, { caption: 'x' })).status, 403);
+    const history = await call('GET', `/assets/${id}/history`);
+    assert.ok(history.body.items.some((e: { action: string }) => e.action === 'ASSET_PHOTO_REMOVED'));
+  });
+
   test('photos are served as images only, never as a page; an old file name cannot leave the upload folder', async () => {
     const id = (await newDrone({ name: 'Header drone' })).body.id;
     const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16, 1)]);
@@ -558,7 +614,7 @@ describe('logins of your choice', () => {
     assert.equal(await signIn('store1', 'Store#2026'), 200);
   });
 
-  // FreeFounders: the saved-password vault was removed (PLAN.md §14.3). Passwords are kept as hashes only.
+  // Kaampilot: the saved-password vault was removed (PLAN.md §14.3). Passwords are kept as hashes only.
   test('nobody can read a password back, not even an admin', async () => {
     const roleList = await call('GET', '/roles');
     const roleId = roleList.body.find((x: { name: string }) => x.name === 'HR').id;
@@ -794,5 +850,81 @@ describe('history', () => {
     await assert.rejects(dbs.root.execute(sql`truncate history_events`), appendOnly);
     const r = await dbs.root.execute<{ n: number }>(sql`select count(*)::int as n from history_events where summary = 'tampered'`);
     assert.equal(r.rows[0].n, 0);
+  });
+});
+
+describe('downloads (PLAN.md §19.31)', () => {
+  async function file(path: string, who = 'admin') {
+    const res = await fetch(base + path, { headers: { 'x-requested-with': 'XMLHttpRequest', cookie: cookies[who] } });
+    return { status: res.status, type: res.headers.get('content-type') ?? '', disposition: res.headers.get('content-disposition') ?? '', bytes: Buffer.from(await res.arrayBuffer()) };
+  }
+  const csvLines = (b: Buffer) => b.toString('utf8').replace(/^﻿/, '').trim().split(/\r?\n/);
+
+  test('assets: every matching row (not one page), filters applied, typed formulas neutralised', async () => {
+    const tag = `EXP${Date.now()}`;
+    for (let i = 0; i < 3; i++) assert.equal((await newDrone({ name: `${tag} drone ${i}`, attributes: { flight_time_min: 10 + i } })).status, 201);
+    assert.equal((await newDrone({ name: `=HYPERLINK("http://x") ${tag}`, status: 'IN_INVENTORY', attributes: { flight_time_min: 5 } })).status, 201);
+
+    // pageSize=1 on the screen does not limit the file
+    const csv = await file(`/assets?search=${tag}&status=AVAILABLE&pageSize=1&page=2&export=csv`);
+    assert.equal(csv.status, 200);
+    assert.match(csv.type, /text\/csv/);
+    assert.match(csv.disposition, /attachment; filename="assets\.csv"/);
+    const lines = csvLines(csv.bytes);
+    assert.ok(lines[0].startsWith('Asset tag,Name,Category,Type,Status'), lines[0]);
+    assert.ok(lines[0].includes('Flight time min'), 'custom fields become columns');
+    assert.equal(lines.length, 1 + 3, 'header + the 3 available drones');
+    assert.ok(lines.slice(1).every((l) => l.includes('Available')));
+
+    const all = csvLines((await file(`/assets?search=${tag}&export=csv`)).bytes);
+    assert.equal(all.length, 1 + 4);
+    const evil = all.find((l) => l.includes('HYPERLINK'))!;
+    assert.ok(evil.includes(`"'=HYPERLINK(""http://x"") ${tag}"`), evil);
+
+    const xlsx = await file(`/assets?search=${tag}&export=xlsx`);
+    assert.equal(xlsx.status, 200);
+    assert.match(xlsx.type, /spreadsheetml/);
+    assert.equal(xlsx.bytes.subarray(0, 2).toString('latin1'), 'PK');
+  });
+
+  test('an export keeps the list’s own permission checks', async () => {
+    // An employee sees only their own assets and cannot list people or the activity log.
+    const mine = csvLines((await file('/assets?export=csv', 'bob')).bytes);
+    const visible = await call('GET', '/assets?pageSize=200', undefined, 'bob');
+    assert.equal(mine.length - 1, visible.body.total);
+    assert.equal((await file('/employees?export=csv', 'bob')).status, 403);
+    assert.equal((await file('/history?export=xlsx', 'bob')).status, 403);
+    assert.equal((await file('/users?export=csv', 'bob')).status, 403);
+    assert.equal((await file('/assets?export=csv', 'nobody')).status, 401);
+  });
+
+  test('employees, activity, tickets, users and org lists download with human columns', async () => {
+    const emp = csvLines((await file('/employees?search=T001&export=csv')).bytes);
+    assert.equal(emp[0].split(',').slice(0, 3).join(','), 'Employee code,Name,Designation');
+    assert.equal(emp.length, 2);
+    assert.ok(emp[1].startsWith('T001,Alice Rao'));
+
+    const hist = await file('/history?entityType=ASSET&export=xlsx');
+    assert.equal(hist.status, 200);
+    assert.equal(hist.bytes.subarray(0, 2).toString('latin1'), 'PK');
+    assert.ok(csvLines((await file('/history?entityType=ASSET&export=csv')).bytes)[0].startsWith('When,Who,What,Item,Action,Summary'));
+
+    assert.equal(csvLines((await file('/tickets?export=csv')).bytes)[0].split(',')[0], 'Ticket');
+    const usersCsv = csvLines((await file('/users?search=Test%20IT&export=csv')).bytes);
+    assert.equal(usersCsv.length, 2);
+    assert.ok(usersCsv[1].startsWith('Test IT,'));
+
+    const loc = csvLines((await file('/locations?search=Test%20Store&export=csv')).bytes);
+    assert.equal(loc.length, 2);
+    assert.ok(!loc[0].split(',').includes('ID'), 'ids are left out');
+    assert.ok(loc[1].includes('Test Store'));
+  });
+
+  test('without ?export the list still answers JSON pages', async () => {
+    const r = await call('GET', '/assets?pageSize=1');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.items.length, 1);
+    assert.equal(r.body.pageSize, 1);
+    assert.equal((await file('/assets?export=pdf')).type.includes('json'), true);
   });
 });

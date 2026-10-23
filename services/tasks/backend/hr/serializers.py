@@ -94,19 +94,30 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     leave_type_name = serializers.CharField(source="leave_type.name", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     document_url = serializers.SerializerMethodField()
+    leave_days = serializers.FloatField(read_only=True)
+    beyond_balance_by_detail = UserBriefSerializer(source="beyond_balance_by", read_only=True)
+    balance_check = serializers.SerializerMethodField()
 
     class Meta:
         model = LeaveRequest
         fields = ["id", "user", "user_detail", "leave_type", "leave_type_name",
-                  "start_date", "end_date", "days", "reason", "document", "document_url",
+                  "start_date", "end_date", "days", "half_day", "leave_days", "reason", "document", "document_url",
                   "status", "status_display", "reviewed_by_detail", "remarks",
-                  "reviewed_at", "created_at"]
+                  "reviewed_at", "beyond_balance", "beyond_balance_by_detail", "beyond_balance_at",
+                  "balance_check", "created_at"]
         read_only_fields = ["user", "days", "status", "reviewed_by_detail",
-                            "remarks", "reviewed_at"]
+                            "remarks", "reviewed_at", "beyond_balance", "beyond_balance_at"]
         extra_kwargs = {"document": {"write_only": True, "required": False}}
 
     def get_document_url(self, obj):
         return file_url(obj.document)
+
+    def get_balance_check(self, obj):
+        """Pending requests only: would approving it go beyond the person's balance? (The approval screen warns.)"""
+        if obj.status != "pending":
+            return None
+        from .services import leave_balance_check
+        return leave_balance_check(obj.user, obj.leave_type, obj.start_date, obj.leave_days, exclude_pk=obj.pk)
 
     def validate_document(self, value):
         from config.images import check_size, compress_upload
@@ -123,6 +134,10 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"end_date": "End date cannot be before the start date."})
         if start and end and (end - start) > timedelta(days=90):
             raise serializers.ValidationError({"end_date": "Leave range cannot exceed 90 days."})
+        if attrs.get("half_day"):
+            s, e = start or getattr(self.instance, "start_date", None), end or getattr(self.instance, "end_date", None)
+            if s and e and s != e:
+                raise serializers.ValidationError({"half_day": "A half day is one date: make the start and end date the same."})
         leave_type = attrs.get("leave_type")
         if leave_type and leave_type.requires_document and not attrs.get("document"):
             raise serializers.ValidationError({"document": f"{leave_type.name} requires a supporting document."})

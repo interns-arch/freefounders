@@ -43,7 +43,7 @@ const LAST = ['Patel', 'Iyer', 'Gupta', 'Reddy', 'Nair', 'Joshi', 'Kulkarni', 'D
 
 async function main() {
   if (tenancyEnabled()) {
-    console.log('ℹ Multi-company mode: companies are set up by the FreeFounders Platform — nothing to seed.');
+    console.log('ℹ Multi-company mode: companies are set up by the Kaampilot Platform — nothing to seed.');
     return;
   }
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });

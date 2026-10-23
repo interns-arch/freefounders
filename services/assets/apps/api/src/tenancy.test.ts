@@ -1,4 +1,4 @@
-// FreeFounders multi-company mode (TENANCY=schemas): one schema per company, nothing visible across.
+// Kaampilot multi-company mode (TENANCY=schemas): one schema per company, nothing visible across.
 // Runs in its own process with `npm test`; creates two company schemas in the throwaway test database
 // and drops them afterwards.
 import assert from 'node:assert/strict';
@@ -175,6 +175,41 @@ describe('multi-company mode', () => {
 
   test('company schemas get the same database rules (history cannot be edited)', async () => {
     await assert.rejects(dbs.pool.query(`update "${ACME.schema}".history_events set summary = 'x'`), /append-only|not allowed|immutable|cannot/i);
+  });
+
+  test('an asset photo is served in its own company only (PLAN.md §19.34)', async () => {
+    const asha = people['Asha@acme_t'];
+    const beta = people['Asha@beta_t'];
+    const cat = await call('POST', '/categories', { token: await access(asha), body: { name: 'Photo cat', code: 'PHC' } });
+    assert.equal(cat.status, 201, JSON.stringify(cat.body));
+    const type = await call('POST', '/asset-types', { token: await access(asha), body: { categoryId: cat.body.id, name: 'Photo type', code: 'PHT', trackingMode: 'INDIVIDUAL' } });
+    assert.equal(type.status, 201, JSON.stringify(type.body));
+    const asset = await call('POST', '/assets', { token: await access(asha), body: { assetTypeId: type.body.id, name: 'Photo asset', status: 'AVAILABLE', attributes: {} } });
+    assert.equal(asset.status, 201, JSON.stringify(asset.body));
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16, 3)]);
+    const form = new FormData();
+    form.append('kind', 'ASSET');
+    form.append('photos', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'p.png');
+    const up = await fetch(`${base}/assets/${asset.body.id}/photos`, {
+      method: 'POST',
+      headers: { 'x-requested-with': 'XMLHttpRequest', authorization: `Bearer ${await access(asha)}` },
+      body: form,
+    });
+    const upText = await up.text();
+    assert.equal(up.status, 201, upText);
+    const photoId = (JSON.parse(upText) as { id: string }[])[0].id;
+    const url = `/assets/${asset.body.id}/photos/${photoId}`;
+    const own = await fetch(base + url, { headers: { authorization: `Bearer ${await access(asha)}` } });
+    assert.equal(own.status, 200);
+    assert.equal(own.headers.get('content-type'), 'image/png');
+    // The same ids mean nothing in the other company: not found, not deletable, and the table there stays empty.
+    assert.equal((await call('GET', url, { token: await access(beta) })).status, 404);
+    assert.equal((await call('DELETE', url, { token: await access(beta) })).status, 404);
+    assert.equal((await call('GET', `/assets/${asset.body.id}/photos`, { token: await access(beta) })).status, 404);
+    const { rows } = await dbs.pool.query(
+      `select (select count(*)::int from "${ACME.schema}".allocation_photos) as acme, (select count(*)::int from "${BETA.schema}".allocation_photos) as beta`,
+    );
+    assert.deepEqual(rows[0], { acme: 1, beta: 0 });
   });
 
   test('deleting a person works in the company of the token only', async () => {

@@ -2,21 +2,22 @@
  * /attendance/dashboard (PLAN.md §19.15): one row per person for a month: present, absent, half days, late marks, leave,
  * week-offs/holidays and hours. Sort any column, open a person's month calendar, download the month or import attendance.
  */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { type TeamMonthRow, useTeamMonth } from '@freefounders/core/hr';
-import { ChevronLeft, ChevronRight, Download, Upload } from '@/components/icons';
+import { useAccess } from '@freefounders/core';
+import { type TeamMonthRow, hrExports, useTeamMonth } from '@freefounders/core/hr';
+import { fileSlug } from '@freefounders/core/export';
+import { ChevronLeft, ChevronRight, Upload } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { type Column, DataTable } from '@/components/common/data-table';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState } from '@/components/common/page';
 import { SearchField } from '@/components/common/search-field';
 import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Label, NativeSelect } from '@/components/ui/input';
 import { Avatar, Card, Switch } from '@/components/ui/primitives';
-import { Chip, ErrorNote, OkNote } from '../tasks/general/parts';
+import { Chip } from '../tasks/general/parts';
 import { useOpenHistory } from './daily';
 import { ImportAttendanceDialog } from './import-dialog';
-import { useReportDownload } from './reports';
 
 type SortKey = 'name' | 'employee_code' | 'present' | 'absent' | 'half_day' | 'late' | 'leave' | 'off' | 'hours';
 
@@ -56,9 +57,7 @@ export function DashboardTab() {
   const [inactive, setInactive] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' });
   const [importing, setImporting] = useState(false);
-  const [done, setDone] = useState('');
   const query = useTeamMonth(ym.year, ym.month, { q, department, inactive });
-  const report = useReportDownload();
   const openHistory = useOpenHistory('dashboard');
   const isCurrent = ym.year === now.getFullYear() && ym.month === now.getMonth() + 1;
   const title = new Date(ym.year, ym.month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
@@ -130,12 +129,7 @@ export function DashboardTab() {
     },
   ];
 
-  const download = () => {
-    setDone('');
-    report
-      .run({ type: 'monthly_summary', format: 'xlsx', year: ym.year, month: ym.month, department: department || undefined })
-      .then((n) => setDone(`Downloaded ${n}`), () => undefined);
-  };
+  const ymText = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
 
   return (
     <div className="max-w-6xl space-y-4">
@@ -157,9 +151,20 @@ export function DashboardTab() {
               <Upload /> Import attendance
             </Button>
           )}
-          <Button size="sm" onClick={download} loading={report.pending}>
-            <Download /> Download report
-          </Button>
+          <DownloadMenu
+            filename={fileSlug('attendance', 'dashboard', ymText, department, inactive && 'with-inactive', q)}
+            target={hrExports.teamMonth(ym.year, ym.month, { q, department, inactive }, sort)}
+            loading={!query.data}
+            empty={!!query.data && rows.length === 0}
+            extra={[
+              {
+                label: 'Monthly summary report (Excel)',
+                format: 'xlsx',
+                filename: fileSlug('attendance', 'monthly-summary', ymText, department),
+                target: hrExports.report({ type: 'monthly_summary', year: ym.year, month: ym.month, department }),
+              },
+            ]}
+          />
         </div>
       </div>
 
@@ -184,8 +189,6 @@ export function DashboardTab() {
         </span>
       </div>
 
-      {report.error && <ErrorNote>{errorMessage(report.error)}</ErrorNote>}
-      <OkNote>{done}</OkNote>
       <Card className="overflow-hidden">
         <DataTable
           columns={columns}

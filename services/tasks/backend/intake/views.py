@@ -1,3 +1,4 @@
+from config.exports import ExportMixin
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -26,11 +27,17 @@ class SimulateSerializer(serializers.Serializer):
     body = serializers.CharField(max_length=8000)
 
 
-class IntakeViewSet(viewsets.ReadOnlyModelViewSet):
+class IntakeViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
     """AI inbox: what came in, how it was classified, which lead it became."""
     permission_classes = [HasCapability.of("intake.view")]
     serializer_class = InboundMessageSerializer
     queryset = InboundMessage.objects.select_related("lead").all()
+    export_name = "ai-inbox"
+    export_columns = [
+        ("Received", "created_at"), ("Channel", "channel"), ("From", "sender_name"), ("Sender", "sender"),
+        ("Subject", "subject"), ("Message", "body"), ("Status", "status"), ("Lead", "lead_name"),
+        ("Error", "error"), ("Processed", "processed_at"),
+    ]
 
     def get_queryset(self):
         qs = super().get_queryset()

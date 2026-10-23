@@ -84,7 +84,7 @@ function useInvalidateUsers() {
 }
 
 /**
- * PATCH /users/:id/. In FreeFounders the department and "reports to" belong to the Platform's People directory
+ * PATCH /users/:id/. In Kaampilot the department and "reports to" belong to the Platform's People directory
  * (PLAN.md §17.1), so they are not sent from here.
  */
 export interface ManagedUserInput {

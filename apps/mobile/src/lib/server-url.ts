@@ -1,6 +1,6 @@
 /**
- * The FreeFounders address the app opens. Default: EXPO_PUBLIC_WEB_URL (apps/mobile/.env, see .env.example), else
- * app.json "extra.webUrl". A person can change it on the "Can't reach FreeFounders" screen (e.g. another Wi-Fi); that
+ * The Kaampilot address the app opens. Default: EXPO_PUBLIC_WEB_URL (apps/mobile/.env, see .env.example), else
+ * app.json "extra.webUrl". A person can change it on the "Can't reach Kaampilot" screen (e.g. another Wi-Fi); that
  * choice is kept on the phone (expo-secure-store) until they reset it.
  *
  * Store builds lock the address (EXPO_PUBLIC_LOCK_SERVER=1 or app.json "extra.lockServer": true): the app then always

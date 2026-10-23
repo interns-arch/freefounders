@@ -12,6 +12,8 @@ import { useInvalidateReconciliation, useReconciliations, useRunReconciliation }
 import { cn, formatDateTime, relativeTime } from '@/lib/utils';
 import { parseDumpFile, type ParsedDump } from './parse';
 import { SummaryChips } from './summary';
+import { DownloadMenu } from '@/components/common/download-menu';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
 
 const SOURCES: { source: ReconSource; icon: typeof CardSim; perm: 'asset:assign' | 'employee:manage'; hint: string }[] = [
   { source: 'AIRTEL', icon: CardSim, perm: 'asset:assign', hint: 'Connections export from the Airtel business portal. Checked against the SIM register.' },
@@ -63,7 +65,34 @@ export default function ReconciliationPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Reconciliation" description="Upload the latest Airtel or Salary Box dump. Every upload is checked against this system and the team gets a notification with the result." />
+      <PageHeader
+        title="Reconciliation"
+        description="Upload the latest Airtel or Salary Box dump. Every upload is checked against this system and the team gets a notification with the result."
+        actions={
+          <DownloadMenu
+            filename={fileSlug('assets', 'reconciliation-checks', todayStamp())}
+            rows={() => ({
+              title: 'Reconciliation checks',
+              header: ['Checked on', 'Source', 'File', 'Rows', 'Matched', 'Mismatch', 'Not in system', 'Not in file', 'Invalid', 'With notes', 'By'],
+              rows: (runs.data ?? []).map((r) => [
+                new Date(r.createdAt),
+                RECON_SOURCE_LABELS[r.source],
+                r.fileName,
+                r.rowCount,
+                r.summary.MATCHED ?? 0,
+                r.summary.MISMATCH ?? 0,
+                r.summary.MISSING_IN_SYSTEM ?? 0,
+                r.summary.MISSING_IN_DUMP ?? 0,
+                r.summary.INVALID ?? 0,
+                r.summary.warnings ?? 0,
+                r.createdByName,
+              ]),
+            })}
+            empty={runs.data?.length === 0}
+            loading={!runs.data}
+          />
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         {sources.map((s) => (

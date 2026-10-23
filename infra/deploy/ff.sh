@@ -1,5 +1,5 @@
 #!/bin/sh
-# docker compose for FreeFounders with the right project, env file and compose file. Examples:
+# docker compose for Kaampilot with the right project, env file and compose file. Examples:
 #   ./ff.sh ps        ./ff.sh logs -f platform        ./ff.sh stop        ./ff.sh up -d
 # FF_HOME (default /opt/freefounders) holds .env, app/ (this repo), web/ (apps/web/dist) and data/.
 set -eu

@@ -176,7 +176,7 @@ export interface GatewayConfig {
   razorpay?: { keyId: string; keySecret: string; webhookSecret: string; mode: 'test' | 'live' };
 }
 
-export const PAYMENTS_OFF_MESSAGE = 'Payments are not set up yet. Please try again later or contact FreeFounders support.';
+export const PAYMENTS_OFF_MESSAGE = 'Payments are not set up yet. Please try again later or contact Kaampilot support.';
 
 /**
  * BILLING_GATEWAY=fake|razorpay. Default: fake in dev and on the open demo (DEMO_MODE=1); a production build without

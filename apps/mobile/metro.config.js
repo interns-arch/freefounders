@@ -1,4 +1,4 @@
-// Metro for the FreeFounders phone app (the web app in a native shell, PLAN.md §19.17). apps/mobile is NOT in the root
+// Metro for the Kaampilot phone app (the web app in a native shell, PLAN.md §19.17). apps/mobile is NOT in the root
 // npm workspace: it keeps its own node_modules (Expo pins its own React). The only shared code it reads is the theme's
 // hex colours, straight from source:  @freefounders/theme/native  →  ../../packages/theme  (through its "exports").
 // Any bare import made inside packages/* would be taken from THIS app's node_modules (one React). See README.md.

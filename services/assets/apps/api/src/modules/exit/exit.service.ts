@@ -441,7 +441,7 @@ export class ExitService {
       .where(eq(users.employeeId, c.employeeId))
       .returning({ id: users.id, personId: users.platformPersonId });
     for (const u of logins) await this.auth.revokeUserSessions(u.id);
-    // FreeFounders: the Platform switches the person off in every app (PLAN.md §17.4).
+    // Kaampilot: the Platform switches the person off in every app (PLAN.md §17.4).
     const personIds = logins.map((u) => u.personId).filter((p): p is string => !!p);
     if (personIds.length) await this.outbox.emit('exit.completed', { employeeId: c.employeeId, caseNumber: c.caseNumber, personIds });
 

@@ -163,9 +163,9 @@ export const roles = pgTable('roles', {
   description: text('description'),
   permissions: text('permissions').array().notNull().default(sql`'{}'::text[]`),
   isSystem: boolean('is_system').notNull().default(false),
-  /** A role removed in the FreeFounders role builder: kept for history, gives no permissions. */
+  /** A role removed in the Kaampilot role builder: kept for history, gives no permissions. */
   archived: boolean('archived').notNull().default(false),
-  /** The FreeFounders Platform role this copy comes from (null for roles made here). */
+  /** The Kaampilot Platform role this copy comes from (null for roles made here). */
   platformRoleId: uuid('platform_role_id').unique(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -189,14 +189,14 @@ export const users = pgTable('users', {
   failedLogins: integer('failed_logins').notNull().default(0),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
-  /** The FreeFounders Platform person this login belongs to (set by /internal/provision). */
+  /** The Kaampilot Platform person this login belongs to (set by /internal/provision). */
   platformPersonId: uuid('platform_person_id').unique(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [uniqueIndex('users_username_lower_idx').on(sql`lower(${t.username})`), uniqueIndex('users_email_lower_idx').on(sql`lower(${t.email})`)]);
 
 /**
- * Roles given by the FreeFounders role builder (several per person). When a user has rows here, only these count;
+ * Roles given by the Kaampilot role builder (several per person). When a user has rows here, only these count;
  * otherwise `users.role_id` does. Permissions are read through the SQL function user_permissions(user_id).
  */
 export const userRoles = pgTable(
@@ -229,7 +229,7 @@ export const sessions = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     ip: text('ip'),
     userAgent: text('user_agent'),
-    /** Session made from a FreeFounders Platform token: it ends with that token and is never extended. */
+    /** Session made from a Kaampilot Platform token: it ends with that token and is never extended. */
     fixedExpiry: boolean('fixed_expiry').notNull().default(false),
     /** The Platform token said the company's subscription is read-only (`ro`): writes are refused (PLAN.md §21). */
     readOnly: boolean('read_only').notNull().default(false),
@@ -437,6 +437,9 @@ export const allocationPhotos = pgTable(
     sizeBytes: integer('size_bytes').notNull(),
     uploadedBy: uuid('uploaded_by'),
     uploadedByName: text('uploaded_by_name'),
+    // Asset photos (kind ASSET, PLAN.md §19.34): an optional caption and the order they are shown in.
+    caption: text('caption'),
+    sortOrder: integer('sort_order').notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [index('allocation_photos_alloc_idx').on(t.allocationId), index('allocation_photos_asset_idx').on(t.assetId)],
@@ -602,7 +605,7 @@ export const tickets = pgTable(
     status: text('status', { enum: TICKET_STATUSES }).notNull().default('OPEN'),
     resolution: text('resolution'),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-    /** FreeFounders (PLAN.md §17.4): the Tasks task working on this ticket, e.g. {"ref":"T-00042","url":"/tasks/tasks/42"}. */
+    /** Kaampilot (PLAN.md §17.4): the Tasks task working on this ticket, e.g. {"ref":"T-00042","url":"/tasks/tasks/42"}. */
     linkedTask: jsonb('linked_task').$type<{ ref: string; url: string } | null>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -610,7 +613,7 @@ export const tickets = pgTable(
   (t) => [index('tickets_status_idx').on(t.status), index('tickets_asset_idx').on(t.assetId)],
 );
 
-/** Outbox for the FreeFounders Platform (PLAN.md §17.4): it reads these to run cross-app rules. */
+/** Outbox for the Kaampilot Platform (PLAN.md §17.4): it reads these to run cross-app rules. */
 export const ffEvents = pgTable('ff_events', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   type: text('type').notNull(),

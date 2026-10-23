@@ -166,7 +166,7 @@ def visible_tasks(user, include_deleted=False):
             | Q(assigned_to=user) | Q(created_by=user) | Q(subscribers=user)
             | Q(group__members=user) | Q(group__owner=user) | reports_clause
         ).distinct()
-    # A role scoped to strictly "own" tasks (FreeFounders role builder) does
+    # A role scoped to strictly "own" tasks (Kaampilot role builder) does
     # not see direct reports' tasks; every built-in role keeps seeing them.
     if has_capability(user, "tasks.view_self") and not has_capability(user, "tasks.view_own"):
         reports_clause = Q(pk__in=[])

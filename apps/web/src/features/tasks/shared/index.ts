@@ -1,6 +1,5 @@
 // Building blocks shared by every Tasks screen (task workspace, home, team performance, groups…).
 // Owned by the task workspace; the exported names and props are stable.
-export { downloadCSV } from './csv';
 export { FilePick, PickedFiles, addFiles } from './file-pick';
 export { fmtDT, fmtEffort, nowForInput, pct, relDue, toLocalInput, toMinutes } from './format';
 export { Linkify } from './linkify';

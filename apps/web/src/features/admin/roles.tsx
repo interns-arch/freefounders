@@ -1,8 +1,10 @@
 import { errorMessage, usePlatformMe } from '@freefounders/core';
-import { LEVEL_LABELS, type Role, roleApps, roleLimits, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles } from '@freefounders/core/admin';
+import { LEVEL_LABELS, type Role, roleApps, roleLimits, rolesMatrixSheet, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles } from '@freefounders/core/admin';
 import { Lock, Plus, ShieldCheck } from '@/components/icons';
 import { useState } from 'react';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
 import { useConfirm } from '@/components/common/confirm';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -121,9 +123,18 @@ export function RolesPage() {
         title="Roles"
         description="What each role can do in every app, the Admin workspace included. Admin and Member are built in: change what they can do, but they cannot be deleted. A person can have several roles; their permissions add up. The owner can always do everything."
         actions={
-          <Button variant="cta" onClick={() => setEditing('new')} disabled={!catalogue.data}>
-            <Plus /> New role
-          </Button>
+          <>
+            <DownloadMenu
+              filename={fileSlug('admin-roles', todayStamp())}
+              rows={() => rolesMatrixSheet(roles.data ?? [], catalogue.data ?? [])}
+              empty={roles.data?.length === 0}
+              loading={!roles.data || !catalogue.data}
+              size="default"
+            />
+            <Button variant="cta" onClick={() => setEditing('new')} disabled={!catalogue.data}>
+              <Plus /> New role
+            </Button>
+          </>
         }
       />
       <ErrorNote>{error || (catalogue.error ? errorMessage(catalogue.error) : '')}</ErrorNote>

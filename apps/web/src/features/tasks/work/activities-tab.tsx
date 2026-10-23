@@ -1,4 +1,6 @@
-import { type PersonOption, useTaskActivities, useTaskPeople } from '@freefounders/core/tasks';
+import { type PersonOption, tasksExports, useTaskActivities, useTaskPeople } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadMenu } from '@/components/common/download-menu';
 import { SearchField } from '@/components/common/search-field';
 import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Activity } from '@/components/icons';
@@ -66,6 +68,13 @@ export function ActivitiesTab({ href }: { href: (id: number) => string }) {
             Clear
           </Button>
         )}
+        <span className="flex-1" />
+        <DownloadMenu
+          target={tasksExports.activities({ days: days || undefined, assigned_to: who || undefined, actor: actor || undefined, search: q || undefined })}
+          filename={fileSlug('tasks', 'activities', days ? `${days}-days` : 'all', todayStamp())}
+          empty={!list.isLoading && rows.length === 0}
+          loading={list.isLoading}
+        />
       </div>
       {(counts.data ?? []).length > 0 && (
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Done by">

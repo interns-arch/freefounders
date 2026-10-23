@@ -6,7 +6,7 @@ import { DbService } from '../db/db.service';
 import { syncState } from '../db/schema';
 
 /**
- * The company profile from the FreeFounders Platform (PLAN.md §16): names, colour, logo and module switches.
+ * The company profile from the Kaampilot Platform (PLAN.md §16): names, colour, logo and module switches.
  * Kept in the company's own sync_state table. An install that never received one (standalone) has every module on
  * and keeps its own look.
  */

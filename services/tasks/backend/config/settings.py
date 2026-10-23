@@ -135,7 +135,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        # FreeFounders Platform tokens (EdDSA) first; anything else falls
+        # Kaampilot Platform tokens (EdDSA) first; anything else falls
         # through to the app's own SimpleJWT login exactly as before.
         "accounts.platform_auth.PlatformJWTAuthentication",
         # SimpleJWT, switched off in multi-company mode (accounts/platform_auth.py).
@@ -163,14 +163,14 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
 }
 
-# FreeFounders Platform sign-in (accounts/platform_auth.py). Blank = off.
+# Kaampilot Platform sign-in (accounts/platform_auth.py). Blank = off.
 # PLATFORM_JWKS_URL: the Platform's public keys, e.g.
 #   http://localhost:4000/api/platform/.well-known/jwks.json
 # PLATFORM_JWKS: the same key set inline as JSON (tests, air-gapped installs).
 PLATFORM_JWKS_URL = env("PLATFORM_JWKS_URL")
 PLATFORM_JWKS = env("PLATFORM_JWKS")
 
-# FreeFounders multi-company mode (tenancy/, PLAN.md section 14): one Postgres
+# Kaampilot multi-company mode (tenancy/, PLAN.md section 14): one Postgres
 # schema per company, chosen per request from the Platform token. Blank = off,
 # and the app is the single-company install it always was. Needs Postgres.
 TENANCY = env("TENANCY")

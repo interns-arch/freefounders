@@ -2036,7 +2036,7 @@ permission keys** (CATALOGUE_VERSION stays 2).
 | `d0a1bdf` Voice draft replaces AI draft; red tab counts | **Voice draft**: `voice_draft` takes `{transcript}` (words from the browser/phone; no AI key) or an audio clip (Gemini key); without AI, `speech_rules` reads the person, deadline ("kal 5 baje", "in 2 hours", weekdays, Hindi/Hinglish), effort ("30 minute") and tidies the title. Web `voice-note.tsx`: language English/हिंदी, browser speech recognition on https/localhost, else the keyboard-mic box. **Removed**: the "AI draft" button/box, `POST /tasks/ai_draft/`, `useAiTaskDraft`, the browser audio recording (MediaRecorder) path of the old "Speak the task" (the server still accepts audio). Red round counts (1–9, 9+, 99+) on **My Tasks** (open + in progress), **To accept**, **Requests** (and "More" on phones); `countLabel` in core. |
 | `ed023cf` Voice draft asks for the microphone | Browser: asks for the microphone first; blocked → steps for this browser (Chrome on Android, Safari on iPhone, desktop), "Try again", "Use the keyboard mic instead"; keyboard-mic help. The partsexpressonline link was not ported (a note says the http:// address never gets the microphone). |
 | `ba5c94e` App v3: native voice with the mic pop-up | Phone app **1.1.0** (versionCode 2): bridge request **`voice` {lang}** → `{text}` and **`voice-stop`** (Done), `apps/mobile/src/lib/voice.ts` with **expo-speech-recognition** 57.1 (the phone's speech recogniser; Android's "Allow FreeFounders to record audio?" pop-up; blocked twice → `code: permission, permission: microphone, settings: true` → web shows "Open settings" + "Try again"; no speech service / Expo Go → `code: unavailable` → keyboard-mic box). `app.json`: `RECORD_AUDIO` moved from `blockedPermissions` to `permissions`, plugin config (Google speech service package visibility), iOS usage texts. Nothing is recorded or kept. **Needs a new APK build** (`eas build -p android --profile preview`). |
-| `0980b4d` Startup prompt to update older apps | Platform `GET /api/platform/app-version` (public) → `{minVersion, apkUrl}` from `MOBILE_MIN_VERSION` (default `1.1.0`; empty = off) and `MOBILE_APK_URL` (default `/download/freefounders.apk` = `apps/web/public/download/freefounders.apk`, git-ignored; or a full https:// address). Inside the app, an older version gets "Update the app — one time" (Later = this session); "Update now" opens the APK in a new window, which the shell always hands to the phone's browser (works in 1.0.0 too). The Voice draft in an old app offers the same link. |
+| `0980b4d` Startup prompt to update older apps | Platform `GET /api/platform/app-version` (public) → `{minVersion, apkUrl}` from `MOBILE_MIN_VERSION` (default `1.1.0`; empty = off) and `MOBILE_APK_URL` (default `/download/kaampilot.apk` = `apps/web/public/download/kaampilot.apk`, git-ignored; or a full https:// address). Inside the app, an older version gets "Update the app — one time" (Later = this session); "Update now" opens the APK in a new window, which the shell always hands to the phone's browser (works in 1.0.0 too). The Voice draft in an old app offers the same link. |
 | `748b527` Remove a wrong or outdated file | `POST /tasks/{id}/remove_file/ {id}`: the uploader while the task is open, the giver, or an admin (after Done only the giver/admin); logged "Removed file: …". Web: an × on each attachment in the task panel (with a confirmation). |
 | `2bc1425` Team Performance: who asks most to change a due date | `GET /tasks/change_request_leaders/?range=` (Team performance permission, same audience as `team_report`): people ranked by requests that move a due date (counted on the day raised), approved / rejected / waiting, tasks, approval rate, latest 20 requests each. Web: a panel on Team performance under the ranking; open a person for their requests. |
 | `13fd6e2` WIP weekly overdue email | Skipped (FreeFounders already has the Monday overdue email, `send_weekly_overdue_email`). |
@@ -2046,7 +2046,7 @@ Docs: `docs/UI-FUNCTIONALITY.md` (Voice draft), `services/tasks/README.md` (endp
 `WHATSAPP_HOURS`, `NOTICE_WHATSAPP_TEMPLATE`; Platform `MOBILE_MIN_VERSION`, `MOBILE_APK_URL`), CLAUDE.md (ported up to
 `2bc1425`), `apps/mobile/README.md` (voice bridge).
 
-**For the founder**: (1) build and install the new APK (1.1.0) and put it at `apps/web/public/download/freefounders.apk`
+**For the founder**: (1) build and install the new APK (1.1.0) and put it at `apps/web/public/download/kaampilot.apk`
 (or set `MOBILE_APK_URL`) so 1.0.0 phones get the update prompt; (2) Meta templates `notice_posted` (Utility) and
 `task_completion_review` must be approved for the company's WhatsApp number; (3) the first "please accept" reminder now
 follows `APPROVAL_REMIND_HOURS` (24 h by default; the original used 3 h) and repeats daily.
@@ -2062,7 +2062,204 @@ follows `APPROVAL_REMIND_HOURS` (24 h by default; the original used 3 h) and rep
 | Smoke | 10 / 10 |
 | e2e | 78 / 78 in one full run (new `web-tasks-ported` 2: an admin receiver changes and deletes only through the giver, red tab counts, Owner-only assigning, Team performance panels + WhatsApp hours; `web-app-shell` +2: Voice draft through the app bridge, the update prompt for an older app). Then DEMO reset to the owner (`company -- reset --code DEMO --keep-owner`) |
 
+### 19.31 Downloads everywhere (2026-10-22)
+Founder: "I want all the payslips and everything downloadable in each and every section according to their given filters."
+- **One control**: `components/common/download-menu.tsx` — `DownloadMenu` (outline button, Download icon + "Download" + chevron;
+  menu "Download as" Excel (.xlsx) / CSV / PDF / ZIP plus extra entries) in the page header actions or the section's own
+  header; disabled with the tooltip "Nothing to download for these filters" when 0 rows match; still works in a read-only
+  company (it is not a CTA); 40–44 px on phones. `DownloadButton` = one file (a payslip / invoice PDF). In the phone app
+  the file goes through the native bridge (`saveFile`).
+- **All matching rows, not the page**: the screen passes an `ExportTarget` (`@freefounders/core/export`: API, list path,
+  the screen's own filters/search/sort/tab/date range; page size dropped). The API answers `?export=xlsx|csv` with every
+  matching row (≤ 50 000) from the list's own query and permission checks:
+  Tasks `config/exports.py` `ExportMixin` (DRF lists; `export_columns`), `export_file` for function views;
+  Assets `@Exportable({name, columns})` + global `ExportInterceptor`, `listParams` gives page 1 / 50 000 rows when exporting;
+  Platform `common/export.ts`. Client-side files (`toXlsx`/`toCsv`, no library) only where the screen already holds every
+  row (reports computed in the browser, catalogue, roles matrix…). Area targets: `tasksExports`, `hrExports`,
+  `payrollExports`, `assetsExports`, `adminExports`, `billingExports`.
+- **Formula injection** neutralised in every writer (cell starting with = + - @ tab CR → leading apostrophe). The minimal
+  xlsx/zip writer is `packages/core/src/export/sheet.ts`, copied byte-for-byte to `services/assets/.../common/sheet.ts`
+  and `services/platform/src/common/sheet.ts` (keep the three the same).
+- **File names**: `<area>-<screen>-<filters>-<YYYY-MM-DD>.<ext>` (e.g. `assets-assets-sim-card-available-2026-10-22.xlsx`,
+  `admin-people-a-2026-10-22.csv`, `payslip-2026-09-rahul-verma.pdf`, `payslips-2026-09.zip`, `invoice-<number>.pdf`).
+- **Payslip PDF** (Tasks, `payroll/pdf.py`, reportlab 4.4.4 — the only new library, pure Python): A4, company name + logo
+  (the Platform's public brand logo, fetched once per 10 min, skipped if unreachable), employee name / ID / username /
+  designation / department / reports-to, pay period, status (DRAFT marked), attendance strip (working, paid, present,
+  half, paid leave, LWP), earnings (monthly gross, per-day rate, earned) and deductions (PF, professional tax, advance
+  recovery, other) with totals, net pay in figures and words (Indian: lakh/crore, "Rupees … and … Paise Only"), ₹ drawn
+  as a vector glyph (not in Helvetica), advance still outstanding. Endpoints: `GET /payslips/:id/pdf/` (same queryset as
+  viewing: own finalised payslips with `payroll.self`, everyone's with `payroll.run`; own-records rule unchanged) and
+  `GET /payroll-runs/:id/payslips_pdf/?bundle=zip|pdf` (`payroll.run`). Invoice PDF (Platform): a small hand-written PDF
+  writer (`services/platform/src/common/pdf.ts`, Helvetica, ₹ as a glyph), same check as viewing the invoice.
+
+| Screen | Formats | Built |
+|---|---|---|
+| Attendance: My attendance (month, also a person's month) | xlsx, csv | server `/attendance/monthly/` |
+| Attendance: My leave | xlsx, csv | server `/leaves/` |
+| Attendance: Holidays | xlsx, csv | client (whole list loaded) |
+| Attendance: Live / Daily (date, department, tile, search) | xlsx, csv | server `/attendance/team_day/` |
+| Attendance: Dashboard (month, department, search, sort) | xlsx, csv + monthly summary report | server `/attendance/team_month/`, `/attendance/report/` |
+| Attendance: Reports | xlsx, csv | server (unchanged form) |
+| Attendance: Approvals (pending leave, pending corrections) | xlsx, csv | server `/leaves/`, `/attendance-corrections/` |
+| Attendance: My salary (payslips list; each payslip) | xlsx, csv; pdf | server `/payslips/?status=finalised`; `/payslips/:id/pdf/` |
+| Attendance: Payroll runs; a run (sheet, each payslip, all payslips) | xlsx, csv; pdf; zip / one pdf | server `/payroll-runs/`, `/:id/export/`, `/payslips/:id/pdf/`, `/:id/payslips_pdf/` |
+| Attendance: Salaries, Advances | xlsx, csv | server `/salary-structures/`, `/advances/` |
+| Tasks: My Tasks, Delegated, Subscribed, All tasks, Deleted | xlsx, csv | server `/tasks/` (same `workListQuery` as the list) |
+| Tasks: To accept, Requests | xlsx, csv | server `/task-completions/`, `/task-change-requests/` |
+| Tasks: Disputes, Reports (8), Time report, Team performance, SOPs | xlsx, csv | client (all rows loaded) |
+| Tasks: Activities, Templates, Groups, Notices, Notifications, Leads, AI inbox, Mistakes, Links | xlsx, csv | server (each list endpoint) |
+| Assets: assets / my assets / SIMs, employees, exits, new joiners, requests, tickets, maintenance, activity log, users, companies/departments/locations/vendors | xlsx, csv | server (`@Exportable` list routes) |
+| Assets: catalogue, reconciliation checks + one check, priority queue | xlsx, csv | client (all rows loaded) |
+| Admin: People (search) | xlsx, csv | server `/people?export=` |
+| Admin: Roles (permission matrix) | xlsx, csv | client |
+| Billing: invoices list; each invoice | xlsx, csv; pdf | server `/billing/invoices`, `/billing/invoices/:id/pdf` |
+| Owner console: companies | xlsx, csv | client (loaded list, search applied) |
+
+Not covered: Tasks Dashboard tab and Template Directory, Assets Dashboard / Leadership (no tables; small summaries),
+lists inside detail pages (an asset's / employee's history), Owner console audit (no screen). Task files keep the server's
+order (newest first) rather than the screen's open → overdue → done grouping (same rows).
+
+| Check | Result |
+|---|---|
+| Tasks | full suite 938 run: all new tests pass (payroll `tests_pdf` 9, `crm/tests_exports` 12, `hr/tests_exports` 7); 1 failure `accounts.tests_security…test_stretching_a_pending_leave_recounts_its_days` comes from the parallel leave-balance work in `hr/services.py`, not from downloads |
+| Assets | typecheck + 95 / 95 (new "downloads" block) |
+| Platform | typecheck + 150 / 150 (People / invoices exports, invoice PDF) |
+| Web | rules + typecheck + build clean |
+| Smoke | 10 / 10 |
+| e2e | new `web-downloads` 4 / 4 (People search → xlsx + csv row count = API, Assets search → csv rows = header count, Groups csv = API, 390 px menu); `web-links-payroll` 2 / 2 (run row "Download <month>" → CSV, disabled for a run without payslips), `web-tasks-general` (Download enabled on Team performance) pass. The other touched-screen specs failed only on timeouts / page skeletons while parallel work restarted the suite and reloaded Vite; the ones retried alone pass (Assets request + ticket, Live team, HR settings). DEMO reset afterwards (`company -- reset --code DEMO --keep-owner`) |
+
+### 19.32 Punch-in reminder (2026-10-22)
+Founder: "add an alert module so every person can set an alert for punch-in, so that if they forget, the phone vibrates
+or rings — on phones only." Built as **local notifications scheduled on the phone** (no server push, no server change):
+they ring or vibrate even when the app is closed.
+
+| Part | What |
+|---|---|
+| Native module | **expo-notifications** 57.0.23 (`npx expo install`, SDK 57). Plugin: notification icon `assets/images/notification-icon.png` (white, from the monochrome icon), colour `#4f46e5`. Lazy-loaded like voice. |
+| Android channels | `punch-reminders` "Punch-in reminders" (sound + vibration), `punch-reminders-ring` (sound only), `punch-reminders-vibrate` (vibration only): high importance (heads-up), shown on the lock screen, vibration pattern 0-600-300-600-300-900. A channel's sound/vibration cannot change after creation, so each alert type has its own. |
+| Permissions | `POST_NOTIFICATIONS` (Android 13+; Android's pop-up when the person switches the reminder on or sends a test; blocked → `code: permission, permission: notifications, settings: true` → web "Open settings"), `RECEIVE_BOOT_COMPLETED` (added by the library), `SCHEDULE_EXACT_ALARM` declared (no pop-up; see accuracy). Not `USE_EXACT_ALARM`. |
+| Bridge (`protocol.ts`) | `reminder-set {settings: {enabled, time 'HH:MM', days [1–7, 1 = Mon], mode 'vibrate' \| 'ring' \| 'ring-vibrate', followUpMinutes (default 10, 0 = off, max 120)}}`, `reminder-get`, `reminder-skip-today`, `reminder-off` → `{settings, permission, next, skipped}`; `reminder-test {mode}` → one reminder in 5 s. The shell reports `capabilities` (`…, 'reminders'`) in `window.FreeFoundersApp`; the web shows the reminder only when listed. |
+| Plan (`reminder-plan.ts`, pure, tested) | One **weekly** notification per chosen day at the time, plus the follow-up (a follow-up past midnight rings the next weekday). **Skip today** (a weekly repeat cannot skip one week): the reminders of the skipped day — and a follow-up of the day before that rings after midnight on it — become one-off notifications for the next 4 weeks; the plan is rebuilt at every app start, so after that day it is weekly again. A skip whose reminders already rang changes nothing. |
+| Storage | Settings + skipped date on the phone (expo-secure-store `ff.punchReminder`), per person per phone. **Not saved on the server** (a new phone starts from the company defaults): the defaults already come from the server, and a per-user setting in Platform/Tasks plus sync was not worth it now. |
+| Tap | Opens the app on `/attendance` (Today): cold start via `getLastNotificationResponse`, running app via the response listener. A reminder that arrives while the app is open still pops up and rings. |
+| Web | `features/hr/reminder.tsx`: a "Punch-in reminder" card on **Attendance → Today** (people who may punch) and on **`/attendance/reminder`** (account menu → "Punch-in reminder", in the app only). Switch (on = saved at once, Android's pop-up), time (default **10 min before the company's office start**), weekday buttons (default the company's **working days** = not HR week-offs), Alert: Vibrate / Ring / Ring + vibrate, "Remind again after 10 min if I haven't punched in", **Save reminder**, **Send a test reminder now**, "Next reminder: …". Browser: nothing on Today, a note on the page; an app from before 1.2.0: "need the latest app". A successful check-in in the app sends `reminder-skip-today` (`punch.tsx`), and so does opening Today/Home when today's check-in already exists (checked in on a computer); turning the reminder on after checking in skips today too. The update prompt now mentions reminders. |
+
+**Accuracy and limits** (checked in expo-notifications 57.0.23 source, `ExpoSchedulingDelegate.kt`): it uses
+`setExactAndAllowWhileIdle` when Android allows exact alarms for the app, else `setAndAllowWhileIdle`. With
+`SCHEDULE_EXACT_ALARM` declared that is **exact on Android 12–13** (granted at install) and on Android 14+ **only if the
+person allows "Alarms & reminders"** in the app's settings (off by default); otherwise Android may ring **a few minutes
+late** (Doze, battery saver; Android only promises inexact alarms within its batching window). **Ringing = the
+notification sound** (and Do Not Disturb silences it), not a full-screen alarm clock. **Reboot**: scheduled reminders are
+kept by expo-notifications (stored in the app's preferences and re-registered on `BOOT_COMPLETED` / `REBOOT` /
+`QUICKBOOT_POWERON` / `MY_PACKAGE_REPLACED`), so they survive a restart and an app update; a **force stop** (or some
+phone makers' "deep sleep" battery modes) cancels them until the app is opened again. The person can mute a channel in
+Android's settings. Expo Go (testing): local notifications work there too.
+
+**Needs a new APK**: app **1.2.0**, versionCode **3** (new native module). Build it (`eas build -p android --profile
+preview`), put it at `apps/web/public/download/kaampilot.apk` (or `MOBILE_APK_URL`), then set
+`MOBILE_MIN_VERSION=1.2.0` so older apps get the update prompt (not changed here: the default stays 1.1.0 until the APK
+exists).
+
+| Check | Result |
+|---|---|
+| Mobile | typecheck + 32 tests (new `test/reminder-plan.test.ts`: settings, weekday numbering, weekly plan + follow-up, skip today, skip across midnight, next reminder, bridge requests); `expo export --platform android` OK; expo-doctor 21/21 (expo 57.0.31, expo-location, expo-router, expo-sharing patch-updated by `expo install --fix`) |
+| Web | `npm run web:build` (rules + typecheck + build) |
+| e2e | `web-app-shell` 6 / 6 (new: card only in an app with `reminders`, note in a browser and in an old app, defaults, saving sends `reminder-set`, test reminder, account menu page, check-in sends `reminder-skip-today`) |
+
+### 19.33 Leave balance enforced; "Selfie optional" really optional in the browser (2026-10-23)
+
+- **Leave balance** (Tasks `hr/services.py` `leave_allowance / leave_taken / leave_balance_check`): a type has a balance when
+  it is paid with a quota > 0 (the year of the start date) or comp-off (the CompOff days banked, all time); unpaid (LWP) and
+  quota-0 types stay unlimited. Pending + approved count, rejected / cancelled do not, a **half day** (new
+  `LeaveRequest.half_day`, one date only) counts 0.5. Applying or editing beyond it → 400 "You have N day(s) of <type> left;
+  this request needs M." HR with **Approve leave** for that person can mark leave for someone (`POST /leaves/ {user, …}`,
+  approved at once, attendance updated) and approve a pending request beyond the balance only with `beyond_balance: true`,
+  logged on the request (`beyond_balance`, `_by`, `_at`; migration `hr 0008`). `GET /leaves/balances/` adds `limited` and
+  `available`; pending requests carry `balance_check`. Web: the apply form shows "N days left" next to each type, a Half
+  day box for one date and the error inline; Approvals shows a warning and **Approve beyond balance** instead of Approve.
+  Not done: a web screen for HR to mark leave for someone (API only); payroll still counts a half-day leave day from the
+  attendance row (no extra 0.5 paid).
+- **Selfie optional**: with the HR setting "optional" the browser camera step has **Skip photo** (also when the camera
+  cannot start) and the punch goes without a photo; "required" has no skip (the phone app already allowed skipping).
+- Tests: Tasks 938 (new `hr/tests_leave_balance.py` 9 + optional-photo punch; `tests_security` leave type given a quota for
+  its 30-day stretch); e2e `settings.spec.ts` optional → Skip photo checks in, required → no Skip; `web-hr` leave test reads
+  "(10 days left)".
+
 ---
+
+### 19.34 Asset photos (2026-10-23)
+Founder: "after adding the asset, an option to add photos of that asset too."
+- **Storage**: the asset's own photos are the `allocation_photos` rows with `kind = 'ASSET'` and no allocation (as
+  §19.20 already stored them: bytea in the company schema, shrunk by `photo-shrink.ts`, EXIF dropped; S3 later per §20).
+  Migration `0022_asset_photo_captions` (every company schema via `migrate.js`) adds `caption text` and
+  `sort_order integer not null default 0`. No second table: existing photos stay where they are.
+- **API** (Assets, all under the asset's own view check, company-scoped by the schema):
+  `POST /api/assets/:id/photos` (multipart `kind=ASSET`, `photos[]`, optional `caption` for the first one) now caps the
+  asset at **6 photos in total** (400 "at most 6 photos: n more can be added"); `GET /api/assets/:id/photos` (in order);
+  `PATCH /api/assets/:id/photos/:photoId` `{caption?, sortOrder?}` (position 0 = first = the thumbnail; others shift);
+  `DELETE /api/assets/:id/photos/:photoId` (history `ASSET_PHOTO_REMOVED`; an old on-disk file is unlinked).
+  Add / change / delete need `asset:create` or `asset:edit`; viewing = whoever may view the asset. Handover and return
+  photos are part of the assignment record: PATCH / DELETE on them is 403. Captions: one line, control characters
+  dropped, ≤ 120 chars, rendered as text (the sheet export already neutralises a leading `= + - @`). The list payload
+  carries `photoId` (first photo) for thumbnails; the detail payload's `photos` is ordered by `sortOrder`.
+  Person delete and the Platform reset leave asset photos with the asset (`uploaded_by` → null, name copy as before).
+- **Web** (`features/assets/components/photos.tsx`; hooks `useAssetPhotos`, `useAddAssetPhoto`, `useDeleteAssetPhoto`,
+  `useUpdateAssetPhoto` in `packages/core/src/assets/photos.ts`, invalidating the asset queries):
+  - After **Add asset** succeeds with no photos picked in the form, the dialog **"Add photos of this asset"** opens over
+    the sheet: **Take photo** · **Choose from gallery** · **Skip**; thumbnails with remove; a caption for the first photo;
+    "Save n photos" uploads them, then the asset page opens. Take photo = the phone's **back camera through the bridge**
+    in the app (`photo` request gained `facing: 'back'`; older apps open the front camera), `capture="environment"` in a
+    browser. Photos are shrunk in the browser first (`compress-image.ts`, preset `photo`).
+  - **Asset page**: a "Photos (n)" card with larger thumbnails, the full-size viewer (caption as title, previous / next,
+    Download, **Delete** with confirmation for `asset:edit`), "Add photo" and "n of 6" (disabled at 6).
+  - **Edit asset**: the same gallery (delete, Add photo) plus the picker for more photos uploaded on Save.
+  - **Assets list**: the first photo replaces the type icon in the table row and the card (36 / 48 px).
+- **Tests**: Assets integration (caption cleaning, cap of 6 counting saved photos, order, PATCH, DELETE by permission,
+  404 for someone who cannot see the asset, handover photos untouchable, history), tenancy (a photo and its ids mean
+  nothing in another company), mobile protocol (`facing`), e2e `web-assets.spec.ts` (add from the asset page, see it,
+  delete it).
+
+### 19.35 Brand: Kaampilot (2026-10-23)
+Founder: "make the name everywhere of the application Kaampilot.com, and make the front page more interesting with a
+logo — design it yourself", then "remove the FreeFounders everywhere". (Asked for as §19.33; that number was taken.)
+- **Name**: everything a person sees or receives says **Kaampilot** (the address **kaampilot.com** in the logo lockup on
+  the public pages). Changed: page titles (`Kaampilot · <page>`), `index.html` title/description, the new
+  `manifest.webmanifest` (name, short_name, icons; `display: browser`, so "Add to Home screen" behaves as before), the
+  sidebar/header logo, sign-in / sign-up / forgot / join / new-company pages, FakePay ("Kaampilot · Secure payment",
+  "Back to Kaampilot"), invoices (seller default **"Kaampilot (test)"**, `SELLER_NAME` still overrides; PDF producer),
+  Razorpay plan names, owner console ("Kaampilot staff"), update prompt, reminders, checklist, invite/WhatsApp texts,
+  API messages (Platform "no Kaampilot account", "contact Kaampilot support"; Tasks/Assets "Sign in through Kaampilot"),
+  Assets audit actor "Kaampilot Platform"/"Kaampilot automation", role clash suffix "(Kaampilot)", payslip PDF creator,
+  dev staff "Kaampilot Staff", the APK default `/download/kaampilot.apk` (`MOBILE_APK_URL` still overrides; put the
+  APK under that name), docs/READMEs and code comments. `kaampilot*` is a reserved username and a weak password word.
+  Phone app: `name` "Kaampilot" (Android label), permission texts, "Can't reach Kaampilot", "Opening Kaampilot…",
+  reminder/voice/location messages. Word documents: `docs/Kaampilot_Feature_List.docx`, `docs/Momentum_OS_vs_Kaampilot.docx`.
+- **Internal only, not visible, unchanged on purpose** (renaming any of them breaks running installs or phones):
+  npm names `@freefounders/*` and the root `freefounders` package; token issuer/audience `freefounders-platform` /
+  `freefounders` (every signed-in session and every app's verifier); cookie and `localStorage` keys (`ff-*`); env vars
+  (`FF_*`, `PLATFORM_*`); database / schema names (`ff_tasks`, `ff_none`, `co_<code>`, `ff.companies`); Docker compose
+  project `freefounders`, image names, `/opt/freefounders` on the server; the bridge object `window.FreeFoundersApp`
+  (old installed apps set it); Expo `slug`/`scheme` `freefounders`; Android/iOS id **`com.freefounders.app`**; test and
+  demo e-mail addresses (`@freefounders.test`, `owner@freefounders.demo`, `staff@freefounders.test`).
+- **Android package — later decision**: changing `com.freefounders.app` makes it a different app for Android: phones
+  would need to uninstall the old one and install the new one, keeping two apps side by side meanwhile, and Play Store
+  listings cannot change their id. Keep it until the first Play Store release; rename then if wanted.
+- **Logo** (`apps/web/public/brand/`: `mark.svg`, `mark-mono.svg`, `wordmark.svg`, `lockup.svg`; web component
+  `src/components/brand.tsx`: `BrandMark`, `BrandWordmark`, `BrandLockup`, colours from theme tokens): a rounded tile
+  with a **K** whose arm rises at 45° and leaves the tile as a notched arrowhead (paper plane / compass needle): *kaam*
+  that takes off, the *pilot* steering it. Light: indigo tile, white K, emerald arrowhead and i-dot; dark: lime tile,
+  graphite K, lime arrowhead. Wordmark: monoline lowercase "kaampilot" drawn as strokes (no font file), ".com" in
+  the muted colour. The files carry their own dark-mode colours. Generated from one geometry script: favicon.svg
+  (dark-tab aware), favicon-32, apple-touch-icon, icon-192/512; phone: `icon.png` (indigo, white K, lime arrowhead),
+  adaptive foreground (inside the 66 dp safe circle) / background (indigo) / monochrome, `splash-icon.png` +
+  `splash-icon-dark.png`, `notification-icon.png` (white silhouette).
+- **Front page** (`/login`, `app/pages/login-brand.tsx`): desktop left panel = lockup, "For Indian SMEs · 5 to 500
+  people", headline "Your team's kaam, on autopilot.", one-line value proposition, **Start free** (cta) under it, a small
+  preview drawn in HTML (today's punch card with selfie/GPS, a task list with approval and asset tags; it rises in once,
+  `motion-safe` and off in lite mode), four benefits with Hugeicons, trust line (Made in India · Data stays in India ·
+  Works on low-end Android). Phones: lockup + one line above the form (form above the fold), "New to Kaampilot? Start
+  free" and the benefits + trust line under it. The sign-up / forgot / join / new-company header uses the lockup.
+  Form labels and button names unchanged (e2e).
 
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)
 
@@ -2502,3 +2699,36 @@ wins, existing duplicates still sign in and save Settings, per-IP limit); core 1
 smoke 10/10; e2e web-account-flows + web-signup-billing + settings 16/16 (web-account-flows: a second sign-up typing an
 existing company's name in another case / spacing sees the message, Create disabled, then a free name continues); DEMO
 reset to the owner afterwards.
+
+### 21.7 Switch to Free from Billing; owner console actions logged (2026-10-23)
+
+**Free without payment** (`POST billing/free`, owner / Manage billing; `BillingService.switchToFree`). Same rule as trial
+end / cancel → Free (`freeFit`): at most the Free plan's 3 users in use and no active person holding an app Free lacks.
+- trialing, past_due, read_only → **Free now** (read-only ends; a Razorpay subscription behind a past-due plan is cancelled
+  there, like Cancel); an active paid plan → **cancelled at the end of the paid period**, then Free by the billing clock
+  (Razorpay cancelled at once, as Cancel does); already cancelled → nothing more; Free / Complimentary / suspended → 400.
+  The answer is the Billing view + `freeFrom: 'now' | 'period_end'`. Free switches Assets off for the company
+  (`applyEntitlements`, nothing deleted).
+- Does not fit → 400 "The Free plan is for up to 3 users using Attendance and Tasks. Switch off N people [and the Assets
+  app] first (Admin → People: take Assets away from the K people who have it)." The company has no switch of its own for
+  an app, so the hint says where. **For the founder:** the owner of a trial that chose Assets holds Assets, so they must take
+  it away from themselves first; if an explicit "Switch to Free" should simply switch Assets off (the dialog already says
+  so), that is a one-line change in `switchToFree`.
+- Web Billing: the Free card's button is **Switch to Free** with a confirm dialog saying what happens (now / on the period
+  end date, 3 users, Assets off, nothing charged); no FakePay / Razorpay step; the server's message shows under the card.
+
+**Staff audit log** (migration `0014_staff_audit`: `staff_audit` id, at, staff_account_id + staff_email, action,
+company_id + company_code, details jsonb `{input, before, after}` with plan / state / seats / trial end, ip). Every
+mutating console endpoint writes one row after it succeeded (`ConsoleController` → `consoleAction`): `trial.extend`,
+`plan.set`, `company.suspend`, `company.reactivate`; a failed one writes nothing. `GET console/audit?company=<id or
+code>&action=&page=&pageSize=` (staff only, newest first, 25 a page; `&export=xlsx|csv` = every matching action as a file).
+/console has **Recent actions** (filters by company and action, pager, Download).
+
+**Status 2026-10-23:** Platform 150 pass (new: Free now from a trial with Assets switched off and again refused; the
+doesn't-fit messages (people / Assets / both, then fits once Assets is off); active paid → period end → Free; past due and
+read-only → Free now, new tokens not read-only; Razorpay active → cancelled there + period end, Razorpay past due → Free now
++ cancelled there; every console action writes one row with input / before / after / staff / ip, failed actions none,
+non-staff 403, filters by id / code / action, pages, bad action 400, CSV download staff only); web rules + typecheck +
+build; e2e web-account-flows checks Recent actions after suspend / reactivate. The Word feature list was not rebuilt (it
+was renamed to `docs/Kaampilot_Feature_List.docx` meanwhile); its four "To check" rows (Switch to Free, Action log,
+Selfie optional, leave balance) are now live.

@@ -32,7 +32,7 @@ const slug = (s: string) =>
     .slice(0, 20);
 
 /**
- * The People directory from the FreeFounders Platform (PLAN.md §17.1): the company's departments, and each linked
+ * The People directory from the Kaampilot Platform (PLAN.md §17.1): the company's departments, and each linked
  * person's department, manager, designation, join date and active/inactive. Internal: Platform service token only.
  */
 @Controller('internal/people')

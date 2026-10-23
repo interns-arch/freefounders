@@ -1,5 +1,5 @@
 /**
- * /join/:token (PLAN.md §21.1): "Join <company> on FreeFounders". Signed in: one Join button. Otherwise: sign up with
+ * /join/:token (PLAN.md §21.1): "Join <company> on Kaampilot". Signed in: one Join button. Otherwise: sign up with
  * email / mobile → code → name + username + password (an existing account gives just its password), or "I already have an
  * account" (sign in, then back here). Then Home of that company.
  */
@@ -134,7 +134,7 @@ export function JoinPage() {
   if (claims) {
     return (
       <AuthFrame>
-        <StepTitle title={`Join ${invite.companyName} on FreeFounders`}>You’re signed in as {claims.name ?? 'yourself'}.</StepTitle>
+        <StepTitle title={`Join ${invite.companyName} on Kaampilot`}>You’re signed in as {claims.name ?? 'yourself'}.</StepTitle>
         {card}
         <div className="space-y-3">
           <FormError>{acceptError}</FormError>
@@ -163,7 +163,7 @@ export function JoinPage() {
 
       {step === 'choose' && (
         <div>
-          <StepTitle title={`Join ${invite.companyName} on FreeFounders`}>You’ve been invited to work together on FreeFounders.</StepTitle>
+          <StepTitle title={`Join ${invite.companyName} on Kaampilot`}>You’ve been invited to work together on Kaampilot.</StepTitle>
           {card}
           <div className="space-y-3">
             <Button size="lg" className="h-11 w-full" onClick={() => setStep('identifier')}>

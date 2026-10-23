@@ -1,4 +1,5 @@
 from django.utils import timezone
+from config.exports import ExportMixin
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
@@ -15,7 +16,7 @@ class NotificationSerializer(ModelSerializer):
         fields = ["id", "type", "title", "body", "link", "channels", "read_at", "created_at"]
 
 
-class NotificationViewSet(mixins.DestroyModelMixin,
+class NotificationViewSet(ExportMixin, mixins.DestroyModelMixin,
                           viewsets.ReadOnlyModelViewSet):
     """Own notifications only -- there is deliberately no way to query, or
     clear, someone else's feed. Clearing really deletes the row: a
@@ -23,6 +24,9 @@ class NotificationViewSet(mixins.DestroyModelMixin,
     people asked to be able to empty the list for good."""
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
+    export_name = "notifications"
+    export_columns = [("When", "created_at"), ("Type", "type"), ("Title", "title"), ("Message", "body"),
+                      ("Read", "read_at"), ("Link", "link")]
 
     def get_permissions(self):
         # Reading the list is the Notifications permission (PLAN.md §19.19); marking read or clearing your own

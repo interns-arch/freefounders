@@ -1,4 +1,4 @@
-# FreeFounders database schema
+# Kaampilot database schema
 
 Generated 2026-10-13 from the local dev databases (`npm run dev`). Columns: name, type, NULL allowed, default. **PK** = primary key, **FK** = foreign key → table.column.
 

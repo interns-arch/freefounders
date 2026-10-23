@@ -159,7 +159,7 @@ export function SignupPage() {
     <AuthFrame
       footer={
         <>
-          Already using FreeFounders?{' '}
+          Already using Kaampilot?{' '}
           <Link to="/login" className="font-semibold text-primary hover:underline">
             Sign in
           </Link>
@@ -218,7 +218,7 @@ export function SignupPage() {
         <form onSubmit={submitProfile} noValidate className="space-y-4">
           {token.accountExists ? (
             <>
-              <StepTitle title="Welcome back">{identifier.trim()} already has a FreeFounders account. Enter its password to add a new company to it.</StepTitle>
+              <StepTitle title="Welcome back">{identifier.trim()} already has a Kaampilot account. Enter its password to add a new company to it.</StepTitle>
               <PasswordField id="signup-password" value={password} onChange={setPassword} newPassword={false} autoFocus error={fieldError === 'password' ? 'Enter your password.' : null} />
               <p className="text-sm">
                 <Link to="/forgot" className="font-semibold text-primary hover:underline">

@@ -196,7 +196,7 @@ export interface Invoice extends InvoiceSummary {
   notes?: string | null;
 }
 
-/** GET console/summary (FreeFounders staff). */
+/** GET console/summary (Kaampilot staff). */
 export interface ConsoleSummary {
   mrr: number;
   /** Paid and active (the server may call it `active`). */
@@ -222,4 +222,41 @@ export interface ConsoleCompany {
   mrr: number;
   trialEndsAt: string | null;
   createdAt: string;
+}
+
+/** POST billing/free: the Billing view plus when Free starts (PLAN.md §21.7). */
+export type SwitchToFreeResult = BillingSummary & { freeFrom: 'now' | 'period_end' };
+
+/** Owner console actions written to the staff audit log (PLAN.md §21.7). */
+export type ConsoleAuditAction = 'trial.extend' | 'plan.set' | 'company.suspend' | 'company.reactivate';
+
+/** GET console/audit: one staff action. */
+export interface ConsoleAuditRow {
+  id: string;
+  at: string;
+  staffAccountId: string | null;
+  staffEmail: string | null;
+  action: ConsoleAuditAction | string;
+  companyId: string | null;
+  companyCode: string | null;
+  companyName: string | null;
+  /** `{input, before, after}`: what was asked and the company's plan before and after. */
+  details: { input?: Record<string, unknown>; before?: Record<string, unknown> | null; after?: Record<string, unknown> | null } & Record<string, unknown>;
+  ip: string | null;
+}
+
+export interface ConsoleAuditFilters {
+  /** Company id or code. */
+  company?: string;
+  action?: ConsoleAuditAction | '';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ConsoleAuditPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  actions: ConsoleAuditAction[];
+  rows: ConsoleAuditRow[];
 }

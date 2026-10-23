@@ -10,7 +10,10 @@ from rest_framework.response import Response
 from accounts.models import User
 from accounts.permissions import HasCapability, HasPermission, has_capability, refuse_own_records
 
+from config.exports import ExportMixin, export_file, export_format
+
 from . import approvals, services
+from . import exports as hr_exports
 from .models import (
     Attendance, AttendanceCorrection, CorrectionStatus, FaceProfile,
     LeaveRequest, LeaveStatus, LeaveType, OfficeLocation,
@@ -50,6 +53,14 @@ def _self_review_message(user) -> str:
                 "admin) in My Team, and ask them to review it.")
     names = ", ".join(u.get_full_name() or u.username for u in other_approvers(user)[:5])
     return f"{base} Ask one of: {names}."
+
+
+def _name(user) -> str:
+    return user.get_full_name() or user.username
+
+
+def _truthy(value) -> bool:
+    return value is True or str(value).strip().lower() in ("true", "1", "yes", "on")
 
 
 def _check_reviewer(reviewer, request_obj):
@@ -104,9 +115,11 @@ def _file(content: bytes, filename: str):
 
 # ------------------------------------------------------------ attendance
 
-class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
+class AttendanceViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = AttendanceSerializer
+    export_columns = hr_exports.ATTENDANCE_COLUMNS
+    export_name = "attendance-records"
 
     def get_queryset(self):
         qs = Attendance.objects.select_related("user", "location").filter(
@@ -187,6 +200,11 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             raise PermissionDenied("Your role does not include My attendance.")
         data = services.monthly_report(target, year, month)
         data["user"] = {"id": target.id, "name": target.get_full_name() or target.username}
+        fmt = export_format(request)
+        if fmt:   # Downloads (PLAN.md §19.31): the same month, one row per day
+            header, rows = hr_exports.month_days(data)
+            return export_file(fmt, f"Attendance {year}-{month:02d}", f"attendance-{target.username}-{year}-{month:02d}",
+                               header, rows)
         return Response(data)
 
     @action(detail=False, methods=["get"], permission_classes=[HasPermission.of("hr.live", "hr.approve")])
@@ -208,14 +226,26 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         day = team.parse_day(request.query_params["date"]) if request.query_params.get("date") else timezone.localdate()
         # Today: Live attendance (or Daily, or Reports for its lists); any other day is Daily attendance.
         keys = ("hr.live", "hr.daily", "hr.reports") if day == timezone.localdate() else ("hr.daily",)
-        return Response(team.team_day(self._team(request, keys), day))
+        data = team.team_day(self._team(request, keys), day)
+        fmt = export_format(request)
+        if fmt:   # Downloads (PLAN.md §19.31): these rows, narrowed by the screen's status tile (?filter=)
+            header, rows = hr_exports.team_day_rows(data, request.query_params.get("filter", "all"))
+            return export_file(fmt, f"Attendance {day.isoformat()}", f"attendance-daily-{day.isoformat()}", header, rows)
+        return Response(data)
 
     @action(detail=False, methods=["get"])
     def team_month(self, request):
         """Per-person totals for a month (the attendance dashboard)."""
         from . import team
         year, month, first, last = team.parse_month(request.query_params)
-        return Response(team.team_month(self._team(request, ("hr.dashboard",)), year, month, first, last))
+        data = team.team_month(self._team(request, ("hr.dashboard",)), year, month, first, last)
+        fmt = export_format(request)
+        if fmt:   # Downloads (PLAN.md §19.31): the dashboard rows in the screen's sort order (?sort=&dir=)
+            p = request.query_params
+            header, rows = hr_exports.team_month_rows(data, p.get("sort", "name"), p.get("dir", "asc"))
+            return export_file(fmt, f"Attendance {year}-{month:02d}", f"attendance-dashboard-{year}-{month:02d}",
+                               header, rows)
+        return Response(data)
 
     @action(detail=False, methods=["get"], content_negotiation_class=_FileNegotiation)
     def report(self, request):
@@ -279,15 +309,21 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(AttendanceSerializer(record).data)
 
 
-class CorrectionViewSet(viewsets.ModelViewSet):
+class CorrectionViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CorrectionSerializer
+    export_columns = hr_exports.CORRECTION_COLUMNS
+    export_name = "attendance-corrections"
 
     def get_queryset(self):
         qs = AttendanceCorrection.objects.select_related("user", "reviewed_by")
         if self.request.query_params.get("scope") == "team" and approvals.is_approver(self.request.user):
-            return qs.filter(user__in=approvals.reviewable_users(self.request.user))
-        return qs.filter(user=self.request.user)
+            qs = qs.filter(user__in=approvals.reviewable_users(self.request.user))
+        else:
+            qs = qs.filter(user=self.request.user)
+        if self.request.query_params.get("status"):
+            qs = qs.filter(status=self.request.query_params["status"])
+        return qs
 
     def create(self, request, *args, **kwargs):
         if not has_capability(request.user, "attendance.self"):
@@ -354,9 +390,11 @@ class LeaveTypeViewSet(viewsets.ModelViewSet):
         return [HasCapability.of("hr.settings")()]
 
 
-class LeaveRequestViewSet(viewsets.ModelViewSet):
+class LeaveRequestViewSet(ExportMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = LeaveRequestSerializer
+    export_columns = hr_exports.LEAVE_COLUMNS
+    export_name = "leave-requests"
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
@@ -372,28 +410,68 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
             qs = qs.filter(status=p["status"])
         return qs
 
+    def _on_behalf_of(self, request):
+        """POST /leaves/ with `user` = someone else: HR marking leave for them (PLAN.md §19). Needs Approve leave for
+        that person; None when the person applies for themself."""
+        uid = request.data.get("user")
+        if not uid or str(uid) == str(request.user.id):
+            return None
+        target = User.objects.filter(pk=uid, is_active=True).first() if str(uid).isdigit() else None
+        if not target:
+            raise ValidationError({"user": "Unknown or inactive employee."})
+        if not can_approve(request.user) or not approvals.may_review(request.user, target):
+            raise PermissionDenied("You cannot mark leave for this person.")
+        return target
+
     def create(self, request, *args, **kwargs):
-        if not has_capability(request.user, "leave.self"):
+        if self._on_behalf_of(request) is None and not has_capability(request.user, "leave.self"):
             raise PermissionDenied("Your role does not include My leave.")
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         data = serializer.validated_data
+        target = self._on_behalf_of(self.request)
+        user = target or self.request.user
         days = len(services.leave_working_days(data["start_date"], data["end_date"]))
         if days == 0:
             raise ValidationError({"start_date": "That range has no working days (holidays/week-offs only)."})
         overlap = LeaveRequest.objects.filter(
-            user=self.request.user,
+            user=user,
             status__in=[LeaveStatus.PENDING, LeaveStatus.APPROVED],
             start_date__lte=data["end_date"], end_date__gte=data["start_date"],
         ).exists()
         if overlap:
-            raise ValidationError({"detail": "You already have a leave request covering these dates."})
-        leave = serializer.save(user=self.request.user, days=days)
-        approvals.notify_submitted("leave", leave)
+            raise ValidationError({"detail": "You already have a leave request covering these dates." if not target
+                                   else f"{_name(target)} already has leave covering these dates."})
+        # The balance (PLAN.md §19): pending + approved of the type in the year; half days count 0.5.
+        needs = 0.5 if data.get("half_day") else float(days)
+        check = services.leave_balance_check(user, data["leave_type"], data["start_date"], needs)
+        over = bool(check and check["over"])
+        if over and not target:
+            message = services.balance_message(check, data["leave_type"])
+            raise ValidationError({"detail": message, "leave_type": message})
+        if not target:
+            leave = serializer.save(user=user, days=days)
+            approvals.notify_submitted("leave", leave)
+            return
+        # HR marks it: approved at once (attendance updated); beyond the balance only with the explicit override.
+        if over and not _truthy(self.request.data.get("beyond_balance")):
+            raise ValidationError({"detail": services.balance_message(check, data["leave_type"], _name(target))
+                                   + " Choose “Beyond balance” to mark it anyway.",
+                                   "beyond_balance_needed": True})
+        now = timezone.now()
+        leave = serializer.save(
+            user=user, days=days, status=LeaveStatus.APPROVED, reviewed_by=self.request.user, reviewed_at=now,
+            remarks=str(self.request.data.get("remarks", "") or f"Marked by {_name(self.request.user)}")[:300],
+            **({"beyond_balance": True, "beyond_balance_by": self.request.user, "beyond_balance_at": now} if over else {}))
+        services.apply_leave_to_attendance(leave)
+        from notifications.service import notify
+        notify(user, "leave_reviewed", f"Leave marked: {leave.leave_type.name}",
+               f"{leave.start_date} to {leave.end_date} ({services._num(leave.leave_days)} day(s)), marked by "
+               f"{_name(self.request.user)}", link="/hr")
 
     def perform_update(self, serializer):
-        """Only the person, only while pending; the working days and the overlap check are worked out again, so
+        """Only the person, only while pending; the working days, the overlap and the balance are checked again, so
         stretching the dates afterwards cannot take more leave than the balance shows."""
         leave = self.get_object()
         if leave.user_id != self.request.user.id:
@@ -413,7 +491,13 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         ).exclude(pk=leave.pk).exists()
         if overlap:
             raise ValidationError({"detail": "You already have a leave request covering these dates."})
-        serializer.save(days=days)
+        half = bool(data.get("half_day", leave.half_day)) and start == end
+        leave_type = data.get("leave_type", leave.leave_type)
+        check = services.leave_balance_check(leave.user, leave_type, start, 0.5 if half else float(days),
+                                             exclude_pk=leave.pk)
+        if check and check["over"]:
+            raise ValidationError({"detail": services.balance_message(check, leave_type)})
+        serializer.save(days=days, half_day=half)
 
     def perform_destroy(self, instance):
         raise PermissionDenied("Cancel the request instead of deleting it.")
@@ -443,6 +527,20 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         decision = request.data.get("decision")
         if decision not in ("approved", "rejected"):
             raise ValidationError({"decision": "Use 'approved' or 'rejected'."})
+        if decision == LeaveStatus.APPROVED:
+            # Beyond the balance only with the explicit override, by HR (Approve leave), logged on the request.
+            check = services.leave_balance_check(leave.user, leave.leave_type, leave.start_date, leave.leave_days,
+                                                 exclude_pk=leave.pk)
+            if check and check["over"]:
+                if not _truthy(request.data.get("beyond_balance")):
+                    raise ValidationError({"detail": services.balance_message(check, leave.leave_type, _name(leave.user))
+                                           + " Choose “Approve beyond balance” to approve it anyway.",
+                                           "beyond_balance_needed": True})
+                if not can_approve(request.user):
+                    raise PermissionDenied("Only HR (Approve leave) can approve beyond the balance.")
+                leave.beyond_balance = True
+                leave.beyond_balance_by = request.user
+                leave.beyond_balance_at = timezone.now()
         leave.status = decision
         leave.reviewed_by = request.user
         leave.remarks = str(request.data.get("remarks", ""))[:300]
