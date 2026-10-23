@@ -78,7 +78,6 @@
  *   ExternalLink          LinkSquare02Icon
  *   Eye                   ViewIcon
  *   EyeOff                ViewOffSlashIcon
- *   Feather               FeatherIcon
  *   FileBadge             Certificate01Icon
  *   FileSignature         ContractsIcon
  *   FileSpreadsheet       Xls01Icon
@@ -305,7 +304,6 @@ import {
   Zip01Icon,
   DragDropVerticalIcon,
   ElectricPlugsIcon,
-  FeatherIcon,
   File02Icon,
   FileUploadIcon,
   FilterHorizontalIcon,
@@ -528,7 +526,6 @@ export const Download = icon(Download04Icon, 'Download');
 export const ExternalLink = icon(LinkSquare02Icon, 'ExternalLink');
 export const Eye = icon(ViewIcon, 'Eye');
 export const EyeOff = icon(ViewOffSlashIcon, 'EyeOff');
-export const Feather = icon(FeatherIcon, 'Feather');
 export const FileBadge = icon(Certificate01Icon, 'FileBadge');
 export const FileSignature = icon(ContractsIcon, 'FileSignature');
 export const FileSpreadsheet = icon(Xls01Icon, 'FileSpreadsheet');

@@ -2,7 +2,7 @@
  * The front page's story (PLAN.md §19.35): what Kaampilot is, for whom, and a small live-looking preview of the app,
  * drawn with HTML and theme tokens (no screenshots, no images: it loads with the page). Desktop: the left panel next to
  * the sign-in form. Phones: `BrandHeader` above the form (the form stays above the fold), `BrandFooter` under it.
- * Motion: the preview cards rise in once; `motion-safe` + lite mode (index.css) switch that off.
+ * Motion: the preview cards rise in once; `motion-safe` switches that off for people who ask for less motion.
  */
 import { Check, IndianRupee, ListChecks, MapPin, Package, ShieldCheck, Smartphone, Flag, ArrowRight } from '@/components/icons';
 import { Link } from 'react-router';

@@ -236,3 +236,79 @@ class WhatsAppDeliveryTests(ChannelsDisabledMixin, TestCase):
             "statuses": [{"id": "wamid.TEST1", "status": "delivered"}],
         }}]}]}
         self.assertEqual(self.client.post(self.WEBHOOK, body, format="json").status_code, 200)
+
+
+class NotificationAreaTests(ChannelsDisabledMixin, TestCase):
+    """Grouped by area with a link to the item (PLAN.md §19.37)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = APIClient()
+        self.a = make("asha2", Role.SALES_EXECUTIVE)
+
+    def as_(self, user):
+        res = self.client.post("/api/auth/login", {"username": user.username, "password": "pass@12345"})
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
+
+    def test_category_from_type(self):
+        from .categories import category_for
+        cases = {
+            "leave_request": "approvals", "correction_request": "approvals", "approval_reminder": "approvals",
+            "approval_escalated": "approvals", "task_change_request": "approvals", "task_completion_review": "approvals",
+            "leave_reviewed": "attendance", "payslip_ready": "attendance", "notice": "company", "billing_due": "company",
+            "task_assigned": "tasks", "mistake_logged": "tasks", "lead_assigned": "tasks", "customer_message": "tasks",
+        }
+        for type_, area in cases.items():
+            self.assertEqual(category_for(type_), area, type_)
+        # Stored on the row, also for rows made without notify() (the notice board, the weekly overdue mail).
+        self.assertEqual(Notification.objects.create(user=self.a, type="notice", title="N").category, "company")
+        self.assertEqual(notify(self.a, "category_request", "Approve?", category="approvals").category, "approvals")
+        self.assertEqual(notify(self.a, "category_request", "Approved").category, "tasks")
+
+    def test_counts_filter_and_mark_read_per_area(self):
+        notify(self.a, "task_assigned", "Task")
+        notify(self.a, "leave_request", "Leave from X")
+        notify(self.a, "leave_reviewed", "Leave approved")
+        notify(self.a, "notice", "Holiday")
+        self.as_(self.a)
+        counts = self.client.get("/api/notifications/unread_count/").data
+        self.assertEqual(counts["count"], 4)
+        self.assertEqual(counts["by_category"], {"attendance": 1, "tasks": 1, "approvals": 1, "company": 1})
+        rows = self.client.get("/api/notifications/?category=approvals").data["results"]
+        self.assertEqual([(r["title"], r["category"]) for r in rows], [("Leave from X", "approvals")])
+        two = self.client.get("/api/notifications/?category=attendance,company").data["results"]
+        self.assertEqual(sorted(r["title"] for r in two), ["Holiday", "Leave approved"])
+        self.assertEqual(self.client.post("/api/notifications/read_all/?category=approvals").data["marked"], 1)
+        counts = self.client.get("/api/notifications/unread_count/").data
+        self.assertEqual((counts["count"], counts["by_category"]["approvals"]), (3, 0))
+        self.assertEqual(self.client.post("/api/notifications/read_all/", {"category": "tasks"}, format="json").data["marked"], 1)
+        self.assertEqual(self.client.post("/api/notifications/read_all/").data["marked"], 2)
+
+    def test_links_open_the_item(self):
+        from hr.approvals import review_link
+
+        class Obj:
+            pk = 7
+        self.assertEqual(review_link("leave", Obj()), "/hr?tab=approvals&leave=7")
+        self.assertEqual(review_link("correction", Obj()), "/hr?tab=approvals&correction=7")
+
+    def test_migration_backfill(self):
+        import importlib
+
+        from django.apps import apps as global_apps
+        mig = importlib.import_module("notifications.migrations.0004_notification_category")
+        old = [
+            Notification.objects.create(user=self.a, type="leave_request", title="L", link="/hr", category="tasks"),
+            Notification.objects.create(user=self.a, type="leave_reviewed", title="R", link="/hr", category="tasks"),
+            Notification.objects.create(user=self.a, type="task_daily", title="D", link="/tasks", category="tasks"),
+            Notification.objects.create(user=self.a, type="category_request", title="C", link="/settings", category="tasks"),
+            Notification.objects.create(user=self.a, type="notice", title="N", link="/notices?n=3", category="tasks"),
+        ]
+        Notification.objects.filter(pk__in=[n.pk for n in old]).update(category="")  # as before the field existed
+        mig.backfill(global_apps, None)
+        got = {n.type: (n.category, n.link) for n in Notification.objects.filter(pk__in=[n.pk for n in old])}
+        self.assertEqual(got["leave_request"], ("approvals", "/hr?tab=approvals"))
+        self.assertEqual(got["leave_reviewed"], ("attendance", "/hr?tab=leave"))
+        self.assertEqual(got["task_daily"], ("tasks", "/tasks?tab=my"))
+        self.assertEqual(got["category_request"], ("approvals", "/settings"))
+        self.assertEqual(got["notice"], ("company", "/notices?n=3"))

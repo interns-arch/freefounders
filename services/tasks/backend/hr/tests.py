@@ -69,7 +69,10 @@ class GeoFenceTests(Base):
             res = self.client.post("/api/attendance/check_in/",
                                    {"latitude": FAR[0], "longitude": FAR[1]}, format="json")
             self.assertEqual(res.status_code, 400)
-            self.assertIn("from HQ", res.data["detail"])
+            self.assertEqual(res.data["detail"], "You are not at the office location. You are about 1.1 km away "
+                                                 "from HQ; punch in when you reach the office.")
+            self.assertEqual((res.data["code"], res.data["office"], res.data["radius_m"]), ("outside_office", "HQ", 200))
+            self.assertTrue(1100 <= res.data["distance_m"] <= 1120, res.data)
             self.assertEqual(Attendance.objects.count(), 0)
             # missing coords are refused too
             res = self.client.post("/api/attendance/check_in/", {}, format="json")
@@ -79,6 +82,43 @@ class GeoFenceTests(Base):
                                    {"latitude": OFFICE[0], "longitude": OFFICE[1]}, format="json")
             self.assertEqual(res.status_code, 201)
             self.assertEqual(Attendance.objects.get().location.name, "HQ")
+        finally:
+            os.environ["GEOFENCE_ENABLED"] = "false"
+
+    def test_distance_wording_nearest_office_and_rough_fix(self):
+        """PLAN.md §19.36: metres under 1 km, km with one decimal above; the nearest office is named; a rough GPS fix
+        whose circle reaches the office asks for a better fix instead of refusing."""
+        import os
+        self.assertEqual(services.format_distance(349.6), "350 m")
+        self.assertEqual(services.format_distance(999.6), "1.0 km")
+        self.assertEqual(services.format_distance(1234), "1.2 km")
+        OfficeLocation.objects.create(name="Branch", latitude=FAR[0] + 0.004, longitude=FAR[1], radius_m=100)
+        os.environ["GEOFENCE_ENABLED"] = "true"
+        try:
+            self.as_(self.rahul)
+            near_branch = (FAR[0] + 0.0055, FAR[1])  # ~170 m north of Branch, ~1.6 km from HQ
+            res = self.client.post("/api/attendance/check_in/",
+                                   {"latitude": near_branch[0], "longitude": near_branch[1]}, format="json")
+            self.assertEqual(res.status_code, 400)
+            self.assertEqual(res.data["office"], "Branch")
+            self.assertRegex(res.data["detail"], r"^You are not at the office location\. You are about 1\d\d m away from Branch;")
+            res = self.client.post("/api/attendance/check_in/",
+                                   {"latitude": near_branch[0], "longitude": near_branch[1], "accuracy": 250}, format="json")
+            self.assertEqual(res.status_code, 400)
+            self.assertEqual(res.data["code"], "location_inaccurate")
+            self.assertEqual(res.data["detail"], "Your location isn't accurate enough yet (±250 m). "
+                                                 "Move outdoors or near a window and try again.")
+            # Far away even with the rough fix: still the distance.
+            res = self.client.post("/api/attendance/check_in/",
+                                   {"latitude": FAR[0] - 0.02, "longitude": FAR[1], "accuracy": 250}, format="json")
+            self.assertEqual(res.data["code"], "outside_office")
+            self.assertEqual(Attendance.objects.count(), 0)
+            # Inside with a rough fix is fine (as before).
+            res = self.client.post("/api/attendance/check_in/",
+                                   {"latitude": OFFICE[0], "longitude": OFFICE[1], "accuracy": 250}, format="json")
+            self.assertEqual(res.status_code, 201)
+            out = self.client.post("/api/attendance/check_out/", {"latitude": FAR[0], "longitude": FAR[1]}, format="json")
+            self.assertIn("punch out when you reach the office", out.data["detail"])
         finally:
             os.environ["GEOFENCE_ENABLED"] = "false"
 

@@ -5,11 +5,14 @@ import { Navigate, type RouteObject, useParams, useSearchParams } from 'react-ro
 const HrPage = lazy(() => import('./hr-page').then((m) => ({ default: m.HrPage })));
 const ReminderPage = lazy(() => import('./reminder').then((m) => ({ default: m.ReminderPage })));
 
-/** Old links (emails, notifications): /tasks/hr?tab=x → /attendance/x. */
+/** Old links (emails, notifications): /tasks/hr?tab=x&leave=7 → /attendance/x?leave=7 (the other parameters go along). */
 function OldHrLink() {
   const [params] = useSearchParams();
   const tab = params.get('tab');
-  return <Navigate to={tab && tab !== 'today' ? `/attendance/${tab}` : '/attendance'} replace />;
+  const rest = new URLSearchParams(params);
+  rest.delete('tab');
+  const query = rest.toString() ? `?${rest}` : '';
+  return <Navigate to={`${tab && tab !== 'today' ? `/attendance/${tab}` : '/attendance'}${query}`} replace />;
 }
 
 /** /attendance?tab=x (the old query style) → /attendance/x. */

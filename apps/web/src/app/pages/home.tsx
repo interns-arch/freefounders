@@ -17,7 +17,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
-import { useMinuteClock } from '@/lib/lite';
+import { useMinuteClock } from '@/lib/clock';
 import { cn } from '@/lib/utils';
 import { hrs } from '@/features/hr/parts';
 import { usePunch } from '@/features/hr/punch';
@@ -155,7 +155,7 @@ function Checks({ p }: { p: ReturnType<typeof usePunch> }) {
   const near = pos && offices.data ? nearestOffice(pos, offices.data) : null;
   const d = p.data;
   const warnings: Array<{ icon: typeof MapPin; text: string }> = [];
-  if (d?.geofence_enabled && near && !near.inside) warnings.push({ icon: MapPin, text: `${near.metres} m from ${near.office.name}` });
+  if (d?.geofence_enabled && near && !near.inside) warnings.push({ icon: MapPin, text: `${near.metres < 1000 ? `${near.metres} m` : `${(near.metres / 1000).toFixed(1)} km`} from ${near.office.name}` });
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px]">
       <span className="text-muted-foreground">

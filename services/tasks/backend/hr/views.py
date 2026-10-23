@@ -172,9 +172,11 @@ class AttendanceViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
         d = ser.validated_data
         extra = {"uniform": d.get("uniform")} if fn is services.check_in else {}  # check-out never asks
         try:
-            rec = fn(request.user, d.get("latitude"), d.get("longitude"), photo=d.get("photo"), **extra)
+            rec = fn(request.user, d.get("latitude"), d.get("longitude"), photo=d.get("photo"),
+                     accuracy=d.get("accuracy"), **extra)
         except services.HRError as exc:
-            return Response({"detail": str(exc)}, status=400)
+            # The reason (code) and its numbers (distance to the nearest office, GPS accuracy) next to the message.
+            return Response({"detail": str(exc), **({"code": exc.code} if exc.code else {}), **exc.data}, status=400)
         return Response(AttendanceSerializer(rec).data, status=http.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"], permission_classes=[HasCapability.of("attendance.punch")])
@@ -468,7 +470,7 @@ class LeaveRequestViewSet(ExportMixin, viewsets.ModelViewSet):
         from notifications.service import notify
         notify(user, "leave_reviewed", f"Leave marked: {leave.leave_type.name}",
                f"{leave.start_date} to {leave.end_date} ({services._num(leave.leave_days)} day(s)), marked by "
-               f"{_name(self.request.user)}", link="/hr")
+               f"{_name(self.request.user)}", link=f"/hr?tab=leave&leave={leave.pk}")
 
     def perform_update(self, serializer):
         """Only the person, only while pending; the working days, the overlap and the balance are checked again, so
@@ -554,7 +556,7 @@ class LeaveRequestViewSet(ExportMixin, viewsets.ModelViewSet):
                f"Leave {leave.get_status_display().lower()}: {leave.leave_type.name}",
                f"{leave.start_date} to {leave.end_date} ({leave.days} day(s))"
                + (f"\nRemarks: {leave.remarks}" if leave.remarks else ""),
-               link="/hr")
+               link=f"/hr?tab=leave&leave={leave.pk}")
         return Response(LeaveRequestSerializer(leave).data)
 
     @action(detail=False, methods=["get"])

@@ -3,7 +3,7 @@ import { HISTORY_ENTITY_TYPES } from '@eam/shared';
 import type { Actor } from '../common/actor';
 import { CurrentActor, listFilter, listParams, RequirePermissions, uuidParam } from '../common/http';
 import { HistoryService } from './history.service';
-import { NotificationsService } from './notifications.service';
+import { type NotificationCategory, NotificationsService } from './notifications.service';
 import { Exportable } from '../common/export';
 import { EXPORTS } from '../common/export-specs';
 
@@ -30,19 +30,23 @@ export class HistoryController {
   }
 }
 
+const asCategory = (v: unknown): NotificationCategory | undefined => (v === 'assets' || v === 'approvals' ? v : undefined);
+
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
+  /** ?category=assets|approvals: one area of the bell (PLAN.md §19.37). */
   @Get()
-  list(@CurrentActor() actor: Actor) {
-    return this.notifications.list(actor);
+  list(@CurrentActor() actor: Actor, @Query('category') category?: string) {
+    return this.notifications.list(actor, asCategory(category));
   }
 
+  /** {ids} marks those; {category} one area ("Mark all read" on a tab); nothing = all. */
   @Post('read')
-  async read(@CurrentActor() actor: Actor, @Body() body: { ids?: string[] }) {
+  async read(@CurrentActor() actor: Actor, @Body() body: { ids?: string[]; category?: string }) {
     const ids = Array.isArray(body?.ids) ? body.ids.filter((id) => typeof id === 'string').slice(0, 200) : undefined;
-    await this.notifications.markRead(actor, ids);
+    await this.notifications.markRead(actor, ids, asCategory(body?.category));
     return { ok: true };
   }
 }

@@ -3,7 +3,8 @@ import { errorMessage } from '@freefounders/core';
 import { hrExports, usePendingCorrections, usePendingLeaves, useReviewHrRequest } from '@freefounders/core/hr';
 import { todayStamp } from '@freefounders/core/export';
 import { Check, ClipboardCheck, Inbox, Palmtree, X } from '@/components/icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,10 @@ export function ApprovalsTab() {
   const corrections = usePendingCorrections();
   const review = useReviewHrRequest();
   const [remarks, setRemarks] = useState<Record<string, string>>({});
+  // From a notification (PLAN.md §19.37): ?leave=<id> or ?correction=<id> points at the one to review.
+  const [params] = useSearchParams();
+  const focusLeave = Number(params.get('leave')) || null;
+  const focusCorrection = Number(params.get('correction')) || null;
 
   const error = leaves.error ?? corrections.error ?? review.error;
   return (
@@ -42,6 +47,7 @@ export function ApprovalsTab() {
             {leaves.data.map((l) => (
               <ApprovalRow
                 key={l.id}
+                focused={l.id === focusLeave}
                 kind="leave"
                 remark={remarks[`leave${l.id}`] ?? ''}
                 setRemark={(v) => setRemarks((p) => ({ ...p, [`leave${l.id}`]: v }))}
@@ -88,6 +94,7 @@ export function ApprovalsTab() {
             {corrections.data.map((c) => (
               <ApprovalRow
                 key={c.id}
+                focused={c.id === focusCorrection}
                 kind="correction"
                 remark={remarks[`correction${c.id}`] ?? ''}
                 setRemark={(v) => setRemarks((p) => ({ ...p, [`correction${c.id}`]: v }))}
@@ -128,7 +135,10 @@ function ApprovalRow({
   busy,
   onDecide,
   overBalance,
+  focused,
 }: {
+  /** Opened from its notification: scrolled into view and outlined. */
+  focused?: boolean;
   kind: 'leave' | 'correction';
   title: string;
   person?: string;
@@ -141,8 +151,12 @@ function ApprovalRow({
   onDecide: (decision: 'approved' | 'rejected', beyondBalance?: boolean) => void;
   overBalance?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ block: 'center' });
+  }, [focused]);
   return (
-    <Card className={cn('border-l-4 p-3 sm:p-4', kind === 'leave' ? 'border-l-info' : 'border-l-warning')}>
+    <Card ref={ref} data-focused={focused || undefined} className={cn('border-l-4 p-3 sm:p-4', kind === 'leave' ? 'border-l-info' : 'border-l-warning', focused && 'ring-2 ring-primary')}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <Avatar name={person} className="size-9" />

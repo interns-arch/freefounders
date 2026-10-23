@@ -683,6 +683,17 @@ describe('onboarding', () => {
     assert.equal((await call('POST', `/onboarding/${caseId}/submit`)).status, 200);
     const notes = await call('GET', '/notifications', undefined, 'it');
     assert.ok(JSON.stringify(notes.body).includes('New joiner to approve: Joiner One'));
+    // Grouped by area (PLAN.md §19.37): a new joiner waits for IT's decision = Approvals; per-area unread counts.
+    const joinerNote = notes.body.items.find((n: { title: string }) => n.title.includes('New joiner to approve: Joiner One'));
+    assert.equal(joinerNote.category, 'approvals');
+    assert.equal(joinerNote.link, `/onboarding/${caseId}`);
+    assert.equal(notes.body.unread, notes.body.unreadByCategory.assets + notes.body.unreadByCategory.approvals);
+    const approvalsOnly = await call('GET', '/notifications?category=approvals', undefined, 'it');
+    assert.ok(approvalsOnly.body.items.length > 0 && approvalsOnly.body.items.every((n: { category: string }) => n.category === 'approvals'));
+    assert.equal((await call('POST', '/notifications/read', { category: 'approvals' }, 'it')).status, 201);
+    const afterRead = await call('GET', '/notifications', undefined, 'it');
+    assert.equal(afterRead.body.unreadByCategory.approvals, 0);
+    assert.equal(afterRead.body.unreadByCategory.assets, notes.body.unreadByCategory.assets);
     const queue = await call('GET', '/queue?kind=ONBOARDING', undefined, 'it');
     assert.equal(queue.body.items.find((i: { id: string }) => i.id === caseId).status, 'SUBMITTED');
 

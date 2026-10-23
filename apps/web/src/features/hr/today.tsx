@@ -4,7 +4,7 @@ import { Activity, Camera, Clock, LogIn, LogOut, MapPin, Timer } from '@/compone
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
-import { useMinuteClock } from '@/lib/lite';
+import { useMinuteClock } from '@/lib/clock';
 import { cn } from '@/lib/utils';
 import { ErrorNote, OkNote, Tile, fmtTime } from '../tasks/general/parts';
 import { AttendanceChip, hrs } from './parts';

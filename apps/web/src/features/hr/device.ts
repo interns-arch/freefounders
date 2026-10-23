@@ -23,11 +23,11 @@ export function grabPhoto(video: HTMLVideoElement): string {
  * the app's GPS is used (a WebView only allows the browser's geolocation on https); with `required`, the app's reason
  * (location blocked, GPS off, no fix in 10 s) is thrown instead of returning {}.
  */
-export async function currentPosition(options: { required?: boolean } = {}): Promise<{ latitude?: number; longitude?: number }> {
+export async function currentPosition(options: { required?: boolean } = {}): Promise<{ latitude?: number; longitude?: number; accuracy?: number }> {
   if (isInApp()) {
     try {
-      const p = await appRequest<{ latitude: number; longitude: number }>('location');
-      return { latitude: p.latitude, longitude: p.longitude };
+      const p = await appRequest<{ latitude: number; longitude: number; accuracy?: number | null }>('location');
+      return { latitude: p.latitude, longitude: p.longitude, ...(p.accuracy ? { accuracy: Math.round(p.accuracy) } : {}) };
     } catch (e) {
       if (options.required) throw e;
       return {};
@@ -36,7 +36,8 @@ export async function currentPosition(options: { required?: boolean } = {}): Pro
   return new Promise((resolve, reject) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve({});
     navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
+      // The accuracy goes with it: the server asks for a better fix instead of refusing a rough one near the office.
+      (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude, ...(p.coords.accuracy ? { accuracy: Math.round(p.coords.accuracy) } : {}) }),
       (e) => {
         // Location is needed (office geofence) and the browser refused: say how to allow it.
         if (options.required && e.code === e.PERMISSION_DENIED) reject(new LocationBlockedError());

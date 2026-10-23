@@ -104,13 +104,19 @@ def _describe(kind, obj) -> tuple[str, str]:
     return (f"Attendance correction from {name}", f"For {obj.date}" + (f"\nReason: {obj.reason}" if getattr(obj, "reason", "") else ""))
 
 
+def review_link(kind: str, obj) -> str:
+    """Attendance → Approvals with the item (Tasks-relative, like every Tasks link: /tasks/hr?tab= opens
+    /attendance/<tab> in the web app; PLAN.md §19.37)."""
+    return f"/hr?tab=approvals&{'leave' if kind == 'leave' else 'correction'}={obj.pk}"
+
+
 def notify_submitted(kind: str, obj) -> None:
     """Today nobody hears about a new leave request or correction; now its approvers do."""
     from notifications.service import notify
     title, body = _describe(kind, obj)
     for user in approvers_for(obj.user):
         notify(user, "leave_request" if kind == "leave" else "correction_request", title, body,
-               link="/hr", link_label="Review it")
+               link=review_link(kind, obj), link_label="Review it")
 
 
 def remind_and_escalate() -> int:
@@ -130,7 +136,8 @@ def remind_and_escalate() -> int:
         for obj in waiting.filter(created_at__lte=now - timedelta(hours=hours), reminded_at__isnull=True):
             title, body = _describe(kind, obj)
             for user in approvers_for(obj.user):
-                notify(user, "approval_reminder", f"Waiting for you: {title}", body, link="/hr", link_label="Review it")
+                notify(user, "approval_reminder", f"Waiting for you: {title}", body, link=review_link(kind, obj),
+                       link_label="Review it")
                 sent += 1
             obj.reminded_at = now
             obj.save(update_fields=["reminded_at"])
@@ -138,7 +145,7 @@ def remind_and_escalate() -> int:
             title, body = _describe(kind, obj)
             for user in escalation_targets(obj.user):
                 notify(user, "approval_escalated", f"Not reviewed for {2 * hours} hours: {title}", body,
-                       link="/hr", link_label="Review it")
+                       link=review_link(kind, obj), link_label="Review it")
                 sent += 1
             obj.escalated_at = now
             obj.save(update_fields=["escalated_at"])

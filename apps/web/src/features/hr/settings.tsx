@@ -148,10 +148,11 @@ function AttendanceRules() {
   );
 }
 
-const UNIFORM_MODES: { value: HrSettingValues['uniform_check']; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'remind', label: 'Reminder only' },
-  { value: 'ask', label: 'Ask and record' },
+/** PLAN.md §19.36: the names say what the person's answer does. */
+const UNIFORM_MODES: { value: HrSettingValues['uniform_check']; label: string; hint: string }[] = [
+  { value: 'off', label: 'Off', hint: 'No question' },
+  { value: 'remind', label: 'Reminder only', hint: 'OK, punch in' },
+  { value: 'ask', label: 'Must confirm', hint: 'Yes punches in, No blocks' },
 ];
 
 /** Uniform at punch-in (PLAN.md §19.27): a reminder, or a Yes / No question saved with the attendance. Its own save. */
@@ -182,20 +183,23 @@ function UniformCheck() {
 
   return (
     <form onSubmit={submit} aria-label="Uniform at punch-in">
-      <Panel icon={Shirt} title="Uniform at punch-in" description="Reminder only shows the message before check-in. Ask and record saves the answer with the attendance; the punch is never blocked.">
+      <Panel icon={Shirt} title="Uniform at punch-in" description="Reminder only shows the message before check-in (OK, punch in). Must confirm asks Yes / No: Yes punches in and is saved with the attendance, No blocks the punch until the person is wearing it.">
         <fieldset>
           <legend className="mb-1.5 text-[13px] font-medium">Before check-in</legend>
-          <div className="grid grid-cols-3 gap-1.5 max-[360px]:grid-cols-1">
+          <div className="grid grid-cols-3 gap-1.5 max-[420px]:grid-cols-1">
             {UNIFORM_MODES.map((m) => (
               <label
                 key={m.value}
                 className={cn(
-                  'flex min-h-10 cursor-pointer items-center justify-center rounded-md border bg-card px-2 text-center text-sm font-medium transition outline-none has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/40 hover:border-primary/40',
+                  'flex min-h-12 cursor-pointer flex-col items-center justify-center rounded-md border bg-card px-2 py-1.5 text-center text-sm font-medium transition outline-none has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/40 hover:border-primary/40',
                   mode === m.value && 'border-primary bg-primary/8 text-primary',
                 )}
               >
-                <input type="radio" name="uniform-check" value={m.value} checked={mode === m.value} onChange={() => setMode(m.value)} className="sr-only" />
-                {m.label}
+                <input type="radio" name="uniform-check" value={m.value} checked={mode === m.value} onChange={() => setMode(m.value)} aria-label={m.label} className="sr-only" />
+                <span>{m.label}</span>
+                <span className={cn('text-xs font-normal', mode === m.value ? 'text-primary' : 'text-muted-foreground')} aria-hidden>
+                  {m.hint}
+                </span>
               </label>
             ))}
           </div>

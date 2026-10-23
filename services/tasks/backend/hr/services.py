@@ -60,6 +60,8 @@ UNIFORM_MODES = ("off", "remind", "ask")
 UNIFORM_MESSAGE_DEFAULT = "Are you wearing the company shirt / jersey today?"
 UNIFORM_MESSAGE_MAX = 200
 UNIFORM_MISSING = "Answer whether you are wearing the company shirt / jersey to punch in."
+# "Must confirm" mode: answering No blocks the punch (founder, 2026-10-23; PLAN.md §19.36).
+UNIFORM_NOT_WORN = "Please wear the company shirt / jersey, then punch in."
 
 # Settings an HR admin edits on the HR Settings screen. Each is stored per company
 # (CompanySetting); a blank value falls back to the server's environment variable.
@@ -197,7 +199,13 @@ def _parse_hhmm(value: str, fallback: time) -> time:
 
 
 class HRError(Exception):
-    """Rejected check-in/out -- message is safe to show the employee."""
+    """Rejected check-in/out -- message is safe to show the employee. `code` and `data` (e.g. the distance to the
+    office) go into the API answer next to `detail`, so a screen can react to the reason."""
+
+    def __init__(self, message, code=None, **data):
+        super().__init__(message)
+        self.code = code
+        self.data = data
 
 
 # ------------------------------------------------------------- geofence
@@ -211,27 +219,43 @@ def haversine_m(lat1, lng1, lat2, lng2) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def validate_location(lat, lng):
-    """Returns (office, distance_m). Raises HRError when outside every fence.
-    With geofencing disabled the coordinates are stored but never enforced."""
+def format_distance(metres) -> str:
+    """"350 m" under a kilometre, "1.2 km" from there on (PLAN.md §19.36)."""
+    m = max(0, round(float(metres)))
+    return f"{m} m" if m < 1000 else f"{m / 1000:.1f} km"
+
+
+def validate_location(lat, lng, accuracy=None, verb="punch in"):
+    """Returns (office, distance_m). Raises HRError when outside every fence: the nearest office and the distance
+    (code "outside_office"), or, when the phone's fix is too rough to tell (its accuracy circle reaches the office),
+    code "location_inaccurate" with the accuracy. With geofencing disabled the coordinates are stored but never
+    enforced."""
     conf = cfg()
     if not conf["geofence_enabled"]:
         return None, None
     offices = list(OfficeLocation.objects.filter(active=True))
     if not offices:
-        raise HRError("No office location is configured yet — ask an admin to add one.")
+        raise HRError("No office location is configured yet — ask an admin to add one.", code="no_office")
     if lat is None or lng is None:
-        raise HRError("Location is required for attendance. Please enable GPS and try again.")
+        raise HRError("Location is required for attendance. Please enable GPS and try again.", code="location_required")
     best, best_d = None, None
     for office in offices:
         d = haversine_m(float(lat), float(lng), office.latitude, office.longitude)
         if best_d is None or d < best_d:
             best, best_d = office, d
     if best_d > best.radius_m:
+        acc = float(accuracy) if accuracy is not None and float(accuracy) > 0 else None
+        info = {"office": best.name, "distance_m": round(best_d), "radius_m": best.radius_m}
+        if acc is not None and best_d - acc <= best.radius_m:
+            # The person may well be inside: the fix is too rough to refuse them for being away.
+            raise HRError(
+                f"Your location isn't accurate enough yet (±{format_distance(acc)}). "
+                "Move outdoors or near a window and try again.",
+                code="location_inaccurate", accuracy_m=round(acc), **info)
         raise HRError(
-            f"You are {int(best_d)} m from {best.name} (allowed {best.radius_m} m). "
-            "Move closer to the office to mark attendance."
-        )
+            f"You are not at the office location. You are about {format_distance(best_d)} away from {best.name}; "
+            f"{verb} when you reach the office.",
+            code="outside_office", **info)
     return best, best_d
 
 
@@ -245,9 +269,10 @@ def is_holiday(day: date) -> bool:
     return Holiday.objects.filter(date=day).exists()
 
 
-def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None) -> Attendance:
+def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None, accuracy=None) -> Attendance:
     """`descriptor` (a face signature from an older client) is ignored: there is no face check.
-    `uniform` (True/False) answers the company's uniform question; needed only when UNIFORM_CHECK is "ask"."""
+    `uniform` (True/False) answers the company's uniform question; needed only when UNIFORM_CHECK is "ask", where
+    only True punches in (No blocks the punch, PLAN.md §19.36). `accuracy` (metres) is the phone's GPS accuracy."""
     conf = cfg()
     today = timezone.localdate()
     existing = Attendance.objects.filter(user=user, date=today).first()
@@ -257,9 +282,11 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None
         raise HRError("You are on approved leave today.")
     asks_uniform = conf["uniform_check"] == "ask"
     if asks_uniform and uniform is None:
-        raise HRError(UNIFORM_MISSING)
+        raise HRError(UNIFORM_MISSING, code="uniform_required")
+    if asks_uniform and uniform is False:
+        raise HRError(UNIFORM_NOT_WORN, code="uniform_not_worn")
 
-    office, _ = validate_location(lat, lng)
+    office, _ = validate_location(lat, lng, accuracy)
 
     now = timezone.localtime()
     start = _parse_hhmm(conf["work_start"], time(9, 30))
@@ -274,13 +301,13 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None
     record.status = AttendanceStatus.LATE if late else AttendanceStatus.PRESENT
     record.face_verified = False
     record.face_confidence = None
-    record.uniform_ok = bool(uniform) if asks_uniform else None
+    record.uniform_ok = True if asks_uniform else None
     _attach_photo(record, "check_in_photo", photo)
     record.save()
     return record
 
 
-def check_out(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendance:
+def check_out(user, lat=None, lng=None, descriptor=None, photo=None, accuracy=None) -> Attendance:
     conf = cfg()
     today = timezone.localdate()
     record = Attendance.objects.filter(user=user, date=today).first()
@@ -289,7 +316,7 @@ def check_out(user, lat=None, lng=None, descriptor=None, photo=None) -> Attendan
     if record.check_out:
         raise HRError("You have already checked out today.")
 
-    validate_location(lat, lng)
+    validate_location(lat, lng, accuracy, verb="punch out")
 
     record.check_out = timezone.now()
     record.check_out_lat, record.check_out_lng = lat, lng

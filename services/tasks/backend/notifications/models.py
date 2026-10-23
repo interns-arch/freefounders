@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .categories import CATEGORIES, category_for
+
 
 class Notification(models.Model):
     """One in-app notification for one user. `channels` records what the
@@ -13,6 +15,8 @@ class Notification(models.Model):
     title = models.CharField(max_length=200)
     body = models.TextField(blank=True, default="")
     link = models.CharField(max_length=200, blank=True, default="")
+    # attendance | tasks | approvals | company (notifications/categories.py, PLAN.md §19.37); filled from the type.
+    category = models.CharField(max_length=20, blank=True, default="")
     channels = models.JSONField(default=list, blank=True)
     # A WhatsApp held back because it came up outside the company's sending hours
     # (WHATSAPP_HOURS, default 10 AM - 7 PM): {"template": name|None, "params": [...], "text": str}.
@@ -23,7 +27,13 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["user", "read_at"])]
+        indexes = [models.Index(fields=["user", "read_at"]),
+                   models.Index(fields=["user", "category", "read_at"], name="notif_user_cat_read")]
+
+    def save(self, *args, **kwargs):
+        if not self.category or self.category not in CATEGORIES:
+            self.category = category_for(self.type)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"[{self.type}] {self.title} -> {self.user}"

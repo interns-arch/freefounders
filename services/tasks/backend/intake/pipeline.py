@@ -94,7 +94,7 @@ def _append_to_lead(lead: Lead, msg: InboundMessage, result: dict):
         notify(
             lead.assigned_to, "customer_message",
             f"New {channel_label} message: {lead.customer_name}",
-            msg.body[:300], link="/leads",
+            msg.body[:300], link=f"/leads?lead={lead.pk}",
         )
 
 

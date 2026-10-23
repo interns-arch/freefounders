@@ -170,6 +170,6 @@ class DirectoryTemplateViewSet(viewsets.ModelViewSet):
                    ] + [f"  - {t.code} {t.title}" for t in created[:10]]
                      + ([f"  ...and {len(created) - 10} more"] if len(created) > 10 else [])
                      + ["", "Open Tasks > My Tasks to see due dates and start."]),
-                   link="/tasks")
+                   link=f"/tasks/{created[0].pk}" if len(created) == 1 else "/tasks?tab=my")
         return Response(TaskSerializer(created, many=True, context={"request": request}).data,
                         status=status.HTTP_201_CREATED)

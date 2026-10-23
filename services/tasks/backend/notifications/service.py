@@ -53,7 +53,7 @@ def notify(user, type_: str, title: str, body: str = "", link: str = "",
            wa_template: tuple[str, list] | None = None,
            link_label: str | None = None,
            extra_links=(), want_whatsapp: bool = True,
-           want_email: bool = True, outside_hours: str = "defer") -> Notification:
+           want_email: bool = True, outside_hours: str = "defer", category: str = "") -> Notification:
     """wa_template=(template_name, [params]) routes the WhatsApp leg through
     an approved Meta template (deliverable any time); without it the message
     goes as free-form text, which Meta only delivers inside a 24h
@@ -96,9 +96,10 @@ def notify(user, type_: str, title: str, body: str = "", link: str = "",
         wa = whatsapp.send_text(user.whatsapp_phone, f"{title}\n{body}".strip())
     results.append(wa)
     _remember_whatsapp(user, wa, wa_template[0] if wa_template else "")
+    # The area it is grouped under (PLAN.md §19.37): from the type unless the caller knows better.
     return Notification.objects.create(
         user=user, type=type_, title=title, body=body, link=link, channels=results,
-        wa_deferred=deferred,
+        wa_deferred=deferred, category=category,
     )
 
 
@@ -139,7 +140,7 @@ def notify_lead_assigned(lead, actor=None):
         f"New lead assigned: {lead.customer_name}",
         f"{lead.requirement or 'No requirement captured yet.'}\n"
         f"Source: {lead.get_source_display()} · Priority: {lead.get_priority_display()} · By: {who}",
-        link="/leads",
+        link=f"/leads?lead={lead.pk}",
     )
 
 
@@ -151,7 +152,7 @@ def notify_status_change(lead, actor, old_status_label):
         f"Lead updated: {lead.customer_name}",
         f"Status changed {old_status_label} -> {lead.get_status_display()} "
         f"by {actor.get_full_name() or actor.username}",
-        link="/leads",
+        link=f"/leads?lead={lead.pk}",
     )
 
 
@@ -169,5 +170,5 @@ def notify_follow_up_due(lead):
             lead.get_status_display(),
             lead.phone or "not on file",
         ]),
-        link="/leads",
+        link=f"/leads?lead={lead.pk}",
     )

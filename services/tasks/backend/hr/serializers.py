@@ -59,6 +59,8 @@ class MarkSerializer(serializers.Serializer):
     photo = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=600_000)
     # Check-in only: "are you wearing the company shirt / jersey?" (needed when the company asks, PLAN.md §19.27).
     uniform = serializers.BooleanField(required=False, allow_null=True)
+    # The phone's GPS accuracy in metres: a rough fix near the office gets "not accurate enough" (PLAN.md §19.36).
+    accuracy = serializers.FloatField(required=False, allow_null=True, min_value=0, max_value=1_000_000)
 
 
 class CorrectionSerializer(serializers.ModelSerializer):

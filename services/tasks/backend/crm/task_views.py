@@ -780,7 +780,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             notify(mistake.manager, "mistake_update",
                    f"{mistake.code}: corrective task done",
                    f"{task.code} {task.title} — review and resolve the mistake.",
-                   link="/mistakes")
+                   link=f"/mistakes?open={mistake.pk}")
 
     def perform_destroy(self, instance):
         """SOFT delete -- the task lands in the Deleted bin.
@@ -2594,7 +2594,7 @@ def _notify_bulk_accepted(reviewer_id, remarks, by_submitter):
             lines += ["", remarks]
         notify(submitter, "task_completion_accepted",
                f"Accepted: {len(tasks)} of your tasks", NL_JOIN(lines),
-               link="/tasks", link_label="Open my tasks")
+               link="/tasks?tab=my", link_label="Open my tasks")
 
 
 class TaskCompletionViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
@@ -3009,7 +3009,7 @@ class TaskCategoryViewSet(viewsets.ModelViewSet):
                        f"Approved by: {request.user.get_full_name() or request.user.username}",
                        "",
                        "It is now in the category dropdown — you can pick it on any task.",
-                   ]), link="/tasks")
+                   ]), link="/tasks?tab=my")
         return Response(self.get_serializer(cat).data)
 
     @action(detail=True, methods=["post"],
@@ -3084,7 +3084,7 @@ class TaskCategoryViewSet(viewsets.ModelViewSet):
                        "",
                        "They could not find a category that fits their task.",
                        "Approve or reject it in Settings -> Task categories.",
-                   ]), link="/settings", link_label="Review the request")
+                   ]), link="/settings", link_label="Review the request", category="approvals")
 
     def perform_destroy(self, instance):
         instance.active = False              # never lose reporting history

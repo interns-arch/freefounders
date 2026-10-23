@@ -129,11 +129,11 @@ test('notifications open their task inside the new app', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
   const links = page.getByRole('main').getByRole('link', { name: /./ });
   if ((await links.count()) > 0) {
-    // Tasks links are relative to /tasks: "/tasks/42" opens "/tasks/tasks/42".
+    // Links are relative to their app: Tasks "/tasks/42" opens "/tasks/tasks/42", Assets "/requests?open=x" "/assets/requests?open=x".
     const href = await links.first().getAttribute('href');
-    expect(href).toMatch(/^\/tasks\//);
+    expect(href).toMatch(/^\/(tasks|assets)\//);
   } else {
-    await expect(page.getByText('Nothing yet')).toBeVisible();
+    await expect(page.getByText('Nothing here')).toBeVisible();
   }
   await shot(page, 'web-tasks-notifications');
 });

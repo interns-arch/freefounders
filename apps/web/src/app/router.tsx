@@ -42,6 +42,8 @@ export const router = createBrowserRouter([
           { index: true, element: <HomePage /> },
           ...adminRoutes,
           { path: 'console', lazy: async () => ({ Component: (await import('@/features/billing/console')).ConsolePage }) },
+          // Every notification of every app, grouped by area (PLAN.md §19.37); the bell's "All notifications".
+          { path: 'notifications', lazy: async () => ({ Component: (await import('@/features/tasks/general/notifications')).NotificationsPage }) },
           { path: 'attendance', children: attendanceRoutes },
           { path: 'tasks', children: area([...tasksRoutes, ...hrRoutes]) },
           { path: 'assets', children: area(assetsRoutes) },

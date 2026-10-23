@@ -1,5 +1,14 @@
-import { type Access, useMarkNotificationsRead, useNotifications, useSignOut } from '@freefounders/core';
-import { AlarmClock, Bell, CheckCheck, ChevronDown, Feather, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
+import {
+  type Access,
+  type NotificationTab,
+  useMarkNotificationRead,
+  useMarkNotificationsRead,
+  useNotificationCounts,
+  useNotifications,
+  useSignOut,
+} from '@freefounders/core';
+import { NotificationTabs, NotificationText, notificationRowClass } from '@/components/common/notifications';
+import { AlarmClock, Bell, CheckCheck, ChevronDown, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
 import { CompanyMenuItems } from '@/features/account/switcher';
 import { isInApp } from '@/lib/native-bridge';
 import { useState } from 'react';
@@ -10,15 +19,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/overlays';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlays';
 import { Avatar } from '@/components/ui/primitives';
 import { BrandMark, BrandWordmark } from '@/components/brand';
-import { type LiteChoice, useLite } from '@/lib/lite';
 import { cn } from '@/lib/utils';
 
 /**
@@ -95,13 +101,21 @@ const timeAgo = (iso: string) => {
   return `${Math.floor(s / 86400)}d ago`;
 };
 
-/** One bell for Tasks and Assets. */
+/**
+ * One bell for every app, grouped by area (PLAN.md §19.37): All · Attendance · Tasks · Assets · Approvals · Company, each
+ * with its unread count; "Mark all read" marks the open tab. A tap marks the notification read and opens its page.
+ */
 export function NotificationsBell() {
-  const q = useNotifications();
-  const markRead = useMarkNotificationsRead();
-  const navigate = useNavigate();
+  const [tab, setTab] = useState<NotificationTab>('all');
   const [open, setOpen] = useState(false);
-  const unread = q.data?.unread ?? 0;
+  const q = useNotifications(tab);
+  const counts = useNotificationCounts();
+  const markAll = useMarkNotificationsRead();
+  const markOne = useMarkNotificationRead();
+  const navigate = useNavigate();
+  const unread = counts.data?.all ?? 0;
+  const tabUnread = counts.data?.[tab] ?? 0;
+  const items = q.data ?? [];
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -119,34 +133,32 @@ export function NotificationsBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[22rem] overflow-hidden p-0">
+      <PopoverContent align="end" className="w-[min(25rem,calc(100vw-1rem))] overflow-hidden p-0">
         <div className="flex items-center justify-between border-b px-4 py-2.5">
-          <span className="text-sm font-bold">
-            Notifications
-            {unread > 0 && <span className="ml-2 rounded-sm bg-primary/8 px-1.5 font-mono text-[11px] font-semibold text-primary">{unread}</span>}
-          </span>
-          <Button variant="ghost" size="xs" onClick={() => markRead.mutate()} disabled={!unread || markRead.isPending}>
+          <span className="text-sm font-bold">Notifications</span>
+          <Button variant="ghost" size="xs" onClick={() => markAll.mutate(tab)} disabled={!tabUnread || markAll.isPending}>
             <CheckCheck className="size-3.5" /> Mark all read
           </Button>
         </div>
-        <ul className="max-h-[26rem] divide-y overflow-y-auto scrollbar-thin" aria-label="Latest notifications">
-          {(q.data?.items ?? []).slice(0, 30).map((n) => (
+        <div className="border-b">
+          <NotificationTabs tab={tab} onTab={setTab} counts={counts.data} compact controls="bell-list" />
+        </div>
+        <ul id="bell-list" role="tabpanel" className="max-h-[26rem] divide-y overflow-y-auto scrollbar-thin" aria-label="Latest notifications">
+          {items.slice(0, 30).map((n) => (
             <li key={n.id}>
               <button
                 type="button"
-                className={cn('flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/60', !n.read && 'bg-primary/5 shadow-[inset_3px_0_0_0_var(--primary)]')}
+                className={cn('flex w-full cursor-pointer gap-3 px-4 py-3 text-left', notificationRowClass(n))}
                 onClick={() => {
+                  if (!n.read) markOne.mutate(n);
                   setOpen(false);
-                  if (n.href) navigate(n.href);
+                  if (n.href) {
+                    if (/^https?:\/\//.test(n.href)) window.location.assign(n.href);
+                    else navigate(n.href);
+                  }
                 }}
               >
-                <span className="min-w-0 flex-1">
-                  <span className={cn('block truncate text-sm', n.read ? 'font-medium' : 'font-semibold')}>{n.title}</span>
-                  {n.body && <span className="line-clamp-2 block text-xs text-muted-foreground">{n.body}</span>}
-                  <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
-                    {n.app === 'tasks' ? 'Tasks' : 'Assets'} · {timeAgo(n.createdAt)}
-                  </span>
-                </span>
+                <NotificationText n={n} when={timeAgo(n.createdAt)} clamp />
               </button>
             </li>
           ))}
@@ -163,11 +175,11 @@ export function NotificationsBell() {
               </button>
             </li>
           )}
-          {q.data && q.data.items.length === 0 && <li className="px-4 py-10 text-center text-sm text-muted-foreground">You’re all caught up.</li>}
+          {q.data && items.length === 0 && <li className="px-4 py-10 text-center text-sm text-muted-foreground">You’re all caught up.</li>}
         </ul>
         <div className="border-t bg-muted/30 px-4 py-2 text-right">
-          <Link to="/tasks/notifications" className="text-xs font-semibold text-primary hover:underline" onClick={() => setOpen(false)}>
-            All Tasks notifications
+          <Link to={tab === 'all' ? '/notifications' : `/notifications?tab=${tab}`} className="text-xs font-semibold text-primary hover:underline" onClick={() => setOpen(false)}>
+            All notifications
           </Link>
         </div>
       </PopoverContent>
@@ -175,12 +187,11 @@ export function NotificationsBell() {
   );
 }
 
-/** The account menu in the header (one place on every screen): light/dark, lite mode, shortcuts, change password, sign out. */
+/** The account menu in the header (one place on every screen): light/dark, shortcuts, change password, sign out. */
 export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?: () => void }) {
   const navigate = useNavigate();
   const signOut = useSignOut();
   const theme = useTheme();
-  const lite = useLite();
   const name = access.platform?.person.fullName ?? access.claims?.name ?? '';
   // The owner is a mark, not a role in the list (PLAN.md §19.28): say Owner rather than the Admin role they also hold.
   const role = access.platform?.person.role === 'owner' ? 'Owner' : (access.tasks.me?.role_display ?? access.assets.me?.role.name ?? (access.isAdmin ? 'Admin' : 'Member'));
@@ -213,21 +224,6 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         <DropdownMenuItem onSelect={() => theme.toggle()}>
           {theme.dark ? <Sun className="size-4" /> : <Moon className="size-4" />} {theme.dark ? 'Light mode' : 'Dark mode'}
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel id="lite-label" className="flex items-center gap-1.5">
-          <Feather className="size-3.5" aria-hidden /> Lite mode{lite.choice === 'auto' ? (lite.active ? ' · on' : ' · off') : ''}
-        </DropdownMenuLabel>
-        <DropdownMenuRadioGroup aria-labelledby="lite-label" value={lite.choice} onValueChange={(v) => lite.setChoice(v as LiteChoice)}>
-          <DropdownMenuRadioItem value="auto" onSelect={(e) => e.preventDefault()}>
-            Auto <span className="ml-auto text-xs text-muted-foreground">for weak devices</span>
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="on" onSelect={(e) => e.preventDefault()}>
-            On
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="off" onSelect={(e) => e.preventDefault()}>
-            Off
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         {onShortcuts && (
           <DropdownMenuItem onSelect={onShortcuts} className="max-lg:hidden">

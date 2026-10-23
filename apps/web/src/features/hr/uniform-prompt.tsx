@@ -1,10 +1,12 @@
 /**
- * Uniform check before a check-in (PLAN.md §19.27). "remind": the company's message and "OK, punch in". "ask": the
- * same message with Yes / No; either answer continues the punch and is saved with the day. Cancel stops the punch.
- * The dialog is fully closed before the next step (location, browser camera, or the phone app's native camera) starts.
+ * Uniform check before a check-in (PLAN.md §19.27, §19.36). "remind" (Reminder only): the company's message and
+ * "OK, punch in". "ask" (Must confirm): the same message with Yes / No; Yes continues the punch (saved with the day),
+ * No blocks it with "Please wear the company shirt / jersey, then punch in." and leaves Yes to tap once it is worn.
+ * Cancel stops the punch. The dialog is fully closed before the next step (location, browser camera, or the phone
+ * app's native camera) starts.
  */
-import { UNIFORM_MESSAGE_DEFAULT, type UniformCheck } from '@freefounders/core/hr';
-import { useRef } from 'react';
+import { UNIFORM_MESSAGE_DEFAULT, UNIFORM_NOT_WORN, type UniformCheck } from '@freefounders/core/hr';
+import { useEffect, useRef, useState } from 'react';
 import { Shirt } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
@@ -26,6 +28,11 @@ export function UniformPrompt({
   // The answer waits until the dialog has closed (focus returned), so nothing opens on top of it.
   const pending = useRef<{ wearing: boolean | undefined } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** "No" was answered: the punch is blocked until Yes. */
+  const [notWorn, setNotWorn] = useState(false);
+  useEffect(() => {
+    if (open) setNotWorn(false);
+  }, [open]);
 
   const finish = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -62,12 +69,19 @@ export function UniformPrompt({
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:justify-stretch">
           {mode === 'ask' ? (
             <>
+              {notWorn && (
+                <p role="alert" className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-center text-sm font-medium text-foreground">
+                  {UNIFORM_NOT_WORN}
+                </p>
+              )}
               <Button variant="cta" size="lg" className="w-full" onClick={() => answer(true)}>
                 Yes, I'm wearing it
               </Button>
-              <Button variant="outline" size="lg" className="w-full" onClick={() => answer(false)}>
-                No
-              </Button>
+              {!notWorn && (
+                <Button variant="outline" size="lg" className="w-full" onClick={() => setNotWorn(true)}>
+                  No
+                </Button>
+              )}
             </>
           ) : (
             <Button variant="cta" size="lg" className="w-full" onClick={() => answer(undefined)}>
@@ -75,7 +89,7 @@ export function UniformPrompt({
             </Button>
           )}
           <Button variant="ghost" className="w-full" onClick={onCancel}>
-            Cancel
+            {notWorn ? 'Close' : 'Cancel'}
           </Button>
         </DialogFooter>
       </DialogContent>

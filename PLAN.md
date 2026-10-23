@@ -1437,6 +1437,8 @@ Goal: the web app (and so the Android app, §19.17) fast on 1–2 GB phones on s
   same check as the Home card); without it: "Your role doesn't include punching in."
 
 **2. Lite mode for weak phones** (`src/lib/lite.ts`, CSS in `src/index.css`).
+- **Removed 2026-10-23 (founder; §19.36)**: Lite mode is gone (menu, `lib/lite.ts`, `data-lite`, its CSS). What follows
+  is kept as history; the minute clocks stay (`lib/clock.ts`).
 - `<html data-lite>` is set before the first render when the account menu's **Lite mode** is On, or on Auto (default)
   when `navigator.deviceMemory <= 2`, or a phone-size screen with `hardwareConcurrency <= 4`, or `prefers-reduced-motion`.
   The choice (Auto / On / Off, radio items in the account menu; the label shows what Auto decided) is kept per device in
@@ -1894,7 +1896,8 @@ the admin should have the option that at the time of punch-in it should ask for 
   "Are you wearing the company shirt / jersey today?"). Both are in `/api/hr/config/` and `/api/attendance/today/`.
 - Before a check-in (Today and the Home card, also inside the phone app) a dialog with a shirt icon shows the message:
   `remind` → "OK, punch in" / "Cancel"; `ask` → "Yes, I'm wearing it" / "No" / "Cancel". It closes before location and
-  the camera start. Check-out never asks. The punch is never blocked by "No".
+  the camera start. Check-out never asks. The punch is never blocked by "No". **Changed 2026-10-23 (§19.36): in `ask`
+  ("Must confirm") No blocks the punch, and every check-in reads the rule fresh.**
 - `ask`: check-in needs `uniform: true|false` (400 "Answer whether you are wearing the company shirt / jersey to punch
   in." without it); stored as `Attendance.uniform_ok` (nullable, migration hr 0007). Otherwise the field is ignored and
   stays empty. Shown on Daily attendance (a "Uniform" column Yes / No when the company asks or anyone answered), My
@@ -2256,10 +2259,102 @@ logo — design it yourself", then "remove the FreeFounders everywhere". (Asked 
 - **Front page** (`/login`, `app/pages/login-brand.tsx`): desktop left panel = lockup, "For Indian SMEs · 5 to 500
   people", headline "Your team's kaam, on autopilot.", one-line value proposition, **Start free** (cta) under it, a small
   preview drawn in HTML (today's punch card with selfie/GPS, a task list with approval and asset tags; it rises in once,
-  `motion-safe` and off in lite mode), four benefits with Hugeicons, trust line (Made in India · Data stays in India ·
+  `motion-safe`), four benefits with Hugeicons, trust line (Made in India · Data stays in India ·
   Works on low-end Android). Phones: lockup + one line above the form (form above the fold), "New to Kaampilot? Start
   free" and the benefits + trust line under it. The sign-up / forgot / join / new-company header uses the lockup.
   Form labels and button names unchanged (e2e).
+
+### 19.36 Punch fixes: uniform rule always applied, "No" blocks, "not at the office" message; Lite mode removed (2026-10-23)
+Founder, from testing the web app and the Android app: the uniform pop-up did not show although the setting was on; in
+"Ask" mode No must block the punch; a clear message when someone punches away from the office; remove Lite mode.
+
+**1. Uniform pop-up not showing: the cause.** Reproduced on dev (Playwright, owner and a Member): the screen decided
+whether to ask from the copy of `/attendance/today/` it had loaded **when the screen opened** (Today and the Home card
+alike, browser and app). The server always answered with the current rule (checked: `today` and `hr/config` change at once
+after a save; the 30 s settings cache is cleared on save, one gunicorn worker), but a screen left open — on phones the
+WebView stays open for days, and the §19.18 saved copy is drawn before the network answers — kept the old "off" until
+something refetched it. Switching HR settings to Ask / Reminder and tapping Punch in on an already open screen therefore
+punched without a question; in Reminder mode the server cannot tell (nothing to check), in Ask mode the server refused
+with "Answer whether…" instead of a question. Nothing was wrong with the setting key, the save, the two buttons or the
+in-app path.
+- **Fix** (`features/hr/punch.tsx`): every **check-in** first reads today's rules from the server (`refetch`, the button
+  shows busy) and decides the uniform dialog, location and camera from that fresh answer; offline, the last copy is used
+  and the server still decides. If the server still answers `code: uniform_required`, the dialog opens (Must confirm).
+  Saving HR settings already invalidates the `['hr', …]` queries on the saving device (unchanged).
+- **Must confirm** (setting value `ask`, renamed on screen): the dialog's **No** shows "Please wear the company shirt /
+  jersey, then punch in." inside the dialog and leaves "Yes, I'm wearing it" and "Close"; nothing is sent. **Yes** punches
+  in. Server (`hr/services.py`): `uniform: false` → 400 with the same text, `code: uniform_not_worn`; missing → 400
+  `uniform_required` (as before); `uniform_ok` is stored **true** on a successful check-in in this mode (older rows keep
+  their stored No). Reminder only / Off unchanged.
+- HR settings → "Uniform at punch-in": **Off** (No question) / **Reminder only** (OK, punch in) / **Must confirm** (Yes
+  punches in, No blocks); stored values unchanged (`off|remind|ask`), no migration.
+
+**2. Not at the office.** The server already refused a punch outside every office radius ("You are 1201 m from HQ
+(allowed 200 m). Move closer…") and named the nearest office. Now:
+- Message: "You are not at the office location. You are about **1.2 km** away from **<office>**; punch in when you reach
+  the office." (metres under 1 km, km with one decimal from 1 km; nearest active office; check-out says "punch out").
+- The phone's **GPS accuracy** goes with the punch (browser `coords.accuracy`, app bridge `accuracy`; optional field
+  `accuracy` on check-in/out). When the person is outside but the accuracy circle reaches the office (`distance −
+  accuracy ≤ radius`), the answer is "Your location isn't accurate enough yet (±250 m). Move outdoors or near a window
+  and try again." instead (they may well be inside). Inside the fence a rough fix is accepted as before.
+- The 400 answer carries the reason and numbers next to `detail`: `code` (`outside_office`, `location_inaccurate`,
+  `location_required`, `no_office`, `uniform_required`, `uniform_not_worn`), `office`, `distance_m`, `radius_m`,
+  `accuracy_m`. The web shows `detail` on Today and on the Home card; the Home card's hint line uses the same m / km wording.
+
+**3. Lite mode removed** (founder: "remove Lite mode", meaning the account menu's "Lite mode: Auto / On / Off — for weak
+devices"; the light/dark theme is unchanged: first visit follows the device, the switch stays and is remembered).
+Removed: the account-menu section, `src/lib/lite.ts` (auto-detection, `useLite`, `installLite`), the `data-lite`
+attribute and every `[data-lite]` rule in `index.css`, the unused Feather icon; an old saved `ff-lite` value is deleted at
+start. `useMinuteClock` moved to `src/lib/clock.ts`. `prefers-reduced-motion` handling (device accessibility setting) stays.
+The feature list Word file no longer lists Lite mode.
+
+| Check | Result |
+|---|---|
+| Tasks | full suite; new: Must confirm No → 400 / Yes stored true, setting change applies at once, distance wording (m / km), nearest office, rough-fix message, check-out wording |
+| e2e | `web-uniform` rewritten (rule switched on while Today is open still asks; Cancel; No blocks + API refuses; Yes; Daily shows Yes; Home card in the app with Reminder only), new `web-punch-location` (1.2 km message on Today and the Home card, ±250 m message, API numbers, punch at the office) |
+| Web | `npm run web:build` |
+
+Goes live with a website + Tasks API update (migration none for this part). No new APK needed.
+
+### 19.37 Notifications by area, and every notification opens its item (2026-10-23)
+Founder: "notifications separated" (tabs per area with unread counts, mark read per item and per tab, unread clearly
+visible) and "clicking a notification opens the right page".
+- **Areas**: All · Attendance · Tasks · Assets · Approvals · Company. Tasks rows get a stored **`category`**
+  (`attendance|tasks|approvals|company`; migration **notifications 0004**: the column + index `(user, category, read_at)`,
+  existing rows filled from their type) set by `Notification.save()` from the type (`notifications/categories.py`), or by
+  the caller (`notify(..., category=)`: the approver's copy of a category request is an approval). Approvals = leave /
+  correction requests, their reminders and escalations, task change requests, finished work to accept and its reminder.
+  Attendance = leave decisions (and payslip/payroll/attendance types). Company = notices (billing/system types). Tasks =
+  the rest (tasks, leads, mistakes). Assets rows get `category` from the type in the API (`assets`, or `approvals` for
+  `REQUEST_CREATED` and `ONBOARDING_SUBMITTED`); no Assets migration.
+- **API**: Tasks `GET /notifications/?category=a,b`, `GET /notifications/unread_count/` → `{count, by_category}`,
+  `POST /notifications/read_all/?category=` (one area). Assets `GET /notifications?category=` → items with `category`,
+  `unread`, `unreadByCategory`; `POST /notifications/read {ids}` or `{category}`.
+- **Web**: core `useNotifications(tab, limit)`, `useNotificationCounts()`, `useMarkNotificationRead()`,
+  `useMarkNotificationsRead(tab)`; shared UI `components/common/notifications.tsx`. The **bell** has the area tabs with
+  counts, "Mark all read" for the open tab, a tap marks read and opens the item; footer "All notifications" →
+  **`/notifications`** (new route; `/tasks/notifications` shows the same screen). The **Notifications screen** has the
+  same tabs (`?tab=`), "Mark read" per item, "Mark all read" per tab, Tasks delivery chips, delete and Clear (Tasks rows).
+  Unread = bold title on a light tint with a left bar in the theme colour (no dots, no capsules).
+- **Links** (audit of every notification in Tasks, Assets and Platform; Platform creates none, and nothing creates
+  payslip or billing notifications today — their areas are ready for when it does). Tasks links stay relative to Tasks
+  (emails use them with `APP_BASE_URL`). Changed: leave / correction to approve (+ reminders, escalations) →
+  `/hr?tab=approvals&leave=<id>` (web: `/attendance/approvals?leave=<id>`, that request outlined and scrolled to;
+  `/tasks/hr?tab=` now keeps the other parameters); leave decision → `/hr?tab=leave&leave=<id>`; due-task reminder →
+  the task; daily / day-end / weekly digests and "accepted N tasks" → `/tasks?tab=my`; tasks from a directory template →
+  the task (one) or My tasks; corrective task → the task; mistakes → `/mistakes?open=<id>` (digests stay on the register);
+  leads and customer messages → `/leads?lead=<id>`; category approved → My tasks. Notices (`/notices?n=<id>`) now open that
+  notice and mark it read. Assets links were already specific. Old rows: `/hr` approvals → `?tab=approvals`, leave decisions →
+  `?tab=leave`, digests → `?tab=my` (migration 0004; ids are not stored on old rows, so they open the list).
+- Phone app: the same web screens; the punch reminder still opens `/attendance`.
+
+| Check | Result |
+|---|---|
+| Tasks | `NotificationAreaTests` (type → area, stored on rows made without `notify`, counts / filter / mark read per area, approval links, migration backfill) |
+| Assets | integration test: a new joiner is `approvals`, per-area counts, filter, mark one area read |
+| e2e | new `web-notifications` (owner: Approvals tab opens the leave on Approvals and marks it read; member on a phone: bell counts per tab, task opens the task, leave decision opens My leave, Mark all read on one tab); `web-tasks-general` updated |
+
+Goes live with a website + Tasks API (migration notifications 0004 via `migrate_companies`) + Assets API update. No new APK.
 
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)
 

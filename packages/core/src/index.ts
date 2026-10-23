@@ -19,6 +19,16 @@ export {
   type PlatformMe,
   type TasksMe,
 } from './access';
-export { useNotifications, useMarkNotificationsRead, type UnifiedNotification } from './notifications';
+export {
+  NOTIFICATION_TABS,
+  notificationHref,
+  useMarkNotificationRead,
+  useMarkNotificationsRead,
+  useNotificationCounts,
+  useNotifications,
+  type NotificationArea,
+  type NotificationTab,
+  type UnifiedNotification,
+} from './notifications';
 export { useChangePassword, useSignIn, useSignOut } from './auth';
 export { isOlderVersion, useAppVersionInfo, type AppVersionInfo } from './app-update';

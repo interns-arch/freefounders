@@ -210,26 +210,49 @@ class UniformCheckTests(_Base):
         self.assertEqual(res.json()["detail"], services.UNIFORM_MISSING)
         self.assertFalse(Attendance.objects.filter(user=self.member).exists())
 
-    def test_ask_stores_the_answer_and_check_out_does_not_ask(self):
+    def test_ask_no_blocks_the_punch(self):
+        """Must confirm (PLAN.md §19.36): "No" never punches in, also when an app sends it directly."""
         self.set_mode("ask")
         res = self.as_(self.member).post("/api/attendance/check_in/", {"uniform": False}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()["detail"], "Please wear the company shirt / jersey, then punch in.")
+        self.assertEqual(res.json()["code"], "uniform_not_worn")
+        self.assertFalse(Attendance.objects.filter(user=self.member).exists())
+        missing = self.as_(self.member).post("/api/attendance/check_in/", {}, format="json")
+        self.assertEqual(missing.json()["code"], "uniform_required")
+
+    def test_setting_change_takes_effect_at_once(self):
+        """The 30-second settings cache never hides a change: today/config answer with the new mode right away."""
+        self.assertEqual(self.as_(self.member).get("/api/attendance/today/").json()["uniform_check"], "off")
+        self.set_mode("ask")
+        self.assertEqual(self.as_(self.member).get("/api/attendance/today/").json()["uniform_check"], "ask")
+        self.assertEqual(self.as_(self.member).get("/api/hr/config/").json()["uniform_check"], "ask")
+        self.assertEqual(self.as_(self.member).post("/api/attendance/check_in/", {}, format="json").status_code, 400)
+        self.set_mode("remind")
+        self.assertEqual(self.as_(self.member).get("/api/attendance/today/").json()["uniform_check"], "remind")
+
+    def test_ask_stores_yes_and_check_out_does_not_ask(self):
+        self.set_mode("ask")
+        res = self.as_(self.member).post("/api/attendance/check_in/", {"uniform": True}, format="json")
         self.assertEqual(res.status_code, 201, res.content)
-        self.assertIs(res.json()["uniform_ok"], False)
+        self.assertIs(res.json()["uniform_ok"], True)
         out = self.as_(self.member).post("/api/attendance/check_out/", {}, format="json")
         self.assertEqual(out.status_code, 201, out.content)
-        self.assertIs(out.json()["uniform_ok"], False)
-        self.as_(self.other).post("/api/attendance/check_in/", {"uniform": True}, format="json")
+        self.assertIs(out.json()["uniform_ok"], True)
+        # A day answered "No" before this rule (stored as False) still shows as No.
+        Attendance.objects.create(user=self.other, date=timezone.localdate(), check_in=timezone.now(), uniform_ok=False)
         today = timezone.localdate()
         month = self.as_(self.member).get(f"/api/attendance/monthly/?year={today.year}&month={today.month}").json()
-        self.assertIs(next(d for d in month["days"] if d["date"] == today.isoformat())["uniform_ok"], False)
+        self.assertIs(next(d for d in month["days"] if d["date"] == today.isoformat())["uniform_ok"], True)
         rows = {r["user_id"]: r for r in self.as_(self.hr).get("/api/attendance/team_day/").json()["rows"]}
-        self.assertIs(rows[self.member.id]["uniform_ok"], False)
-        self.assertIs(rows[self.other.id]["uniform_ok"], True)
+        self.assertIs(rows[self.member.id]["uniform_ok"], True)
+        self.assertIs(rows[self.other.id]["uniform_ok"], False)
         self.assertIsNone(rows[self.admin.id]["uniform_ok"])
         csv = self.as_(self.hr).get("/api/attendance/report/?type=daily&format=csv").content.decode("utf-8-sig")
         lines = csv.splitlines()
         self.assertTrue(lines[0].rstrip().endswith("Uniform"))
-        self.assertTrue(any("mem" in line and line.rstrip().endswith("No") for line in lines[1:]), csv)
+        self.assertTrue(any("mem" in line and line.rstrip().endswith("Yes") for line in lines[1:]), csv)
+        self.assertTrue(any("oth" in line and line.rstrip().endswith("No") for line in lines[1:]), csv)
 
 
 class NotificationRuleTests(_Base):

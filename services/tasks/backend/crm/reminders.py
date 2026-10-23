@@ -79,7 +79,7 @@ def send_task_reminders() -> int:
             ] + ([task.description[:300]] if task.description else [])
               + ([f"Lead: {task.lead.customer_name}"] if task.lead else [])
               + ["", "Finish it, or open Tasks to post a status update."]),
-            link="/tasks",
+            link=f"/tasks/{task.pk}",
             wa_template=wa_template,
             outside_hours="skip",          # repeats every 2h: never pile up at the opening
         )
@@ -180,7 +180,7 @@ def send_daily_task_digest(force=False) -> int:
                 " · ".join(f"{t.code} {t.title[:40]}"
                            for t in (overdue[:2] + due_today[:2])) or "nothing due",
             ]),
-            link="/tasks",
+            link="/tasks?tab=my",
         )
         sent += 1
     return sent
@@ -242,7 +242,7 @@ def send_day_end_digest(force=False) -> int:
                  if overdue else [])
               + delegated_lines(delegated_snapshot(user, now, today), "Closed today")
               + ["", "Close what you can, or post a status update on the rest."]),
-            link="/tasks",
+            link="/tasks?tab=my",
             wa_template=("day_end_digest", [
                 user.get_full_name() or user.username,
                 str(bucket["done_today"]),
@@ -360,9 +360,9 @@ def send_weekly_overdue_email(force=False) -> int:
             result = {"channel": "email", "status": "skipped", "detail": "switched off in notification rules"}
         else:
             result = gmail.send_email(user.email, f"[{app_name()}] {title}", body,
-                                      link="/tasks", link_label="Open my tasks")
+                                      link="/tasks?tab=my", link_label="Open my tasks")
         Notification.objects.create(user=user, type="task_overdue_weekly",
-                                    title=title, body=body, link="/tasks",
+                                    title=title, body=body, link="/tasks?tab=my",
                                     channels=[result])
         sent += result.get("status") == "sent"
     return sent

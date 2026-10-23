@@ -3,10 +3,12 @@
  * company switched them on: location (office geofence), then the camera (punch photo). The server decides. There is no
  * face matching (founder, 2026-10-12; PLAN.md §19.18). Inside the phone app (PLAN.md §19.17) the app's GPS and front
  * camera are used instead of the browser's. Before a check-in the company may show a uniform reminder or ask whether the
- * company shirt / jersey is worn (PLAN.md §19.27); that dialog closes before location and camera start. Check-out never asks.
+ * company shirt / jersey is worn (PLAN.md §19.27; in "Must confirm" mode No blocks the punch, §19.36); that dialog closes
+ * before location and camera start. Check-out never asks. A check-in always reads today's rules fresh from the server
+ * first (§19.36: a screen left open, or the saved copy of §19.18, must never miss a uniform rule switched on since).
  */
-import { errorMessage } from '@freefounders/core';
-import { type AttendanceToday, useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
+import { ApiError, errorMessage } from '@freefounders/core';
+import { type AttendanceToday, type PunchRefusal, type UniformCheck, useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
 import { useEffect, useRef, useState } from 'react';
 import { AppRequestError, appRequest, isInApp, openAppSettings, skipTodaysReminder } from '@/lib/native-bridge';
 import { LocationBlockedError, currentPosition } from './device';
@@ -29,15 +31,19 @@ export function usePunch(onDone?: (which: Which) => void) {
   const [blocked, setBlocked] = useState<{ which: Which; settings: boolean } | null>(null);
   /** The uniform dialog is open (check-in only); the answer is kept for this check-in, also across a location retry. */
   const [askUniform, setAskUniform] = useState(false);
+  /** The uniform rule read fresh at the tap (the dialog shows this one, not the screen's older copy). */
+  const [uniformMode, setUniformMode] = useState<Exclude<UniformCheck, 'off'> | null>(null);
   const uniformAnswer = useRef<boolean | undefined>(undefined);
+  /** Reading today's rules from the server before a check-in. */
+  const [checking, setChecking] = useState(false);
 
-  const send = async (which: Which, photo?: string | null) => {
+  const send = async (which: Which, d: AttendanceToday | undefined, photo?: string | null) => {
     setErr('');
     setMsg('');
     setBlocked(null);
     setLocating(true);
-    let pos: { latitude?: number; longitude?: number };
-    const required = !!q.data?.geofence_enabled;
+    let pos: { latitude?: number; longitude?: number; accuracy?: number };
+    const required = !!d?.geofence_enabled;
     try {
       // In the app the location is asked for only when the company checks it, and its reason is shown when it fails.
       pos = inApp ? (required ? await currentPosition({ required: true }) : {}) : await currentPosition({ required });
@@ -50,7 +56,7 @@ export function usePunch(onDone?: (which: Which) => void) {
     }
     setLocating(false);
     if (pos.latitude != null && pos.longitude != null) setPosition({ latitude: pos.latitude, longitude: pos.longitude });
-    const uniform = which === 'check_in' && q.data?.uniform_check === 'ask' ? uniformAnswer.current : undefined;
+    const uniform = which === 'check_in' && d?.uniform_check === 'ask' ? uniformAnswer.current : undefined;
     mark.mutate(
       { which, ...pos, ...(photo ? { photo } : {}), ...(uniform !== undefined ? { uniform } : {}) },
       {
@@ -60,7 +66,15 @@ export function usePunch(onDone?: (which: Which) => void) {
           setMsg(which === 'check_in' ? 'Checked in ✅' : 'Checked out ✅');
           onDone?.(which);
         },
-        onError: (e) => setErr(errorMessage(e)),
+        onError: (e) => {
+          const refusal = e instanceof ApiError ? (e.data as PunchRefusal | undefined) : undefined;
+          // The company asks about the uniform but this screen did not know yet: read the rules again and ask.
+          if (which === 'check_in' && refusal?.code === 'uniform_required') {
+            void q.refetch().then((r) => openUniform('ask', r.data));
+            return;
+          }
+          setErr(errorMessage(e));
+        },
       },
     );
   };
@@ -69,12 +83,12 @@ export function usePunch(onDone?: (which: Which) => void) {
   const appPunch = async (which: Which, d: AttendanceToday) => {
     setErr('');
     setMsg('');
-    if (!d.photo || d.photo === 'off') return send(which);
+    if (!d.photo || d.photo === 'off') return send(which, d);
     setAppCamera(true);
     try {
       const photo = await appRequest<string | null>('photo', { title: which === 'check_in' ? 'Check in' : 'Check out', optional: d.photo === 'optional' });
       setAppCamera(false);
-      await send(which, photo);
+      await send(which, d, photo);
     } catch (e) {
       setAppCamera(false);
       if (!(e instanceof AppRequestError && e.code === 'cancelled')) setErr(e instanceof Error ? e.message : 'The camera could not be opened.');
@@ -89,33 +103,53 @@ export function usePunch(onDone?: (which: Which) => void) {
   }, [checkedInToday]);
   // With punch photos switched on, the camera step comes first.
   const usesCamera = !!data && !!data.photo && data.photo !== 'off';
-  const proceed = (which: Which) => {
-    if (inApp && data) return void appPunch(which, data);
-    return usesCamera ? setCamFor(which) : void send(which);
-  };
-  const uniformMode = data?.uniform_check && data.uniform_check !== 'off' ? data.uniform_check : null;
-  /** Check in / out. A check-in first shows the company's uniform dialog when it has one. */
-  const markIt = (which: Which) => {
-    if (which === 'check_in' && uniformMode) {
-      setErr('');
-      setMsg('');
-      setBlocked(null);
-      uniformAnswer.current = undefined;
-      return setAskUniform(true);
+  /** The location / camera steps and the punch, with the rules `d` (fresh for a check-in). */
+  const proceed = (which: Which, d: AttendanceToday | undefined = data) => {
+    if (inApp && d) return void appPunch(which, d);
+    if (d?.photo && d.photo !== 'off') {
+      freshFor.current = d;
+      return setCamFor(which);
     }
-    return proceed(which);
+    return void send(which, d);
   };
-  const busy = mark.isPending || locating || appCamera;
+  /** The rules the browser camera dialog punches with (read at the tap). */
+  const freshFor = useRef<AttendanceToday | undefined>(undefined);
+  const openUniform = (mode: Exclude<UniformCheck, 'off'>, d: AttendanceToday | undefined) => {
+    freshFor.current = d;
+    uniformAnswer.current = undefined;
+    setUniformMode(mode);
+    setAskUniform(true);
+  };
+  /** Check in / out. A check-in first reads today's rules from the server, then shows the uniform dialog if the company has one. */
+  const markIt = async (which: Which) => {
+    setErr('');
+    setMsg('');
+    setBlocked(null);
+    if (which !== 'check_in') return proceed(which);
+    setChecking(true);
+    let d = data;
+    try {
+      const r = await q.refetch();
+      d = r.data ?? data; // offline: the last copy, and the server still decides
+    } finally {
+      setChecking(false);
+    }
+    if (d && !d.can_check_in) return; // punched in elsewhere meanwhile: the screen now shows it
+    const mode = d?.uniform_check && d.uniform_check !== 'off' ? d.uniform_check : null;
+    if (mode) return openUniform(mode, d);
+    return proceed('check_in', d);
+  };
+  const busy = mark.isPending || locating || appCamera || checking;
 
   const uniformDialog = uniformMode ? (
     <UniformPrompt
       open={askUniform}
       mode={uniformMode}
-      message={data?.uniform_message}
+      message={freshFor.current?.uniform_message ?? data?.uniform_message}
       onCancel={() => setAskUniform(false)}
       onAnswer={(wearing) => {
         uniformAnswer.current = wearing;
-        proceed('check_in');
+        proceed('check_in', freshFor.current ?? data);
       }}
     />
   ) : null;
@@ -129,7 +163,7 @@ export function usePunch(onDone?: (which: Which) => void) {
         onCapture={(photo) => {
           const w = camFor;
           setCamFor(null);
-          void send(w, photo);
+          void send(w, freshFor.current ?? data, photo);
         }}
         // Optional photo: "Skip photo" punches without one (the phone app's camera allows the same); required: no skip.
         onSkip={
@@ -137,7 +171,7 @@ export function usePunch(onDone?: (which: Which) => void) {
             ? () => {
                 const w = camFor;
                 setCamFor(null);
-                void send(w);
+                void send(w, freshFor.current ?? data);
               }
             : undefined
         }
@@ -158,5 +192,5 @@ export function usePunch(onDone?: (which: Which) => void) {
       : { label: 'Allow location', run: () => proceed(blocked.which) }
     : null;
 
-  return { query: q, data, usesCamera, markIt, busy, waitingForCamera: !!camFor || appCamera, msg, err, fix, camera, position };
+  return { query: q, data, usesCamera, markIt: (which: Which) => void markIt(which), busy, waitingForCamera: !!camFor || appCamera, msg, err, fix, camera, position };
 }

@@ -269,15 +269,25 @@ updated in the same change. Removing a function is not.
 - **Content**: a loader until access is ready; lazily loaded screens show a loader while loading.
 - **Phones**: the sidebar becomes a left drawer opened by "Menu"; it closes after any navigation.
 
-### Notifications bell
-- One bell for both apps: the latest 30 Tasks notifications + the Assets notifications, merged newest first, refreshed every
-  30 s. If one app fails it counts as empty.
-- **Badge**: unread count ("99+" above 99); none at 0. Button name "Notifications, N unread" / "Notifications".
-- **Panel**: "Notifications" + "Mark all read" (disabled with nothing unread; marks both apps read). List "Latest
-  notifications" (max 30): app marker (dimmed when read), title, body (2 lines), "Tasks"/"Assets" · relative time ("just
-  now", "Nm ago", "Nh ago", "Nd ago"); unread ones stand out. Click → closes the panel and opens the link inside the app
-  (relative links are prefixed with `/tasks` or `/assets`). Empty: "You're all caught up.". Footer link "All Tasks
-  notifications" → `/tasks/notifications`.
+### Notifications bell (PLAN.md §19.37)
+- One bell for every app: the Tasks and Assets notifications, merged newest first, refreshed every 30 s. If one app fails
+  it counts as empty.
+- **Badge**: unread count of all areas ("99+" above 99); none at 0. Button name "Notifications, N unread" / "Notifications".
+- **Panel**: "Notifications" + "Mark all read" (marks the open tab only; disabled with nothing unread there). Tabs
+  (ARIA tabs, arrow keys move): **All · Attendance · Tasks · Assets · Approvals · Company**, each with its unread count
+  (tab name "Tasks, 2 unread"). List "Latest notifications" (max 30 of the tab): title (bold when unread, on a light tint
+  with a bar in the theme colour on the left; screen readers hear "Unread:"), body (2 lines), "Area · relative time".
+  Click → marks it read, closes the panel and opens the item inside the app (relative links are prefixed with `/tasks` or
+  `/assets`). Empty: "You're all caught up.". Footer "All notifications" → `/notifications?tab=<the open tab>`.
+- **Areas**: Attendance = leave decisions, attendance, payslips; Approvals = leave / correction requests, task change
+  requests, finished work to accept, category requests, Assets requests and new joiners waiting for a decision, and their
+  reminders / escalations; Company = notices, billing, system; Tasks = tasks, leads, mistakes; Assets = the rest of Assets.
+- **Where a notification opens**: a task → `/tasks/tasks/<id>`; a leave / correction to approve →
+  `/attendance/approvals?leave=<id>` (or `?correction=`; that request is outlined and scrolled into view); a leave decision →
+  `/attendance/leave?leave=<id>`; task digests → `/tasks/tasks?tab=my`; a mistake → `/tasks/mistakes?open=<id>`; a lead →
+  `/tasks/leads?lead=<id>`; a notice → `/tasks/notices?n=<id>` (opened and marked read); an asset → `/assets/assets/<id>`;
+  a request / ticket → `/assets/requests?open=<id>` / `/assets/tickets?open=<id>`; exits, onboarding, reconciliation → their
+  detail page.
 
 ### Classic screens
 - Any path under `/tasks` or `/assets` the new app does not have → full page load to `/classic<path><query>` (homes get a
@@ -1158,24 +1168,28 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 
 #### 4.2.6 Notifications
 
-- **URL**: `/tasks/notifications`.
-- **Who**: everyone. Shows their own last 50 Tasks notifications.
-- **Purpose**: inbox of task assignments, reminders, approvals and status changes.
+- **URL**: `/notifications` (also `/tasks/notifications`), `?tab=attendance|tasks|assets|approvals|company`.
+- **Who**: everyone. Shows their own last 100 notifications per app of the tab (Tasks and Assets), grouped by area like the bell
+  (PLAN.md §19.37).
+- **Purpose**: inbox of task assignments, reminders, approvals, leave decisions, asset requests and notices.
 
 **Header actions**
-- "Mark all read": shown when any are unread.
-- "Clear read": shown when any are read. Confirm: "Delete {n} notification(s) you have already read?" / "This cannot be undone." Button "Delete".
-- "Clear all" (destructive; label "Clearing…" while busy). Confirm: "Delete all {n} notification(s)?" with "{u} of them is/are still unread." (when there are unread items) and "This cannot be undone."
-- All three are disabled while a clear or mark-all action is running.
+- "Download" (Tasks notifications).
+- "Mark all read": marks the open tab; shown when it has unread ones.
+- On the All tab only: "Clear read": shown when any Tasks notification is read. Confirm: "Delete {n} Tasks notification(s) you have already read?" / "This cannot be undone." Button "Delete".
+- On the All tab only: "Clear all" (destructive; label "Clearing…" while busy). Confirm: "Delete all {n} Tasks notification(s)?" with "{u} of them is/are still unread." (when there are unread items) and "This cannot be undone."
+- All are disabled while a clear or mark-all action is running.
+
+**Tabs**: All · Attendance · Tasks · Assets · Approvals · Company with unread counts (as in the bell).
 
 **Each notification**
-- Bell icon (differs read/unread), title, body (multi-line).
-- Created time.
-- Channel chips (email "gmail" or WhatsApp) with delivery status: sent / delivered / failed / skipped / queued. The tooltip shows the detail.
-- Unread dot.
-- Delete (×) with tooltip "Delete this notification". No confirmation.
+- Bell icon (differs read/unread), title (bold when unread, with a bar in the theme colour on the left), body (multi-line).
+- "Area · created time".
+- Tasks: channel chips (email "gmail" or WhatsApp) with delivery status: sent / delivered / failed / skipped / queued. The tooltip shows the detail.
+- "Mark read" (unread only).
+- Tasks: delete (×) with tooltip "Delete this notification". No confirmation.
 - Clicking the title/body:
-  - Marks it read.
+  - Marks it read and opens the item (see the bell).
   - Follows its link if it has one. Tasks links are rewritten (`/tasks/42` becomes `/tasks/tasks/42`); full URLs and classic links do a full page load.
   - Without a link, it only marks it read.
 
@@ -1520,7 +1534,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 | "Keep photos for (days)" | number | 1–3650 | 90 |
 | "Weekly off" | day toggles Mon–Sun (index 0 = Mon) | 0–6 | Sun |
 | "Check location at check-in (needs an office below)" | checkbox | — | off |
-| "Uniform at punch-in" (own card, "Save uniform check") | choice "Off" / "Reminder only" / "Ask and record" + "Message" (≤ 200 chars, blank = default) | — | off; "Are you wearing the company shirt / jersey today?" |
+| "Uniform at punch-in" (own card, "Save uniform check") | choice "Off" (No question) / "Reminder only" (OK, punch in) / "Must confirm" (Yes punches in, No blocks) + "Message" (≤ 200 chars, blank = default) | — | off; "Are you wearing the company shirt / jersey today?" |
 | "Face check at check-in and check-out" | checkbox | — | off |
 | "First face capture becomes the person's face profile" | checkbox; disabled unless face check is on | — | on |
 
@@ -1568,7 +1582,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 ### 4.4 Attendance check-in flow (detail)
 
 1. **Starting state**: "Today" loads the company rules (geofence, face, self-enrol, enrolled, photo mode, work hours) and the `can_check_in` / `can_check_out` flags.
-1a. **Uniform check** (check-in only; PLAN.md §19.27): with "Reminder only" a dialog shows the company's message ("OK, punch in" / "Cancel"); with "Ask and record" it asks "Yes, I'm wearing it" / "No" / "Cancel". Either answer continues the check-in (the answer is saved as `uniform_ok` and shown on Daily attendance, My attendance and the daily report); Cancel stops it. The dialog closes before location and the camera (also the phone app's native camera) start. Check-out never asks; the punch is never blocked by a "No".
+1a. **Uniform check** (check-in only; PLAN.md §19.27, §19.36): the tap first reads today's rules from the server (a rule switched on while the screen was open still applies). With "Reminder only" a dialog shows the company's message ("OK, punch in" / "Cancel"); with "Must confirm" it asks "Yes, I'm wearing it" / "No" / "Cancel". **Yes** continues the check-in (saved as `uniform_ok` = Yes, shown on Daily attendance, My attendance and the daily report). **No** blocks it: "Please wear the company shirt / jersey, then punch in." appears in the dialog with only "Yes, I'm wearing it" and "Close" left; the server refuses `uniform: false` with the same text too. Cancel stops it. The dialog closes before location and the camera (also the phone app's native camera) start. Check-out never asks.
 2. **Is a camera step needed?** Yes when face check is ON, or when the photo mode is **optional or required**.
    - In **Optional** mode the camera opens and a photo is always taken; there is no "skip photo" option in this UI. The "A photo is taken…" info line shows only for Required.
    - With no camera step, tapping the button goes straight to step 4.
@@ -1589,7 +1603,8 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
    - **Office geofence** (only when location check is ON):
      - "No office location is configured yet — ask an admin to add one."
      - "Location is required for attendance. Please enable GPS and try again."
-     - Outside the nearest office radius: "You are {d} m from {office} (allowed {r} m). Move closer to the office to mark attendance."
+     - Outside the nearest office radius (PLAN.md §19.36): "You are not at the office location. You are about {d} away from {office}; punch in when you reach the office." ({d} = "350 m" under 1 km, "1.2 km" above; check-out says "punch out"). Shown on Today and on the Home card.
+     - Outside, but the phone's GPS accuracy circle reaches the office: "Your location isn't accurate enough yet (±{a}). Move outdoors or near a window and try again."
      - The nearest active office counts. With the check off, coordinates are stored but not enforced.
    - **Face** (only when face check is ON):
      - Not enrolled and self-enrol ON: this capture becomes the profile, the punch succeeds, and every HR manager gets the notification "Face self-enrolled: {name}" ("…reset it in HR Settings → Face attendance").

@@ -23,7 +23,8 @@ import {
 import { fileSlug, todayStamp } from '@freefounders/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { Megaphone, Paperclip, Pin, Plus, Send, TriangleAlert } from '@/components/icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useConfirm } from '@/components/common/confirm';
 import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -71,9 +72,21 @@ const PRIORITY_ICON = { urgent: Megaphone, important: TriangleAlert, normal: Pin
 function NoticeFeed() {
   const [filter, setFilter] = useState<'' | 'true' | 'false'>('');
   const [search, setSearch] = useState('');
-  const [openId, setOpenId] = useState<number | null>(null);
+  // From a notification (PLAN.md §19.37): /tasks/notices?n=<id> opens that notice (and marks it read).
+  const [params] = useSearchParams();
+  const linked = Number(params.get('n')) || null;
+  const [openId, setOpenId] = useState<number | null>(linked);
   const q = useNotices({ read: filter, search });
   const markRead = useMarkNoticeRead();
+  const linkedDone = useRef(false);
+  useEffect(() => {
+    if (!linked || linkedDone.current || !q.data) return;
+    const n = q.data.find((x) => x.id === linked);
+    if (!n) return;
+    linkedDone.current = true;
+    if (!n.read) markRead.mutate(n.id);
+    document.getElementById(`notice-${n.id}`)?.scrollIntoView({ block: 'center' });
+  }, [linked, q.data, markRead]);
 
   const open = (n: Notice) => {
     setOpenId(openId === n.id ? null : n.id);
@@ -114,7 +127,7 @@ function NoticeFeed() {
           const isOpen = openId === n.id;
           const bubble = n.priority === 'urgent' ? 'bg-destructive/10 text-destructive' : n.priority === 'important' ? 'bg-warning/10 text-warning' : 'bg-primary/8 text-primary';
           return (
-            <li key={n.id}>
+            <li key={n.id} id={`notice-${n.id}`}>
               <div
                 className={cn(
                   'rounded-xl border bg-card shadow-card transition hover:border-primary/40 hover:shadow-sm',

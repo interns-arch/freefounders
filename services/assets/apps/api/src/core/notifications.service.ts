@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import type { Permission } from '@eam/shared';
 import type { Actor } from '../common/actor';
 import { DbService } from '../db/db.service';
@@ -11,6 +11,17 @@ export interface NotificationInput {
   body?: string | null;
   link?: string | null;
 }
+
+/**
+ * The area a notification is grouped under in the bell (PLAN.md §19.37): "approvals" for what waits for this person's
+ * decision (a new request, a new joiner for IT), "assets" for everything else here. Decided by the type, which every
+ * row has, so old rows group the same way (no column needed).
+ */
+export type NotificationCategory = 'assets' | 'approvals';
+export const APPROVAL_TYPES = ['REQUEST_CREATED', 'ONBOARDING_SUBMITTED'] as const;
+export const categoryOf = (type: string): NotificationCategory => ((APPROVAL_TYPES as readonly string[]).includes(type) ? 'approvals' : 'assets');
+const inCategory = (category: NotificationCategory) =>
+  category === 'approvals' ? inArray(notifications.type, [...APPROVAL_TYPES]) : notInArray(notifications.type, [...APPROVAL_TYPES]);
 
 /** In-app notifications. The UI polls the unread count and shows new ones as toasts. */
 @Injectable()
@@ -49,23 +60,40 @@ export class NotificationsService {
     );
   }
 
-  async list(actor: Actor) {
-    if (!actor.userId) return { items: [], unread: 0 };
+  /** The latest 40 (of one area with `category`), each with its area, the unread total and the unread per area. */
+  async list(actor: Actor, category?: NotificationCategory) {
+    const empty = { assets: 0, approvals: 0 };
+    if (!actor.userId) return { items: [], unread: 0, unreadByCategory: empty };
     const db = this.dbs.db;
-    const [items, [{ unread }]] = await Promise.all([
-      db.select().from(notifications).where(eq(notifications.userId, actor.userId)).orderBy(desc(notifications.createdAt)).limit(40),
+    const mine = eq(notifications.userId, actor.userId);
+    const [rows, counts] = await Promise.all([
       db
-        .select({ unread: sql<number>`count(*)::int` })
+        .select()
         .from(notifications)
-        .where(and(eq(notifications.userId, actor.userId), isNull(notifications.readAt))),
+        .where(category ? and(mine, inCategory(category)) : mine)
+        .orderBy(desc(notifications.createdAt))
+        .limit(40),
+      db
+        .select({ type: notifications.type, n: sql<number>`count(*)::int` })
+        .from(notifications)
+        .where(and(mine, isNull(notifications.readAt)))
+        .groupBy(notifications.type),
     ]);
-    return { items, unread };
+    const unreadByCategory = { ...empty };
+    for (const c of counts) unreadByCategory[categoryOf(c.type)] += c.n;
+    return {
+      items: rows.map((r) => ({ ...r, category: categoryOf(r.type) })),
+      unread: unreadByCategory.assets + unreadByCategory.approvals,
+      unreadByCategory,
+    };
   }
 
-  async markRead(actor: Actor, ids?: string[]): Promise<void> {
+  /** Marks read: the given ids, else one area (`category`), else everything. */
+  async markRead(actor: Actor, ids?: string[], category?: NotificationCategory): Promise<void> {
     if (!actor.userId) return;
     const conds = [eq(notifications.userId, actor.userId), isNull(notifications.readAt)];
     if (ids?.length) conds.push(inArray(notifications.id, ids));
+    else if (category) conds.push(inCategory(category));
     await this.dbs.db.update(notifications).set({ readAt: new Date() }).where(and(...conds));
   }
 }

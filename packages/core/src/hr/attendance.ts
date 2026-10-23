@@ -18,6 +18,18 @@ export type PhotoMode = 'off' | 'optional' | 'required';
 /** Uniform question before a check-in (PLAN.md §19.27): off, a reminder only, or ask and save the answer. */
 export type UniformCheck = 'off' | 'remind' | 'ask';
 export const UNIFORM_MESSAGE_DEFAULT = 'Are you wearing the company shirt / jersey today?';
+/** "Must confirm" mode: the answer No blocks the punch (PLAN.md §19.36); the API answers the same text. */
+export const UNIFORM_NOT_WORN = 'Please wear the company shirt / jersey, then punch in.';
+
+/** Why a check-in / check-out was refused (`code` next to `detail` in the 400 answer, PLAN.md §19.36). */
+export interface PunchRefusal {
+  detail: string;
+  code?: 'uniform_required' | 'uniform_not_worn' | 'outside_office' | 'location_inaccurate' | 'location_required' | 'no_office';
+  office?: string;
+  distance_m?: number;
+  radius_m?: number;
+  accuracy_m?: number;
+}
 
 export interface HrConfig {
   geofence_enabled: boolean;
@@ -79,8 +91,10 @@ export interface MarkInput {
   longitude?: number;
   /** JPEG data URL, when the company keeps a photo of every punch. */
   photo?: string;
-  /** Check-in only, when the company asks (uniform_check 'ask'): wearing the company shirt / jersey? */
+  /** Check-in only, when the company asks (uniform_check 'ask'): wearing the company shirt / jersey? Only true punches in. */
   uniform?: boolean;
+  /** The phone's GPS accuracy in metres (a rough fix near the office is refused as "not accurate enough", §19.36). */
+  accuracy?: number;
 }
 
 /** POST /attendance/check_in/ or /attendance/check_out/ — every rule (geofence, photo) is decided by the server. No face check (§19.18). */

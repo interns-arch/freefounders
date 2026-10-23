@@ -175,19 +175,19 @@ class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
                    f"{mistake.description[:300]}\n\nPlease add your explanation, "
                    "the root cause and your corrective action."
                    + (f"\nSOP: {mistake.sop_name}" if mistake.sop_name else ""),
-                   link="/mistakes")
+                   link=f"/mistakes?open={mistake.pk}")
         if mistake.manager and mistake.manager.pk != user.pk:
             notify(mistake.manager, "mistake_logged",
                    f"{mistake.code} logged for {employee.get_full_name() or employee.username}",
                    f"{mistake.category} · {mistake.get_severity_display()} — you own the correction.",
-                   link="/mistakes")
+                   link=f"/mistakes?open={mistake.pk}")
         # founder sees HIGH/CRITICAL immediately — nothing else
         if mistake.severity in (Severity.HIGH, Severity.CRITICAL):
             for admin in _admins().exclude(pk=user.pk):
                 notify(admin, "mistake_logged",
                        f"{mistake.get_severity_display().upper()}: {mistake.code} {mistake.category}",
                        f"{employee.get_full_name() or employee.username} ({mistake.get_department_display() or '—'})"
-                       f" — {mistake.description[:200]}", link="/mistakes")
+                       f" — {mistake.description[:200]}", link=f"/mistakes?open={mistake.pk}")
 
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
@@ -280,7 +280,7 @@ class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
                        "",
                        "This is a count, not a judgement: "
                        f"{count} entries in the same category in 12 months."]),
-                   link="/mistakes")
+                   link=f"/mistakes?open={mistake.pk}")
 
     # ---- AI: suggestions a human accepts or overrides ---------------------
     @action(detail=True, methods=["get"], throttle_classes=[AIThrottle])
@@ -342,7 +342,7 @@ class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
             notify(mistake.manager, "mistake_update",
                    f"{mistake.code} — {request.user.get_full_name() or request.user.username} responded",
                    f"Root cause: {mistake.get_root_cause_display()}\n{explanation[:200]}",
-                   link="/mistakes")
+                   link=f"/mistakes?open={mistake.pk}")
         return Response(MistakeSerializer(mistake).data)
 
     # ---- manager's side -------------------------------------------------
@@ -371,11 +371,11 @@ class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
                 notify(mistake.manager, "mistake_repeat",
                        f"REPEAT ERROR: {mistake.code} ({mistake.category})",
                        f"{mistake.employee.get_full_name() or mistake.employee.username} repeated "
-                       f"{prior.code}. You are accountable for the resolution.", link="/mistakes")
+                       f"{prior.code}. You are accountable for the resolution.", link=f"/mistakes?open={mistake.pk}")
             notify(mistake.employee, "mistake_repeat",
                    f"REPEAT ERROR DETECTED: {mistake.code}",
                    "This mistake was made before. Root cause, corrective AND "
-                   "preventive action are now required.", link="/mistakes")
+                   "preventive action are now required.", link=f"/mistakes?open={mistake.pk}")
         else:  # level 3
             mistake.escalation_level = max(mistake.escalation_level, 1)
             mistake.save(update_fields=["escalation_level"])
@@ -387,7 +387,7 @@ class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
                        f"THIRD OCCURRENCE: {mistake.code} — {mistake.employee.get_full_name() or mistake.employee.username}",
                        f"{mistake.category} repeated a 3rd time. Department-head action "
                        "required (coaching / retraining / warning / PIP / process change…).",
-                       link="/mistakes")
+                       link=f"/mistakes?open={mistake.pk}")
         return Response(MistakeSerializer(mistake).data)
 
     @action(detail=True, methods=["post"])
@@ -445,7 +445,7 @@ class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
                 + (f" · SOP adequate: {'yes' if mistake.sop_adequate else 'NO — process fix needed'}"
                    if mistake.sop_adequate is not None else ""))
             notify(mistake.employee, "mistake_update",
-                   f"{mistake.code} resolved", mistake.manager_remarks[:300], link="/mistakes")
+                   f"{mistake.code} resolved", mistake.manager_remarks[:300], link=f"/mistakes?open={mistake.pk}")
         mistake.save()
         return Response(MistakeSerializer(mistake).data)
 
@@ -503,7 +503,7 @@ class MistakeViewSet(ExportMixin, viewsets.ModelViewSet):
                    mistake.description[:300] if mistake.description else "",
                    "",
                    "Complete this task to close the mistake.",
-               ]), link="/tasks")
+               ]), link=f"/tasks/{task.pk}")
         return Response(MistakeSerializer(mistake).data, status=http.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"])

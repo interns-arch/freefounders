@@ -33,6 +33,6 @@ def escalate_overdue_mistakes() -> int:
                    f"SLA MISSED: {mistake.code} escalated to you",
                    f"{mistake.category} · {mistake.get_severity_display()} · "
                    f"{mistake.employee.get_full_name() or mistake.employee.username} — "
-                   "no action within the deadline.", link="/mistakes")
+                   "no action within the deadline.", link=f"/mistakes?open={mistake.pk}")
         bumped += 1
     return bumped

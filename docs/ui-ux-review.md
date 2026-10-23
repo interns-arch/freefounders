@@ -37,7 +37,7 @@ Each line: rule → where → fix. `[x]` = fixed in this pass, `[ ]` = left on p
 
 ## 3. Performance
 - [x] Progress bars animated `width` → `transform` (no layout per frame).
-- [ ] Long lists, lazy pages, lite mode, offline copy: already done in §19.18.
+- [ ] Long lists, lazy pages, offline copy: already done in §19.18 (Lite mode removed 2026-10-23, §19.36).
 
 ## 4. Style
 - [x] **Drop-downs had no arrow**: the select chevron was an SVG data URL with spaces inside a Tailwind class, so it was
@@ -60,7 +60,7 @@ Each line: rule → where → fix. `[x]` = fixed in this pass, `[ ]` = left on p
 - [x] Notification times at 10.5 px → 12 px; account role line 11 → 12 px; count pills 11 → 12 px.
 
 ## 7. Animation
-- [ ] Reduced motion and lite mode already switch transitions off (§19.14, §19.18); nothing new animates.
+- [ ] Reduced motion already switches transitions off (§19.14); nothing new animates. (Lite mode removed 2026-10-23, §19.36.)
 
 ## 8. Forms and feedback
 - [x] Sign in was greyed out until both fields had text, with no reason given → always pressable; an empty field gets its

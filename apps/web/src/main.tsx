@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { z } from 'zod';
 import { App } from '@/app/App';
 import '@/index.css';
-import { installLite } from '@/lib/lite';
 import { installAppDownloadLinks } from '@/lib/native-bridge';
 import { registerServiceWorker } from '@/lib/sw-register';
 
@@ -18,8 +17,12 @@ try {
 // Content-Security-Policy can forbid eval (infra/gateway/Caddyfile, docs/security/assets-web-mobile-infra.md).
 z.config({ jitless: true });
 
-// Lite mode on weak phones (PLAN.md §19.18): set before the first render, so nothing costly is painted even once.
-installLite();
+// Lite mode was removed (founder, 2026-10-23; PLAN.md §19.36): forget a choice saved by an older version.
+try {
+  localStorage.removeItem('ff-lite');
+} catch {
+  /* private mode */
+}
 
 // Inside the phone app, file links (e.g. Assets photos) are saved through the app (PLAN.md §19.17).
 installAppDownloadLinks();
