@@ -28,7 +28,7 @@ Postgres and the APIs are on an `internal` Docker network: no host ports, no int
 | `gen-env.sh` | writes `FF_HOME/.env` with fresh random secrets (mode 600) |
 | `ff.sh` | `docker compose` with the right project / env file / compose file |
 | `bootstrap.sh` | once: first company + owner + `/console` staff account, then `company sync` |
-| `set-razorpay.sh` | switches payments to Razorpay: asks for the keys without showing them, writes `.env`, recreates the platform only |
+| `set-cashfree.sh` | switches payments to Cashfree: asks for the App ID, the Secret Key (hidden) and production/sandbox, writes `.env`, recreates the platform only |
 | `set-msg91.sh` | switches one-time codes to MSG91: asks for the authkey (hidden) and the SMS and/or email template IDs (email only is fine), writes `.env`, recreates the platform only |
 | `backup.sh` | nightly backup: all databases + uploaded files into `FF_HOME/backups`, 14 days kept (see **Backups**) |
 
@@ -94,8 +94,8 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 | `COOKIE_SECURE` | `false` on plain http (Platform refresh cookie and Assets session cookie); `true` on https |
 | `DEMO_MODE` | `1` = **open demo**: sign-up one-time codes are shown on screen (no email/SMS needed) and FakePay checkout works in this production build. **Unsafe for real customers** (anyone can sign up as any email/phone, and payments are fake). Default `0`. `BILLING_DEV_TOOLS` is always off here. |
 | `FAKE_GATEWAY_SECRET` | FakePay signing secret (used only with `DEMO_MODE=1`) |
-| `BILLING_GATEWAY` | `fake` (FakePay, open demo only) or `razorpay`. Without `DEMO_MODE=1` only `razorpay` works; anything missing → checkout answers 503 "Payments are not set up yet" and the reason is in the platform log (never a key) |
-| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Razorpay API keys and webhook secret. Set them only with `set-razorpay.sh` (below) |
+| `PAYMENT_GATEWAY` | `fake` (FakePay, open demo only) or `cashfree`. Without `DEMO_MODE=1` only `cashfree` works; anything missing → checkout answers 503 "Payments are not set up yet" and the reason is in the platform log (never a key). `BILLING_GATEWAY` is the older name, read only when `PAYMENT_GATEWAY` is empty (`razorpay` there = payments off) |
+| `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV` | Cashfree App ID, Secret Key (also signs the webhooks) and `production` / `sandbox`. Set them only with `set-cashfree.sh` (below). Optional `CASHFREE_API_VERSION` (default `2026-01-01`) |
 | `OTP_SENDER` | `fake` (default: codes only in the platform log, and on screen with `DEMO_MODE=1`) or `msg91`. With `msg91` and no authkey (or neither SMS nor email set up), asking for a code answers 503 "Codes can't be sent right now" and the reason is in the platform log (never a key); one channel missing → that channel answers "Codes by SMS/email aren't set up yet…" in production (fake sender with `DEMO_MODE=1`) |
 | `MSG91_AUTHKEY`, `MSG91_SMS_TEMPLATE_ID`, `MSG91_EMAIL_TEMPLATE_ID`, `MSG91_EMAIL_FROM`, `MSG91_EMAIL_DOMAIN` | MSG91 authkey, DLT-approved OTP template (optional), email template + From address + sending domain (optional; at least one of SMS / email). Set them only with `set-msg91.sh` (below) |
 | `PLATFORM_SECRET` | encrypts the Platform's signing keys at rest (≥ 32 chars). Changing it invalidates the keys. |
@@ -112,50 +112,46 @@ Integrations** (keys are write-only and stored encrypted with `TASKS_SETTINGS_KE
 python manage.py company_setting <code> <NAME> <value>` still works. The containers have no internet until the
 `internal` network is relaxed.
 
-## Switching on Razorpay
-Everything is built (PLAN.md §21.4); adding the keys is the only step. Start with **test keys**: they take no real money.
+## Switching on Cashfree payments
+Everything is built (PLAN.md §21.10); adding the keys is the only step. Razorpay was removed on 2026-10-24: an old
+`.env` that still says `BILLING_GATEWAY=razorpay` only switches payments off (logged), nothing crashes.
 
-1. **Razorpay Dashboard** (dashboard.razorpay.com), Test mode switched on (top bar):
-   - *Account & Settings → API Keys → Generate Test Key*: you get a **Key ID** (`rzp_test_…`) and a **Key Secret**
-     (shown once; download it). Live keys (`rzp_live_…`) come after KYC (company PAN, GST, bank, website with
-     Terms / Privacy / Refund pages).
-   - *Subscriptions* must be enabled on the account (Test mode has it; for Live, ask Razorpay support to enable
-     Subscriptions + UPI AutoPay).
-   - *Account & Settings → Webhooks → Add New Webhook* (only once the site has a domain with https, see below):
-     - URL: `https://<domain>/api/platform/billing/webhook/razorpay`
-     - Secret: any long random text; the same text goes into `RAZORPAY_WEBHOOK_SECRET`
-     - Active events: `subscription.authenticated`, `subscription.activated`, `subscription.charged`,
-       `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`,
-       `payment.captured`, `payment.failed`, `invoice.paid`
-   - Leave Razorpay's own invoices/receipts as payment records only: **our GST invoice (Billing → Invoices) is the tax
-     invoice**. The amounts sent to Razorpay already include 18 % GST, worked out by the Platform.
+How it works: each purchase or renewal is **one Cashfree order** (`kp_<checkout id>`), paid on Cashfree's own page (UPI,
+cards, net banking). Nothing is charged by itself afterwards: when a paid period ends the plan is past due and the owner
+pays the next period in Billing (7 days, then read-only). A payment counts only when the server has seen it: the signed
+webhook, or the server asking Cashfree about the order (when the person comes back, and the billing clock for orders
+nobody came back from). Our GST invoice (Billing → Invoices) is the tax invoice; the amounts sent already include GST.
+
+1. **Cashfree Merchant Dashboard** (merchant.cashfree.com), Payment Gateway:
+   - *Developers → API Keys* (merchant.cashfree.com/merchants/pg/developers/api-keys): the **App ID** and the
+     **Secret Key** of the environment you want (Production, or Test/Sandbox to try first without real money).
+   - *Developers → Webhooks → Add webhook endpoint*: URL
+     `https://kaampilot.com/api/platform/billing/webhooks/cashfree`, standard HTTP POST, latest version, events
+     **Payment success** and **Payment failed** (`payment.success` / `payment.failed`; the classic names
+     `PAYMENT_SUCCESS_WEBHOOK`, `PAYMENT_FAILED_WEBHOOK`, `PAYMENT_USER_DROPPED_WEBHOOK` work too). Cashfree signs every
+     webhook with the same Secret Key, so there is no separate webhook secret. Its test event is answered 200.
+   - *Developers → Whitelisting → Add New → Website URL*: `https://kaampilot.com` (production only: Cashfree blocks
+     checkout on a domain that is not approved). The site needs reachable Contact Us and Terms and Conditions pages for
+     the approval; it takes a few minutes to a day. The Android app opens checkout from kaampilot.com inside its WebView,
+     so the domain approval covers it (add the app package `com.freefounders.app` too if Cashfree asks for it).
+   - Account activation / KYC must be complete for production payments.
 2. **On the server** (as the user that owns `/opt/freefounders`):
    ```
-   bash /opt/freefounders/app/infra/deploy/set-razorpay.sh
+   bash /opt/freefounders/app/infra/deploy/set-cashfree.sh
    ```
-   It asks for the Key ID, then the Key Secret and the Webhook Secret **without showing them** (`read -s`: not on screen,
-   not in shell history, not in `ps`), writes them to `/opt/freefounders/.env` (mode 600), sets
-   `BILLING_GATEWAY=razorpay` and recreates **only the platform container**. Leave the webhook secret empty while there
-   is no https domain: a random one is stored; paste it into Razorpay later (`sudo grep RAZORPAY_WEBHOOK_SECRET
-   /opt/freefounders/.env`). Back to FakePay: `bash …/set-razorpay.sh --off`.
-3. Check: `app/infra/deploy/ff.sh logs --tail 30 platform` shows `Payments: Razorpay (test mode, key rzp_test_…)`. If a
-   value is missing it shows `Payments are OFF (checkout answers 503): …` instead, and the rest of the app keeps working.
-4. Try it: Billing → choose a plan → *Continue to payment* → *Pay* opens Razorpay Checkout. Use Razorpay's test cards
-   / test UPI IDs (razorpay.com/docs/payments/payments/test-card-details; for subscriptions pick a card marked as
-   supporting recurring payments). The plan is active at once and the GST invoice is in Billing → Invoices.
+   It asks for the App ID, then the Secret Key **without showing it** (`read -s`: not on screen, not in shell history,
+   not in `ps`) and the environment (`production` or `sandbox`), writes them to `/opt/freefounders/.env` (mode 600), sets
+   `PAYMENT_GATEWAY=cashfree` and recreates **only the platform container**. Back to FakePay: `bash …/set-cashfree.sh --off`.
+3. Check: `app/infra/deploy/ff.sh logs --tail 30 platform` shows `Payments: Cashfree (production, API 2026-01-01, App ID
+   ab12cd…)`. If a value is missing it shows `Payments are OFF (checkout answers 503): …` instead, and the rest of the
+   app keeps working (checkout answers "Payments are not set up yet").
+4. Try it: Billing → choose a plan → *Continue to payment* → *Pay* opens Cashfree's page in the same window (also in the
+   phone app). After paying, Cashfree sends you back to `/billing/pay/<id>?order_id=…`, which shows "Checking your payment
+   with Cashfree…" and then the result; the plan is active and the GST invoice is in Billing → Invoices. In sandbox use
+   Cashfree's test cards / UPI IDs. Each payment and webhook is in the Kaampilot console → Logs (`billing.*` events).
 
-**What works on the http demo (`http://<ip>:7395`) and what needs a domain + https**
-| | http demo (now) | domain + https |
-|---|---|---|
-| Checkout in a browser (modal), plan active at once, GST invoice | yes (the browser's success handler is verified on the server) | yes |
-| Renewals, failed renewals (past due), cancellations made in Razorpay | the billing clock asks Razorpay after each period end (every 5 min until seen; past due 2 days after a missed charge) | yes, at once, by webhook (Razorpay sends webhooks only to public https URLs on port 443) |
-| Phone app checkout (Razorpay redirect mode, UPI apps) | not reliable: Razorpay posts the result from https to an http address | yes |
-The platform container reaches `api.razorpay.com` through its own `egress` network (docker-compose.yml); the databases
-and the other APIs stay without internet.
-
-**Live keys**: only with `DEMO_MODE=0` (no codes on screen, no FakePay), `COOKIE_SECURE=true` and https. Then run
-`set-razorpay.sh` again with the `rzp_live_…` keys and add the webhook again in Live mode (Razorpay keeps separate
-webhooks for Test and Live).
+The platform container reaches `api.cashfree.com` through its own `egress` network (docker-compose.yml); the databases
+and the other APIs stay without internet. Live payments only with `DEMO_MODE=0`, `COOKIE_SECURE=true` and https.
 
 ## Switching on MSG91 codes
 Sign-up, forgot password and "Sign in with a code" (PLAN.md §21.8) send a 6-digit code. Our server makes and checks the

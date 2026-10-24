@@ -56,7 +56,7 @@ export function ConsoleCompanyPage() {
             { label: 'Trial ends', value: s?.trialEndsAt ? formatDate(s.trialEndsAt) : null },
             { label: 'Period', value: s?.currentPeriodStart ? `${formatDate(s.currentPeriodStart)} – ${formatDate(s.currentPeriodEnd)}` : null },
             { label: 'Cancels at period end', value: s ? (s.cancelAtPeriodEnd ? 'Yes' : 'No') : null },
-            { label: 'Gateway', value: s?.gateway === 'razorpay' ? 'Razorpay' : s?.gateway === 'fake' ? 'FakePay' : s?.gateway },
+            { label: 'Gateway', value: s?.gateway === 'cashfree' ? 'Cashfree' : s?.gateway === 'fake' ? 'FakePay' : s?.gateway },
             { label: 'GST details', value: billingProfile ? `${billingProfile.legalName}${billingProfile.gstin ? ` · ${billingProfile.gstin}` : ''} · ${billingProfile.state}` : null, full: true },
           ]}
         />
@@ -107,7 +107,7 @@ export function ConsoleCompanyPage() {
         <DataTable
           columns={[
             { key: 'at', header: 'When', cell: (p) => <span className="whitespace-nowrap">{formatDateTime(p.at)}</span> },
-            { key: 'gateway', header: 'Gateway', cell: (p) => (p.gateway === 'razorpay' ? 'Razorpay' : p.gateway === 'fake' ? 'FakePay' : p.gateway) },
+            { key: 'gateway', header: 'Gateway', cell: (p) => (p.gateway === 'cashfree' ? 'Cashfree' : p.gateway === 'fake' ? 'FakePay' : p.gateway) },
             { key: 'amount', header: 'Amount', className: 'text-right', headerClassName: 'text-right', cell: (p) => <span className="font-mono tabular-nums">{formatInr(p.amount)}</span> },
             { key: 'status', header: 'Status', cell: (p) => <Badge tone={p.status === 'captured' ? 'green' : 'red'}>{p.status === 'captured' ? 'Paid' : 'Failed'}</Badge> },
             { key: 'reason', header: 'Reason', hideOnMobile: true, cell: (p) => p.reason ?? '—' },

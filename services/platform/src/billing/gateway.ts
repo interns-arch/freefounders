@@ -1,18 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-/** A recurring plan behind a checkout (Razorpay creates a subscription for it). */
-export interface CheckoutSubscription {
-  planCode: string;
-  planName: string;
-  interval: 'month' | 'year';
-  seats: number;
-  /** paise per seat before GST */
-  unitPrice: number;
-  /** paise per seat with GST: what the gateway charges per seat at each renewal */
-  unitAmount: number;
-  /** When the first paid period ends = the first renewal charge. */
-  firstPeriodEnd: Date;
+/** Who pays (Cashfree needs a customer id and a phone number on every order). */
+export interface CheckoutCustomer {
+  /** Our account id (Cashfree customer_id). */
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  /** Mobile number as stored on the account (+91…), if any. */
+  phone?: string | null;
 }
 
 /** What the gateway's checkout page needs. */
@@ -24,12 +20,12 @@ export interface CheckoutRequest {
   description: string;
   /** The checkout link stops working after this. */
   expiresAt: Date;
-  subscription?: CheckoutSubscription;
+  customer?: CheckoutCustomer;
 }
 
 export interface CheckoutCreated {
   checkoutUrl: string;
-  /** The gateway's object for this checkout (Razorpay: sub_…). */
+  /** The gateway's object for this checkout (Cashfree: our order_id). */
   ref?: string;
   data?: Record<string, unknown>;
 }
@@ -38,61 +34,43 @@ export type GatewayEventType =
   | 'payment.captured'
   | 'payment.failed'
   | 'checkout.cancelled'
-  /** A recurring charge succeeded (a renewal, or the first payment when the checkout is still open). */
-  | 'subscription.charged'
-  /** A renewal failed: the gateway retries (pending) or gave up (halted). Our state: past_due. */
-  | 'subscription.pending'
-  | 'subscription.halted'
-  /** Cancelled or completed at the gateway: no more renewals. */
-  | 'subscription.cancelled'
-  /** Stored once, nothing to do. */
+  /** Stored once, nothing to do (a test event, charges, an event type we do not use). */
   | 'ignored';
 
-/** A gateway webhook, after its signature was checked. */
+/** A gateway webhook (after its signature was checked) or a payment status the server looked up itself. */
 export interface GatewayEvent {
-  /** The gateway's event id: stored once (a repeated delivery is ignored). */
+  /** Stored once (a repeated delivery is ignored). Cashfree: one id per payment and outcome, webhook or status check. */
   id: string;
   type: GatewayEventType;
   /** Our checkout session ('' when the event does not name one). */
   sessionId: string;
   paymentId?: string;
+  /** paise */
   amount?: number;
   reason?: string;
-  /** The gateway's subscription (Razorpay sub_…). */
-  subscriptionId?: string;
-  /** The paid billing cycle, when the gateway says it. */
-  periodStart?: string;
-  periodEnd?: string;
-  /** The gateway's original event name (e.g. "invoice.paid"). */
+  /** The gateway's original event name (e.g. "PAYMENT_SUCCESS_WEBHOOK", "order.status"). */
   source?: string;
+  /** Cashfree: a payment event we could not read in full; the service looks the order up at the gateway. */
+  check?: boolean;
 }
 
-/** A renewal charged on a saved mandate / card. */
+/** A renewal charged on a saved card (FakePay only: Cashfree renewals are paid by the owner on the Billing page). */
 export interface RenewalCharge {
   companyId: string;
   amount: number;
   /** Fake gateway only (dev tools): force the result. */
   outcome?: 'success' | 'failure';
-  /** Razorpay: the subscription that charges by itself; the renewal is looked up, not charged. */
-  subscriptionId?: string | null;
-  /** The end of the paid period: a charge for the next one is on or after it. */
-  periodEnd?: Date | null;
 }
 
 export interface RenewalResult {
   ok: boolean;
   paymentId: string;
   reason?: string;
-  /** Nothing charged yet (Razorpay charges a little after the period ends): ask again later. */
-  pending?: boolean;
-  amount?: number;
-  periodStart?: string;
-  periodEnd?: string;
 }
 
 /**
- * The payment gateway (PLAN.md §20.6/§21/§21.4): `FakeGateway` (dev, open demo) or `RazorpayGateway`, chosen by
- * BILLING_GATEWAY. Both end in the same events and the same subscription states. The apps never deal with money: the
+ * The payment gateway (PLAN.md §20.6/§21/§21.10): `FakeGateway` (dev, open demo) or `CashfreeGateway`, chosen by
+ * PAYMENT_GATEWAY. Both end in the same events and the same subscription states. The apps never deal with money: the
  * Platform turns paid plans into module switches.
  */
 export interface PaymentGateway {
@@ -100,7 +78,6 @@ export interface PaymentGateway {
   createCheckout(req: CheckoutRequest): Promise<CheckoutCreated>;
   /** Checks the signature over the raw body and returns the event; throws on a bad signature. */
   verifyWebhook(headers: Record<string, string | string[] | undefined>, rawBody: Buffer): GatewayEvent;
-  chargeRenewal(charge: RenewalCharge): Promise<RenewalResult>;
 }
 
 export const FAKE_SIGNATURE_HEADER = 'x-fakepay-signature';
@@ -130,8 +107,8 @@ const FAKE_TYPES: GatewayEventType[] = ['payment.captured', 'payment.failed', 'c
 
 /**
  * "FakePay · test mode": the checkout page is the web app's `/billing/pay/<session>`; Pay / Fail / Cancel there make
- * the Platform post itself a webhook signed with FAKE_GATEWAY_SECRET, checked like Razorpay's would be. Renewals
- * succeed unless the dev tools ask for a failure.
+ * the Platform post itself a webhook signed with FAKE_GATEWAY_SECRET, checked like Cashfree's is. Renewals succeed
+ * unless the dev tools ask for a failure.
  */
 export class FakeGateway implements PaymentGateway {
   readonly name = 'fake';
@@ -166,39 +143,53 @@ export class FakeGateway implements PaymentGateway {
 
 // ─── which gateway (env, checked at start-up) ────────────────────────────────
 
-export type GatewayName = 'fake' | 'razorpay';
+export type GatewayName = 'fake' | 'cashfree';
+
+export interface CashfreeConfig {
+  appId: string;
+  secretKey: string;
+  env: 'production' | 'sandbox';
+  apiVersion: string;
+}
 
 export interface GatewayConfig {
   /** The gateway new checkouts use; null = checkout answers 503 "Payments are not set up yet". */
   name: GatewayName | null;
   /** Why checkout is off (for the log; never contains a secret value). */
   problem: string | null;
-  razorpay?: { keyId: string; keySecret: string; webhookSecret: string; mode: 'test' | 'live' };
+  cashfree?: CashfreeConfig;
 }
 
 export const PAYMENTS_OFF_MESSAGE = 'Payments are not set up yet. Please try again later or contact Kaampilot support.';
+/** Cashfree's current documented API version (https://www.cashfree.com/docs/api-reference/payments/latest/orders/create). */
+export const CASHFREE_API_VERSION = '2026-01-01';
 
 /**
- * BILLING_GATEWAY=fake|razorpay. Default: fake in dev and on the open demo (DEMO_MODE=1); a production build without
- * DEMO_MODE must say razorpay and have RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET, or checkout
- * stays off (503) while the rest of the app runs.
+ * PAYMENT_GATEWAY=fake|cashfree (BILLING_GATEWAY, its older name, is still read when PAYMENT_GATEWAY is not set).
+ * Default: fake in dev and on the open demo (DEMO_MODE=1); a production build without DEMO_MODE must say cashfree and
+ * have CASHFREE_APP_ID and CASHFREE_SECRET_KEY, or checkout stays off (503) while the rest of the app runs.
+ * "razorpay" (removed on 2026-10-24, PLAN.md §21.10) is treated as not set up: logged, never a crash.
  */
 export function gatewayConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
-  const raw = (env.BILLING_GATEWAY ?? '').trim().toLowerCase();
+  const named = (env.PAYMENT_GATEWAY ?? '').trim() ? 'PAYMENT_GATEWAY' : 'BILLING_GATEWAY';
+  const raw = (env[named] ?? '').trim().toLowerCase();
   const production = env.NODE_ENV === 'production' && env.DEMO_MODE !== '1';
-  if (raw === 'razorpay') {
-    const keyId = (env.RAZORPAY_KEY_ID ?? '').trim();
-    const keySecret = (env.RAZORPAY_KEY_SECRET ?? '').trim();
-    const webhookSecret = (env.RAZORPAY_WEBHOOK_SECRET ?? '').trim();
-    const missing = [!keyId && 'RAZORPAY_KEY_ID', !keySecret && 'RAZORPAY_KEY_SECRET', !webhookSecret && 'RAZORPAY_WEBHOOK_SECRET'].filter(Boolean);
-    if (missing.length) return { name: null, problem: `BILLING_GATEWAY=razorpay but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set` };
-    const m = /^rzp_(test|live)_[A-Za-z0-9]+$/.exec(keyId);
-    if (!m) return { name: null, problem: 'RAZORPAY_KEY_ID does not look like a Razorpay key id (rzp_test_… or rzp_live_…)' };
-    return { name: 'razorpay', problem: null, razorpay: { keyId, keySecret, webhookSecret, mode: m[1] as 'test' | 'live' } };
+  if (raw === 'cashfree') {
+    const appId = (env.CASHFREE_APP_ID ?? '').trim();
+    const secretKey = (env.CASHFREE_SECRET_KEY ?? '').trim();
+    const missing = [!appId && 'CASHFREE_APP_ID', !secretKey && 'CASHFREE_SECRET_KEY'].filter(Boolean);
+    if (missing.length) return { name: null, problem: `${named}=cashfree but ${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} not set` };
+    if (!/^[A-Za-z0-9_-]{4,100}$/.test(appId)) return { name: null, problem: 'CASHFREE_APP_ID does not look like a Cashfree App ID (letters and digits)' };
+    const e = (env.CASHFREE_ENV ?? '').trim().toLowerCase() || 'sandbox';
+    if (e !== 'production' && e !== 'sandbox') return { name: null, problem: `CASHFREE_ENV="${e}" is not known (use production or sandbox)` };
+    const apiVersion = (env.CASHFREE_API_VERSION ?? '').trim() || CASHFREE_API_VERSION;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(apiVersion)) return { name: null, problem: 'CASHFREE_API_VERSION must look like 2026-01-01' };
+    return { name: 'cashfree', problem: null, cashfree: { appId, secretKey, env: e, apiVersion } };
   }
+  if (raw === 'razorpay') return { name: null, problem: `${named}=razorpay: Razorpay was removed (PLAN.md §21.10); switch to Cashfree with infra/deploy/set-cashfree.sh` };
   if (raw === '' || raw === 'fake') {
-    if (production) return { name: null, problem: 'production needs BILLING_GATEWAY=razorpay with its keys (FakePay is for dev and the open demo only)' };
+    if (production) return { name: null, problem: 'production needs PAYMENT_GATEWAY=cashfree with its keys (FakePay is for dev and the open demo only)' };
     return { name: 'fake', problem: null };
   }
-  return { name: null, problem: `BILLING_GATEWAY="${raw}" is not known (use fake or razorpay)` };
+  return { name: null, problem: `${named}="${raw}" is not known (use fake or cashfree)` };
 }

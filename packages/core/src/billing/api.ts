@@ -18,7 +18,6 @@ import type {
   Invoice,
   InvoiceSummary,
   Plan,
-  RazorpayHandlerResponse,
   SwitchToFreeResult,
 } from './types';
 
@@ -42,7 +41,7 @@ export const billingApi = {
   checkout: (body: CheckoutInput) => platformApi.post<CheckoutStarted>('/billing/checkout', body),
   checkoutSession: (id: string) => platformApi.get<CheckoutSession>(`/billing/checkout/${encodeURIComponent(id)}`),
   fakeComplete: (id: string, outcome: FakeOutcome) => platformApi.post<FakeResult>(`/billing/fake/${encodeURIComponent(id)}/complete`, { outcome }),
-  razorpayVerify: (sessionId: string, r: RazorpayHandlerResponse) => platformApi.post<CheckoutSession>('/billing/razorpay/verify', { sessionId, ...r }),
+  cashfreeCheck: (sessionId: string) => platformApi.post<CheckoutSession>('/billing/cashfree/check', { sessionId }),
   setSeats: (seats: number) => platformApi.post<unknown>('/billing/seats', { seats }),
   cancel: () => platformApi.post<unknown>('/billing/cancel'),
   resume: () => platformApi.post<unknown>('/billing/resume'),
@@ -124,15 +123,18 @@ export function useFakeComplete() {
     },
   });
 }
-/** Razorpay Checkout succeeded in the browser: the server checks the signature and marks the checkout paid. */
-export function useRazorpayVerify() {
+/**
+ * Back from Cashfree (or waiting): the server looks the order up at Cashfree and applies it. Answers the checkout with
+ * `attempt` (paid / failed / pending / expired). The browser's redirect itself proves nothing.
+ */
+export function useCashfreeCheck() {
   const after = useAfterBillingChange();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, response }: { id: string; response: RazorpayHandlerResponse }) => billingApi.razorpayVerify(id, response),
-    onSuccess: async (_r, v) => {
-      await qc.invalidateQueries({ queryKey: billingKeys.checkout(v.id) });
-      await after();
+    mutationFn: (id: string) => billingApi.cashfreeCheck(id),
+    onSuccess: async (r, id) => {
+      qc.setQueryData(billingKeys.checkout(id), r);
+      if (r.attempt === 'paid') await after();
     },
   });
 }

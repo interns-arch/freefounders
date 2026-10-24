@@ -49,18 +49,22 @@ export function BillingBanners({ access }: { access: Access }) {
     );
   }
   if (b.state === 'past_due') {
+    // Cashfree: nothing renews by itself, so past due means the next period is waiting to be paid.
+    const due = !!b.paysEachPeriod;
     return (
       <Banner tone="warning" icon={<AlertTriangle className="size-4 shrink-0" aria-hidden />}>
-        Payment failed.{' '}
+        {due ? 'The paid period has ended.' : 'Payment failed.'}{' '}
         {manage ? (
           <>
             <Link to="/billing" className="font-semibold underline underline-offset-2">
-              Update payment in Billing
+              {due ? 'Pay for the next period in Billing' : 'Update payment in Billing'}
             </Link>
             {b.daysLeft != null && ` (${days(b.daysLeft)} before read-only)`}
           </>
         ) : (
-          <>Owner: update payment in Billing{b.daysLeft != null && ` (${days(b.daysLeft)} before read-only)`}.</>
+          <>
+            Owner: {due ? 'pay for the next period' : 'update payment'} in Billing{b.daysLeft != null && ` (${days(b.daysLeft)} before read-only)`}.
+          </>
         )}
       </Banner>
     );

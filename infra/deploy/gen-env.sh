@@ -27,12 +27,13 @@ PLATFORM_SECRET=$(rnd 32)
 TASKS_SECRET_KEY=$(rnd 40)
 TASKS_SETTINGS_KEY=$(rnd 32)
 FAKE_GATEWAY_SECRET=$(rnd 24)
-# Payments: fake = FakePay (open demo only). Razorpay is switched on with infra/deploy/set-razorpay.sh, which asks for
-# the three values without echoing them and sets BILLING_GATEWAY=razorpay (README.md "Switching on Razorpay").
-BILLING_GATEWAY=fake
-RAZORPAY_KEY_ID=
-RAZORPAY_KEY_SECRET=
-RAZORPAY_WEBHOOK_SECRET=
+# Payments: fake = FakePay (open demo only). Cashfree is switched on with infra/deploy/set-cashfree.sh, which asks for
+# the App ID, the Secret Key (hidden) and the environment, and sets PAYMENT_GATEWAY=cashfree
+# (README.md "Switching on Cashfree payments").
+PAYMENT_GATEWAY=fake
+CASHFREE_APP_ID=
+CASHFREE_SECRET_KEY=
+CASHFREE_ENV=sandbox
 # First company (created once by README step 5) and the staff account for /console.
 FF_COMPANY_CODE=DEMO
 FF_COMPANY_NAME="Kaampilot Demo"

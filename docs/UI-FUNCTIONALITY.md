@@ -3635,7 +3635,7 @@ Exit case statuses: OPEN ("In progress"), COMPLETED, CANCELLED.
 
 ### 6.4 Billing (logged as "Viewed billing")
 - Tiles: Revenue this month, Invoiced this month, Failed this month, Subscriptions. "Revenue by month" (12 bars).
-- "Subscriptions", "Payments" (filters "Result" Paid / Failed and "Gateway" FakePay / Razorpay; Reason), "Invoices";
+- "Subscriptions", "Payments" (filters "Result" Paid / Failed and "Gateway" FakePay / Cashfree; Reason), "Invoices";
   each section has its own "Download" (Excel / CSV of every row). Note: refunds are made in the gateway's dashboard.
 
 ### 6.5 Logs (production log)

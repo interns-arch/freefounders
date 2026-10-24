@@ -155,13 +155,13 @@ function CurrentPlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
             {trialLeft != null && <span className="block text-xs text-muted-foreground">{trialLeft} days left</span>}
           </Fact>
         ) : (
-          <Fact label={b.cancelAtPeriodEnd ? 'Ends on' : 'Renews on'}>{formatDate(b.currentPeriodEnd)}</Fact>
+          <Fact label={b.cancelAtPeriodEnd ? 'Ends on' : b.paysEachPeriod ? 'Paid until' : 'Renews on'}>{formatDate(b.currentPeriodEnd)}</Fact>
         )}
         <Fact label="Users">
           <span className="font-mono tabular-nums">{b.seats.used}</span> used · <span className="font-mono tabular-nums">{b.seats.paid}</span> paid
           {b.seats.limit != null && <span className="block text-xs text-muted-foreground">Limit {b.seats.limit}</span>}
         </Fact>
-        <Fact label="Next charge">
+        <Fact label={b.paysEachPeriod ? 'Next payment (you pay it here)' : 'Next charge'}>
           {b.nextCharge ? (
             <>
               {formatInr(b.nextCharge.total)}
@@ -197,9 +197,7 @@ function CurrentPlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
             </div>
             <p className="text-xs text-muted-foreground">More users: charged for the rest of this period on the next invoice. Fewer: from the next period.</p>
           </div>
-          {b.cancelAtPeriodEnd && b.canResume === false ? (
-            <p className="max-w-xs text-xs text-muted-foreground">To keep this plan, choose it again under Plans: the unused days are credited.</p>
-          ) : b.cancelAtPeriodEnd ? (
+          {b.cancelAtPeriodEnd ? (
             <Button variant="outline" loading={resume.isPending} onClick={() => resume.mutate(undefined, { onSuccess: () => toast.success('Subscription resumed'), onError: (e) => toast.error(errorMessage(e)) })}>
               Resume subscription
             </Button>
@@ -392,7 +390,7 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
             </dl>
             <p className="mt-2 text-xs text-muted-foreground">
               CGST + SGST or IGST is worked out from your GST state on the payment page.
-              {b.checkoutGateway === 'razorpay' && ' Paid by UPI AutoPay, card or net banking through Razorpay; it renews by itself until you cancel.'}
+              {b.checkoutGateway === 'cashfree' && ' Paid by UPI, card or net banking through Cashfree, one period at a time: nothing is charged by itself, you pay each renewal here.'}
             </p>
             {b.checkoutGateway === null && isPaidPlan(plan) && (
               <p role="status" className="mt-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2 text-xs">

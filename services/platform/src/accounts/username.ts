@@ -29,7 +29,7 @@ export const RESERVED_USERNAMES = new Set([
   'founders', 'api', 'www', 'mail', 'email', 'postmaster', 'hostmaster', 'webmaster', 'abuse', 'security', 'billing',
   'payments', 'invoice', 'invoices', 'account', 'accounts', 'login', 'logout', 'signin', 'signup', 'register', 'join',
   'console', 'settings', 'platform', 'tasks', 'assets', 'attendance', 'hr', 'me', 'null', 'undefined', 'anonymous',
-  'guest', 'user', 'users', 'official', 'team', 'info', 'noreply', 'no-reply', 'razorpay',
+  'guest', 'user', 'users', 'official', 'team', 'info', 'noreply', 'no-reply', 'razorpay', 'cashfree',
 ]);
 
 /** Lower-cased and trimmed (what is stored and compared). */

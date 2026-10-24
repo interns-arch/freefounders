@@ -2894,6 +2894,10 @@ created (the resend throttle answered "Wait a few seconds…", easy to miss), an
 
 ### 21.4 Razorpay ready (2026-10-21)
 
+> **Replaced by Cashfree on 2026-10-24 (§21.10).** Razorpay was removed from the code, the env, the deploy scripts and
+> the screens; this section is kept as history. A server `.env` that still says `BILLING_GATEWAY=razorpay` only
+> switches payments off (logged, 503 on pay), it never crashes.
+
 Founder: "Razorpay I want to add in this; I will give you the access token later; make it ready for that." Razorpay is
 now a complete gateway behind the same interface as FakePay (`services/platform/src/billing/`), switched on by env.
 **Adding the keys is the only step left** (infra/deploy/README.md "Switching on Razorpay": `set-razorpay.sh`).
@@ -3247,3 +3251,86 @@ suite 105; root `npm run web:build` (rules + typecheck + build). New `e2e/web-co
 sent Home; staff Overview + Health, Companies → detail with the audited view, Users masked → detail, Billing, Logs with
 the drawer; 390 / 320 px) and `web-account-flows.spec.ts` updated (`/console/companies`, "Kaampilot console"); both
 still to run on a dev suite started from this branch (the shared :8080 suite was busy with another agent's e2e run).
+
+### 21.10 Cashfree payments (2026-10-24)
+
+Founder: "use Cashfree" (Kaampilot has a Cashfree merchant account; production keys = App ID + Secret Key), then
+"remove Razorpay completely". Cashfree is the only real gateway now, behind the same `PaymentGateway` interface as
+FakePay (`services/platform/src/billing/cashfree.gateway.ts`); Razorpay's gateway, tests, `set-razorpay.sh`, env vars,
+UI texts, the `gateway_plans` table and `subscriptions.gateway_subscription_id` (migration `0017_cashfree`) are gone.
+FakePay stays for dev, tests and the open demo.
+
+**Switch** (`gateway.ts → gatewayConfig`, checked at start-up): `PAYMENT_GATEWAY=fake|cashfree` (`BILLING_GATEWAY`, the
+older name, is read only when `PAYMENT_GATEWAY` is empty), `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`,
+`CASHFREE_ENV=production|sandbox` (default sandbox), optional `CASHFREE_API_VERSION` (default `2026-01-01`, the current
+documented `x-api-version`). Missing keys, an unknown value or a leftover `razorpay` → one log line
+(`Payments are OFF (checkout answers 503): …`, never a value), checkout and the Cashfree webhook answer **503 "Payments
+are not set up yet"**, everything else runs. Keys live only in the server's `.env` (`infra/deploy/set-cashfree.sh`:
+App ID, Secret Key with `read -s`, production / sandbox; `--off` back to fake); tests use a local stand-in.
+
+**Why one-time orders, not Cashfree Subscriptions**: Razorpay was used with subscriptions (a mandate charged each
+period). Cashfree Subscriptions needs a separately activated product, plan objects and an authorised mandate (UPI
+AutoPay / eNACH / card) per customer, with its own states and webhooks; with no Cashfree subscription product on the
+account yet, the simplest robust choice is **one Cashfree order per checkout** (purchase, upgrade, renewal). Nothing is
+charged by itself: at the end of a paid period the plan becomes `past_due` (the billing clock; no invoice and no fake
+"failed charge"), the banner says "The paid period has ended. Pay for the next period in Billing", and paying a new
+checkout makes it active again from now (7 days past due, then read-only, as before). An upgrade still credits unused
+time; seats added mid-period are charged on the next checkout. A subscription mandate can be added later behind the
+same interface without changing the states.
+
+**Flow** (docs: https://www.cashfree.com/docs/api-reference/payments/latest/orders/create, …/orders/get,
+…/payments/get-payments-for-order, https://www.cashfree.com/docs/payments/online/web/redirect,
+https://www.cashfree.com/docs/api-reference/payments/latest/payments/webhooks,
+https://www.cashfree.com/docs/payments/online/webhooks/signature-verification):
+1. `POST billing/checkout` prices it (GST included) and calls **Create Order** `POST https://api.cashfree.com/pg/orders`
+   (sandbox `https://sandbox.cashfree.com/pg/orders`; headers `x-client-id`, `x-client-secret`, `x-api-version`,
+   `x-idempotency-key` = our checkout id): `order_id` `kp_<checkout uuid>` (unique per attempt), `order_amount` =
+   paise / 100 in rupees, `INR`, `customer_details` (`customer_id` = the account id without dashes, `customer_phone` =
+   the account's mobile as 10 digits, else the placeholder `9999999999` because Cashfree requires a phone and email-only
+   accounts have none; email + name when known), `order_meta.return_url` =
+   `${PUBLIC_WEB_URL}/billing/pay/<checkout>?order_id=kp_…`, `notify_url` =
+   `${PUBLIC_WEB_URL}/api/platform/billing/webhooks/cashfree` (https only), `order_expiry_time` = the checkout's 1 h,
+   `order_tags` {sessionId, companyId}. `payment_session_id` is kept on the checkout (`gateway_data`), never logged.
+2. `/billing/pay/:id` loads **Cashfree.js v3** (`https://sdk.cashfree.com/js/v3/cashfree.js`, only on this page) and
+   calls `Cashfree({mode}).checkout({paymentSessionId, redirectTarget: "_self"})`: same window in browsers and in the
+   Android WebView (whose `isPaymentPage` now keeps `https://*.cashfree.com` inside the app; UPI app links still open
+   the UPI app). CSP (Report-Only in both Caddyfiles) allows `script-src https://sdk.cashfree.com`,
+   `connect-src / frame-src / form-action https://*.cashfree.com`, Payment Request for Cashfree.
+3. Back on the return URL the page shows "Checking your payment with Cashfree…" and calls `POST billing/cashfree/check`:
+   the server does **Get Order** + **Get Payments for an Order** and applies what Cashfree says (paid → plan active, GST
+   invoice, payment row; failed / dropped → a failed payment row, the checkout stays open for another try until it
+   expires; expired / terminated → checkout cancelled; still pending → the page asks again every 3 s, 10 times). The
+   redirect itself proves nothing.
+4. **Webhook** `POST /api/platform/billing/webhooks/cashfree` (also `…/webhook/cashfree`): `x-webhook-signature` =
+   base64 HMAC-SHA256(`x-webhook-timestamp` + raw body, Secret Key), constant-time compare, else 400. Types handled:
+   `PAYMENT_SUCCESS_WEBHOOK` / `payment.success`, `PAYMENT_FAILED_WEBHOOK` / `payment.failed`,
+   `PAYMENT_USER_DROPPED_WEBHOOK`; payload `data.order.order_id`, `data.payment.{cf_payment_id, payment_status,
+   payment_amount}`. A success / failure we cannot read in full makes the server look the order up instead. Test
+   events, `PAYMENT_CHARGES_WEBHOOK` and unknown types are stored and answered 200.
+5. **Idempotent**: the event id is per payment and outcome (`cf_paid_<cf_payment_id>`, `cf_failed_<…>`) for both the
+   webhook and the look-up, stored once in `billing_events`; a paid checkout is never applied twice. The amount must
+   equal the checkout total (else nothing is applied; `billing.amount_mismatch` in the production log). A payment that
+   Cashfree took after we closed the checkout still counts.
+6. **Nobody came back** (tab closed, no webhook for a dropped payment): the billing clock (`runAll`, every 5 min) looks up
+   open Cashfree checkouts 5 minutes after they expire (up to 3 days back): paid → applied; otherwise the checkout closes
+   (failed / cancelled), so nothing stays "paying" forever.
+
+**Logs** (§21.9 production log): `billing.checkout` (order id, amount), `billing.payment` (captured / failed with the
+reason, look-ups), `billing.webhook` (type, source, duplicate), `billing.webhook_rejected`, `billing.gateway_error`
+(Cashfree status / code / message), `billing.amount_mismatch`; never the Secret Key, `payment_session_id`, payloads or
+card / UPI / bank details (never read). The start-up log line shows only the first 6 characters of the App ID.
+
+**Founder's Cashfree dashboard steps** (infra/deploy/README.md "Switching on Cashfree payments"): API keys
+(Developers → API Keys); webhook `https://kaampilot.com/api/platform/billing/webhooks/cashfree`, standard HTTP POST,
+events Payment success + Payment failed (Developers → Webhooks); whitelist `https://kaampilot.com` (Developers →
+Whitelisting → Website URL; needs Contact Us + Terms pages; production only); then `set-cashfree.sh` on the server.
+
+**Status 2026-10-24:** Platform typecheck + full tests (new `src/cashfree.test.ts`, 12, against a local Cashfree
+stand-in: env switch incl. a leftover razorpay, rupee / phone conversion; 503 without keys (checkout + webhook); Create
+Order request shape + headers + return / notify URLs; paid by look-up then webhook duplicate; paid by webhook (both
+type names) then look-up; bad signature / changed body / unsigned → 400, test and unknown events → 200, old route;
+failed and dropped keep the checkout open and the clock closes it; nobody came back → found paid by the clock; expired
+order → cancelled; amount mismatch refused; another company 404, no secret / session id stored; renewal → past due →
+new order → active); `razorpay.test.ts` removed. Mobile protocol tests 12 OK; root `npm run web:build` OK. e2e not
+re-run here (the shared :8080 suite belonged to another checkout); `web-signup-billing` (FakePay) is unchanged in
+behaviour.

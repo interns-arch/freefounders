@@ -19,14 +19,14 @@
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		# Camera (punch selfie, QR scanner, photos), location (punch geofence) and microphone (Tasks voice notes): this site only.
-		# Razorpay Checkout (PLAN.md §21.4, only on /billing/pay/…): its script (checkout.razorpay.com), its frame and API
-		# (api.razorpay.com, *.razorpay.com), the redirect-mode form post (api.razorpay.com), Payment Request for it, and
-		# popups it opens for bank pages (COOP same-origin-allow-popups keeps their way back to the Checkout window).
-		Permissions-Policy `camera=(self), geolocation=(self), microphone=(self), payment=(self "https://api.razorpay.com" "https://checkout.razorpay.com"), usb=(), serial=(), bluetooth=(), interest-cohort=()`
+		# Cashfree checkout (PLAN.md §21.10, only on /billing/pay/…): its script (sdk.cashfree.com), its API and pages
+		# (api / sandbox / payments.cashfree.com: *.cashfree.com), its form posts, Payment Request for it, and popups it
+		# may open for bank pages (COOP same-origin-allow-popups keeps their way back).
+		Permissions-Policy `camera=(self), geolocation=(self), microphone=(self), payment=(self "https://sdk.cashfree.com" "https://api.cashfree.com" "https://sandbox.cashfree.com"), usb=(), serial=(), bluetooth=(), interest-cohort=()`
 		Cross-Origin-Opener-Policy "same-origin-allow-popups"
 		-Server
 		-X-Powered-By
-		?Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://*.razorpay.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://api.razorpay.com"
+		?Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://sdk.cashfree.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.cashfree.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src 'self' https://*.cashfree.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://*.cashfree.com"
 	}
 }
 

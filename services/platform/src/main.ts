@@ -11,8 +11,8 @@ import { ReportingLogger } from './console/log-sink';
 
 export const API_PREFIX = 'api/platform';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-// Gateway webhooks and Razorpay's redirect-mode callback (a form post from Razorpay's page): signed, never cookie-authenticated.
-const WEBHOOK = /^\/billing\/(webhook\/[a-z]+|razorpay\/callback)$/;
+// Payment gateway webhooks (Cashfree: /billing/webhooks/cashfree): signed, never cookie-authenticated.
+const WEBHOOK = /^\/billing\/webhooks?\/[a-z]+$/;
 
 export async function createApp() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -29,8 +29,6 @@ export async function createApp() {
   app.use(helmet());
   app.use(cookieParser());
   app.useBodyParser('json', { limit: '1mb' }); // room for a 512 KB logo, base64-encoded
-  // Only Razorpay's redirect-mode callback posts a form (flat keys: razorpay_payment_id, error[code]…).
-  app.useBodyParser('urlencoded', { extended: false, limit: '16kb' });
 
   // CSRF defence (same rule as Assets): a custom header cannot be sent cross-site without a CORS preflight,
   // and the refresh cookie is SameSite=Lax.

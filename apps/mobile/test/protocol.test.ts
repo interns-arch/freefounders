@@ -149,25 +149,25 @@ test('security: plain http only for the office network; anything else needs http
   assert.equal(normalizeServerUrl('javascript:alert(1)'), null);
 });
 
-test('payments (PLAN.md §21.4): Razorpay pages stay in the app, also in a frame; UPI links open the UPI app', () => {
+test('payments (PLAN.md §21.10): Cashfree pages stay in the app, also in a frame; UPI links open the UPI app', () => {
   const s = 'https://app.example.com';
-  assert.equal(isPaymentPage('https://checkout.razorpay.com/v1/checkout.js'), true);
-  assert.equal(isPaymentPage('https://api.razorpay.com/v1/checkout/embedded'), true);
-  assert.equal(isPaymentPage('http://api.razorpay.com/'), false, 'https only');
-  assert.equal(isPaymentPage('https://razorpay.com.evil.test/'), false);
-  assert.equal(isPaymentPage('https://evilrazorpay.com/'), false);
-  assert.equal(isPaymentPage('https://razorpay.com@evil.test/'), false);
-  assert.equal(linkTarget('https://api.razorpay.com/v1/checkout/embedded', s, false), 'inside', 'Checkout frame');
-  assert.equal(linkTarget('https://api.razorpay.com/v1/payments/create/checkout', s, true), 'inside', 'redirect mode');
+  assert.equal(isPaymentPage('https://sdk.cashfree.com/js/v3/cashfree.js'), true);
+  assert.equal(isPaymentPage('https://payments.cashfree.com/order/'), true);
+  assert.equal(isPaymentPage('http://payments.cashfree.com/'), false, 'https only');
+  assert.equal(isPaymentPage('https://cashfree.com.evil.test/'), false);
+  assert.equal(isPaymentPage('https://evilcashfree.com/'), false);
+  assert.equal(isPaymentPage('https://cashfree.com.evil.test/'), false);
+  assert.equal(linkTarget('https://sandbox.cashfree.com/pg/view/sessions/checkout', s, false), 'inside', 'checkout frame');
+  assert.equal(linkTarget('https://payments.cashfree.com/order/#session', s, true), 'inside', 'redirect');
 
-  // UPI: upi:// and Android intent:// for a UPI app open outside, even from Razorpay's frame.
-  const intent = 'intent://pay?pa=merchant@razorpay&pn=Kaampilot&am=584.10&cu=INR#Intent;scheme=upi;package=com.phonepe.app;end';
-  assert.equal(linkTarget('upi://pay?pa=merchant@razorpay&am=1.00', s, false), 'outside');
+  // UPI: upi:// and Android intent:// for a UPI app open outside, even from Cashfree's page.
+  const intent = 'intent://pay?pa=merchant@cashfree&pn=Kaampilot&am=584.10&cu=INR#Intent;scheme=upi;package=com.phonepe.app;end';
+  assert.equal(linkTarget('upi://pay?pa=merchant@cashfree&am=1.00', s, false), 'outside');
   assert.equal(linkTarget(intent, s, false), 'outside');
-  assert.equal(upiAppUrl(intent), 'upi://pay?pa=merchant@razorpay&pn=Kaampilot&am=584.10&cu=INR');
+  assert.equal(upiAppUrl(intent), 'upi://pay?pa=merchant@cashfree&pn=Kaampilot&am=584.10&cu=INR');
   assert.equal(upiAppUrl('intent://pay?pa=x#Intent;package=com.google.android.apps.nbu.paisa.user;scheme=tez;end'), 'tez://pay?pa=x');
   assert.equal(upiAppUrl('phonepe://pay?pa=x'), 'phonepe://pay?pa=x');
-  assert.equal(outsideUrl(intent), 'upi://pay?pa=merchant@razorpay&pn=Kaampilot&am=584.10&cu=INR');
+  assert.equal(outsideUrl(intent), 'upi://pay?pa=merchant@cashfree&pn=Kaampilot&am=584.10&cu=INR');
   assert.equal(outsideUrl('tel:+919876543210'), 'tel:+919876543210');
   // Anything else stays as before: other intents never from a frame, other sites never in a frame.
   assert.equal(upiAppUrl('intent://scan/#Intent;scheme=zxing;end'), null);
@@ -176,20 +176,20 @@ test('payments (PLAN.md §21.4): Razorpay pages stay in the app, also in a frame
   assert.equal(linkTarget('https://bank.example.com/3ds', s, false), 'block');
 });
 
-test('payments: the bank pages of a redirect-mode payment stay in the app until it is back on the server', () => {
+test('payments: the bank pages of a payment stay in the app until it is back on the server', () => {
   const s = 'http://192.168.2.72:8080';
   let paying = false;
   paying = paymentStep('http://192.168.2.72:8080/billing/pay/abc', s, paying);
   assert.equal(paying, false);
   assert.equal(linkTarget('https://acs.bank.example.com/3ds', s, true, paying), 'outside', 'no payment on: other sites open outside');
-  paying = paymentStep('https://api.razorpay.com/v1/payments/create/checkout', s, paying);
+  paying = paymentStep('https://payments.cashfree.com/order/#session', s, paying);
   assert.equal(paying, true);
   paying = paymentStep('https://acs.bank.example.com/3ds', s, paying);
   assert.equal(paying, true);
   assert.equal(linkTarget('https://acs.bank.example.com/3ds', s, true, paying), 'inside');
   assert.equal(linkTarget('http://plain.example.com/', s, true, paying), 'outside', 'https only');
   assert.equal(linkTarget('https://acs.bank.example.com/3ds', s, false, paying), 'block', 'never in a frame');
-  paying = paymentStep('http://192.168.2.72:8080/billing/pay/abc?result=paid', s, paying);
+  paying = paymentStep('http://192.168.2.72:8080/billing/pay/abc?order_id=kp_abc', s, paying);
   assert.equal(paying, false);
   assert.equal(linkTarget('https://acs.bank.example.com/3ds', s, true, paying), 'outside');
 });

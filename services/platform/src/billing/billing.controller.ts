@@ -1,5 +1,5 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, Res, StreamableFile } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, StreamableFile } from '@nestjs/common';
+import type { Request } from 'express';
 import { z } from 'zod';
 import { exportFile, exportFormat } from '../common/export';
 import { type Caller, CurrentCaller, Needs, Public, ReadOnlyOk, uuidParam, ZodPipe } from '../common/http';
@@ -7,10 +7,10 @@ import {
   advanceSchema,
   auditQuerySchema,
   BillingService,
+  cashfreeCheckSchema,
   checkoutSchema,
   outcomeSchema,
   profileSchema,
-  razorpayVerifySchema,
   renewSchema,
   seatsSchema,
 } from './billing.service';
@@ -63,26 +63,22 @@ export class BillingController {
     return this.billing.fakeComplete(caller.companyId, uuidParam(id), body.outcome);
   }
 
-  /** Razorpay Checkout's success handler (browser): signature checked, then the checkout is paid (idempotent with the webhook). */
-  @Post('razorpay/verify')
+  /**
+   * The payment page, back from Cashfree (return URL) or waiting: the server looks the order up at Cashfree and applies
+   * it (idempotent with the webhook). The browser's redirect itself proves nothing.
+   */
+  @Post('cashfree/check')
   @HttpCode(200)
-  razorpayVerify(@CurrentCaller() caller: Caller, @Body(new ZodPipe(razorpayVerifySchema)) body: z.infer<typeof razorpayVerifySchema>) {
-    return this.billing.verifyRazorpay(caller.companyId, body);
+  cashfreeCheck(@CurrentCaller() caller: Caller, @Body(new ZodPipe(cashfreeCheckSchema)) body: z.infer<typeof cashfreeCheckSchema>) {
+    return this.billing.cashfreeCheck(caller.companyId, body.sessionId);
   }
 
   /**
-   * Razorpay Checkout in redirect mode (the phone app): Razorpay's page posts the handler fields here as a form. No
-   * token or CSRF header can come with it (main.ts); the HMAC signature is the proof. Answers with the payment page.
+   * Gateway webhooks (Cashfree: https://kaampilot.com/api/platform/billing/webhooks/cashfree): no session, no CSRF
+   * header (main.ts); the signature over the raw body is checked instead. `webhook/:gateway` is the older spelling.
    */
   @Public()
-  @Post('razorpay/callback')
-  async razorpayCallback(@Query('session') session: unknown, @Body() form: Record<string, unknown>, @Res() res: Response) {
-    res.redirect(303, await this.billing.razorpayCallback(session, form));
-  }
-
-  /** Gateway webhooks: no session, no CSRF header (main.ts); the signature over the raw body is checked instead. */
-  @Public()
-  @Post('webhook/:gateway')
+  @Post(['webhooks/:gateway', 'webhook/:gateway'])
   @HttpCode(200)
   webhook(@Param('gateway') gateway: string, @Req() req: Request & { rawBody?: Buffer }) {
     return this.billing.handleWebhook(gateway, req.headers, req.rawBody);

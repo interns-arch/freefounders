@@ -63,7 +63,7 @@ export function Shell() {
   const insets = useSafeAreaInsets();
   const web = useRef<WebView>(null);
   const canGoBack = useRef(false);
-  /** A Razorpay payment is on (redirect mode): the bank's pages stay in the app until it is back on the server. */
+  /** A Cashfree payment is on: the bank's pages stay in the app until it is back on the server. */
   const paying = useRef(false);
   const [server, setServer] = useState<string | null>(null);
   const [camera, setCamera] = useState<CameraState | null>(null);

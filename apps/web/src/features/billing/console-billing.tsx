@@ -1,5 +1,5 @@
 /**
- * Kaampilot console → Billing (PLAN.md §21.9): every subscription, invoice and payment (FakePay and Razorpay), failures
+ * Kaampilot console → Billing (PLAN.md §21.9): every subscription, invoice and payment (FakePay and Cashfree), failures
  * and revenue by month, each with a Download of every row (xlsx / csv, PLAN.md §19.31). Read-only.
  */
 import { type ConsoleBilling, consoleExports, formatInr, useConsoleBilling } from '@freefounders/core/billing';
@@ -15,7 +15,7 @@ import { formatDate, formatDateTime } from '@/lib/utils';
 import { Section, StatTile } from './console-parts';
 import { StateBadge } from './parts';
 
-const gatewayName = (g: string | null | undefined) => (g === 'razorpay' ? 'Razorpay' : g === 'fake' ? 'FakePay' : (g ?? '—'));
+const gatewayName = (g: string | null | undefined) => (g === 'cashfree' ? 'Cashfree' : g === 'fake' ? 'FakePay' : (g ?? '—'));
 const CompanyLink = ({ id, name, code }: { id?: string; name?: string; code?: string }) =>
   id ? (
     <Link to={`/console/companies/${id}`} className="font-medium text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
@@ -78,7 +78,7 @@ export function ConsoleBillingTab({ enabled }: { enabled: boolean }) {
             <NativeSelect id="pay-gateway" value={gateway} onChange={(e) => setGateway(e.target.value)}>
               <option value="">All</option>
               <option value="fake">FakePay</option>
-              <option value="razorpay">Razorpay</option>
+              <option value="cashfree">Cashfree</option>
             </NativeSelect>
           </div>
         </div>

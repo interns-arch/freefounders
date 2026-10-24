@@ -1,10 +1,11 @@
 /**
- * /billing/pay/:sessionId: the payment step of a checkout (PLAN.md §21.1, §21.4).
- * - Razorpay (BILLING_GATEWAY=razorpay): the order summary and "Pay", which opens Razorpay Checkout (checkout.js is loaded
- *   only here). Success → POST billing/razorpay/verify (signature checked on the server; the webhook stays the source of
- *   truth). In the phone app Checkout runs in redirect mode and comes back here with ?result=paid|failed.
+ * /billing/pay/:sessionId: the payment step of a checkout (PLAN.md §21.1, §21.10).
+ * - Cashfree (PAYMENT_GATEWAY=cashfree): the order summary and "Pay", which opens Cashfree's payment page in this window
+ *   (cashfree.js is loaded only here; the same in the phone app). Cashfree sends the person back here with ?order_id=;
+ *   the page then asks the server (POST billing/cashfree/check), which looks the order up at Cashfree. The redirect
+ *   itself proves nothing; the signed webhook settles it too, whichever comes first.
  * - FakePay · test mode (dev, open demo): looks like a hosted payment page but is clearly a test: no real brand, no card
- *   numbers asked. Pay / Simulate failure / Cancel → POST billing/fake/:id/complete, a signed webhook like Razorpay's.
+ *   numbers asked. Pay / Simulate failure / Cancel → POST billing/fake/:id/complete, a signed webhook like Cashfree's.
  */
 import { errorMessage } from '@freefounders/core';
 import {
@@ -12,18 +13,17 @@ import {
   type FakeOutcome,
   formatInr,
   INTERVAL_LABELS,
+  useCashfreeCheck,
   useCheckoutSession,
   useFakeComplete,
-  useRazorpayVerify,
 } from '@freefounders/core/billing';
 import { AlertTriangle, CheckCircle2, CreditCard, Landmark, Lock, Smartphone, XCircle } from '@/components/icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/primitives';
-import { isInApp } from '@/lib/native-bridge';
-import { openRazorpay } from '@/lib/razorpay';
+import { openCashfree } from '@/lib/cashfree';
 import { cn } from '@/lib/utils';
 
 type Method = 'upi' | 'card' | 'netbanking';
@@ -44,13 +44,13 @@ export function PayPage() {
   const { sessionId } = useParams();
   const q = useCheckoutSession(sessionId);
   const s = q.data;
-  const razorpay = s?.gateway === 'razorpay';
+  const real = s?.gateway === 'cashfree';
 
   return (
     <div className="flex min-h-dvh flex-col bg-muted/40">
       <header className="border-b bg-card">
         <div className="mx-auto flex h-14 max-w-[480px] items-center justify-between gap-2 px-4">
-          {razorpay || !s ? (
+          {real || !s ? (
             <span className="flex items-center gap-2 text-sm font-bold">
               <Lock className="size-4 text-primary" aria-hidden />
               Kaampilot · Secure payment
@@ -84,14 +84,14 @@ export function PayPage() {
               <Link to="/billing">Back to Kaampilot</Link>
             </Button>
           </div>
-        ) : razorpay ? (
-          <RazorpayPay s={s} sessionId={sessionId} />
+        ) : real ? (
+          <CashfreePay s={s} sessionId={sessionId} />
         ) : (
           <FakePay s={s} sessionId={sessionId} />
         )}
       </main>
       <footer className="pb-6 text-center font-mono text-[11px] tracking-wider text-muted-foreground uppercase">
-        {razorpay ? 'Payments by Razorpay · GST invoice from Kaampilot' : s ? 'FakePay · simulated gateway for testing Kaampilot' : ''}
+        {real ? 'Payments by Cashfree · GST invoice from Kaampilot' : s ? 'FakePay · simulated gateway for testing Kaampilot' : ''}
       </footer>
     </div>
   );
@@ -143,20 +143,58 @@ function OrderSummary({ s }: { s: CheckoutSession }) {
   );
 }
 
-// ─── Razorpay ───────────────────────────────────────────────────────────────
+
+// ─── Cashfree ───────────────────────────────────────────────────────────────
 
 type Note = { kind: 'error' | 'info'; text: string };
+/** Back from Cashfree, a payment still being confirmed is asked about again every 3 s, up to 10 times. */
+const CHECK_EVERY_MS = 3000;
+const CHECK_TRIES = 10;
 
-function RazorpayPay({ s, sessionId }: { s: CheckoutSession; sessionId: string }) {
-  const verify = useRazorpayVerify();
+function CashfreePay({ s, sessionId }: { s: CheckoutSession; sessionId: string }) {
+  const check = useCashfreeCheck();
   const [params] = useSearchParams();
+  const returned = params.has('order_id');
   const [opening, setOpening] = useState(false);
-  const [note, setNote] = useState<Note | null>(() =>
-    params.get('result') === 'failed' ? { kind: 'error', text: 'The payment did not go through. If money was taken it is refunded by Razorpay; you can try again.' } : null,
-  );
+  const [waiting, setWaiting] = useState(returned);
+  const [note, setNote] = useState<Note | null>(null);
+  const tries = useRef(0);
+  const { mutateAsync } = check;
+
+  // Back from Cashfree's page (return URL): the server looks the order up; the redirect itself proves nothing.
+  useEffect(() => {
+    if (!returned) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const once = async () => {
+      try {
+        const r = await mutateAsync(sessionId);
+        if (stopped) return;
+        if (r.attempt === 'pending' && tries.current++ < CHECK_TRIES) {
+          timer = setTimeout(() => void once(), CHECK_EVERY_MS);
+          return;
+        }
+        setWaiting(false);
+        if (r.attempt === 'failed') setNote({ kind: 'error', text: 'The payment did not go through. Nothing was charged. You can try again.' });
+        if (r.attempt === 'pending') {
+          setNote({ kind: 'info', text: 'Cashfree has not confirmed this payment yet. If money was taken, your plan turns active within a few minutes: open Billing again later.' });
+        }
+      } catch (e) {
+        if (stopped) return;
+        setWaiting(false);
+        setNote({ kind: 'error', text: errorMessage(e) });
+      }
+    };
+    void once();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [returned, sessionId, mutateAsync]);
+
   const settled = settledOf(s);
   if (settled) return <Result outcome={settled} total={s.total} test={false} />;
-  const o = s.razorpay;
+  const o = s.cashfree;
   const interval = s.interval === 'year' ? 'year' : 'month';
 
   const pay = async () => {
@@ -164,19 +202,9 @@ function RazorpayPay({ s, sessionId }: { s: CheckoutSession; sessionId: string }
     setNote(null);
     setOpening(true);
     try {
-      await openRazorpay(
-        o,
-        {
-          onPaid: (response) =>
-            verify.mutate(
-              { id: sessionId, response },
-              { onError: (e) => setNote({ kind: 'error', text: `${errorMessage(e)} If money was taken, the plan turns active here within a few minutes.` }) },
-            ),
-          onFailed: (message) => setNote({ kind: 'error', text: `${message} Nothing was charged. You can try again.` }),
-          onDismiss: () => setNote((n) => n ?? { kind: 'info', text: 'Payment window closed. Nothing was charged.' }),
-        },
-        { redirect: isInApp() },
-      );
+      // Same window (browser and phone app): Cashfree comes back to this page with ?order_id=.
+      const problem = await openCashfree(o);
+      if (problem) setNote({ kind: 'error', text: `${problem} Nothing was charged. You can try again.` });
     } catch (e) {
       setNote({ kind: 'error', text: (e as Error).message });
     } finally {
@@ -188,19 +216,24 @@ function RazorpayPay({ s, sessionId }: { s: CheckoutSession; sessionId: string }
     <div className="overflow-hidden rounded-xl border bg-card shadow-card">
       <OrderSummary s={s} />
       <div className="space-y-3 p-5">
-        {o?.keyId.startsWith('rzp_test_') && (
+        {o?.mode === 'sandbox' && (
           <p className="flex items-start gap-2 rounded-md border border-dashed border-warning/50 bg-warning/8 px-3 py-2 text-[13px]" role="note">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-            Razorpay test mode: use Razorpay&apos;s test cards or UPI IDs. No real money moves.
+            Cashfree test mode: use Cashfree&apos;s test cards or UPI IDs. No real money moves.
           </p>
         )}
         <p className="text-[13px] text-muted-foreground">
-          Pay by UPI, card or net banking. This sets up AutoPay: after this payment, Razorpay charges the plan each {interval} until you cancel in
-          Billing. Your GST invoice comes from Kaampilot.
+          Pay by UPI, card or net banking on Cashfree&apos;s secure page. This pays for one {interval}; nothing is charged by itself afterwards: you
+          pay the next {interval} from Billing. Your GST invoice comes from Kaampilot.
         </p>
         {!o && (
           <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
-            Payments are not set up yet. Please try again later.
+            This payment link cannot be opened. Go back to Billing and start again.
+          </p>
+        )}
+        {waiting && (
+          <p role="status" className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-foreground">
+            Checking your payment with Cashfree…
           </p>
         )}
         {note && (
@@ -211,7 +244,7 @@ function RazorpayPay({ s, sessionId }: { s: CheckoutSession; sessionId: string }
             {note.text}
           </p>
         )}
-        <Button variant="cta" allowReadOnly size="lg" className="h-12 w-full text-base" loading={opening || verify.isPending} disabled={!o || opening || verify.isPending} onClick={() => void pay()}>
+        <Button variant="cta" allowReadOnly size="lg" className="h-12 w-full text-base" loading={opening || waiting} disabled={!o || opening || waiting} onClick={() => void pay()}>
           <Lock /> Pay {formatInr(s.total, true)}
         </Button>
         <Button asChild variant="ghost" className="w-full">

@@ -145,9 +145,9 @@ export function originOf(url: string): string | null {
  * `blob:` addresses stay. Everything else is blocked: a `data:` page (it would get the app's powers) and, inside a frame,
  * any other site (a frame must never start another app on its own).
  *
- * Payments (PLAN.md §21.4): Razorpay's pages (https://*.razorpay.com) stay in the app, in a frame too; while a payment
+ * Payments (PLAN.md §21.10): Cashfree's pages (https://*.cashfree.com) stay in the app, in a frame too; while a payment
  * is on (`paying`, see paymentStep) the bank's 3-D Secure pages stay as well, until the page is back on the server.
- * UPI app links (upi://, or an Android intent:// for a UPI app) open the UPI app even from Razorpay's frame (see
+ * UPI app links (upi://, or an Android intent:// for a UPI app) open the UPI app even from Cashfree's page (see
  * outsideUrl): that is how "Pay with a UPI app" works.
  */
 export function linkTarget(url: string, server: string, topFrame = true, paying = false): 'inside' | 'outside' | 'block' {
@@ -163,15 +163,15 @@ export function linkTarget(url: string, server: string, topFrame = true, paying 
   return topFrame ? 'outside' : 'block';
 }
 
-/** Razorpay Checkout and its pages: https on razorpay.com or one of its sub-domains. */
+/** Cashfree's checkout and its pages: https on cashfree.com or one of its sub-domains (payments., sandbox., sdk.). */
 export function isPaymentPage(url: string): boolean {
   const o = originOf(url);
-  return !!o && /^https:\/\/([a-z0-9-]+\.)*razorpay\.com$/.test(o);
+  return !!o && /^https:\/\/([a-z0-9-]+\.)*cashfree\.com$/.test(o);
 }
 
 /**
- * A payment starts when a top-level page of Razorpay loads and ends when the page is back on the Kaampilot server
- * (Razorpay posts the result there). Other pages in between (the bank) keep the current state.
+ * A payment starts when a top-level page of Cashfree loads and ends when the page is back on the Kaampilot server
+ * (Cashfree sends the person back to the return URL there). Other pages in between (the bank) keep the current state.
  */
 export function paymentStep(url: string, server: string, paying: boolean): boolean {
   if (isPaymentPage(url)) return true;
@@ -180,7 +180,7 @@ export function paymentStep(url: string, server: string, paying: boolean): boole
   return paying;
 }
 
-/** Schemes of UPI apps that Razorpay's "Pay with a UPI app" may open (upi:// is the standard one). */
+/** Schemes of UPI apps that Cashfree's "Pay with a UPI app" may open (upi:// is the standard one). */
 const UPI_SCHEMES = ['upi', 'phonepe', 'tez', 'gpay', 'paytmmp', 'paytm', 'bhim', 'credpay', 'mobikwik', 'amazonpay'];
 
 /**

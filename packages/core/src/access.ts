@@ -30,6 +30,8 @@ export interface MeBilling {
   readOnly: boolean;
   /** Days left in the current state: of the trial, or before a failed payment makes the company read-only. */
   daysLeft: number | null;
+  /** Cashfree (PLAN.md §21.10): nothing renews by itself; past due means "pay the next period", not a failed charge. */
+  paysEachPeriod?: boolean;
 }
 
 export interface PlatformMe {

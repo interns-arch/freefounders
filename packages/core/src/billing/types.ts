@@ -56,15 +56,16 @@ export interface BillingSummary {
   devTools: boolean;
   /** The billing clock (moved by the dev tools). */
   now: string;
-  /** Who charges this plan's renewals (PLAN.md §21.4). */
+  /** Who took the last payment (PLAN.md §21.10). */
   gateway?: PaymentGatewayName;
   /** The gateway new payments use; null = payments are not set up on this server yet. */
   checkoutGateway?: PaymentGatewayName | null;
-  /** False for a Razorpay plan: a cancelled one is bought again instead (unused time credited). */
   canResume?: boolean;
+  /** Cashfree: nothing renews by itself; the owner pays each period on the Billing page (past due until then). */
+  paysEachPeriod?: boolean;
 }
 
-export type PaymentGatewayName = 'fake' | 'razorpay';
+export type PaymentGatewayName = 'fake' | 'cashfree';
 
 /** GET billing/plans. Business data on the server (§21), so the screen reads whatever plans it lists. */
 export interface Plan {
@@ -100,28 +101,17 @@ export interface CheckoutStarted {
   gateway?: PaymentGatewayName;
 }
 
-/** What Razorpay Checkout needs (GET billing/checkout/:id while a Razorpay checkout is open). */
-export interface RazorpayCheckoutOptions {
-  /** Public key id (rzp_test_… / rzp_live_…); the secret never leaves the server. */
-  keyId: string;
-  subscriptionId: string;
-  /** paise, GST included */
-  amount: number;
-  currency: string;
-  name: string;
-  description: string;
-  prefill: { name?: string; email?: string; contact?: string };
-  notes: Record<string, string>;
-  /** Redirect mode (phone app): Razorpay posts the result to this path on our server. */
-  callbackPath: string;
+/** What Cashfree.js needs (GET billing/checkout/:id while a Cashfree checkout is open). Never logged. */
+export interface CashfreeCheckoutOptions {
+  /** payment_session_id of the Cashfree order (the Secret Key never leaves the server). */
+  paymentSessionId: string;
+  /** Cashfree.js mode. */
+  mode: 'production' | 'sandbox';
+  orderId?: string | null;
 }
 
-/** Razorpay Checkout's success handler response. */
-export interface RazorpayHandlerResponse {
-  razorpay_payment_id: string;
-  razorpay_subscription_id?: string;
-  razorpay_signature: string;
-}
+/** POST billing/cashfree/check: what happened to the latest attempt at Cashfree. */
+export type CashfreeAttempt = 'paid' | 'failed' | 'pending' | 'expired';
 
 export type CheckoutStatus = 'open' | 'pending' | 'paid' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | string;
 
@@ -140,7 +130,10 @@ export interface CheckoutSession {
   companyName: string;
   status: CheckoutStatus;
   gateway?: PaymentGatewayName;
-  razorpay?: RazorpayCheckoutOptions;
+  /** null: the order has no payment session (try again from Billing). */
+  cashfree?: CashfreeCheckoutOptions | null;
+  /** Only from POST billing/cashfree/check. */
+  attempt?: CashfreeAttempt;
 }
 
 export type FakeOutcome = 'success' | 'failure' | 'cancel';
