@@ -363,14 +363,16 @@ def build_report(kind, users, params):
         from .models import AttendanceCorrection
         first, last = parse_range(params)
         reqs = (AttendanceCorrection.objects.filter(user__in=[u.id for u in users], date__range=(first, last))
-                .select_related("user", "reviewed_by").order_by("user__first_name", "user__last_name", "date"))
+                .select_related("user", "reviewed_by", "added_by").order_by("user__first_name", "user__last_name", "date"))
         if params.get("status"):
             reqs = reqs.filter(status=params["status"])
         rows = []
         for c in reqs:
             reviewer = (c.reviewed_by.get_full_name() or c.reviewed_by.username) if c.reviewed_by else ""
+            # Added directly by HR / a manager (2026-10-24) vs the person's own request.
+            source = f"Added by {c.added_by.get_full_name() or c.added_by.username}" if c.added_by else "Requested"
             rows.append(_ident(c.user, names) + [
-                c.date.strftime("%Y-%m"), _dmy(c.date), c.get_reason_type_display(), c.reason,
+                c.date.strftime("%Y-%m"), _dmy(c.date), source, c.get_reason_type_display(), c.reason,
                 _hm(c.requested_check_in), _hm(c.requested_check_out), c.get_status_display(),
                 _hm(c.original_check_in), _hm(c.original_check_out), LABEL.get(c.original_status, c.original_status),
                 LABEL.get(c.applied_status, c.applied_status), reviewer,
@@ -378,7 +380,7 @@ def build_report(kind, users, params):
                 timezone.localtime(c.created_at).strftime("%d-%m-%Y %H:%M")])
         return (f"Regularization {_dmy(first)} to {_dmy(last)}",
                 f"attendance-regularization-{first.isoformat()}-to-{last.isoformat()}",
-                ident + ["Month", "Date", "Reason", "Note", "Requested in", "Requested out", "Status", "Was in", "Was out",
+                ident + ["Month", "Date", "Source", "Reason", "Note", "Requested in", "Requested out", "Status", "Was in", "Was out",
                          "Was status", "New status", "Reviewed by", "Reviewed at", "Remarks", "Requested on"], rows)
 
     raise ValidationError({"type": f"Use one of: {', '.join(REPORT_TYPES)}."})

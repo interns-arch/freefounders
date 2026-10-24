@@ -2410,6 +2410,27 @@ and HR, downloadable.
 
 Goes live with a website + Tasks API update (migrations hr 0009–0010 via `migrate_companies`). No new APK.
 
+#### 19.38 addendum: Flexible limits + HR adds (2026-10-24)
+Founder: "Any organization can set regularization by itself, there is no restriction; I can adjust the number of
+regularizations."
+
+| Part | What |
+|---|---|
+| No caps | `reg_monthly_limit` and `reg_days_back` take any whole number ≥ 0 (only a sanity maximum, `REG_MAX` = 100000); 0 = unlimited / only today after the shift. |
+| Limit period | new `reg_limit_period` (REGULARIZATION_LIMIT_PERIOD): `month` (default) / `week` (Monday–Sunday) / `year`. The key `reg_monthly_limit` keeps its name and is "requests per period". Refusal "Monthly / Weekly / Yearly limit reached: … {n} … a month / a week / a year … used {u} in {Month YYYY} / the week of {Monday} / {YYYY} ({left} left)" (code stays `monthly_limit`). |
+| Per-person limits | new `reg_person_limits` (REGULARIZATION_PERSON_LIMITS, `CompanySetting` JSON `{"<user id>": limit}`, setting kind "limits"; PUT `[{user, limit}]`, GET answers `[{user, name, limit}]`). The person's own limit replaces the company's (0 = unlimited). Same card: "Different limit for some people" (pick a person → their number). `GET /attendance-corrections/policy/` adds `limit`, `period`, `personal_limit`, `used`, `left` (the old `monthly_limit` / `used_this_month` / `left_this_month` carry the same numbers); the employee's form shows "{left} of {limit} requests left this week[ (your own limit)]". |
+| HR adds | `POST /attendance-corrections/add_for/` {user, date, end_date, reason_type, check_in_time, check_out_time, reason, attachment} (`regularization.add_for`): applied at once (status approved, `reviewed_by` = `added_by` = the actor, `apply` exactly like an approval, from → to kept), **not counted** in the person's limit (`used_in_period` skips `added_by`), ignores the days-back window, the company's on/off switch and the allowed-reasons list (never a future day; a day with a pending request or approved full-day leave is refused), tells the person (`correction_reviewed` "Attendance regularized: {date}", "{reason}: added by {name}"). Who: `check_adder` = whoever may decide the person's requests (`may_review`: reporting manager, or an approver whose scope covers them); nobody for themselves except the Owner (§19.24, `SELF_EDIT_MESSAGE`). `GET /attendance-corrections/people/` = the picker (`?scope=all` = everyone, HR settings people only, for the per-person limits). Migration **hr 0012** `AttendanceCorrection.added_by` (SET_NULL; `people_delete` NULL). |
+| Record + downloads | serializer `added_by_detail`, `source` (`hr` / `request`); list download "Source" ("Added by HR" / "Requested") + "Added by"; Reports → Regularization "Source" ("Added by {name}" / "Requested"). My regularization requests: chip "Added by {name}". |
+| Web | Settings card (period, helper line "Each person can ask 3 times a month, up to 7 days back. Unlimited = 0.", per-person list); `RegularizeForSomeoneButton` (`features/hr/regularize.tsx`) on Approvals → Regularization, Daily (date bar + "Regularize" per row), Live / My team, a person's month ("Regularize this day"); shown when `can_approve_regularization`. |
+
+| Check | Result |
+|---|---|
+| Tasks | new `hr/tests_regularization_flex.py` (7: no cap 5000 / 365 + sanity max, weekly and yearly counting, per-person higher + unlimited + unknown person + clear, HR add applied / not counted / any past day / told / downloads, scope + own-record + Owner, future + pending refused); `npm run quick-check -- --tests tasks` |
+| Web | `npm run web:build` |
+| e2e | `web-regularization` + step 5: the reporting manager regularizes the earlier day from Approvals → approved, `source` hr, not counted |
+
+Goes live with a website + Tasks API update (migration hr 0012 via `migrate_companies`). No new APK.
+
 ### 19.39 Punch-in reminders from the server (2026-10-24)
 Founder: "Attendance reminder every 3 times after every 30 min from reporting time if not marked, leave." A person who
 has not punched in by the reporting time (= the company's **Work starts**; there is no per-person shift) gets reminder

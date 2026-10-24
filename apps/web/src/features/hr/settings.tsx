@@ -2,7 +2,9 @@
 import { ApiError, errorMessage } from '@freefounders/core';
 import {
   type HrSettingValues,
+  REGULARIZATION_PERIOD_WORDS,
   REGULARIZATION_REASONS,
+  type RegularizationPeriod,
   type RegularizationReason,
   UNIFORM_MESSAGE_DEFAULT,
   useAddLeaveType,
@@ -11,6 +13,7 @@ import {
   useHrSettings,
   useLeaveTypes,
   useOfficeLocations,
+  useRegularizablePeople,
   useSaveHrSettings,
 } from '@freefounders/core/hr';
 import { AlarmClock, CalendarHeart, ClipboardCheck, LocateFixed, MapPin, Settings2, Shirt, X } from '@/components/icons';
@@ -43,7 +46,7 @@ const UNIFORM_KEYS: string[] = ['uniform_check', 'uniform_message'];
 /** Punch-in reminders have their own card and save (PLAN.md §19.39). */
 const PUNCH_KEYS: string[] = ['punch_reminders', 'punch_reminder_count', 'punch_reminder_gap', 'punch_reminder_first'];
 /** The regularization policy has its own card and save too (PLAN.md §19.38). */
-const REG_KEYS: string[] = ['reg_enabled', 'reg_reasons', 'reg_monthly_limit', 'reg_days_back', 'reg_mark'];
+const REG_KEYS: string[] = ['reg_enabled', 'reg_reasons', 'reg_monthly_limit', 'reg_limit_period', 'reg_days_back', 'reg_person_limits', 'reg_mark'];
 
 /** Working hours and attendance rules, saved for this company. */
 function AttendanceRules() {
@@ -156,15 +159,37 @@ function AttendanceRules() {
   );
 }
 
+/** "3 times a month" / "unlimited": what a limit means, for the helper texts. */
+function limitWords(limit: string | number, period: RegularizationPeriod): string {
+  const n = Number(limit);
+  if (!Number.isFinite(n) || n <= 0) return 'unlimited';
+  return `${n} time${n === 1 ? '' : 's'} ${REGULARIZATION_PERIOD_WORDS[period].a}`;
+}
+
+type PersonLimit = { user: number; name: string; limit: string };
+type RegForm = {
+  enabled: boolean;
+  reasons: RegularizationReason[];
+  limit: string;
+  period: RegularizationPeriod;
+  back: string;
+  mark: 'times' | 'present';
+  people: PersonLimit[];
+};
+
 /**
- * Attendance regularization (PLAN.md §19.38): on/off, the reasons people may pick, the monthly limit (any number), how far
- * back and what an approved day counts as. Every request goes to the reporting manager (else HR) and needs approval. Its own save.
+ * Attendance regularization (PLAN.md §19.38 + addendum 2026-10-24): on/off, the reasons people may pick, the limit (any
+ * number, 0 = unlimited) per month / week / year, how far back (any number), a different limit for some people and what
+ * an approved day counts as. Every request goes to the reporting manager (else HR) and needs approval. Its own save.
  */
 function RegularizationPolicy() {
   const q = useHrSettings();
   const save = useSaveHrSettings();
-  const [f, setF] = useState<{ enabled: boolean; reasons: RegularizationReason[]; limit: string; back: string; mark: 'times' | 'present' } | null>(null);
+  const [f, setF] = useState<RegForm | null>(null);
   const [msg, setMsg] = useState('');
+  const hasOwnLimits = !!q.data?.reg_person_limits;
+  const people = useRegularizablePeople(!!f && hasOwnLimits, true);
+  const [pick, setPick] = useState('');
   useEffect(() => {
     const d = q.data;
     if (d?.reg_enabled && !f) {
@@ -172,8 +197,10 @@ function RegularizationPolicy() {
         enabled: d.reg_enabled.value,
         reasons: d.reg_reasons.value,
         limit: String(d.reg_monthly_limit.value),
+        period: d.reg_limit_period?.value ?? 'month',
         back: String(d.reg_days_back.value),
         mark: d.reg_mark.value,
+        people: (d.reg_person_limits?.value ?? []).map((p) => ({ ...p, limit: String(p.limit) })),
       });
     }
   }, [q.data, f]);
@@ -185,28 +212,107 @@ function RegularizationPolicy() {
     e.preventDefault();
     setMsg('');
     save.mutate(
-      { reg_enabled: f.enabled, reg_reasons: f.reasons, reg_monthly_limit: f.limit, reg_days_back: f.back, reg_mark: f.mark },
+      {
+        reg_enabled: f.enabled,
+        reg_reasons: f.reasons,
+        reg_monthly_limit: f.limit,
+        reg_limit_period: f.period,
+        reg_days_back: f.back,
+        reg_mark: f.mark,
+        ...(hasOwnLimits ? { reg_person_limits: f.people.map((p) => ({ user: p.user, limit: Number(p.limit) || 0 })) } : {}),
+      },
       { onSuccess: () => setMsg('Saved') },
     );
   };
+  const back = Number(f.back);
+  const backText = !Number.isFinite(back) || back <= 0 ? 'only today, after the shift ends' : `up to ${back} day${back === 1 ? '' : 's'} back`;
+  const choices = (people.data ?? []).filter((p) => !f.people.some((x) => x.user === p.id));
+  const addPerson = () => {
+    const p = people.data?.find((x) => String(x.id) === pick);
+    if (!p) return;
+    setF({ ...f, people: [...f.people, { user: p.id, name: p.name, limit: f.limit }] });
+    setPick('');
+  };
+  const setPersonLimit = (user: number, limit: string) => setF({ ...f, people: f.people.map((p) => (p.user === user ? { ...p, limit } : p)) });
   return (
     <form onSubmit={submit} aria-label="Regularization">
-      <Panel icon={ClipboardCheck} title="Regularization" description="People ask to fix a past day (a missed punch, on duty, work from home). Every request goes to the person’s reporting manager (without one, to HR / people who approve attendance) and needs approval; on approval the day is corrected and worked out again with the rules above.">
+      <Panel icon={ClipboardCheck} title="Regularization" description="People ask to fix a past day (a missed punch, on duty, work from home). Every request goes to the person’s reporting manager (without one, to HR / people who approve attendance) and needs approval; on approval the day is corrected and worked out again with the rules above. HR and managers can also regularize a day for someone directly (Approvals, Daily, My team): applied at once and not counted in the person’s limit.">
         <label className="flex items-center gap-2 text-sm">
           <Checkbox checked={f.enabled} onCheckedChange={(c) => setF({ ...f, enabled: c === true })} /> People can request regularization
         </label>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <div className="grid gap-1.5">
-            <Label htmlFor="reg-limit">Requests per person per month (0 = no limit)</Label>
-            <Input id="reg-limit" type="number" min={0} max={1000} value={f.limit} onChange={(e) => setF({ ...f, limit: e.target.value })} />
+            <Label htmlFor="reg-limit">Requests per person (0 = unlimited)</Label>
+            <Input id="reg-limit" type="number" min={0} step={1} inputMode="numeric" value={f.limit} onChange={(e) => setF({ ...f, limit: e.target.value })} />
             {fe('reg_monthly_limit')}
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="reg-back">How many days back</Label>
-            <Input id="reg-back" type="number" min={0} max={90} value={f.back} onChange={(e) => setF({ ...f, back: e.target.value })} />
+            <Label htmlFor="reg-period">Counted per</Label>
+            <NativeSelect id="reg-period" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value as RegularizationPeriod })}>
+              <option value="month">Month</option>
+              <option value="week">Week (Monday–Sunday)</option>
+              <option value="year">Year</option>
+            </NativeSelect>
+            {fe('reg_limit_period')}
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="reg-back">How many days back (0 = today only)</Label>
+            <Input id="reg-back" type="number" min={0} step={1} inputMode="numeric" value={f.back} onChange={(e) => setF({ ...f, back: e.target.value })} />
             {fe('reg_days_back')}
           </div>
-          <div className="grid gap-1.5 sm:col-span-2">
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground" aria-live="polite" data-testid="reg-effect">
+          Each person can ask {limitWords(f.limit, f.period)}, {backText}. Unlimited = 0.
+        </p>
+        {hasOwnLimits && (
+          <fieldset className="mt-4">
+            <legend className="mb-1 text-[13px] font-medium">Different limit for some people</legend>
+            <p className="mb-2 text-xs text-muted-foreground">Their own number replaces the company’s ({limitWords(f.limit, f.period)}); 0 = unlimited.</p>
+            {f.people.length > 0 && (
+              <ul className="mb-2 divide-y rounded-md border" aria-label="People with their own limit">
+                {f.people.map((p) => (
+                  <li key={p.user} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      className="w-24"
+                      aria-label={`Limit for ${p.name}`}
+                      value={p.limit}
+                      onChange={(e) => setPersonLimit(p.user, e.target.value)}
+                    />
+                    <span className="w-32 text-xs text-muted-foreground">{limitWords(p.limit, f.period)}</span>
+                    <Button type="button" size="icon-xs" variant="ghost" aria-label={`Remove ${p.name}`} onClick={() => setF({ ...f, people: f.people.filter((x) => x.user !== p.user) })}>
+                      <X />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="grid min-w-48 flex-1 gap-1.5">
+                <Label htmlFor="reg-person">Person</Label>
+                <NativeSelect id="reg-person" value={pick} onChange={(e) => setPick(e.target.value)}>
+                  <option value="">{people.isLoading ? 'Loading…' : 'Pick a person'}</option>
+                  {choices.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.department ? ` · ${p.department}` : ''}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <Button type="button" variant="outline" disabled={!pick} onClick={addPerson}>
+                Add person
+              </Button>
+            </div>
+            {fe('reg_person_limits')}
+          </fieldset>
+        )}
+        <div className="mt-4 grid gap-4">
+          <div className="grid gap-1.5">
             <Label htmlFor="reg-mark">An approved day counts as</Label>
             <NativeSelect id="reg-mark" value={f.mark} onChange={(e) => setF({ ...f, mark: e.target.value as 'times' | 'present' })}>
               <option value="times">Worked out from the times (Present, Late or Half day)</option>

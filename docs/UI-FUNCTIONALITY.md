@@ -1494,7 +1494,9 @@ decided before 2026-10-24), other changes asked, "Reason: …", the outcome "{Ap
   - Button **"Regularize this day"**: own records only; present, late, half day or absent days up to today. While a request
     for the day is pending it reads "Regularization waiting for approval" (disabled).
 - **Dialog "Regularize attendance"** (also from Today → "Regularize a day"; PLAN.md §19.38):
-  - Description: "{left} of {limit} requests left this month · up to {n} days back. Your approver decides." (or "No monthly limit").
+  - Description: "{left} of {limit} requests left this month|this week|this year[ (your own limit)] · up to {n} days back
+    (or "today only, after the shift"). Your approver decides." (or "No limit"). The limit is the person's own one when HR
+    set one (Settings → Regularization → "Different limit for some people"); HR adds for them are not counted.
   - "Recorded in {time} out {time}" with the status chip, the Regularized tag and the day's request status.
   - "Reason": one tap among the reasons the company allows (Forgot to punch in / Forgot to punch out / Punched late due to
     work / On duty – client visit / Work from home / Technical issue (app/GPS) / Other). Pre-selected from the record: no
@@ -1505,15 +1507,19 @@ decided before 2026-10-24), other changes asked, "Reason: …", the outcome "{Ap
     left empty (the shift is used).
   - "Note" (required for "Other"), "Photo or document (optional)" (photos are shrunk before upload).
   - "Send request" is disabled when regularization is off, the month's requests are used up, a request for the day is
-    pending, or required fields are empty. Server messages: "Monthly limit reached: you can raise {n} regularization
-    request(s) a month and have used {u} in {Month YYYY} ({left} left).", "Regularization is allowed for the last {n} day(s)
+    pending, or required fields are empty. Server messages: "Monthly|Weekly|Yearly limit reached: you can raise {n}
+    regularization request(s) a month|a week|a year and have used {u} in {Month YYYY}|the week of {Monday}|{YYYY} ({left}
+    left).", "Regularization is allowed for the last {n} day(s)
     only (from {date}).", "A future day cannot be regularized.", "Today can be regularized after the shift ends ({time}).",
     "You already have a pending request for {date}.", "{date} is approved leave; cancel the leave instead.", "There is no
     check-in on {date}: give the check-in time too.", "Check-out must be after check-in.".
   - Success: "Regularization for {day} sent for approval." Nothing changes in attendance until it is approved.
 - **"My regularization requests"** (own month only; Download): each request with its day, reason, status, the times asked,
   for an approved one "{was in}–{was out} {was status} → {new in}–{new out} {new status}", and "{Approved|Rejected} by
-  {name}, {when} — "{comment}"".
+  {name}, {when} — "{comment}"". Days HR / a manager regularized for the person show the chip "Added by {name}" and
+  "Set: in … · out …" instead of "Asked".
+- **Someone else's month** (HR / a manager opening a person's history): the day panel has **"Regularize this day"** = the
+  "Regularize for someone" dialog with the person and day filled in (shown only to people who decide regularizations).
 - **States**: skeleton for the calendar; error state with Retry.
 
 #### 4.3.5 My Leave (`?tab=leave`)
@@ -1598,6 +1604,18 @@ decided before 2026-10-24), other changes asked, "Reason: …", the outcome "{Ap
     status · hours" against "Requested in · out" (or "as recorded"); "Check-in {distance} from {office}"; "{n} requests
     this month"; the attachment (signed link).
   - Bulk: "Select all" / a checkbox per row, "Approve selected", "Reject selected" → "Approved {n}. Not done: {reasons}".
+  - Button **"Regularize for someone"** next to the Regularization heading (see below).
+- **Dialog "Regularize for someone"** (PLAN.md §19.38 addendum, 2026-10-24; also on Daily — the date bar and a
+  "Regularize" button per row — on Live / My team, and on a person's month): "Person" (the people whose requests the
+  viewer decides: their reports, their approving scope; the Owner also themselves), the same reasons (all of them), "Day" /
+  "Several days" (any past day up to today, never a future one), "Check-in" / "Check-out" (the shift), "Note".
+  "Regularize now" applies it at once: approved by the viewer, the day worked out again exactly like an approval, the
+  from → to kept, "Added by {name}"; not counted in the person's limit; the days-back window does not apply. The person
+  gets "Attendance regularized: {date}" ("{reason}: added by {name}"), which opens their day. Success line "Regularized
+  for {name}: {day}." Server messages: "You cannot regularize attendance for this person.", "You cannot change your own
+  attendance/salary — ask another HR person or the Owner." (anyone but the Owner for themselves), "A future day cannot be
+  regularized.", "{name} has a pending request for {date}: approve or reject it in Approvals.", "{date} is approved
+  leave; cancel the leave instead.", and the time checks.
   - The count shows "…" while loading.
 - **Per row**:
   - "Remarks…" text field (optional; the server stores up to 300 characters).
@@ -1640,7 +1658,7 @@ decided before 2026-10-24), other changes asked, "Reason: …", the outcome "{Ap
 | "Face check at check-in and check-out" | checkbox | — | off |
 | "First face capture becomes the person's face profile" | checkbox; disabled unless face check is on | — | on |
 
-| "Regularization" (own card, "Save regularization") | "People can request regularization" · "Requests per person per month (0 = no limit)" · "How many days back" · "An approved day counts as" (Worked out from the times / Always Present) · "Reasons people can pick" | limit 0–1000, days back 0–90 | on · 3 · 7 · from the times · all reasons |
+| "Regularization" (own card, "Save regularization") | "People can request regularization" · "Requests per person (0 = unlimited)" · "Counted per" (Month / Week (Monday–Sunday) / Year) · "How many days back (0 = today only)" · helper line "Each person can ask {n} times a month|week|year (or unlimited), up to {d} days back. Unlimited = 0." · "Different limit for some people" (list: name, own limit, "{n} times a …" / "unlimited", remove; "Person" + "Add person") · "An approved day counts as" (Worked out from the times / Always Present) · "Reasons people can pick" | any whole number ≥ 0 for the limit, the days back and each person's limit (server sanity maximum 100000) | on · 3 · month · 7 · nobody · from the times · all reasons |
 | "Punch-in reminders" (own card, "Save reminders"; PLAN.md §19.39) | "Remind people who have not punched in" · "Number of reminders" · "Minutes between reminders" · "First reminder after reporting time (min)"; preview "Reporting time 09:30: reminders at 10:00, 10:30, 11:00." | count 1–10, gap 5–240, first 0–240 | on · 3 · 30 · 30 |
 
 - **Punch-in reminders** (PLAN.md §19.39): a person who has not punched in by the reporting time (Work starts) gets "Reminder 1 of 3: you have not punched in yet today (reporting time 09:30). Open Kaampilot to punch in." in the bell (Attendance tab; tapping opens Attendance → Today with Punch in), and on WhatsApp when the company has it set up (Task settings → Notifications → "Punch-in reminders to people who have not punched in": WhatsApp on, email off by default). Then every gap until the count; nothing after the punch-in, on approved leave, a holiday, the weekly off, a day HR already marked, after work ends, for switched-off people or people without "Punch in and out". **Daily / Live attendance** show "Reminded 2×" next to a person not checked in. The phone app's "Punch-in reminder" card starts from the same rule ("Remind me at" = reporting time + first delay; "Remind me again every 30 min until I punch in (3 reminders in all)"); apps 1.2.0/1.2.1 show "This app version rings the first 2 reminders. Update the Kaampilot app to get all 3." Checking in, or opening Today on leave / a holiday / the weekly off, cancels the rest of today's phone reminders.

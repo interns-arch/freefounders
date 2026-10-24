@@ -378,6 +378,36 @@ class CorrectionViewSet(ExportMixin, viewsets.ModelViewSet):
         from . import regularization
         return Response(regularization.policy_for(request.user))
 
+    @action(detail=False, methods=["post"])
+    def add_for(self, request):
+        """HR / a manager regularizes days for someone directly (2026-10-24): {user, date, end_date, reason_type,
+        check_in_time, check_out_time, reason, attachment}. Applied at once, not counted in the person's limit."""
+        from . import regularization
+        raw = request.data.get("user")
+        target = User.objects.filter(pk=raw).first() if str(raw or "").isdigit() else None
+        regularization.check_adder(request.user, target)
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = dict(ser.validated_data)
+        created = regularization.add_for(request.user, target, data, attachment=data.pop("attachment", None))
+        out = CorrectionSerializer(created, many=True, context=self.get_serializer_context()).data
+        return Response(out[0] if len(out) == 1 else {"results": out, "count": len(out)}, status=http.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"])
+    def people(self, request):
+        """Whom I may regularize for (the "Regularize for someone" picker). ?scope=all: everyone, for the per-person
+        limits in HR settings (HR settings people only)."""
+        from . import regularization
+        if request.query_params.get("scope") == "all":
+            if not can_manage_hr(request.user):
+                raise PermissionDenied("Your role does not include HR settings.")
+            users = User.objects.all()
+        else:
+            users = regularization.addable_users(request.user)
+        users = users.filter(is_active=True).order_by("first_name", "last_name", "username")
+        return Response([{"id": u.pk, "name": u.get_full_name() or u.username, "username": u.username,
+                          "department": u.department or ""} for u in users])
+
     @action(detail=True, methods=["get"])
     def attachment(self, request, pk=None):
         """The request's attachment, for the person and whoever may decide it (a fresh signed link)."""
@@ -689,6 +719,8 @@ def hr_settings(request):
     from tenancy.models import CompanySetting
 
     conf = services.cfg()
+    # Per-person regularization limits go out as [{user, name, limit}] (the screen shows the names).
+    conf["reg_person_limits"] = services.person_limits_view(conf["reg_person_limits"])
     saved = set(CompanySetting.objects.exclude(value="").values_list("key", flat=True))
     return Response({
         # custom: the company saved its own value (else the server default applies)

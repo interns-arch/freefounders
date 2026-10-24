@@ -203,6 +203,9 @@ export interface Regularization {
   remarks: string;
   reviewed_at: string | null;
   auto_approved: boolean;
+  /** Added directly by HR / a manager (applied at once, not counted in the person's limit) vs the person's own request. */
+  added_by_detail?: UserBrief | null;
+  source?: 'hr' | 'request';
   /** The day before the approval, and the status it got (the from → to). */
   original_check_in: string | null;
   original_check_out: string | null;
@@ -223,9 +226,23 @@ export interface Regularization {
 /** @deprecated the old name. */
 export type AttendanceCorrection = Regularization;
 
+/** What the regularization limit counts: per month (default), per week (Monday–Sunday) or per year. */
+export type RegularizationPeriod = 'month' | 'week' | 'year';
+export const REGULARIZATION_PERIOD_WORDS: Record<RegularizationPeriod, { a: string; this: string }> = {
+  month: { a: 'a month', this: 'this month' },
+  week: { a: 'a week', this: 'this week' },
+  year: { a: 'a year', this: 'this year' },
+};
+
 export interface RegularizationPolicy {
   enabled: boolean;
   reasons: Array<{ value: RegularizationReason; label: string }>;
+  /** My limit per period (my own when HR set one); 0 = unlimited. Older servers leave these out (use monthly_*). */
+  limit?: number;
+  period?: RegularizationPeriod;
+  personal_limit?: boolean;
+  used?: number;
+  left?: number | null;
   /** 0 = unlimited. */
   monthly_limit: number;
   used_this_month: number;
@@ -276,6 +293,46 @@ export function useRequestRegularization() {
       for (const [k, v] of Object.entries(clean)) fd.append(k, String(v));
       fd.append('attachment', attachment, attachment.name ?? 'attachment');
       return tasksApi.upload<RegularizationAnswer>('/attendance-corrections/', fd);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hr'] }),
+  });
+}
+
+/** Someone I may regularize for (GET /attendance-corrections/people/). */
+export interface RegularizablePerson {
+  id: number;
+  name: string;
+  username: string;
+  department: string;
+}
+
+/**
+ * GET /attendance-corrections/people/ — whom I may regularize for (my reports / my approving scope; the Owner also
+ * themselves). `all`: everyone (HR settings → per-person limits; HR settings people only).
+ */
+export function useRegularizablePeople(enabled = true, all = false) {
+  return useQuery({
+    queryKey: ['hr', 'regularization', 'people', all],
+    queryFn: () => tasksApi.get<RegularizablePerson[]>('/attendance-corrections/people/', all ? { scope: 'all' } : undefined),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * POST /attendance-corrections/add_for/ — HR / a manager regularizes days for someone (PLAN.md §19.38 addendum): applied at
+ * once, not counted in the person's limit, any past day; the person is told.
+ */
+export function useAddRegularization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ attachment, ...body }: RegularizationInput & { user: number }) => {
+      const clean = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined && v !== ''));
+      if (!attachment) return tasksApi.post<RegularizationAnswer>('/attendance-corrections/add_for/', clean);
+      const fd = new FormData();
+      for (const [k, v] of Object.entries(clean)) fd.append(k, String(v));
+      fd.append('attachment', attachment, attachment.name ?? 'attachment');
+      return tasksApi.upload<RegularizationAnswer>('/attendance-corrections/add_for/', fd);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hr'] }),
   });

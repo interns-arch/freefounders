@@ -60,8 +60,13 @@ def cfg():
         # Attendance regularization policy (PLAN.md §19.38).
         "reg_enabled": _env("REGULARIZATION_ENABLED", "true").lower() != "false",
         "reg_reasons": _codes(_env("REGULARIZATION_REASONS", ""), REG_REASON_CODES),
-        "reg_monthly_limit": _int(_env("REGULARIZATION_MONTHLY_LIMIT", "3"), 3),
-        "reg_days_back": _int(_env("REGULARIZATION_DAYS_BACK", "7"), 7),
+        # The limit counts per `reg_limit_period` (month / week / year; the key keeps its first name); 0 = unlimited.
+        "reg_monthly_limit": min(REG_MAX, _int(_env("REGULARIZATION_MONTHLY_LIMIT", "3"), 3)),
+        "reg_limit_period": (_env("REGULARIZATION_LIMIT_PERIOD", "month")
+                             if _env("REGULARIZATION_LIMIT_PERIOD", "month") in REG_PERIODS else "month"),
+        "reg_days_back": min(REG_MAX, _int(_env("REGULARIZATION_DAYS_BACK", "7"), 7)),
+        # A different limit for some people: {user id: limit (0 = unlimited)} (2026-10-24).
+        "reg_person_limits": _person_limits(_env("REGULARIZATION_PERSON_LIMITS", "")),
         "reg_mark": _env("REGULARIZATION_MARK", "times") if _env("REGULARIZATION_MARK", "times") in REG_MARKS else "times",
     }
 
@@ -88,10 +93,33 @@ def _codes(text, default):
     return [c for c in REG_REASON_CODES if c in {x.strip() for x in text.split(",")}]
 
 
+def _person_limits(text) -> dict:
+    """The stored per-person limits ('{"12": 10, "15": 0}') as {user id: limit}; anything unreadable is ignored."""
+    import json
+    try:
+        data = json.loads(text) if (text or "").strip() else {}
+    except ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    for k, v in data.items():
+        try:
+            uid, limit = int(k), int(v)
+        except (TypeError, ValueError):
+            continue
+        if uid > 0 and 0 <= limit <= REG_MAX:
+            out[uid] = limit
+    return out
+
+
 # Regularization (PLAN.md §19.38): reason codes in the order the screens show them; what an approved day counts as.
 REG_REASON_CODES = ("forgot_in", "forgot_out", "late_work", "on_duty", "wfh", "technical", "other")
 # times: decided from the times with the HR rules (present / late / half day), like a punch; present: always Present.
 REG_MARKS = ("times", "present")
+# The company sets any number (founder, 2026-10-24): only a sanity maximum for the limit and the days back.
+REG_MAX = 100000
+REG_PERIODS = ("month", "week", "year")
 
 
 PHOTO_MODES = ("off", "optional", "required")
@@ -126,8 +154,10 @@ EDITABLE = {
     "punch_reminder_first": ("PUNCH_REMINDER_FIRST_MINUTES", "int", (0, 240)),
     "reg_enabled": ("REGULARIZATION_ENABLED", "bool", None),
     "reg_reasons": ("REGULARIZATION_REASONS", "codes", REG_REASON_CODES),
-    "reg_monthly_limit": ("REGULARIZATION_MONTHLY_LIMIT", "int", (0, 1000)),
-    "reg_days_back": ("REGULARIZATION_DAYS_BACK", "int", (0, 90)),
+    "reg_monthly_limit": ("REGULARIZATION_MONTHLY_LIMIT", "int", (0, REG_MAX)),
+    "reg_limit_period": ("REGULARIZATION_LIMIT_PERIOD", "choice", REG_PERIODS),
+    "reg_days_back": ("REGULARIZATION_DAYS_BACK", "int", (0, REG_MAX)),
+    "reg_person_limits": ("REGULARIZATION_PERSON_LIMITS", "limits", (0, REG_MAX)),
     "reg_mark": ("REGULARIZATION_MARK", "choice", REG_MARKS),
 }
 
@@ -179,6 +209,8 @@ def clean_setting(key, value) -> str:
         if unknown:
             raise ValueError(f"Unknown: {', '.join(sorted(unknown))}")
         return ",".join(c for c in extra if c in wanted) or "none"
+    if kind == "limits":
+        return _clean_person_limits(value, extra)
     if kind == "text":
         text = " ".join(str(value).split())
         if len(text) > extra:
@@ -189,6 +221,48 @@ def clean_setting(key, value) -> str:
             raise ValueError(f"One of: {', '.join(extra)}")
         return str(value)
     raise ValueError("Unknown setting")
+
+
+def _clean_person_limits(value, bounds) -> str:
+    """Per-person regularization limits: [{user, limit}] or {user id: limit}; each person once, an existing person,
+    a whole number in the bounds (0 = unlimited). Stored as JSON; an empty list is stored as "{}"."""
+    import json
+
+    from accounts.models import User
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            raise ValueError("A list of people and their limits")
+    if isinstance(value, dict):
+        value = [{"user": k, "limit": v} for k, v in value.items()]
+    if not isinstance(value, list):
+        raise ValueError("A list of people and their limits")
+    lo, hi = bounds
+    out = {}
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("A list of people and their limits")
+        try:
+            uid, limit = int(item.get("user")), int(item.get("limit"))
+        except (TypeError, ValueError):
+            raise ValueError("Pick a person and enter a whole number for each row")
+        if not lo <= limit <= hi:
+            raise ValueError(f"Limits are between {lo} and {hi}")
+        out[uid] = limit
+    known = set(User.objects.filter(pk__in=list(out)).values_list("pk", flat=True))
+    if set(out) - known:
+        raise ValueError("Unknown person")
+    return json.dumps({str(k): out[k] for k in sorted(out)})
+
+
+def person_limits_view(limits: dict) -> list:
+    """The per-person limits for the settings screen: [{user, name, limit}] by name."""
+    from accounts.models import User
+    users = {u.pk: u for u in User.objects.filter(pk__in=list(limits))}
+    rows = [{"user": uid, "name": (users[uid].get_full_name() or users[uid].username), "limit": limit}
+            for uid, limit in limits.items() if uid in users]
+    return sorted(rows, key=lambda r: r["name"].lower())
 
 
 def decode_photo(data) -> bytes | None:

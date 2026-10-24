@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, OkNote, Panel, Tile, fmtDay, fmtTime, todayLocal } from '../tasks/general/parts';
 import { AttendanceChip, PunchPhoto, STATUS_CELL, STATUS_TEXT, UniformChip, hrs } from './parts';
-import { RegularizeDialog, RegularizedTag } from './regularize';
+import { RegularizeDialog, RegularizeForSomeoneButton, RegularizedTag } from './regularize';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -191,6 +191,11 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
               </div>
             )}
           </dl>
+          {!!userId && shown.date <= todayLocal() && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <RegularizeForSomeoneButton userId={userId} date={shown.date} label="Regularize this day" />
+            </div>
+          )}
           {!userId && ['present', 'late', 'half_day', 'absent'].includes(shown.status) && shown.date <= todayLocal() && (
             <Button variant="outline" className="mt-3 w-full sm:w-auto" disabled={shown.request?.status === 'pending'} onClick={() => setRegularizing(shown)}>
               {shown.request?.status === 'pending' ? 'Regularization waiting for approval' : 'Regularize this day'}
@@ -232,12 +237,13 @@ function MyRegularizations() {
             <div className="flex flex-wrap items-center gap-1.5">
               <strong className="font-semibold">{fmtDay(r.date)}</strong>
               <span className="text-muted-foreground">{r.reason_label}</span>
+              {r.source === 'hr' && <Chip tone="primary">Added by {r.added_by_detail?.name ?? 'HR'}</Chip>}
               <Chip tone={r.status === 'pending' ? 'warning' : r.status === 'approved' ? 'success' : 'danger'} className="ml-auto">
                 {r.status_display}
               </Chip>
             </div>
             <div className="font-mono text-xs text-muted-foreground tabular-nums">
-              Asked: in {r.requested_check_in ? fmtTime(r.requested_check_in) : 'as recorded'} · out {r.requested_check_out ? fmtTime(r.requested_check_out) : 'as recorded'}
+              {r.source === 'hr' ? 'Set' : 'Asked'}: in {r.requested_check_in ? fmtTime(r.requested_check_in) : 'as recorded'} · out {r.requested_check_out ? fmtTime(r.requested_check_out) : 'as recorded'}
             </div>
             {r.status === 'approved' && (
               <div className="font-mono text-xs tabular-nums">

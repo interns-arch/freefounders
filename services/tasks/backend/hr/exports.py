@@ -129,6 +129,8 @@ CORRECTION_COLUMNS = [
     ("Employee", lambda r: (r.get("user_detail") or {}).get("name", "")),
     ("Username", lambda r: (r.get("user_detail") or {}).get("username", "")),
     ("Date", "date"),
+    ("Source", lambda r: "Added by HR" if r.get("source") == "hr" else "Requested"),
+    ("Added by", lambda r: (r.get("added_by_detail") or {}).get("name", "")),
     ("Reason", "reason_label"),
     ("Note", "reason"),
     ("Requested check in", "requested_check_in"),

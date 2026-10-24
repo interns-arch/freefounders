@@ -77,6 +77,9 @@ class CorrectionSerializer(serializers.ModelSerializer):
     view), which checks the company's policy; `end_date`, `check_in_time` and `check_out_time` are only inputs."""
     user_detail = UserBriefSerializer(source="user", read_only=True)
     reviewed_by_detail = UserBriefSerializer(source="reviewed_by", read_only=True)
+    # Added directly by HR / a manager (2026-10-24) vs requested by the person.
+    added_by_detail = UserBriefSerializer(source="added_by", read_only=True)
+    source = serializers.SerializerMethodField()
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     reason_label = serializers.CharField(source="get_reason_type_display", read_only=True)
     attachment_url = serializers.SerializerMethodField()
@@ -91,7 +94,7 @@ class CorrectionSerializer(serializers.ModelSerializer):
         fields = ["id", "user", "user_detail", "date", "end_date", "requested_check_in",
                   "requested_check_out", "check_in_time", "check_out_time", "reason_type", "reason_label", "reason",
                   "attachment", "attachment_url", "attachment_name", "batch", "status", "status_display",
-                  "reviewed_by_detail", "remarks", "reviewed_at", "original_check_in",
+                  "reviewed_by_detail", "remarks", "reviewed_at", "added_by_detail", "source", "original_check_in",
                   "original_check_out", "original_status", "applied_status", "day", "created_at"]
         read_only_fields = ["user", "status", "reviewed_by_detail", "remarks", "batch", "reviewed_at",
                             "original_check_in", "original_check_out", "original_status", "applied_status"]
@@ -99,6 +102,9 @@ class CorrectionSerializer(serializers.ModelSerializer):
 
     def get_attachment_url(self, obj):
         return file_url(obj.attachment)
+
+    def get_source(self, obj):
+        return "hr" if obj.added_by_id else "request"
 
     def get_attachment_name(self, obj):
         return obj.attachment.name.rsplit("/", 1)[-1] if obj.attachment else None

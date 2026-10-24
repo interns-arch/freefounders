@@ -1,6 +1,7 @@
 // Attendance regularization (PLAN.md §19.38): an employee on a phone asks to regularize a past day from My attendance,
 // their reporting manager (no approve permission of their own) approves it from Approvals → Regularization, the day
-// shows the corrected times and the "Regularized" tag; over the monthly limit the employee gets the limit message.
+// shows the corrected times and the "Regularized" tag; over the monthly limit the employee gets the limit message;
+// the manager then regularizes another day for the employee directly (applied at once, not counted; §19.38 addendum).
 // Found by role/label/text only; the people and the setting changed here are cleaned up.
 import { expect, type APIRequestContext, type Browser, type Page, test } from '@playwright/test';
 
@@ -77,7 +78,7 @@ test('employee regularizes a day on a phone, the reporting manager approves, the
   test.setTimeout(180_000);
   const owner = await token(request);
   const before = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
-  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { reg_enabled: true, reg_monthly_limit: 1, reg_days_back: 7 } })).ok()).toBeTruthy();
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { reg_enabled: true, reg_monthly_limit: 1, reg_limit_period: 'month', reg_days_back: 7 } })).ok()).toBeTruthy();
   const manager = await newPerson(request, owner, 'Manager');
   const employee = await newPerson(request, owner, 'Employee', manager.id);
   try {
@@ -140,8 +141,27 @@ test('employee regularizes a day on a phone, the reporting manager approves, the
       expect((await res.json()).detail).toContain('Monthly limit reached');
     }
     await emp2.ctx.close();
+
+    // 5. HR add: the manager regularizes the earlier day for the employee from Approvals → applied at once, not counted.
+    const mgr2 = await phonePage(browser, manager.login, manager.password);
+    await mgr2.page.goto('/attendance/approvals');
+    await mgr2.page.getByRole('button', { name: 'Regularize for someone' }).click();
+    const add = mgr2.page.getByRole('form', { name: 'Regularize for someone' });
+    const person = add.getByLabel('Person');
+    await person.selectOption((await person.locator('option', { hasText: employee.name }).getAttribute('value'))!);
+    await add.getByLabel('Day', { exact: true }).fill(earlier);
+    await add.getByRole('radio', { name: 'Forgot to punch out' }).check({ force: true });
+    await add.getByRole('button', { name: 'Regularize now' }).click();
+    await expect(mgr2.page.getByRole('status').filter({ hasText: `Regularized for ${employee.name}` })).toBeVisible();
+    await mgr2.ctx.close();
+    const empToken = await token(request, employee.login, employee.password);
+    const mine = await (await request.get('/tasks/api/attendance-corrections/', { headers: auth(empToken) })).json();
+    const added = (mine.results ?? mine).find((r: { date: string }) => r.date === earlier);
+    expect([added.status, added.source, added.added_by_detail?.name]).toEqual(['approved', 'hr', manager.name]);
+    const policy = await (await request.get('/tasks/api/attendance-corrections/policy/', { headers: auth(empToken) })).json();
+    if (day.slice(0, 7) === iso(new Date()).slice(0, 7)) expect(policy.used).toBe(1); // the HR add is not counted
   } finally {
-    const keys = ['reg_enabled', 'reg_monthly_limit', 'reg_days_back'];
+    const keys = ['reg_enabled', 'reg_monthly_limit', 'reg_limit_period', 'reg_days_back'];
     await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: Object.fromEntries(keys.map((k) => [k, before[k]?.custom ? before[k].value : ''])) });
     await employee.remove();
     await manager.remove();

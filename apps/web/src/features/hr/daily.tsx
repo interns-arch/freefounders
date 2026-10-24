@@ -20,7 +20,7 @@ import { Avatar, Card } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, OkNote, type Tone, fmtTime, todayLocal } from '../tasks/general/parts';
 import { AttendanceChip, PunchPhoto, UniformChip, hrs } from './parts';
-import { RegularizedTag } from './regularize';
+import { RegularizeForSomeoneButton, RegularizedTag } from './regularize';
 
 type Filter = 'all' | 'in' | 'late' | 'missing' | 'leave' | 'off' | 'out';
 
@@ -177,6 +177,7 @@ export function TeamDayView({ live }: { live: boolean }) {
               Mark
             </Button>
           )}
+          {!future && <RegularizeForSomeoneButton size="xs" label="Regularize" ariaLabel={`Regularize ${r.name}`} userId={r.user_id} date={date} />}
         </div>
       ),
     },
@@ -201,6 +202,9 @@ export function TeamDayView({ live }: { live: boolean }) {
             {data?.holiday && ` · Holiday: ${data.holiday}`}
             {data && !data.holiday && data.week_off && ' · Week off'}
           </span>
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            <RegularizeForSomeoneButton size="sm" date={future ? today : date} />
+          </span>
         </div>
       )}
       {live && (
@@ -218,6 +222,9 @@ export function TeamDayView({ live }: { live: boolean }) {
           <Button size="xs" variant="ghost" onClick={() => query.refetch()} loading={query.isFetching} aria-label="Refresh now">
             <RefreshCw /> Refresh
           </Button>
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            <RegularizeForSomeoneButton size="sm" />
+          </span>
         </div>
       )}
 

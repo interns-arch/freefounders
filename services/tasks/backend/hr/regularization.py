@@ -10,15 +10,23 @@ the day.
 Policy (HR settings, per company; `services.cfg()`):
   reg_enabled        on (default) / off
   reg_reasons        the reasons people may pick (default: all)
-  reg_monthly_limit  requests (one per day) per person per calendar month, pending + approved; default 3, 0 = unlimited
-  reg_days_back      how many days back a day may be asked for; default 7. Never a future day; today only after the
-                     shift has ended.
+  reg_monthly_limit  requests (one per day) per person per period, pending + approved; default 3, 0 = unlimited; any
+                     number (2026-10-24: no cap but a sanity maximum)
+  reg_limit_period   month (default) / week (Monday to Sunday) / year: what the limit counts
+  reg_person_limits  a different limit for some people {user id: limit, 0 = unlimited}; used instead of the company's
+  reg_days_back      how many days back a day may be asked for; default 7, any number (0 = only today after the
+                     shift). Never a future day; today only after the shift has ended.
   reg_mark           times (default): the day's status comes from the times like a punch (present / late / half day);
                      present: an approved day is always Present
 Every request needs a person's approval (founder, 2026-10-24: no auto-approve); nothing changes in attendance until then.
 Who approves: the person's reporting manager (People directory reports-to), who is told and sees it in Approvals ->
 Regularization. Without a manager it goes to the people with the approve-attendance permission for them (HR / Admin /
 Owner), who can also decide any request in their scope. Reminders and escalation to HR after APPROVAL_REMIND_HOURS.
+
+HR adds (2026-10-24, `add_for`): whoever may decide a person's requests (the reporting manager, or an approver whose
+scope covers them) can regularize a day for that person directly. It is applied at once (approved by them, the day
+worked out again exactly like an approval), is not counted in the person's limit, ignores the days-back window (never a
+future day), tells the person, and is kept with `added_by`. Nobody does it for themselves except the Owner (§19.24).
 """
 import uuid
 from datetime import datetime, time, timedelta
@@ -50,12 +58,55 @@ def _name(user) -> str:
     return user.get_full_name() or user.username
 
 
-def used_in_month(user, day, exclude_ids=()) -> int:
-    """Requests (one per day) the person has pending or approved in that day's calendar month."""
+# How each limit period reads: (refusal title, "a month", "this month").
+PERIOD_WORDS = {"month": ("Monthly", "a month", "this month"), "week": ("Weekly", "a week", "this week"),
+                "year": ("Yearly", "a year", "this year")}
+
+
+def period_bounds(day, period="month"):
+    """First and last day of the period the day falls in: the calendar month, the week (Monday to Sunday) or the year."""
+    if period == "week":
+        start = day - timedelta(days=day.weekday())
+        return start, start + timedelta(days=6)
+    if period == "year":
+        return day.replace(month=1, day=1), day.replace(month=12, day=31)
+    first = day.replace(day=1)
+    nxt = (first + timedelta(days=32)).replace(day=1)
+    return first, nxt - timedelta(days=1)
+
+
+def period_label(day, period="month") -> str:
+    start, _ = period_bounds(day, period)
+    if period == "week":
+        return f"the week of {start:%d-%m-%Y}"
+    if period == "year":
+        return str(day.year)
+    return f"{day:%B %Y}"
+
+
+def used_in_period(user, day, period="month", exclude_ids=()) -> int:
+    """The person's own requests (one per day) pending or approved in that day's period. Days HR added for them
+    (`added_by`) never count."""
+    first, last = period_bounds(day, period)
     return (AttendanceCorrection.objects
-            .filter(user=user, date__year=day.year, date__month=day.month,
+            .filter(user=user, date__range=(first, last), added_by__isnull=True,
                     status__in=[CorrectionStatus.PENDING, CorrectionStatus.APPROVED])
             .exclude(pk__in=list(exclude_ids)).count())
+
+
+def used_in_month(user, day, exclude_ids=()) -> int:
+    """Requests (one per day) the person has pending or approved in that day's calendar month."""
+    return used_in_period(user, day, "month", exclude_ids)
+
+
+def limit_for(user, conf=None) -> tuple:
+    """(the person's limit, whether it is their own): their per-person limit if HR set one, else the company's.
+    0 = unlimited."""
+    conf = conf or services.cfg()
+    own = conf["reg_person_limits"]
+    if user.pk in own:
+        return own[user.pk], True
+    return conf["reg_monthly_limit"], False
 
 
 def today_shift_ended(conf=None) -> bool:
@@ -68,14 +119,23 @@ def policy_for(user) -> dict:
     """What the request form needs: the policy and how many requests are left this month."""
     conf = services.cfg()
     today = timezone.localdate()
-    limit = conf["reg_monthly_limit"]
-    used = used_in_month(user, today)
+    period = conf["reg_limit_period"]
+    limit, personal = limit_for(user, conf)
+    used = used_in_period(user, today, period)
+    left = None if not limit else max(0, limit - used)
     return {
         "enabled": conf["reg_enabled"],
         "reasons": [{"value": c, "label": REASON_LABELS[c]} for c in conf["reg_reasons"]],
+        # The person's limit per period (their own when HR set one), used and left in the current period.
+        "limit": limit,
+        "period": period,
+        "personal_limit": personal,
+        "used": used,
+        "left": left,
+        # Older screens: the same numbers under their first names.
         "monthly_limit": limit,
         "used_this_month": used,
-        "left_this_month": None if not limit else max(0, limit - used),
+        "left_this_month": left,
         "days_back": conf["reg_days_back"],
         "earliest": (today - timedelta(days=conf["reg_days_back"])).isoformat(),
         "mark": conf["reg_mark"],
@@ -114,15 +174,16 @@ def days_of(start, end):
     return days
 
 
-def create_requests(user, data, attachment=None) -> list:
-    """Checks the policy and stores one request per day (all pending: every request is approved by a person). Raises ValidationError with a message (and `code`) the person can act on."""
-    conf = services.cfg()
-    if not conf["reg_enabled"]:
+def _checked(user, data, conf, direct=False):
+    """The checks shared by a person's request and a day HR adds (`direct`): reason, times, the days. A direct add
+    skips the company's on/off switch, the allowed reasons, the days-back window and "today only after the shift"
+    (never a future day). Returns (reason_type, note, days, wanted(day))."""
+    if not direct and not conf["reg_enabled"]:
         _refuse(DISABLED, "disabled")
     reason_type = data.get("reason_type") or "other"
     if reason_type not in REASON_LABELS:
         raise ValidationError({"reason_type": "Pick a reason."})
-    if reason_type not in conf["reg_reasons"]:
+    if not direct and reason_type not in conf["reg_reasons"]:
         raise ValidationError({"reason_type": f"“{REASON_LABELS[reason_type]}” is not a reason your company allows."})
     note = (data.get("reason") or "").strip()
     if reason_type == "other" and not note:
@@ -162,12 +223,15 @@ def create_requests(user, data, attachment=None) -> list:
     for day in days:
         if day > today:
             _refuse("A future day cannot be regularized.", "future")
-        if day == today and not today_shift_ended(conf):
+        if not direct and day == today and not today_shift_ended(conf):
             _refuse(f"Today can be regularized after the shift ends ({conf['work_end']}).", "shift_not_over")
-        if day < earliest:
+        if not direct and day < earliest:
             _refuse(f"Regularization is allowed for the last {conf['reg_days_back']} day(s) only "
                     f"(from {earliest:%d-%m-%Y}).", "too_far_back")
         if day in pending:
+            if direct:
+                _refuse(f"{_name(user)} has a pending request for {day:%d-%m-%Y}: approve or reject it in Approvals.",
+                        "duplicate")
             _refuse(f"You already have a pending request for {day:%d-%m-%Y}.", "duplicate")
         if day in on_leave:
             _refuse(f"{day:%d-%m-%Y} is approved leave; cancel the leave instead.", "leave")
@@ -182,16 +246,26 @@ def create_requests(user, data, attachment=None) -> list:
             raise ValidationError({"check_in_time": "Check-in must be before the recorded check-out.", "code": "times"})
         if max(t for t in (ask_in, ask_out) if t) > timezone.now() + timedelta(minutes=1):
             raise ValidationError({"check_out_time": "That time has not come yet.", "code": "times"})
+    return reason_type, note, days, wanted
 
-    limit = conf["reg_monthly_limit"]
+
+def create_requests(user, data, attachment=None) -> list:
+    """Checks the policy and stores one request per day (all pending: every request is approved by a person). Raises ValidationError with a message (and `code`) the person can act on."""
+    conf = services.cfg()
+    reason_type, note, days, wanted = _checked(user, data, conf)
+
+    limit, _ = limit_for(user, conf)
+    period = conf["reg_limit_period"]
     if limit:
-        for month_day in sorted({d.replace(day=1) for d in days}):
-            asked = sum(1 for d in days if (d.year, d.month) == (month_day.year, month_day.month))
-            used = used_in_month(user, month_day)
+        title, a_period, _ = PERIOD_WORDS[period]
+        for start in sorted({period_bounds(d, period)[0] for d in days}):
+            asked = sum(1 for d in days if period_bounds(d, period)[0] == start)
+            used = used_in_period(user, start, period)
             if used + asked > limit:
                 left = max(0, limit - used)
-                _refuse(f"Monthly limit reached: you can raise {limit} regularization request(s) a month and have used "
-                        f"{used} in {month_day:%B %Y} ({left} left)."
+                # The code keeps its first name (screens and the e2e read it) whatever the period.
+                _refuse(f"{title} limit reached: you can raise {limit} regularization request(s) {a_period} and have "
+                        f"used {used} in {period_label(start, period)} ({left} left)."
                         + (f" This request needs {asked}." if asked > 1 else ""), "monthly_limit")
 
     batch = uuid.uuid4().hex if len(days) > 1 else ""
@@ -209,6 +283,66 @@ def create_requests(user, data, attachment=None) -> list:
             created.append(c)
     from . import approvals
     approvals.notify_submitted("correction", created[0])
+    return created
+
+
+def check_adder(actor, target):
+    """Who may regularize a day for someone directly: whoever may decide that person's requests (the reporting manager,
+    or an approver whose scope covers them). Nobody for themselves, except the Owner (PLAN.md §19.24)."""
+    from accounts.access import is_owner
+    from accounts.permissions import SELF_EDIT_MESSAGE
+    if target is None:
+        raise ValidationError({"user": "Pick a person."})
+    if target.pk == actor.pk:
+        if is_owner(actor):
+            return
+        raise PermissionDenied(SELF_EDIT_MESSAGE)
+    if not may_review(actor, target):
+        raise PermissionDenied("You cannot regularize attendance for this person.")
+
+
+def addable_users(actor):
+    """The people this person may regularize for (the "Regularize for someone" picker): the people whose requests they
+    decide, plus themselves for the Owner."""
+    from accounts.access import is_owner
+    from accounts.models import User
+    ids = set(reviewable_users(actor).exclude(pk=actor.pk).values_list("pk", flat=True))
+    if is_owner(actor):
+        ids.add(actor.pk)
+    return User.objects.filter(pk__in=ids)
+
+
+def add_for(actor, target, data, attachment=None) -> list:
+    """HR / a manager regularizes days for a person: applied at once (approved by the actor, the day worked out again
+    like an approval, from -> to kept), not counted in the person's limit, any past day (never a future one). The
+    person is told."""
+    check_adder(actor, target)
+    conf = services.cfg()
+    reason_type, note, days, wanted = _checked(target, data, conf, direct=True)
+    batch = uuid.uuid4().hex if len(days) > 1 else ""
+    now = timezone.now()
+    created = []
+    with transaction.atomic():
+        for day in days:
+            ask_in, ask_out = wanted(day)
+            c = AttendanceCorrection(user=target, date=day, reason_type=reason_type, reason=note[:1000], batch=batch,
+                                     requested_check_in=ask_in, requested_check_out=ask_out,
+                                     status=CorrectionStatus.APPROVED, reviewed_by=actor, reviewed_at=now,
+                                     added_by=actor)
+            if attachment and not created:
+                c.attachment = attachment
+            elif attachment:
+                c.attachment = created[0].attachment.name
+            c.save()          # the day links to it
+            apply(c, actor)
+            c.save()
+            created.append(c)
+    if target.pk != actor.pk:
+        from notifications.service import notify
+        when = f"{days[0]:%d-%m-%Y}" if len(days) == 1 else f"{days[0]:%d-%m-%Y} to {days[-1]:%d-%m-%Y}"
+        notify(target, "correction_reviewed", f"Attendance regularized: {when}",
+               f"{REASON_LABELS.get(reason_type, '')}: added by {_name(actor)}" + (f"\nNote: {note}" if note else ""),
+               link=my_link(created[0]), link_label="Open the day")
     return created
 
 

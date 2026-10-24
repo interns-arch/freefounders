@@ -139,6 +139,10 @@ class AttendanceCorrection(models.Model):
                                     on_delete=models.SET_NULL, related_name="reviewed_corrections")
     remarks = models.CharField(max_length=300, blank=True, default="")
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    # Added directly by HR / a manager for the person (2026-10-24): applied at once, not counted in the person's limit.
+    # Empty for the person's own requests.
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name="added_regularizations")
     # The day as it was just before the approval, and the status it got (the audit of the change).
     original_check_in = models.DateTimeField(null=True, blank=True)
     original_check_out = models.DateTimeField(null=True, blank=True)

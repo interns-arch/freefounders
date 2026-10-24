@@ -1,7 +1,7 @@
 /** HR settings: attendance rules (PLAN.md §16.1), office locations (old pages/HR.jsx). No face check (PLAN.md §19.18). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
-import type { RegularizationReason } from './attendance';
+import type { RegularizationPeriod, RegularizationReason } from './attendance';
 
 /** One saved rule: its value, whether the company set it (else the default), and what may be chosen. */
 export interface HrSetting<T> {
@@ -35,9 +35,13 @@ export interface HrSettingValues {
   /** Attendance regularization policy (PLAN.md §19.38). */
   reg_enabled: boolean;
   reg_reasons: RegularizationReason[];
-  /** Requests per person per month; 0 = unlimited. */
+  /** Requests per person per period (`reg_limit_period`); 0 = unlimited; any number. */
   reg_monthly_limit: number;
+  reg_limit_period: RegularizationPeriod;
+  /** Days back a day may be asked for (0 = only today after the shift); any number. */
   reg_days_back: number;
+  /** A different limit for some people (0 = unlimited). Saved as [{user, limit}]. */
+  reg_person_limits: Array<{ user: number; name: string; limit: number }>;
   /** times: status from the times like a punch; present: always Present. */
   reg_mark: 'times' | 'present';
 }

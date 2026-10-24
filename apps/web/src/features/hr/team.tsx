@@ -13,6 +13,7 @@ import { Avatar, Card, Checkbox, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, CountPill, ErrorNote, OkNote, Segmented, fmtDay, fmtTime } from '../tasks/general/parts';
 import { MarkLeaveButton } from './mark-leave';
+import { RegularizeForSomeoneButton } from './regularize';
 import { hrs } from './parts';
 
 export function ApprovalsTab() {
@@ -125,8 +126,10 @@ export function ApprovalsTab() {
               <ClipboardCheck className="size-4" />
             </span>
             <h2 className="text-[15px] font-bold tracking-tight">Regularization requests ({regs?.length ?? '…'})</h2>
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <RegularizeForSomeoneButton size="sm" />
+            </span>
             <DownloadMenu
-              className="ml-auto"
               filename={`attendance-approvals-regularization-pending-${todayStamp()}`}
               target={hrExports.pendingCorrections()}
               loading={!regs}
