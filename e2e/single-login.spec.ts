@@ -32,18 +32,19 @@ test('one sign-in opens Tasks and Assets, switch between them, sign out', async 
   await page.getByRole('button', { name: /^Open Tasks/ }).click();
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByRole('navigation', { name: 'Tasks menu' }).getByRole('link', { name: 'Home' })).toBeVisible({ timeout: 20_000 });
+  // A count badge (PLAN.md §19.42) adds ", N pending" to Tasks / Assets when the company has open items.
   const menu = page.getByRole('navigation', { name: 'Main menu' });
-  await expect(menu.getByRole('link', { name: 'Assets', exact: true })).toBeVisible();
+  await expect(menu.getByRole('link', { name: /^Assets( ?, \d+ pending)?$/ })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Assets menu' })).toHaveCount(0); // collapsed until opened
   await shot(page, '3-tasks');
 
-  await menu.getByRole('link', { name: 'Assets', exact: true }).click();
+  await menu.getByRole('link', { name: /^Assets( ?, \d+ pending)?$/ }).click();
   await expect(page).toHaveURL(/\/assets$/);
   await expect(page.getByRole('navigation', { name: 'Assets menu' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
   await shot(page, '4-assets');
 
-  await menu.getByRole('link', { name: 'Tasks', exact: true }).first().click();
+  await menu.getByRole('link', { name: /^Tasks( ?, \d+ pending)?$/ }).first().click();
   await expect(page.getByRole('navigation', { name: 'Tasks menu' })).toBeVisible({ timeout: 20_000 });
 
   // The Assets cookie session (photos) was made at sign-in; sign-out ends it at once (security review 2026-10-12).

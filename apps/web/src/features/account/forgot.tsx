@@ -10,7 +10,7 @@ import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { ChooseCompanyCard } from './choose-company';
-import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer } from './parts';
+import { AuthFrame, BackButton, CodeField, channelOff, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer } from './parts';
 
 type Step = 'identifier' | 'code' | 'password' | 'signing-in' | 'choose' | 'done';
 
@@ -123,7 +123,7 @@ export function ForgotPage() {
             autoCapitalize="none"
             spellCheck={false}
             autoFocus
-            error={fieldError}
+            error={fieldError ?? channelOff(forgot.error, forgot.isError)}
           />
           {forgot.isError && <CodeWait left={timer.left} />}
           <FormError>{codeError(forgot.error, forgot.isError)}</FormError>

@@ -11,7 +11,7 @@ import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { CompanyForm, EMPTY_COMPANY, SetupScreen } from './company-form';
-import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer, UsernameField } from './parts';
+import { AuthFrame, BackButton, CodeField, channelOff, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer, UsernameField } from './parts';
 
 type Step = 'identifier' | 'code' | 'profile' | 'company' | 'setup';
 const ORDER: Step[] = ['identifier', 'code', 'profile', 'company'];
@@ -185,7 +185,7 @@ export function SignupPage() {
             autoCapitalize="none"
             spellCheck={false}
             autoFocus
-            error={fieldError}
+            error={fieldError ?? channelOff(start.error, start.isError)}
           />
           {start.isError && <CodeWait left={timer.left} />}
           <FormError>{codeError(start.error, start.isError)}</FormError>

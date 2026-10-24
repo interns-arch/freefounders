@@ -3,7 +3,8 @@ import type { Identifier } from './identifier';
 import { Msg91OtpSender, msg91Config } from './msg91.sender';
 import { CODES_OFF_MESSAGE, demoMode, FakeOtpSender, type OtpPurpose, type OtpSender } from './otp.service';
 
-const EMAIL_OFF_MESSAGE = "Codes by email aren't set up yet. Use your mobile number instead.";
+export const EMAIL_OFF_MESSAGE = "Codes by email aren't set up yet. Use your mobile number instead.";
+export const SMS_OFF_MESSAGE = "Codes by SMS aren't set up yet. Use your email address instead.";
 
 /** `OTP_SENDER`: fake (default: codes go to the Platform log) or msg91. Anything else is treated as not set up. */
 export function otpSenderName(env: NodeJS.ProcessEnv = process.env): 'fake' | 'msg91' | 'unknown' {
@@ -17,9 +18,11 @@ export function otpSenderName(env: NodeJS.ProcessEnv = process.env): 'fake' | 'm
  * startup line says what is on (like payments: a missing key never stops the server, sending answers 503 instead).
  *
  * - `OTP_SENDER=fake`: the code is written to the log (dev, tests, and the open demo, which also shows it on screen).
- * - `OTP_SENDER=msg91`: SMS through MSG91 SendOTP; email through MSG91 when its email template and from address are
- *   set. Without them, email codes keep using the fake sender on a dev machine or the open demo (DEMO_MODE=1), and in
- *   production answer 503 "Codes by email aren't set up yet".
+ * - `OTP_SENDER=msg91`: SMS through MSG91 SendOTP when its template is set; email through MSG91 when its email
+ *   template and from address are set. At least one of the two is needed (with the authkey). A channel that is not set
+ *   up keeps using the fake sender on a dev machine or the open demo (DEMO_MODE=1), and in production answers 503
+ *   "Codes by SMS aren't set up yet. Use your email address instead." (or the email twin). Email-only is the setup
+ *   while SMS waits for DLT approval (founder 2026-10-24).
  */
 export class EnvOtpSender implements OtpSender {
   private readonly fake = new FakeOtpSender();
@@ -32,13 +35,16 @@ export class EnvOtpSender implements OtpSender {
     const name = otpSenderName();
     if (name === 'fake') return 'One-time codes: fake sender (written to this log; nothing is sent)';
     if (name === 'unknown') return `One-time codes are OFF (sending answers 503): OTP_SENDER="${process.env.OTP_SENDER}" is not known (use fake or msg91)`;
-    const { problem, emailProblem } = msg91Config();
+    const { problem, smsProblem, emailProblem } = msg91Config();
     if (problem) return `One-time codes are OFF (sending answers 503): ${problem}. Everything else keeps working.`;
-    const email = emailProblem ? (this.emailFallback() ? 'email: fake sender (MSG91 email not set up)' : 'email: OFF (MSG91 email not set up)') : 'email: MSG91';
-    return `One-time codes: MSG91 (SMS: SendOTP template; ${email})`;
+    const off = (what: string) => (this.fallback() ? `fake sender (MSG91 ${what} not set up)` : `OFF (MSG91 ${what} not set up)`);
+    const sms = smsProblem ? off('SMS') : 'MSG91 SendOTP';
+    const email = emailProblem ? off('email') : 'MSG91 Email';
+    return `One-time codes: MSG91 (SMS: ${sms}; email: ${email})`;
   }
 
-  private emailFallback(): boolean {
+  /** A channel MSG91 is not set up for still works with the fake sender on a dev machine or the open demo. */
+  private fallback(): boolean {
     return demoMode() || process.env.NODE_ENV !== 'production';
   }
 
@@ -55,11 +61,11 @@ export class EnvOtpSender implements OtpSender {
     if (name === 'unknown') return false;
     const sender = this.msg91();
     if (!sender) return false;
-    return sender.canSend(channel) || (channel === 'email' && this.emailFallback());
+    return sender.canSend(channel) || this.fallback();
   }
 
   unavailableMessage(channel: 'email' | 'sms'): string {
-    if (channel === 'email' && otpSenderName() === 'msg91' && this.msg91()) return EMAIL_OFF_MESSAGE;
+    if (otpSenderName() === 'msg91' && this.msg91()) return channel === 'sms' ? SMS_OFF_MESSAGE : EMAIL_OFF_MESSAGE;
     return CODES_OFF_MESSAGE;
   }
 
@@ -67,7 +73,7 @@ export class EnvOtpSender implements OtpSender {
     if (otpSenderName() === 'fake') return this.fake.send(target, code, purpose);
     const sender = this.msg91();
     if (sender && sender.canSend(target.channel)) return sender.send(target, code, purpose);
-    // Only reached for email on a dev machine / the open demo (canSend said yes).
+    // Only reached for a channel MSG91 is not set up for, on a dev machine / the open demo (canSend said yes).
     return this.fake.send(target, code, purpose);
   }
 }

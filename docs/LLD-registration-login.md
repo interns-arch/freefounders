@@ -13,7 +13,7 @@ passwords; they only verify the signed access token.
 | `accounts/otp.service.ts` | `OtpService` | 6-digit codes: `start()` (send, rate-limit), `verify()` (check, count attempts, optionally consume) |
 | | `TicketsService` | Short-lived single-use tickets: `signup` (proves the identifier, 30 min) and `login` (choose-company step, 5 min) |
 | | `OtpSender` / `FakeOtpSender` / `OtpSendError` | Delivery interface (`send`, optional `canSend(channel)` → 503 before anything is stored). Fake = Platform log (+ `devCode` in the response only with `OTP_DEV_ECHO=1` or `DEMO_MODE=1`). A failed send throws `OtpSendError` (`rejected` / `unavailable` / `config`) |
-| `accounts/otp-senders.ts` | `EnvOtpSender`, `otpSenderFromEnv()` | The provider: `OTP_SENDER=fake` (default) or `msg91`, env read on every send; one startup line ("One-time codes: MSG91 …" or "… are OFF (sending answers 503): …") |
+| `accounts/otp-senders.ts` | `EnvOtpSender`, `otpSenderFromEnv()` | The provider: `OTP_SENDER=fake` (default) or `msg91`, env read on every send; one startup line saying which channels are on ("One-time codes: MSG91 (SMS: …; email: …)" or "… are OFF (sending answers 503): …") |
 | `accounts/msg91.sender.ts` | `Msg91OtpSender`, `msg91Config()` | MSG91 delivery of OUR code (§21.8): SMS = SendOTP `POST /api/v5/otp?template_id&mobile=91…&otp=<code>&otp_length=6&otp_expiry=10`, email = `POST /api/v5/email/send` (template + variables); header `authkey`; 10 s timeout; logs request id + masked target, never the code / authkey / URL |
 | `accounts/accounts.service.ts` | `AccountsService` | Sign-up (`signupStart/Verify/Complete`), sign in with a code (`loginCodeStart/Verify`, §21.8), new company for an account, forgot / reset password, `usernameAvailable`, `setUsername` |
 | `accounts/accounts.controller.ts` | controllers | HTTP layer, Zod validation, throttles |
@@ -236,8 +236,9 @@ sequenceDiagram
 ```
 Our server stays the source of truth for codes (MSG91 SendOTP takes our code in `otp`; MSG91's Verify / Retry are never
 called). Codes are shown on screen only with `OTP_DEV_ECHO=1` outside production, or `DEMO_MODE=1`; production with
-`DEMO_MODE=0` never echoes. Email codes with `OTP_SENDER=msg91` and no email template: fake sender in dev / demo, 503
-"Codes by email aren't set up yet" in production. Unknown identifiers get a real code (like forgot), so the start answer
+`DEMO_MODE=0` never echoes. SMS and email are each optional with `OTP_SENDER=msg91` (at least one; email only while SMS
+waits for DLT): a channel that is not set up uses the fake sender in dev / demo and answers 503 "Codes by SMS aren't set
+up yet. Use your email address instead." (or the email twin) in production, shown on the email / mobile field. Unknown identifiers get a real code (like forgot), so the start answer
 is identical; the verified code then reveals "no account".
 
 ## 5. How the apps trust the token
@@ -258,7 +259,7 @@ is identical; the verified code then reveals "no account".
 | `LOGIN_MAX_FAILED` | 0 (no lock) | > 0 brings back a 15-minute lock after that many wrong passwords |
 | `LOGIN_IP_LIMIT` | 1000 per 15 min | per-network bot guard |
 | `OTP_DEV_ECHO` / `DEMO_MODE` | off | show the code on screen (test and demo only) |
-| `OTP_SENDER` | fake | `msg91`: `MSG91_AUTHKEY` + `MSG91_SMS_TEMPLATE_ID` (SMS), `MSG91_EMAIL_TEMPLATE_ID` + `MSG91_EMAIL_FROM` (+ `MSG91_EMAIL_DOMAIN`, `MSG91_EMAIL_FROM_NAME`) for email; missing → 503 "Codes can't be sent right now" |
+| `OTP_SENDER` | fake | `msg91`: `MSG91_AUTHKEY` + `MSG91_SMS_TEMPLATE_ID` (SMS) and/or `MSG91_EMAIL_TEMPLATE_ID` + `MSG91_EMAIL_FROM` (+ `MSG91_EMAIL_DOMAIN`, `MSG91_EMAIL_FROM_NAME`) for email; no authkey or neither channel → 503 "Codes can't be sent right now"; one channel missing → 503 "Codes by SMS/email aren't set up yet…" in production |
 | `COOKIE_SECURE` | true | set `false` only for a plain-http demo |
 | `PLATFORM_SECRET` | required in production | encrypts the signing keys |
 

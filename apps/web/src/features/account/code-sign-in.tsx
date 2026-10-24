@@ -7,7 +7,7 @@ import { type ChooseCompany } from '@freefounders/core';
 import { identifierKind, type OtpSent, useLoginCodeStart, useLoginWithCode } from '@freefounders/core/account';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, ResendCode, sentTo, StepTitle, TextField, useCodeTimer } from './parts';
+import { BackButton, CodeField, channelOff, codeError, CodeWait, DevCodeNote, FormError, ResendCode, sentTo, StepTitle, TextField, useCodeTimer } from './parts';
 
 export function CodeSignIn({ initial = '', onSignedIn, passwordLink }: { initial?: string; onSignedIn: (choose?: ChooseCompany) => void; passwordLink: ReactNode }) {
   const [step, setStep] = useState<'identifier' | 'code'>('identifier');
@@ -86,7 +86,7 @@ export function CodeSignIn({ initial = '', onSignedIn, passwordLink }: { initial
         autoCapitalize="none"
         spellCheck={false}
         autoFocus
-        error={fieldError}
+        error={fieldError ?? channelOff(start.error, start.isError)}
       />
       {start.isError && <CodeWait left={timer.left} />}
       <FormError>{codeError(start.error, start.isError)}</FormError>

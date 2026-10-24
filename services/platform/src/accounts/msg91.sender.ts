@@ -34,17 +34,30 @@ export interface Msg91Config {
   email: { templateId: string; from: string; fromName: string; domain: string } | null;
 }
 
-/** MSG91 settings from the environment; `problem` names what is missing for SMS (the channel MSG91 must have). */
-export function msg91Config(env: NodeJS.ProcessEnv = process.env): { config: Msg91Config | null; problem: string | null; emailProblem: string | null } {
+/**
+ * MSG91 settings from the environment. Each channel is optional (founder 2026-10-24: "use email otp for now"; SMS
+ * waits for DLT): `problem` is set only when nothing can go out (no authkey, or neither the SMS template nor the email
+ * template + From); `smsProblem` / `emailProblem` name what one channel is missing.
+ */
+export function msg91Config(env: NodeJS.ProcessEnv = process.env): {
+  config: Msg91Config | null;
+  problem: string | null;
+  smsProblem: string | null;
+  emailProblem: string | null;
+} {
   const authkey = env.MSG91_AUTHKEY?.trim() ?? '';
   const smsTemplateId = env.MSG91_SMS_TEMPLATE_ID?.trim() || null;
   const emailTemplate = env.MSG91_EMAIL_TEMPLATE_ID?.trim() ?? '';
   const from = env.MSG91_EMAIL_FROM?.trim() ?? '';
   const domain = env.MSG91_EMAIL_DOMAIN?.trim() || (from.includes('@') ? from.split('@')[1] : '');
-  const missing = [!authkey && 'MSG91_AUTHKEY', !smsTemplateId && 'MSG91_SMS_TEMPLATE_ID'].filter(Boolean) as string[];
-  const problem = missing.length ? `OTP_SENDER=msg91 but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set` : null;
+  const smsProblem = smsTemplateId ? null : 'MSG91_SMS_TEMPLATE_ID is not set';
   const emailProblem = !emailTemplate || !from ? 'MSG91_EMAIL_TEMPLATE_ID and MSG91_EMAIL_FROM are not set' : null;
-  if (!authkey) return { config: null, problem, emailProblem };
+  const problem = !authkey
+    ? 'OTP_SENDER=msg91 but MSG91_AUTHKEY is not set'
+    : smsProblem && emailProblem
+      ? 'OTP_SENDER=msg91 but neither MSG91_SMS_TEMPLATE_ID nor MSG91_EMAIL_TEMPLATE_ID + MSG91_EMAIL_FROM is set'
+      : null;
+  if (!authkey) return { config: null, problem, smsProblem, emailProblem };
   return {
     config: {
       authkey,
@@ -54,6 +67,7 @@ export function msg91Config(env: NodeJS.ProcessEnv = process.env): { config: Msg
       email: emailProblem ? null : { templateId: emailTemplate, from, fromName: env.MSG91_EMAIL_FROM_NAME?.trim() || APP_NAME, domain },
     },
     problem,
+    smsProblem,
     emailProblem,
   };
 }
@@ -85,7 +99,7 @@ export class Msg91OtpSender implements OtpSender {
   }
 
   private async sendSms(target: Identifier, code: string, purpose: OtpPurpose) {
-    if (!this.config.smsTemplateId) throw new OtpSendError('config', 'MSG91_SMS_TEMPLATE_ID is not set');
+    if (!this.config.smsTemplateId) throw new OtpSendError('config', 'MSG91 SMS is not set up');
     const minutes = String(OTP_TTL_MS / 60_000);
     const query = new URLSearchParams({
       template_id: this.config.smsTemplateId,

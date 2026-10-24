@@ -9,6 +9,8 @@ import { type INestApplication, Logger, type LoggerService } from '@nestjs/commo
 import { eq } from 'drizzle-orm';
 import { decodeJwt } from 'jose';
 import { normaliseIdentifier } from './accounts/identifier';
+import { msg91Config } from './accounts/msg91.sender';
+import { EnvOtpSender } from './accounts/otp-senders';
 import { hashPassword } from './auth/auth.service';
 import { Throttle } from './auth/throttle';
 import { DbService } from './db/db.service';
@@ -264,6 +266,82 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
       delete process.env.MSG91_EMAIL_TEMPLATE_ID;
       delete process.env.MSG91_EMAIL_FROM;
     }
+  });
+
+  test('email only (no SMS template; founder 2026-10-24): email codes go by MSG91, SMS falls back to the fake sender on dev / DEMO_MODE=1 and is refused in production with a clear message', async () => {
+    delete process.env.MSG91_SMS_TEMPLATE_ID;
+    process.env.MSG91_EMAIL_TEMPLATE_ID = 'kaampilot_code';
+    process.env.MSG91_EMAIL_FROM = 'no-reply@mail.kaampilot.test';
+    const env = process.env.NODE_ENV;
+    const demo = process.env.DEMO_MODE;
+    try {
+      // The startup line says which channels are on.
+      delete process.env.DEMO_MODE;
+      process.env.NODE_ENV = 'production';
+      const line = new EnvOtpSender().describe();
+      assert.match(line, /^One-time codes: MSG91 \(SMS: OFF \(MSG91 SMS not set up\); email: MSG91 Email\)$/, line);
+      process.env.NODE_ENV = env;
+      assert.match(new EnvOtpSender().describe(), /SMS: fake sender \(MSG91 SMS not set up\); email: MSG91 Email/);
+
+      // Email sign-up works: MSG91 Email API, and the code verifies.
+      const email = `only-${randomUUID().slice(0, 8)}@mail.test`;
+      const res = await call('POST', '/signup/start', { identifier: email });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      assert.equal(res.body.channel, 'email');
+      assert.equal(received.length, 1);
+      assert.equal(received[0].path, '/api/v5/email/send');
+      assert.equal(received[0].body.template_id, 'kaampilot_code');
+      assert.equal(received[0].body.recipients[0].variables.purpose, 'finish signing up');
+      assert.equal((await call('POST', '/signup/verify', { otpId: res.body.otpId, code: res.body.devCode })).status, 200);
+
+      // SMS on a dev machine: the fake sender, nothing to MSG91.
+      received.length = 0;
+      const dev = await call('POST', '/signup/start', { identifier: mobile() });
+      assert.equal(dev.status, 200, JSON.stringify(dev.body));
+      assert.equal(received.length, 0);
+
+      // SMS in production without DEMO_MODE: 503 with the message, nothing stored, nothing sent.
+      process.env.NODE_ENV = 'production';
+      for (const path of ['/signup/start', '/auth/forgot', '/auth/login/code/start']) {
+        const num = mobile();
+        const prod = await call('POST', path, { identifier: num });
+        assert.equal(prod.status, 503, `${path}: ${JSON.stringify(prod.body)}`);
+        assert.equal(prod.body.message, "Codes by SMS aren't set up yet. Use your email address instead.");
+        assert.equal((await rowsFor(num)).length, 0);
+      }
+      assert.equal(received.length, 0);
+      // Email still works in production.
+      const prodEmail = await call('POST', '/auth/forgot', { identifier: `only-${randomUUID().slice(0, 8)}@mail.test` });
+      assert.equal(prodEmail.status, 200, JSON.stringify(prodEmail.body));
+      assert.equal(received.length, 1);
+
+      // Production with DEMO_MODE=1 (the open demo): SMS stays on the fake sender.
+      process.env.DEMO_MODE = '1';
+      received.length = 0;
+      const demoSms = await call('POST', '/signup/start', { identifier: mobile() });
+      assert.equal(demoSms.status, 200, JSON.stringify(demoSms.body));
+      assert.equal(received.length, 0);
+    } finally {
+      process.env.NODE_ENV = env;
+      if (demo === undefined) delete process.env.DEMO_MODE;
+      else process.env.DEMO_MODE = demo;
+      process.env.MSG91_SMS_TEMPLATE_ID = 'tmpl-sms-1';
+      delete process.env.MSG91_EMAIL_TEMPLATE_ID;
+      delete process.env.MSG91_EMAIL_FROM;
+    }
+  });
+
+  test('config: only a missing authkey, or neither channel, switches codes off', () => {
+    const base = { MSG91_AUTHKEY: 'k' };
+    assert.match(String(msg91Config({}).problem), /MSG91_AUTHKEY is not set/);
+    assert.match(String(msg91Config(base).problem), /neither MSG91_SMS_TEMPLATE_ID nor MSG91_EMAIL_TEMPLATE_ID/);
+    assert.equal(msg91Config({ ...base, MSG91_SMS_TEMPLATE_ID: 't' }).problem, null);
+    const emailOnly = msg91Config({ ...base, MSG91_EMAIL_TEMPLATE_ID: 'e', MSG91_EMAIL_FROM: 'no-reply@mail.kaampilot.com' });
+    assert.equal(emailOnly.problem, null);
+    assert.equal(emailOnly.config?.smsTemplateId, null);
+    assert.equal(emailOnly.config?.email?.domain, 'mail.kaampilot.com');
+    // A template without a From is not email.
+    assert.ok(msg91Config({ ...base, MSG91_EMAIL_TEMPLATE_ID: 'e' }).problem);
   });
 });
 

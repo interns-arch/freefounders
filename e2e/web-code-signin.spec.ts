@@ -72,3 +72,31 @@ test('sign in with a code: username guidance, wrong code, then signed in; back t
   await page.waitForURL((u) => u.pathname !== '/login', { timeout: 20_000 });
   await expect(page.getByRole('button', { name: 'Your account' })).toBeVisible();
 });
+
+test('codes by SMS not set up (email-only MSG91): sign-up, forgot and code sign-in say so on the field', async ({ page }) => {
+  // Production with only the MSG91 email template answers 503 for a mobile number (PLAN.md §21.8); the dev suite
+  // runs the fake sender, so the answer is stood in here.
+  const SMS_OFF = "Codes by SMS aren't set up yet. Use your email address instead.";
+  for (const path of ['signup/start', 'auth/forgot', 'auth/login/code/start']) {
+    await page.route(`**/api/platform/${path}`, (route) =>
+      route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ statusCode: 503, message: SMS_OFF }) }),
+    );
+  }
+  const screens = [
+    { url: '/signup', label: 'Work email or mobile number', button: 'Continue' },
+    { url: '/forgot', label: 'Email or mobile number', button: 'Send code' },
+    { url: '/login?code=1', label: 'Email or mobile number', button: 'Send code' },
+  ];
+  for (const s of screens) {
+    await page.goto(s.url);
+    const field = page.getByLabel(s.label);
+    await field.fill('9876543210');
+    await page.getByRole('button', { name: s.button }).click();
+    await expect(page.getByRole('alert').filter({ hasText: SMS_OFF }), s.url).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: SMS_OFF }), `${s.url}: shown once`).toHaveCount(1);
+    await expect(field).toHaveAttribute('aria-invalid', 'true');
+    // Typing again clears it.
+    await field.fill('someone@example.com');
+    await expect(page.getByRole('alert').filter({ hasText: SMS_OFF })).toHaveCount(0);
+  }
+});

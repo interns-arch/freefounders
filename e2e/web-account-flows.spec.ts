@@ -399,7 +399,8 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   await page.getByRole('button', { name: `Actions for ${companyB}` }).click();
   await page.getByRole('menuitem', { name: /trial by 7 days|Extend trial.*7/i }).first().click();
   await page.getByRole('button', { name: 'Extend trial' }).click();
-  await expect(page.getByText(/trial/i).first()).toBeVisible();
+  // The console's state filter has a hidden "Trial" option, so wait for the confirmation instead of any "trial" text.
+  await expect(page.getByText('Done', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: `Actions for ${companyB}` }).click();
   await page.getByRole('menuitem', { name: /Suspend/ }).click();
   await page.getByRole('button', { name: 'Suspend', exact: true }).click();

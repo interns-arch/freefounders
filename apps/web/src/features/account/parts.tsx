@@ -3,7 +3,7 @@
  * frame like Notion's, one question per screen, a progress bar, a back button, the one-time-code field and its
  * "Test mode" note.
  */
-import { errorMessage, retryAfterSeconds } from '@freefounders/core';
+import { ApiError, errorMessage, retryAfterSeconds } from '@freefounders/core';
 import { type PasswordAbout, PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
 import { type CompanyNameCheckState, type UsernameCheckState } from '@freefounders/core/account';
 import { AlertCircle, ArrowLeft, Eye, EyeOff, Info } from '@/components/icons';
@@ -365,8 +365,17 @@ export function ResendCode({ onResend, busy, left }: { onResend: () => void; bus
 
 /** The server's error, except a "wait before a new code" refusal (shown as the countdown instead). */
 export function codeError(err: unknown, active: boolean): string | null {
-  if (!active || retryAfterSeconds(err) !== null) return null;
+  if (!active || retryAfterSeconds(err) !== null || channelOff(err, active)) return null;
   return errorMessage(err);
+}
+
+/**
+ * "Codes by SMS aren't set up yet. Use your email address instead." (or the email twin; 503, PLAN.md §21.8): shown on
+ * the email / mobile field itself, since the fix is to type the other one there. null for any other error.
+ */
+export function channelOff(err: unknown, active: boolean): string | null {
+  if (!active || !(err instanceof ApiError) || err.status !== 503) return null;
+  return /aren['’]t set up yet/i.test(err.message) ? err.message : null;
 }
 
 /** Where the code went: "We sent a 6-digit code to a@b.com". */

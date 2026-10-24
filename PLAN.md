@@ -3084,7 +3084,7 @@ per 15 minutes); MSG91 only delivers it. `OTP_SENDER=fake|msg91` (default fake),
   MSG91_EMAIL_FROM}, domain: MSG91_EMAIL_DOMAIN or the From domain, template_id: MSG91_EMAIL_TEMPLATE_ID}`; template
   variables `{{otp}}` `{{minutes}}` `{{app}}` `{{purpose}}` (sign in / finish signing up / reset your password). Without
   the email template + From: email codes stay on the fake sender on a dev machine or with `DEMO_MODE=1`, and answer 503
-  "Codes by email aren't set up yet. Use your mobile number instead." in production.
+  "Codes by email aren't set up yet. Use your mobile number instead." in production (SMS likewise since 2026-10-24, below).
 - **WhatsApp**: not built (MSG91 needs an integrated WhatsApp number and a Meta-approved authentication template; not
   trivial). **Voice / MSG91 retry**: not used (our resend sends a new code).
 - **Failures**: 10 s timeout. A refused send (HTTP 4xx or `type:"error"`) → 400 "We couldn't send the code. Check the
@@ -3137,6 +3137,25 @@ password"; 30 s gap and the per-IP guard). Web rules + typecheck + build; `npm r
 `web-code-signin.spec.ts` (new), `single-login.spec.ts`, `web-signup-billing.spec.ts` pass; `web-account-flows.spec.ts`
 passes up to its billing test, which times out on FakePay's "Payment successful" (the Pay request was still running
 after 5 s while another agent ran the suite; the test does not touch codes; to recheck on a quiet machine).
+
+**Email-only codes (2026-10-24)** (founder: "use email otp for now"; SMS waits for DLT). `OTP_SENDER=msg91` no longer
+needs `MSG91_SMS_TEMPLATE_ID`: codes are OFF (503 "Codes can't be sent right now…") only without `MSG91_AUTHKEY` or with
+neither the SMS template nor the email template + From. Each channel that is not set up behaves the same way: the fake
+sender on a dev machine or with `DEMO_MODE=1`, and in production 503 "Codes by SMS aren't set up yet. Use your email
+address instead." (email twin: "Codes by email aren't set up yet. Use your mobile number instead."), with nothing stored.
+The three code flows (sign-up, forgot password, code sign-in; also invite links) each take the one identifier the person
+types, and all accept an email address, so an email-only setup blocks nobody; nothing requires a mobile code. The web
+screens show the channel message on the email / mobile field itself (`channelOff()` in `features/account/parts.tsx`;
+red field, announced, cleared on typing) instead of the general error. Startup line names both channels, e.g.
+`One-time codes: MSG91 (SMS: OFF (MSG91 SMS not set up); email: MSG91 Email)`. `set-msg91.sh`: the OTP template prompt
+is optional ("Enter = skip SMS"), at least one of SMS / email is required, From defaults to `no-reply@mail.kaampilot.com`.
+`infra/deploy/README.md` "Switching on MSG91 codes" has the email-only path (MSG91 Email domain `mail.kaampilot.com`
+verified through GoDaddy DNS records, template using `{{otp}}` `{{minutes}}`). Tests: `otp-msg91.test.ts` (email-only:
+email by MSG91, SMS fake on dev / `DEMO_MODE=1`, 503 with the message in production on all three flows, startup line;
+config rules), e2e `web-code-signin.spec.ts` (the message on the field of /signup, /forgot, /login?code=1). Status: Platform typecheck + 180 tests, Tasks 1046, Assets 105, web build,
+mobile check, smoke 10 / 10, e2e console-dashboard / account-flows / code-signin / single-login / signup-billing / badges /
+app-shell pass (single-login now accepts the ", N pending" badge on the Tasks / Assets links; account-flows waits for the
+console's "Done" instead of any "trial" text, which matched the hidden filter option).
 
 ### 21.9 Kaampilot console dashboard + production log (2026-10-24)
 

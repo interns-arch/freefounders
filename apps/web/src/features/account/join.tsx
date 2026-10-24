@@ -24,7 +24,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/utils';
-import { AuthFrame, BackButton, CodeField, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer, UsernameField } from './parts';
+import { AuthFrame, BackButton, CodeField, channelOff, codeError, CodeWait, DevCodeNote, FormError, PasswordField, ResendCode, sentTo, StepProgress, StepTitle, TextField, useCodeTimer, UsernameField } from './parts';
 
 type Step = 'choose' | 'identifier' | 'code' | 'profile';
 
@@ -198,7 +198,7 @@ export function JoinPage() {
             autoCapitalize="none"
             spellCheck={false}
             autoFocus
-            error={fieldError}
+            error={fieldError ?? channelOff(start.error, start.isError)}
           />
           {start.isError && <CodeWait left={timer.left} />}
           <FormError>{codeError(start.error, start.isError)}</FormError>

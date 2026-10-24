@@ -29,7 +29,7 @@ Postgres and the APIs are on an `internal` Docker network: no host ports, no int
 | `ff.sh` | `docker compose` with the right project / env file / compose file |
 | `bootstrap.sh` | once: first company + owner + `/console` staff account, then `company sync` |
 | `set-razorpay.sh` | switches payments to Razorpay: asks for the keys without showing them, writes `.env`, recreates the platform only |
-| `set-msg91.sh` | switches one-time codes to MSG91: asks for the authkey (hidden) and template IDs, writes `.env`, recreates the platform only |
+| `set-msg91.sh` | switches one-time codes to MSG91: asks for the authkey (hidden) and the SMS and/or email template IDs (email only is fine), writes `.env`, recreates the platform only |
 | `backup.sh` | nightly backup: all databases + uploaded files into `FF_HOME/backups`, 14 days kept (see **Backups**) |
 
 ## Server layout (`FF_HOME`, default `/opt/freefounders`)
@@ -96,8 +96,8 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 | `FAKE_GATEWAY_SECRET` | FakePay signing secret (used only with `DEMO_MODE=1`) |
 | `BILLING_GATEWAY` | `fake` (FakePay, open demo only) or `razorpay`. Without `DEMO_MODE=1` only `razorpay` works; anything missing → checkout answers 503 "Payments are not set up yet" and the reason is in the platform log (never a key) |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Razorpay API keys and webhook secret. Set them only with `set-razorpay.sh` (below) |
-| `OTP_SENDER` | `fake` (default: codes only in the platform log, and on screen with `DEMO_MODE=1`) or `msg91`. With `msg91` and a value missing, asking for a code answers 503 "Codes can't be sent right now" and the reason is in the platform log (never a key) |
-| `MSG91_AUTHKEY`, `MSG91_SMS_TEMPLATE_ID`, `MSG91_EMAIL_TEMPLATE_ID`, `MSG91_EMAIL_FROM`, `MSG91_EMAIL_DOMAIN` | MSG91 authkey, DLT-approved OTP template, optional email template + From address + sending domain. Set them only with `set-msg91.sh` (below) |
+| `OTP_SENDER` | `fake` (default: codes only in the platform log, and on screen with `DEMO_MODE=1`) or `msg91`. With `msg91` and no authkey (or neither SMS nor email set up), asking for a code answers 503 "Codes can't be sent right now" and the reason is in the platform log (never a key); one channel missing → that channel answers "Codes by SMS/email aren't set up yet…" in production (fake sender with `DEMO_MODE=1`) |
+| `MSG91_AUTHKEY`, `MSG91_SMS_TEMPLATE_ID`, `MSG91_EMAIL_TEMPLATE_ID`, `MSG91_EMAIL_FROM`, `MSG91_EMAIL_DOMAIN` | MSG91 authkey, DLT-approved OTP template (optional), email template + From address + sending domain (optional; at least one of SMS / email). Set them only with `set-msg91.sh` (below) |
 | `PLATFORM_SECRET` | encrypts the Platform's signing keys at rest (≥ 32 chars). Changing it invalidates the keys. |
 | `TASKS_SECRET_KEY`, `TASKS_SETTINGS_KEY` | Django secret key; per-company settings encryption key |
 | `POSTGRES_PASSWORD`, `*_DB_PASSWORD` | database superuser and per-service roles (read at first Postgres start only) |
@@ -162,6 +162,29 @@ Sign-up, forgot password and "Sign in with a code" (PLAN.md §21.8) send a 6-dig
 code (10 minutes, 5 tries, 30 s between codes, limits per number and per network); MSG91 only delivers it. Until it is
 switched on, codes go to the platform log (and on screen while `DEMO_MODE=1`).
 
+SMS and email are each optional; at least one is needed (with the authkey). **Email only is the setup for now**
+(founder 2026-10-24: SMS waits for DLT approval): see "Email-only path" below. A channel that is not set up answers
+"Codes by SMS aren't set up yet. Use your email address instead." (or "Codes by email aren't set up yet. Use your
+mobile number instead.") once `DEMO_MODE=0`; with `DEMO_MODE=1` it stays on the fake sender (code on screen). Sign-up,
+forgot password and code sign-in all accept an email address, so nobody is blocked without SMS.
+
+**Email-only path** (no DLT needed):
+1. MSG91 → *Email* → *Domains* → *Add domain*: `mail.kaampilot.com` (a subdomain keeps the main domain's mail
+   reputation separate). MSG91 lists the DNS records to add (typically a TXT for SPF, a TXT/CNAME for DKIM, and a CNAME
+   for the return path / tracking; copy them exactly as MSG91 shows them).
+2. GoDaddy → *My Products* → kaampilot.com → *DNS* → *Add new record* for each one. In GoDaddy's *Name* field enter the
+   host **without** `.kaampilot.com` (e.g. MSG91's `mail.kaampilot.com` → `mail`, `xyz._domainkey.mail.kaampilot.com`
+   → `xyz._domainkey.mail`); TTL 1 hour. Do not touch the existing A / MX records of kaampilot.com. Back in MSG91,
+   press *Verify* until every record shows verified (minutes to a few hours).
+3. MSG91 → *Email* → *Templates* → *Create*: e.g. name `kaampilot_code`, subject `Your Kaampilot code: {{otp}}`, body
+   `Your Kaampilot code is {{otp}}. It is valid for {{minutes}} minutes. Do not share it with anyone. If you did not ask
+   for it, ignore this email.` (`{{app}}` and `{{purpose}}` are sent too and may be used). Save it and copy its
+   template ID.
+4. On the server run `set-msg91.sh` (below): authkey, **Enter** at the OTP template prompt (= skip SMS), the email
+   template ID, **Enter** for the From address (= `no-reply@mail.kaampilot.com`) and the domain.
+5. The platform log then shows `One-time codes: MSG91 (SMS: fake sender (MSG91 SMS not set up); email: MSG91 Email)`
+   (`SMS: OFF (…)` once `DEMO_MODE=0`). Try "Forgot password" with your email address.
+
 1. **What to get from MSG91** (control.msg91.com):
    - **Authkey**: under your name → *Authkey* (one key for SMS and email). Keep it secret.
    - **SMS (India needs DLT)**: register on a DLT portal (Jio / Vodafone Idea / Airtel / BSNL…) as the principal entity,
@@ -172,7 +195,7 @@ switched on, codes go to the platform log (and on screen while `DEMO_MODE=1`).
      `##OTP##` in place of `{#var#}` (`Your Kaampilot code is ##OTP##. It is valid for 10 minutes. Do not share it with
      anyone.`), the sender ID and the **DLT template ID**. MSG91 gives an **OTP template ID**: that is
      `MSG91_SMS_TEMPLATE_ID`. The text must match the DLT template exactly, or operators drop the SMS.
-   - **Email (optional)**: MSG91 → *Email* → *Domains*: add a sending domain (e.g. `mail.kaampilot.com`) and its DNS
+   - **Email**: MSG91 → *Email* → *Domains*: add a sending domain (e.g. `mail.kaampilot.com`) and its DNS
      records (SPF, DKIM, the MSG91 return-path) until it shows verified. Then *Email* → *Templates* → a template using
      `{{otp}}`, `{{minutes}}`, `{{app}}` (Kaampilot) and `{{purpose}}` (sign in / finish signing up / reset your
      password), e.g. subject `Your {{app}} code: {{otp}}`, body `Use {{otp}} to {{purpose}}. It is valid for {{minutes}}
@@ -187,15 +210,17 @@ switched on, codes go to the platform log (and on screen while `DEMO_MODE=1`).
    ```
    bash /opt/freefounders/app/infra/deploy/set-msg91.sh
    ```
-   It asks for the authkey **without showing it** (`read -s`), then the OTP template ID and (optional) the email template,
-   From address and domain, writes them to `/opt/freefounders/.env` (mode 600), sets `OTP_SENDER=msg91` and recreates
+   It asks for the authkey **without showing it** (`read -s`), then the OTP template ID (Enter = skip SMS) and the email
+   template, From address (Enter = `no-reply@mail.kaampilot.com`) and domain (at least one of SMS / email), writes them to `/opt/freefounders/.env` (mode 600), sets `OTP_SENDER=msg91` and recreates
    **only the platform container**. Back to the fake sender: `bash …/set-msg91.sh --off`.
-3. Check: `app/infra/deploy/ff.sh logs --tail 30 platform` shows `One-time codes: MSG91 (SMS: SendOTP template; email: …)`.
-   A missing value shows `One-time codes are OFF (sending answers 503): …` instead; the rest of the app keeps working.
+3. Check: `app/infra/deploy/ff.sh logs --tail 30 platform` shows which channels are on, e.g.
+   `One-time codes: MSG91 (SMS: MSG91 SendOTP; email: MSG91 Email)`.
+   No authkey, or neither SMS nor email, shows `One-time codes are OFF (sending answers 503): …` instead; the rest of the app keeps working.
    Each send logs MSG91's request id and a masked number (`******3210`), never the code or the authkey.
 4. **`DEMO_MODE` stays `1`** until the founder decides: codes are then sent by MSG91 **and** still shown on screen (test
    mode note). Setting `DEMO_MODE=0` (then `ff.sh up -d --no-deps platform`) hides on-screen codes for good: people
-   need the real SMS / email, so do it only once SMS works (and email, or tell people to use their mobile number).
+   need the real SMS / email, so do it only once the channels people use work (email-only: people with a mobile number
+   are told to use their email address).
 
 ## Kaampilot console (staff) and the production log
 
