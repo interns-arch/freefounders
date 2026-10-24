@@ -1,0 +1,56 @@
+/**
+ * Count badges (PLAN.md §19.42): the numbers behind the red counters on tabs, menu items and the phone bottom bar.
+ * Plain functions (no React) so they are unit-tested; the hook is in badges.ts.
+ */
+
+/** GET /tasks/api/badges/ */
+export interface TasksBadgesResponse {
+  tasks?: { my_tasks?: number; to_accept?: number; requests?: number };
+  hr?: { leave?: number; corrections?: number; approvals?: number };
+}
+
+/** GET /assets/api/badges */
+export interface AssetsBadgesResponse {
+  approve?: number;
+  fulfil?: number;
+  tickets?: number;
+  exits?: number;
+}
+
+export interface Badges {
+  /** My Tasks (open / in progress, assigned to me), To accept (work waiting for my review), Requests (to decide). */
+  tasks: { myTasks: number; toAccept: number; requests: number; total: number };
+  /** Approvals = leave + attendance corrections I may decide. */
+  attendance: { leave: number; corrections: number; approvals: number; total: number };
+  /** Requests = approve + fulfil; tickets assigned to me or unassigned; exits with assets to collect. */
+  assets: { approve: number; fulfil: number; requests: number; tickets: number; exits: number; total: number };
+  total: number;
+}
+
+const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+
+/** Both services' answers as one shape (a missing or failed service counts as zero). */
+export function toBadges(t: TasksBadgesResponse | null | undefined, a: AssetsBadgesResponse | null | undefined): Badges {
+  const myTasks = n(t?.tasks?.my_tasks);
+  const toAccept = n(t?.tasks?.to_accept);
+  const requests = n(t?.tasks?.requests);
+  const leave = n(t?.hr?.leave);
+  const corrections = n(t?.hr?.corrections);
+  const approve = n(a?.approve);
+  const fulfil = n(a?.fulfil);
+  const tickets = n(a?.tickets);
+  const exits = n(a?.exits);
+  const tasks = { myTasks, toAccept, requests, total: myTasks + toAccept + requests };
+  const attendance = { leave, corrections, approvals: leave + corrections, total: leave + corrections };
+  const assets = { approve, fulfil, requests: approve + fulfil, tickets, exits, total: approve + fulfil + tickets + exits };
+  return { tasks, attendance, assets, total: tasks.total + attendance.total + assets.total };
+}
+
+export const NO_BADGES: Badges = toBadges(null, null);
+
+/** The text in a counter: '' for none (hidden), 1–99, then "99+". */
+export function countLabel(value: number | null | undefined): string {
+  const v = n(value);
+  if (!v) return '';
+  return v > 99 ? '99+' : String(v);
+}

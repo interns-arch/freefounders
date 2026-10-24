@@ -292,6 +292,20 @@ updated in the same change. Removing a function is not.
   a request / ticket → `/assets/requests?open=<id>` / `/assets/tickets?open=<id>`; exits, onboarding, reconciliation → their
   detail page.
 
+### Count badges (PLAN.md §19.42)
+- A small **red round counter** after a tab or menu label means "this many things wait for you there". Hidden at 0, "99+"
+  above 99; screen readers hear it as part of the name ("My Tasks, 5 pending"). It never shrinks: on a phone the tab row
+  scrolls sideways instead.
+- **Where**: Tasks tabs **My Tasks** (my open + in-progress tasks, overdue included), **To accept** (finished work, also
+  sub-task parts, waiting for my review), **Requests** (change / cancel requests I decide); on a phone the "More" tab shows
+  the sum of the tabs inside it. Attendance tab **Approvals** (leave + corrections I may decide, never my own). Sidebar
+  items: Tasks → Tasks, Attendance → Approvals, Assets → Requests / My requests (to approve + approved to hand out),
+  Tickets (assigned to me + open unassigned), Exits (open cases with assets still to collect). Each sidebar **group
+  header** and the phone **bottom bar** (Attendance · Tasks · Assets) show their area's total. Home and More show none;
+  Admin has nothing that waits.
+- **Freshness**: refreshed every minute, when the window gets focus and right after any change you make (approving makes
+  the count drop at once). The bell keeps its own unread count (same counter look).
+
 ### Classic screens
 - Any path under `/tasks` or `/assets` the new app does not have → full page load to `/classic<path><query>` (homes get a
   trailing slash). Same sign-in. Old links therefore always open something.

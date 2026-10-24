@@ -1,9 +1,17 @@
-import { keepPreviousData, QueryClient } from '@tanstack/react-query';
+import { keepPreviousData, MutationCache, QueryClient } from '@tanstack/react-query';
 import { ApiError } from './http';
 
-/** One cache for the whole app. Client errors (4xx) are not retried. */
+/**
+ * One cache for the whole app. Client errors (4xx) are not retried. Any successful change refreshes the count badges
+ * (PLAN.md §19.42): approving, accepting or finishing something makes its counter drop at once.
+ */
 export function createQueryClient() {
-  return new QueryClient({
+  const client: QueryClient = new QueryClient({
+    mutationCache: new MutationCache({
+      onSuccess: () => {
+        void client.invalidateQueries({ queryKey: ['badges'] });
+      },
+    }),
     defaultOptions: {
       queries: {
         staleTime: 20_000,
@@ -14,6 +22,7 @@ export function createQueryClient() {
       },
     },
   });
+  return client;
 }
 
 /** Cached for minutes: lists for dropdowns (departments, roles, categories…). */

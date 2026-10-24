@@ -1,5 +1,5 @@
-import { useAccess } from '@freefounders/core';
-import { type TaskTemplate, useTaskInboxCounts, useTaskPeople } from '@freefounders/core/tasks';
+import { useAccess, useBadges } from '@freefounders/core';
+import { type TaskTemplate, useTaskPeople } from '@freefounders/core/tasks';
 import { ChevronDown } from '@/components/icons';
 import { useCallback, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -16,7 +16,7 @@ import { DisputesTab, ReportsTab, TimeTab } from './reports-tab';
 import { ChainsTab } from './task-chain';
 import { TaskDetailSheet } from './task-detail';
 import { TaskFormSheet } from './task-form';
-import { TabCount } from './task-bits';
+import { CountBadge } from '@/components/common/count-badge';
 import { DirectoryTab, TemplatesTab } from './templates-tab';
 
 const BASE = '/tasks/tasks';
@@ -41,20 +41,20 @@ export function TaskWorkspacePage() {
   const area = params.get('tab') || 'dashboard';
   const review = params.get('review');
   const profileId = Number(params.get('user')) || null;
-  const counts = useTaskInboxCounts();
+  const counts = useBadges().tasks;
   // More people than just me → I have a team, so All Tasks is worth showing.
   const people = useTaskPeople().data ?? [];
   const hasTeam = isManager || people.length > 1;
   const [form, setForm] = useState<{ template: TaskTemplate | null } | null>(null);
 
-  // [value, label, red count after the label (my open tasks, work to accept, requests to decide)]
+  // [value, label, red count after the label (my open tasks, work to accept, requests to decide; PLAN.md §19.42)]
   const tabs: Tab[] = [
     ['dashboard', 'Dashboard'],
-    ['my', 'My Tasks', counts.mine],
+    ['my', 'My Tasks', counts.myTasks],
     ...(hasTeam ? [['all', 'All Tasks'] as Tab] : []),
     ['delegated', 'Delegated'],
     ['subscribed', 'Subscribed'],
-    ['reviews', 'To accept', counts.reviews],
+    ['reviews', 'To accept', counts.toAccept],
     ['requests', 'Requests', counts.requests],
     ['templates', 'Templates'],
     ...(can('directory.view') ? [['directory', 'Template Directory'] as Tab] : []),
@@ -151,7 +151,7 @@ function TabBar({ tabs, area, href }: { tabs: Tab[]; area: string; href: (v: str
       )}
     >
       {l}
-      <TabCount n={count} className="ml-1" />
+      <CountBadge n={count} />
     </Link>
   );
   const front = tabs.slice(0, PHONE_TABS);
@@ -176,14 +176,14 @@ function TabBar({ tabs, area, href }: { tabs: Tab[]; area: string; href: (v: str
               )}
             >
               {restActive ? restActive[1] : 'More'}
-              {!restActive && <TabCount n={restCount} className="ml-1" />}
+              {!restActive && <CountBadge n={restCount} />}
               <ChevronDown className="size-3.5" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {rest.map(([v, l, c]) => (
                 <DropdownMenuItem key={v} onSelect={() => navigate(href(v))} className={cn('justify-between', area === v && 'font-semibold text-primary')}>
                   {l}
-                  <TabCount n={c} />
+                  <CountBadge n={c} />
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

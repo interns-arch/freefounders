@@ -16,7 +16,7 @@ export const TASKS_SCREENS = {
 /** Tasks workspace menu. */
 export const TASKS_NAV: NavItem[] = [
   { label: 'Home', to: '/tasks', icon: Home, end: true },
-  { label: 'Tasks', to: '/tasks/tasks', icon: CheckSquare },
+  { label: 'Tasks', to: '/tasks/tasks', icon: CheckSquare, badge: (b) => b.tasks.total },
   { label: 'Team performance', to: '/tasks/team', icon: BarChart3, show: TASKS_SCREENS.team },
   { label: 'Groups', to: '/tasks/groups', icon: Boxes },
   { label: 'Notices', to: '/tasks/notices', icon: Megaphone, show: TASKS_SCREENS.notices },

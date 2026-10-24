@@ -1,4 +1,4 @@
-import { countLabel, type TaskPriority, type TaskStatus } from '@freefounders/core/tasks';
+import type { TaskPriority, TaskStatus } from '@freefounders/core/tasks';
 import type { ReactNode } from 'react';
 import { Badge, type BadgeTone } from '@/components/ui/primitives';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
@@ -35,23 +35,6 @@ export function PriorityPill({ priority, label, className }: { priority: TaskPri
 /** The task code ("T-00042") in a small monospace pill. */
 export function TaskCode({ code, className }: { code: string; className?: string }) {
   return <span className={cn('shrink-0 rounded-md border border-border/70 bg-muted/70 px-1.5 py-0.5 font-mono text-[11px] font-semibold tracking-tight text-muted-foreground', className)}>{code}</span>;
-}
-
-/**
- * The red count on the My Tasks / To accept / Requests tabs (original app d0a1bdf): a round counter like the bell's,
- * 1–9, then 9+ and 99+. Nothing when there is nothing waiting.
- */
-export function TabCount({ n, className }: { n: number | null | undefined; className?: string }) {
-  const label = countLabel(n);
-  if (!label) return null;
-  return (
-    <span
-      aria-label={`${n} waiting`}
-      className={cn('inline-grid min-w-[18px] place-items-center rounded-full bg-destructive px-1 font-mono text-[10px] leading-[16px] font-bold text-white tabular dark:text-background', className)}
-    >
-      {label}
-    </span>
-  );
 }
 
 /** A small count beside a heading or a tab ("To accept 3"): the old app's count-pill. */

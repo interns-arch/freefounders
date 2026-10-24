@@ -1,8 +1,9 @@
-import { useAccess } from '@freefounders/core';
+import { useAccess, useBadges } from '@freefounders/core';
 import { ensureAssetsCookie } from '@freefounders/core/assets';
 import { ChevronDown, Home, LayoutGrid } from '@/components/icons';
 import { type RefObject, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import { CountBadge } from '@/components/common/count-badge';
 import { PageLoader } from '@/components/common/page';
 import { ReadOnlyContext } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/input';
@@ -17,7 +18,7 @@ import { BillingBanners } from '@/features/billing/banners';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
 import { TASKS_NAV } from '@/features/tasks/nav';
-import { isWorkspace, type NavItem, type Workspace, WORKSPACE_HOME, WORKSPACE_NAMES, workspaceOf } from './nav';
+import { isWorkspace, type NavItem, type Workspace, WORKSPACE_BADGE, WORKSPACE_HOME, WORKSPACE_NAMES, workspaceOf } from './nav';
 import { Logo, NotificationsBell, ThemeToggle, UserMenu } from './shell-parts';
 import { WORKSPACE_LOOK, workspacesFor } from './workspaces';
 
@@ -122,6 +123,7 @@ function useFocusHeading(pathname: string, main: RefObject<HTMLElement | null>) 
  */
 export function AppShell() {
   const access = useAccess();
+  const badges = useBadges();
   const loc = useLocation();
   const navigate = useNavigate();
   const mainRef = useRef<HTMLElement>(null);
@@ -231,6 +233,7 @@ export function AppShell() {
                     <gl.icon className="size-3.5" />
                   </span>
                   <span className="flex-1 truncate">{WORKSPACE_NAMES[w]}</span>
+                  <CountBadge n={WORKSPACE_BADGE[w](badges)} />
                 </Link>
                 <button
                   type="button"
@@ -259,6 +262,7 @@ export function AppShell() {
                         <NavLink to={item.to} end={item.end} className={({ isActive }) => cn(itemClass, isActive && activeClass)}>
                           <item.icon className="size-4 shrink-0" aria-hidden />
                           <span className="flex-1 truncate">{item.label}</span>
+                          {item.badge && <CountBadge n={item.badge(badges)} />}
                         </NavLink>
                       </div>
                     );
@@ -278,11 +282,11 @@ export function AppShell() {
   );
 
   // Phones: Attendance first (marking attendance is the priority), then Home, Tasks, Assets; Admin lives in More.
-  const tabs: Array<{ to: string; label: string; icon: typeof Home; active: boolean }> = [
-    ...(workspaces.includes('attendance') ? [{ to: '/attendance', label: 'Attendance', icon: WORKSPACE_LOOK.attendance.icon, active: here === 'attendance' }] : []),
+  const tabs: Array<{ to: string; label: string; icon: typeof Home; active: boolean; count?: number }> = [
+    ...(workspaces.includes('attendance') ? [{ to: '/attendance', label: 'Attendance', icon: WORKSPACE_LOOK.attendance.icon, active: here === 'attendance', count: WORKSPACE_BADGE.attendance(badges) }] : []),
     { to: '/?home=1', label: 'Home', icon: Home, active: here === null },
-    ...(workspaces.includes('tasks') ? [{ to: '/tasks', label: 'Tasks', icon: WORKSPACE_LOOK.tasks.icon, active: here === 'tasks' }] : []),
-    ...(workspaces.includes('assets') ? [{ to: '/assets', label: 'Assets', icon: WORKSPACE_LOOK.assets.icon, active: here === 'assets' }] : []),
+    ...(workspaces.includes('tasks') ? [{ to: '/tasks', label: 'Tasks', icon: WORKSPACE_LOOK.tasks.icon, active: here === 'tasks', count: WORKSPACE_BADGE.tasks(badges) }] : []),
+    ...(workspaces.includes('assets') ? [{ to: '/assets', label: 'Assets', icon: WORKSPACE_LOOK.assets.icon, active: here === 'assets', count: WORKSPACE_BADGE.assets(badges) }] : []),
   ];
   // Labels stay 11 px here (the one exception, like iOS/Material tab bars): "Attendance" must fit a fifth of a 360 px phone.
   const tabClass = 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 pt-1.5 pb-2 text-[11px] font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
@@ -334,8 +338,9 @@ export function AppShell() {
         >
           {tabs.map((t) => (
             <Link key={t.label} to={t.to} aria-current={t.active ? 'page' : undefined} className={cn(tabClass, t.active && 'font-semibold text-primary')}>
-              <span className={cn('rounded-md px-4 py-1 transition-colors', t.active && 'bg-primary/10')}>
+              <span className={cn('relative rounded-md px-4 py-1 transition-colors', t.active && 'bg-primary/10')}>
                 <t.icon className="size-5" aria-hidden />
+                <CountBadge n={t.count} className="absolute -top-1 right-1 ring-2 ring-card" />
               </span>
               <span className="max-w-full truncate">{t.label}</span>
             </Link>

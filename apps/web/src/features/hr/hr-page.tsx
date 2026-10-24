@@ -5,12 +5,13 @@
  * (PLAN.md §19.19, ATTENDANCE_SCREENS in nav.ts). /attendance/history?user=<id>&name= opens someone else's month (the API
  * checks they may).
  */
-import { useAccess } from '@freefounders/core';
+import { useAccess, useBadges } from '@freefounders/core';
 import { useHrConfig } from '@freefounders/core/hr';
 import { ArrowLeft } from '@/components/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageHeader, PageLoader } from '@/components/common/page';
 import { TabBar } from '@/components/common/controls';
+import { CountBadge } from '@/components/common/count-badge';
 import { Button } from '@/components/ui/button';
 import { MonthView } from './attendance';
 import { DailyTab } from './daily';
@@ -31,6 +32,7 @@ const BACK: Record<string, string> = { team: 'Live team', daily: 'Daily attendan
 export function HrPage() {
   const access = useAccess();
   const cfg = useHrConfig();
+  const badges = useBadges();
   const navigate = useNavigate();
   const { tab: asked } = useParams();
   const [params] = useSearchParams();
@@ -79,7 +81,7 @@ export function HrPage() {
   return (
     <div className="space-y-4">
       <PageHeader className="mb-0" title="Leave & Attendance" />
-      <TabBar label="Attendance and leave sections" items={tabs.map(([v, label]) => ({ value: v, label }))} value={tab} onChange={choose} />
+      <TabBar label="Attendance and leave sections" items={tabs.map(([v, label]) => ({ value: v, label, extra: v === 'approvals' ? <CountBadge n={badges.attendance.approvals} /> : undefined }))} value={tab} onChange={choose} />
       {tab === 'today' && <TodayTab />}
       {tab === 'history' && !otherUser && <MonthView />}
       {tab === 'history' && otherUser && (

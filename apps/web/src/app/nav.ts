@@ -1,4 +1,4 @@
-import type { Access } from '@freefounders/core';
+import type { Access, Badges } from '@freefounders/core';
 import type { IconComponent } from '@/components/icons';
 
 /** One menu entry. Each area exports its own list (features/<area>/nav.ts); the shell shows what `show` allows. */
@@ -12,6 +12,8 @@ export interface NavItem {
   end?: boolean;
   /** Section heading this item sits under in the sidebar (optional). */
   group?: string;
+  /** The red count beside it: what waits for me there (PLAN.md §19.42). */
+  badge?: (b: Badges) => number;
 }
 
 /** The four groups of the one menu (PLAN.md §19.14). Home (`/`) belongs to none of them. */
@@ -30,4 +32,11 @@ export function workspaceOf(pathname: string): Workspace | null {
 }
 
 export const WORKSPACE_NAMES: Record<Workspace, string> = { attendance: 'Attendance', tasks: 'Tasks', assets: 'Assets', admin: 'Admin' };
+/** The count on an area's sidebar header and phone tab: everything waiting for me in it (PLAN.md §19.42). */
+export const WORKSPACE_BADGE: Record<Workspace, (b: Badges) => number> = {
+  attendance: (b) => b.attendance.total,
+  tasks: (b) => b.tasks.total,
+  assets: (b) => b.assets.total,
+  admin: () => 0,
+};
 export const WORKSPACE_HOME: Record<Workspace, string> = { attendance: '/attendance', tasks: '/tasks', assets: '/assets', admin: '/people' };

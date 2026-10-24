@@ -2967,6 +2967,38 @@ class TaskCompletionViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
         return Response({"accepted": accepted, "skipped": len(ids) - accepted})
 
 
+def change_request_inbox(user, qs=None):
+    """Change / cancel requests waiting for THIS person to decide (the Requests tab and its count badge)."""
+    if qs is None:
+        qs = TaskChangeRequest.objects.all()
+    creator_raised = Q(requested_by=F("task__created_by"))
+    # a task I gave out, someone else is asking to change it
+    i_gave_it = Q(task__created_by=user)
+    # my own report asking to change a task they created themselves
+    from_my_report = Q(requested_by__reporting_manager=user) & creator_raised
+    if has_capability(user, "tasks.delete_admin_work"):
+        # the Owner decides a delete request only when the giver has
+        # left or is the one asking (otherwise the giver decides)
+        giver_gone = (Q(task__created_by__isnull=True) | Q(task__created_by__is_active=False)
+                      | creator_raised)
+        cancels_for_owner = Q(changes__cancel=True) & giver_gone
+        qs = qs.filter(i_gave_it | from_my_report | Q(escalated=True)
+                       | cancels_for_owner)
+    elif has_capability(user, "tasks.view_all"):
+        # admins are the LAST resort, not the default inbox: only
+        # escalations and people with no manager on file land here
+        no_manager = (Q(requested_by__reporting_manager__isnull=True)
+                      | Q(requested_by__reporting_manager__is_active=False))
+        qs = qs.filter(i_gave_it | from_my_report | Q(escalated=True)
+                       | (creator_raised & no_manager))
+        # a delete request is the giver's (or an Owner's) to decide, never another admin's
+        qs = qs.exclude(pk__in=TaskChangeRequest.objects.filter(changes__cancel=True)
+                        .exclude(task__created_by=user).values("pk"))
+    else:
+        qs = qs.filter(i_gave_it | from_my_report).filter(escalated=False)
+    return qs.exclude(requested_by=user).filter(status=ChangeRequestStatus.PENDING)
+
+
 class TaskChangeRequestViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
     """Modification Requests. Scopes:
       ?scope=inbox  -> requests waiting for ME to approve (default)
@@ -2995,32 +3027,7 @@ class TaskChangeRequestViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
             if not has_capability(user, "tasks.view_all"):
                 raise PermissionDenied("Only an admin can see all change requests.")
         else:  # inbox — only what THIS person is actually meant to decide
-            creator_raised = Q(requested_by=F("task__created_by"))
-            # a task I gave out, someone else is asking to change it
-            i_gave_it = Q(task__created_by=user)
-            # my own report asking to change a task they created themselves
-            from_my_report = Q(requested_by__reporting_manager=user) & creator_raised
-            if has_capability(user, "tasks.delete_admin_work"):
-                # the Owner decides a delete request only when the giver has
-                # left or is the one asking (otherwise the giver decides)
-                giver_gone = (Q(task__created_by__isnull=True) | Q(task__created_by__is_active=False)
-                              | creator_raised)
-                cancels_for_owner = Q(changes__cancel=True) & giver_gone
-                qs = qs.filter(i_gave_it | from_my_report | Q(escalated=True)
-                               | cancels_for_owner)
-            elif has_capability(user, "tasks.view_all"):
-                # admins are the LAST resort, not the default inbox: only
-                # escalations and people with no manager on file land here
-                no_manager = (Q(requested_by__reporting_manager__isnull=True)
-                              | Q(requested_by__reporting_manager__is_active=False))
-                qs = qs.filter(i_gave_it | from_my_report | Q(escalated=True)
-                               | (creator_raised & no_manager))
-                # a delete request is the giver's (or an Owner's) to decide, never another admin's
-                qs = qs.exclude(pk__in=TaskChangeRequest.objects.filter(changes__cancel=True)
-                                .exclude(task__created_by=user).values("pk"))
-            else:
-                qs = qs.filter(i_gave_it | from_my_report).filter(escalated=False)
-            qs = qs.exclude(requested_by=user).filter(status=ChangeRequestStatus.PENDING)
+            qs = change_request_inbox(user, qs)
         if self.request.query_params.get("status"):
             qs = qs.filter(status=self.request.query_params["status"])
         return qs

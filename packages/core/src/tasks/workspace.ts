@@ -321,22 +321,6 @@ export function useWorkTaskList(params: WorkListParams, options: { enabled?: boo
   });
 }
 
-/** Counts on the My Tasks (open + in progress), To accept and Requests tabs. */
-export function useTaskInboxCounts() {
-  const count = (path: string, q: Record<string, string | number> = { scope: 'inbox' }) => () =>
-    tasksApi.get<DrfPage<unknown> | unknown[]>(path, { ...q, page_size: 1 }).then((d) => (Array.isArray(d) ? d.length : (d.count ?? d.results.length)));
-  const mine = useQuery({ queryKey: ['tasks', 'my-open-count'], queryFn: count('/tasks/', { scope: 'my', status: 'open,in_progress' }) });
-  const reviews = useQuery({ queryKey: ['task-completions', 'inbox-count'], queryFn: count('/task-completions/') });
-  const requests = useQuery({ queryKey: ['task-change-requests', 'inbox-count'], queryFn: count('/task-change-requests/') });
-  return { mine: mine.data ?? 0, reviews: reviews.data ?? 0, requests: requests.data ?? 0 };
-}
-
-/** A count on a tab, like the bell: 1–9, then 9+, and 99+ past that ('' for none). */
-export function countLabel(n: number | null | undefined): string {
-  if (!n || n < 1) return '';
-  return n > 99 ? '99+' : n > 9 ? '9+' : String(n);
-}
-
 /** GET /task-settings/ — whether completing needs remarks / a proof file. */
 export function useTaskWorkSettings() {
   return useQuery({ queryKey: ['tasks', 'work-settings'], queryFn: () => tasksApi.get<TaskWorkSettings>('/task-settings/'), ...STATIC });

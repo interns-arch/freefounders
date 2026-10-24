@@ -16,6 +16,7 @@ import {
 import type { Actor } from '../../common/actor';
 import { CurrentActor, RequirePermissions, ZodPipe } from '../../common/http';
 import { AssetsModule } from '../assets/assets.module';
+import { BadgesService } from './badges.service';
 import { MaintenanceService } from './maintenance.service';
 import { QueueService } from './queue.service';
 import { RequestsService } from './requests.service';
@@ -120,9 +121,20 @@ export class QueueController {
   }
 }
 
+/** GET /badges: what waits for me in Assets, as counts for the menu and tab badges (PLAN.md §19.42). */
+@Controller('badges')
+export class BadgesController {
+  constructor(private readonly badges: BadgesService) {}
+
+  @Get()
+  counts(@CurrentActor() actor: Actor) {
+    return this.badges.counts(actor);
+  }
+}
+
 @Module({
   imports: [AssetsModule],
-  providers: [RequestsService, TicketsService, MaintenanceService, QueueService],
-  controllers: [RequestsController, TicketsController, MaintenanceController, QueueController],
+  providers: [RequestsService, TicketsService, MaintenanceService, QueueService, BadgesService],
+  controllers: [RequestsController, TicketsController, MaintenanceController, QueueController, BadgesController],
 })
 export class ServiceModule {}

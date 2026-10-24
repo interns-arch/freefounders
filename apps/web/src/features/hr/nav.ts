@@ -31,7 +31,7 @@ export const ATTENDANCE_NAV: NavItem[] = [
   { label: 'Daily attendance', to: '/attendance/daily', icon: CalendarRange, group: 'Manage', show: ATTENDANCE_SCREENS.daily },
   { label: 'Dashboard', to: '/attendance/dashboard', icon: LayoutGrid, group: 'Manage', show: ATTENDANCE_SCREENS.dashboard },
   { label: 'Reports', to: '/attendance/reports', icon: FileSpreadsheet, group: 'Manage', show: ATTENDANCE_SCREENS.reports },
-  { label: 'Approvals', to: '/attendance/approvals', icon: ClipboardCheck, group: 'Manage', show: ATTENDANCE_SCREENS.approvals },
+  { label: 'Approvals', to: '/attendance/approvals', icon: ClipboardCheck, group: 'Manage', show: ATTENDANCE_SCREENS.approvals, badge: (b) => b.attendance.approvals },
   { label: 'Payroll', to: '/attendance/payroll', icon: Banknote, group: 'Manage', show: ATTENDANCE_SCREENS.payroll },
   { label: 'HR settings', to: '/attendance/settings', icon: Settings2, group: 'Manage', show: ATTENDANCE_SCREENS.settings },
 ];

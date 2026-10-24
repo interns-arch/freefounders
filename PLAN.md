@@ -2554,6 +2554,45 @@ column, each request "Due {old} → {new}", reason, outcome (by whom, when, rema
 
 Goes live with Tasks + website updates (`migrate_companies` for `crm 0023`). No new APK needed.
 
+### 19.42 Count badges (2026-10-24)
+Founder (screenshot of the Tasks tab bar "My Tasks (5)" with a small red round counter): "like this I want notification
+count badges in the complete application." A red counter means **something waits for you** there; the bell keeps its own
+unread count.
+- **What is counted** (same rows as the screen it sits on, never another person's work, never your own request):
+  - Tasks: **My Tasks** = open + in progress assigned to me (overdue included; same as before); **To accept** = finished
+    work waiting for my review (sub-task parts use the same review, so they are in it; there is no separate "parts" list);
+    **Requests** = change / cancel requests I decide (`change_request_inbox()`, the Requests tab's own filter, moved out of
+    the viewset). Not counted: Delegated (the original counts nothing there), Disputes (a report of estimate gaps with no
+    "done" state, so a count would never drop).
+  - Attendance: **Approvals** = pending leave of the people I may approve (`approvals.reviewable_users`) + pending
+    regularizations (§19.38) of the people I review (`regularization.reviewable_users`: my direct reports plus my
+    approving scope, so a reporting manager without the approve permission sees them too), excluding my own.
+  - Assets: **Requests** = pending requests I may decide (approvers: all; a manager: their team's) + approved requests to
+    hand out (fulfillers); **Tickets** = open / in-progress tickets assigned to me + open unassigned ones (ticket managers);
+    **Exits** = open exit cases with assets still to collect (exit managers).
+  - Admin: nothing waits for an admin today (invites are accepted by the invitee; no join approvals), so no counter.
+- **API**: Tasks `GET /api/badges/` → `{tasks: {my_tasks, to_accept, requests, total}, hr: {leave, corrections,
+  approvals}}` (`crm/badges.py`); Assets `GET /api/badges` → `{approve, fulfil, requests, tickets, exits, total}`
+  (`modules/service/badges.service.ts`). A handful of COUNT queries each, in the request's company schema.
+- **Web**: core `useBadges()` (one request per app, every 60 s and on window focus; any successful change anywhere refreshes
+  it through the query client's mutation cache, so a count drops right after approving); pure helpers `toBadges()` and
+  `countLabel()` (hidden at 0, 1–99, "99+"). One component **`<CountBadge n>`** (`components/common/count-badge.tsx`): round
+  counter (allowed: counters), `--destructive` with the new **`--destructive-foreground`** token, screen readers hear
+  ", 5 pending", never shrinks (tab rows keep scrolling). Used on: Tasks tabs (My Tasks, To accept, Requests; the phone
+  "More" menu shows the sum of the hidden tabs), Attendance → Approvals tab, sidebar items (`NavItem.badge`: Tasks,
+  Approvals, Requests / My requests, Tickets, Exits), sidebar group headers and the phone bottom bar (Attendance, Tasks,
+  Assets show their area total), and the bell (unread). Replaces the old `useTaskInboxCounts()` (three list calls) and
+  `TabCount` (capped at "9+").
+
+| Check | Result |
+|---|---|
+| Tasks | `crm.tests_badges` (zero case, sign-in needed, My Tasks open/in progress only, To accept only mine, Requests = the inbox tab, Approvals in scope and never my own, a reporting manager without approve permission counts their report's regularization but not leave) |
+| Assets | integration test "count badges": employee zero / own request not counted, approve → fulfil → handed out, ticket counted for the support team and dropped when resolved |
+| core | `badge-count.test.mjs` (totals, bad values = 0, "99+") |
+| e2e | new `web-badges` (member: My Tasks 1 on tab, sidebar and phone bottom bar at 360 px without sideways scroll; owner: Approvals count drops right after approving in the screen) |
+
+Goes live with a website + Tasks API + Assets API update (no migrations). No new APK.
+
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)
 
 Founder: "use Notion's architecture for making and giving new users; plan how we share this with millions of users and

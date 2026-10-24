@@ -939,3 +939,42 @@ describe('downloads (PLAN.md §19.31)', () => {
     assert.equal((await file('/assets?export=pdf')).type.includes('json'), true);
   });
 });
+
+describe('count badges (PLAN.md §19.42)', () => {
+  const badges = async (who: string) => {
+    const r = await call('GET', '/badges', undefined, who);
+    assert.equal(r.status, 200);
+    return r.body as { approve: number; fulfil: number; requests: number; tickets: number; exits: number; total: number };
+  };
+
+  test('a plain employee has nothing waiting; their own request is never counted for them', async () => {
+    const r = await call('POST', '/requests', { itemName: 'Badge test mouse', reason: 'Broken' }, 'bob');
+    assert.equal(r.status, 201);
+    assert.deepEqual(await badges('bob'), { approve: 0, fulfil: 0, requests: 0, tickets: 0, exits: 0, total: 0 });
+    assert.equal((await call('GET', '/badges', undefined, null)).status, 401);
+    assert.equal((await call('POST', `/requests/${r.body.id}/cancel`, undefined, 'bob')).status, 200);
+  });
+
+  test('requests move from approve to fulfil and drop off when handed out; tickets count for the support team', async () => {
+    const before = await badges('admin');
+    const r = await call('POST', '/requests', { itemName: 'Badge test keyboard', reason: 'Worn out' }, 'bob');
+    let now = await badges('admin');
+    assert.equal(now.approve, before.approve + 1);
+    assert.equal(now.total, now.requests + now.tickets + now.exits);
+    assert.equal((await call('POST', `/requests/${r.body.id}/decision`, { decision: 'APPROVE' }, 'it')).status, 200);
+    now = await badges('admin');
+    assert.equal(now.approve, before.approve);
+    assert.equal(now.fulfil, before.fulfil + 1);
+    const drone = await newDrone({ name: 'Keyboard stand-in' });
+    assert.equal((await call('POST', `/requests/${r.body.id}/fulfil`, { assetId: drone.body.id }, 'it')).status, 200);
+    assert.equal((await badges('admin')).fulfil, before.fulfil);
+
+    const itBefore = (await badges('it')).tickets;
+    const t = await call('POST', '/tickets', { title: 'Badge test ticket', type: 'ISSUE', priority: 'LOW' });
+    assert.equal(t.status, 201);
+    assert.equal((await badges('it')).tickets, itBefore + 1, 'an open unassigned ticket waits for the support team');
+    assert.equal((await badges('bob')).tickets, 0);
+    assert.equal((await call('PATCH', `/tickets/${t.body.id}`, { status: 'RESOLVED' })).status, 200);
+    assert.equal((await badges('it')).tickets, itBefore);
+  });
+});

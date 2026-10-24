@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from . import views
+from .badges import badges
 from .dashboard import dashboard
 from .task_views import (
     HolidayViewSet, TaskActivityViewSet, TaskCategoryViewSet,
@@ -22,4 +23,4 @@ router.register("leads", views.LeadViewSet, basename="leads")
 router.register("quotations", views.QuotationViewSet, basename="quotations")
 router.register("assignment-rules", views.AssignmentRuleViewSet, basename="assignment-rules")
 
-urlpatterns = [path("dashboard/", dashboard)] + router.urls
+urlpatterns = [path("dashboard/", dashboard), path("badges/", badges)] + router.urls

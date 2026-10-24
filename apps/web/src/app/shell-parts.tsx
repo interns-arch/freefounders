@@ -10,6 +10,7 @@ import {
 import { NotificationTabs, NotificationText, notificationRowClass } from '@/components/common/notifications';
 import { AlarmClock, Bell, CheckCheck, ChevronDown, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
 import { CompanyMenuItems } from '@/features/account/switcher';
+import { CountBadge } from '@/components/common/count-badge';
 import { isInApp } from '@/lib/native-bridge';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -126,11 +127,7 @@ export function NotificationsBell() {
           className="relative rounded-full text-muted-foreground hover:text-primary max-lg:size-11"
         >
           <Bell className="size-5" />
-          {unread > 0 && (
-            <span className="absolute top-0.5 right-0.5 grid min-w-[18px] place-items-center rounded-full border-2 border-card bg-destructive px-1 font-mono text-[10px] leading-[14px] font-bold text-white dark:text-background">
-              {unread > 99 ? '99+' : unread}
-            </span>
-          )}
+          <CountBadge n={unread} label="unread" className="absolute top-0 right-0 ring-2 ring-card" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(25rem,calc(100vw-1rem))] overflow-hidden p-0">
