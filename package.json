@@ -12,7 +12,8 @@
     "web:build": "npm --workspace @freefounders/web run build",
     "web:typecheck": "npm --workspace @freefounders/web run typecheck",
     "mobile": "npm --prefix apps/mobile start",
-    "mobile:check": "npm --prefix apps/mobile run typecheck && npm --prefix apps/mobile test"
+    "mobile:check": "npm --prefix apps/mobile run typecheck && npm --prefix apps/mobile test",
+    "quick-check": "node scripts/quick-check.mjs"
   },
   "engines": {
     "node": ">=22"
