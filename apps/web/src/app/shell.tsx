@@ -340,9 +340,13 @@ export function AppShell() {
             <Link key={t.label} to={t.to} aria-current={t.active ? 'page' : undefined} className={cn(tabClass, t.active && 'font-semibold text-primary')}>
               <span className={cn('relative rounded-md px-4 py-1 transition-colors', t.active && 'bg-primary/10')}>
                 <t.icon className="size-5" aria-hidden />
-                <CountBadge n={t.count} className="absolute -top-1 right-1 ring-2 ring-card" />
+                {/* the badge sits on the icon; screen readers hear the count after the label ("Tasks, 1 pending") */}
+                <span aria-hidden>
+                  <CountBadge n={t.count} className="absolute -top-1 right-1 ring-2 ring-card" />
+                </span>
               </span>
               <span className="max-w-full truncate">{t.label}</span>
+              {t.count ? <span className="sr-only">, {t.count} pending</span> : null}
             </Link>
           ))}
           <button type="button" onClick={() => setDrawer(true)} aria-haspopup="dialog" aria-expanded={drawer} className={cn(tabClass, 'cursor-pointer')}>

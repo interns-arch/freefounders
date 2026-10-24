@@ -98,9 +98,9 @@ test('an admin who received a task changes and deletes it only through the giver
     const theirs = await context.newPage();
     try {
       await signIn(theirs, admin.login, admin.password);
-      // Red count on My Tasks (d0a1bdf): their two open tasks.
+      // Red count on My Tasks (d0a1bdf; CountBadge since PLAN.md §19.42): their two open tasks.
       await theirs.goto('/tasks/tasks');
-      await expect(views(theirs).getByRole('link', { name: /^My Tasks/ }).getByLabel('2 waiting')).toBeVisible();
+      await expect(views(theirs).getByRole('link', { name: /^My Tasks/ }).locator('[data-count-badge="2"]')).toBeVisible();
 
       // A change goes to the giver as a request, even for an admin.
       await theirs.goto(`/tasks/tasks/${made[0].id}`);
@@ -129,7 +129,7 @@ test('an admin who received a task changes and deletes it only through the giver
     // The giver approves both from Requests (with its red count); the second moves to Deleted.
     await signIn(page);
     await page.goto('/tasks/tasks?tab=requests');
-    await expect(views(page).getByRole('link', { name: /^Requests/ }).getByLabel(/\d+ waiting/)).toBeVisible();
+    await expect(views(page).getByRole('link', { name: /^Requests ?, \d+ pending$/ })).toBeVisible();
     for (const t of made) {
       await page.getByRole('button', { name: `Approve ${t.code}` }).click();
       await expect(page.getByRole('button', { name: `Approve ${t.code}` })).toBeHidden();

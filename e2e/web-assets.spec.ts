@@ -64,7 +64,8 @@ test('every Assets screen opens under /assets with its menu', async ({ page }) =
   await expect(page.getByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening)/ })).toBeVisible();
   const menu = page.getByRole('navigation', { name: 'Assets menu' });
   for (const name of ['Dashboard', 'Assets', 'Employees', 'Requests', 'Tickets', 'Asset catalogue', 'Departments']) {
-    await expect(menu.getByRole('link', { name, exact: true })).toBeVisible();
+    // a count badge (PLAN.md §19.42) adds ", N pending" to Requests / Tickets when something waits
+    await expect(menu.getByRole('link', { name: new RegExp(`^${name}( ?, \\d+ pending)?$`) })).toBeVisible();
   }
   // SIM cards and reconciliation are in-app too (web-assets-sims-reconciliation.spec.ts covers them).
   await expect(menu.getByRole('link', { name: /SIM cards/ })).toHaveAttribute('href', '/assets/sims');

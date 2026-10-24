@@ -54,6 +54,9 @@ async function newMember(request: APIRequestContext, owner: string) {
   };
 }
 
+/** A link / tab name with its count badge: Chrome joins the flex item's ", N pending" with a space before the comma. */
+const pending = (label: string, n: number) => new RegExp(`^${label} ?, ${n} pending$`);
+
 async function signedIn(browser: Browser, login: string, password: string, phone = false) {
   const ctx = await browser.newContext(phone ? { viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true } : {});
   const page = await ctx.newPage();
@@ -91,18 +94,18 @@ test('count badges: My Tasks for the member; Approvals for the owner drops right
     const m = await signedIn(browser, person.login, person.password);
     await m.page.goto('/tasks/tasks');
     const views = m.page.getByRole('navigation', { name: 'Task views' }).first();
-    await expect(views.getByRole('link', { name: 'My Tasks, 1 pending' })).toBeVisible();
-    await expect(m.page.getByRole('navigation', { name: 'Tasks menu' }).getByRole('link', { name: 'Tasks, 1 pending' })).toBeVisible();
-    await expect(m.page.getByRole('navigation', { name: 'Main menu' }).getByRole('link', { name: 'Tasks, 1 pending' }).first()).toBeVisible();
+    await expect(views.getByRole('link', { name: pending('My Tasks', 1) })).toBeVisible();
+    await expect(m.page.getByRole('navigation', { name: 'Tasks menu' }).getByRole('link', { name: pending('Tasks', 1) })).toBeVisible();
+    await expect(m.page.getByRole('navigation', { name: 'Main menu' }).getByRole('link', { name: pending('Tasks', 1) }).first()).toBeVisible();
     await shot(m.page, 'web-badges-my-tasks');
     await m.ctx.close();
 
     // Phone (360 px): the bottom bar's Tasks says 1 and the task tabs still scroll sideways.
     const p = await signedIn(browser, person.login, person.password, true);
     await p.page.goto('/tasks/tasks');
-    await expect(p.page.getByRole('navigation', { name: 'Quick menu' }).getByRole('link', { name: 'Tasks, 1 pending' })).toBeVisible();
+    await expect(p.page.getByRole('navigation', { name: 'Quick menu' }).getByRole('link', { name: pending('Tasks', 1) })).toBeVisible();
     const phoneViews = p.page.getByRole('navigation', { name: 'Task views' }).last();
-    await expect(phoneViews.getByRole('link', { name: 'My Tasks, 1 pending' })).toBeVisible();
+    await expect(phoneViews.getByRole('link', { name: pending('My Tasks', 1) })).toBeVisible();
     const overflow = await p.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     await shot(p.page, 'web-badges-phone');
@@ -119,10 +122,10 @@ test('count badges: My Tasks for the member; Approvals for the owner drops right
     const o = await signedIn(browser, OWNER.login, OWNER.password);
     await o.page.goto('/attendance/approvals');
     const tabs = o.page.getByRole('navigation', { name: 'Attendance and leave sections' });
-    await expect(tabs.getByRole('button', { name: `Approvals, ${before} pending` })).toBeVisible();
+    await expect(tabs.getByRole('button', { name: pending('Approvals', before) })).toBeVisible();
     await o.page.getByRole('button', { name: new RegExp(`^Approve ${person.name} — `) }).click();
     const after = before - 1;
-    if (after > 0) await expect(tabs.getByRole('button', { name: `Approvals, ${after} pending` })).toBeVisible();
+    if (after > 0) await expect(tabs.getByRole('button', { name: pending('Approvals', after) })).toBeVisible();
     else await expect(tabs.getByRole('button', { name: 'Approvals', exact: true })).toBeVisible();
     await shot(o.page, 'web-badges-approvals');
     await o.ctx.close();

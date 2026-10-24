@@ -128,6 +128,8 @@ test('notifications open their task inside the new app', async ({ page }) => {
   await signIn(page, '/tasks/notifications');
   await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
   const links = page.getByRole('main').getByRole('link', { name: /./ });
+  // wait until the list (or its empty state) has loaded before counting: count() does not wait
+  await expect(page.locator('#notification-list > li').first().or(page.getByText('Nothing here'))).toBeVisible();
   if ((await links.count()) > 0) {
     // Links are relative to their app: Tasks "/tasks/42" opens "/tasks/tasks/42", Assets "/requests?open=x" "/assets/requests?open=x".
     const href = await links.first().getAttribute('href');
