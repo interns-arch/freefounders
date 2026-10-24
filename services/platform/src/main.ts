@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
@@ -6,6 +7,7 @@ import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/exception.filter';
+import { ReportingLogger } from './console/log-sink';
 
 export const API_PREFIX = 'api/platform';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -16,10 +18,12 @@ export async function createApp() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // Payment webhooks are signed over the exact bytes received (req.rawBody).
     rawBody: true,
-    logger: process.env.NODE_ENV === 'test' ? ['error'] : ['log', 'warn', 'error'],
+    // error() lines also go to the production log (console/log-sink.ts, PLAN.md §21.9).
+    logger: new ReportingLogger({ logLevels: process.env.NODE_ENV === 'test' ? ['error'] : ['log', 'warn', 'error'] }),
   });
   // Mounted at /api/platform on the shared origin, so the gateway forwards paths unchanged.
-  app.setGlobalPrefix(API_PREFIX);
+  // POST /internal/logs (the apps' log sink) stays outside the prefix: the public gateway never forwards it.
+  app.setGlobalPrefix(API_PREFIX, { exclude: [{ path: 'internal/logs', method: RequestMethod.POST }] });
   app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : 'loopback');
   app.disable('x-powered-by');
   app.use(helmet());

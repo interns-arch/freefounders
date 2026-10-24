@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { type AnyPgColumn, boolean, customType, date, index, integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { type AnyPgColumn, bigserial, boolean, customType, date, index, integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 /** Everything the Platform owns lives in its own Postgres schema. */
 export const platform = pgSchema('platform');
@@ -613,3 +613,39 @@ export const staffAudit = platform.table(
   },
   (t) => [index('staff_audit_at_idx').on(t.at), index('staff_audit_company_idx').on(t.companyId, t.at)],
 );
+
+/**
+ * Production log (PLAN.md §21.9): ERROR-level exceptions and key events from every service (Platform, Tasks, Tasks
+ * worker, Assets), redacted before they are stored (no secrets, tokens, codes, passwords or request bodies). Kept 30
+ * days (LOG_RETENTION_DAYS). Read only by Kaampilot staff (GET console/logs).
+ */
+export const serviceLogs = platform.table(
+  'service_logs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+    service: text('service').notNull(),
+    level: text('level').notNull(),
+    kind: text('kind').notNull().default('event'),
+    event: text('event'),
+    message: text('message').notNull(),
+    stack: text('stack'),
+    method: text('method'),
+    path: text('path'),
+    status: integer('status'),
+    companyId: uuid('company_id'),
+    companyCode: text('company_code'),
+    userId: text('user_id'),
+    count: integer('count').notNull().default(1),
+    version: text('version'),
+  },
+  (t) => [index('service_logs_at_idx').on(t.at), index('service_logs_service_idx').on(t.service, t.at), index('service_logs_company_idx').on(t.companyId, t.at)],
+);
+
+/** The last heartbeat of each background service (Tasks worker: last pass, punch-ins today), for the console's Health strip. */
+export const serviceHeartbeats = platform.table('service_heartbeats', {
+  service: text('service').primaryKey(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  version: text('version'),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+});

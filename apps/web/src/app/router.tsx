@@ -41,7 +41,11 @@ export const router = createBrowserRouter([
           // Home (PLAN.md §19.14): attendance first, then the other areas; /?choose is a plain alias, /?home=1 skips the phone redirect.
           { index: true, element: <HomePage /> },
           ...adminRoutes,
+          // Kaampilot console (PLAN.md §21.1, §21.9): Kaampilot staff only (the screens send anyone else Home; the API answers 403).
           { path: 'console', lazy: async () => ({ Component: (await import('@/features/billing/console')).ConsolePage }) },
+          { path: 'console/companies/:id', lazy: async () => ({ Component: (await import('@/features/billing/console-company')).ConsoleCompanyPage }) },
+          { path: 'console/users/:kind/:id', lazy: async () => ({ Component: (await import('@/features/billing/console-users')).ConsoleUserPage }) },
+          { path: 'console/:tab', lazy: async () => ({ Component: (await import('@/features/billing/console')).ConsolePage }) },
           // Every notification of every app, grouped by area (PLAN.md §19.37); the bell's "All notifications".
           { path: 'notifications', lazy: async () => ({ Component: (await import('@/features/tasks/general/notifications')).NotificationsPage }) },
           { path: 'attendance', children: attendanceRoutes },

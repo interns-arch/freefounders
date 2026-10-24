@@ -394,8 +394,8 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   await page.getByLabel('Password', { exact: true }).fill('Demo@1234');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => u.pathname !== '/login');
-  await page.goto('/console');
-  await expect(page.getByRole('heading', { name: 'Owner console' })).toBeVisible();
+  await page.goto('/console/companies');
+  await expect(page.getByRole('heading', { name: 'Kaampilot console' })).toBeVisible();
   await page.getByRole('button', { name: `Actions for ${companyB}` }).click();
   await page.getByRole('menuitem', { name: /trial by 7 days|Extend trial.*7/i }).first().click();
   await page.getByRole('button', { name: 'Extend trial' }).click();

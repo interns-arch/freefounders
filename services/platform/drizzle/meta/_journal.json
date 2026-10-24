@@ -113,6 +113,13 @@
       "when": 1792761137350,
       "tag": "0015_otp_send_failed",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792833938353,
+      "tag": "0016_console_logs",
+      "breakpoints": true
     }
   ]
 }

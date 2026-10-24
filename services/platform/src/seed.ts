@@ -2,7 +2,7 @@
 //   node dist/seed.js            demo company for local development, plus the dev staff account (below)
 //   node dist/seed.js --bootstrap  real install: COMPANY_NAME, COMPANY_CODE, OWNER_NAME, OWNER_EMAIL, OWNER_LOGIN, OWNER_PASSWORD
 //                                  (+ optional STAFF_EMAIL, STAFF_PASSWORD: a Kaampilot staff account for /console)
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { hashPassword } from './auth/auth.service';
@@ -35,7 +35,14 @@ export async function seedStaff(staff = DEV_STAFF, companyCode = DEMO.companyCod
     if (!demo) return false;
     const email = staff.email.trim().toLowerCase();
     const [existing] = await db.select({ id: schema.accounts.id }).from(schema.accounts).where(sql`lower(${schema.accounts.email}) = ${email}`).limit(1);
-    if (existing) return false;
+    if (existing) {
+      // Dev databases seeded before the Kaampilot rename still show the old visible name: fix it once.
+      if (!bootstrap) {
+        await db.update(schema.accounts).set({ fullName: staff.fullName }).where(and(eq(schema.accounts.id, existing.id), eq(schema.accounts.fullName, 'FreeFounders Staff (dev)')));
+        await db.update(schema.people).set({ fullName: staff.fullName }).where(and(eq(schema.people.accountId, existing.id), eq(schema.people.fullName, 'FreeFounders Staff (dev)')));
+      }
+      return false;
+    }
     await db.transaction(async (tx) => {
       const [account] = await tx
         .insert(schema.accounts)

@@ -1,3 +1,5 @@
+import os
+
 from django.conf import settings
 from django.contrib import admin
 from django.http import FileResponse, Http404, JsonResponse
@@ -18,7 +20,7 @@ def media(request, path):
 
 
 def health(_request):
-    return JsonResponse({"status": "ok", "app": "cartrends-crm"})
+    return JsonResponse({"status": "ok", "app": "cartrends-crm", "version": os.environ.get("APP_VERSION") or None})
 
 
 def spa(request, *_args, **_kwargs):

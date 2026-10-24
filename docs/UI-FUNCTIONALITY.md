@@ -57,6 +57,7 @@ Generated from the code on 2026-10-08. Source of truth if anything here disagree
 3. Tasks: the task workspace (14 tabs, task lifecycle, add task, task detail, dialogs, reviews, requests, templates, reports)
 4. Tasks: general screens (home, team performance, groups, notices, notifications, my team, task settings) and HR (check in/out, attendance, leave, holidays, team, approvals, HR settings)
 5. Assets: dashboard, assets, scan, labels, employees, ID cards, joiners, exits, requests, tickets, maintenance, activity, catalogue, departments & vendors, users & roles
+6. Kaampilot console (staff only): overview + health, companies + detail, users + detail, billing, production log
 
 ---
 
@@ -3589,3 +3590,60 @@ Exit case statuses: OPEN ("In progress"), COMPLETED, CANCELLED.
 - Any other `/assets/...` path not listed above also opens the classic app.
 
 ---
+
+## 6. Kaampilot console (Kaampilot staff only, PLAN.md §21.9)
+
+- **Who:** Kaampilot staff accounts only (`accounts.is_staff`). Account menu item "Kaampilot console" (Gauge icon) shows
+  only for staff; anyone else opening `/console…` is sent to Home, and every `/api/platform/console/*` call answers 403.
+- **Header:** title "Kaampilot console", line "Kaampilot staff only. Every company and every user; every view of a
+  company and every action is logged." Tabs (in the URL): "Overview" `/console`, "Companies" `/console/companies`,
+  "Users" `/console/users`, "Billing" `/console/billing`, "Logs" `/console/logs`.
+
+### 6.1 Overview
+- "Health" (region): one card per service ("Platform", "Tasks", "Tasks worker", "Assets") with "Up" / "Down" (or "not
+  connected" / "no heartbeat yet"), "v <version>" or "version not set", answer time, "N errors in 24 h", for the worker
+  "last pass N min ago"; "Checked <time>"; refreshes every 30 s.
+- "Companies" tiles: "All companies", "Paid, active", "On trial", "Free" (hint "N complimentary"), "Past due /
+  read-only", "Suspended". "People": "People in companies" (N active), "Accounts" (N admin-made logins), "Active today",
+  "Active 7 days", "Active 30 days", "Punch-ins today" ("counted N min ago" / "waiting for the Tasks worker"). "Money
+  and codes": "MRR", "Revenue this month" (N payments), "Paid users" (N in use), "Failed payments" (N in 30 days), "Codes
+  sent today", "Codes failed today" (N server errors today).
+- "Sign-ups, last 30 days": two bars per day (Accounts, Companies) with totals in the legend; each bar has a tooltip.
+
+### 6.2 Companies
+- Search "Name, code or owner"; "Plan" and "State" selects; "Download" (Excel / CSV of the filtered list); "N of M
+  companies".
+- Table: Company (name + code), Owner, Plan, State, Users (used / paid), MRR, Apps (+ "N off" modules), Last activity,
+  Created; sortable by Company, Users, MRR, Last activity, Created (newest first by default). A row opens the detail.
+- Row menu "Actions for <company>": "Open details", "Extend trial +7 days", "Extend trial +14 days", "Set plan…",
+  "Suspend" / "Reactivate" (each asks first, as before).
+- "Recent actions" (region) below: the staff audit log (filters Company and Action incl. "Viewed company", "Viewed
+  user", "Downloaded users", "Viewed billing", "Viewed logs"; pager; Download).
+- **Company detail** `/console/companies/:id` (opening it is logged as "Viewed company", at most once per 10 minutes):
+  back link "Companies"; name, code, state; tiles Plan, Users used / paid, MRR, Server errors 7 days (last activity);
+  details (Owner, Created, Apps, Modules switched off, State, Trial ends, Period, Cancels at period end, Gateway, GST
+  details); sections "People (N)" (Name → user detail, Sign-in = username or masked email / mobile, Role, Active, Apps,
+  Last sign-in), "Invoices", "Payments", "Plan changes", "Staff actions and views". Nothing on this page changes data.
+
+### 6.3 Users
+- Search "Name, email, mobile, username or company" (server, 300 ms); "Download" (masked); "N users"; pages of 50.
+- Table: Name (+ username), Email / mobile (partly hidden: `as***@domain`, `+91******3210`), Companies, Last sign-in,
+  Created, Kind ("Verified account" / "Admin-made login", "Staff").
+- **User detail** `/console/users/account/:id` or `/console/users/login/:id` (logged as "Viewed user"): Email, Mobile,
+  Username, Last sign-in, Created, Verified; "Companies" (company → its detail, Role, Active, Apps, Last session);
+  "Recent sign-ins" (When, Company, Client, IP, Device, Open / Signed out).
+
+### 6.4 Billing (logged as "Viewed billing")
+- Tiles: Revenue this month, Invoiced this month, Failed this month, Subscriptions. "Revenue by month" (12 bars).
+- "Subscriptions", "Payments" (filters "Result" Paid / Failed and "Gateway" FakePay / Razorpay; Reason), "Invoices";
+  each section has its own "Download" (Excel / CSV of every row). Note: refunds are made in the gateway's dashboard.
+
+### 6.5 Logs (production log)
+- "Health" strip (as 6.1). "Production log" heading; "Auto-refresh" switch (on: every 15 s); "Download".
+- Filters: search "Message, path or event", "Service", "Level" (Errors / Warnings / Info), "Time" (Last hour / 24
+  hours / 7 days / 30 days), "Company code". Line "N entries · kept 30 days · secrets, codes and request bodies are
+  never stored".
+- Table: When, Level ("Error" / "Warning" / "Info"), Service, Message (+ event, method + path, status, "×N"), Company.
+  A row opens the "Log entry" drawer: When, Level, Service, Version, Kind, Event, Request, Status, Company (→ detail),
+  User id (in that service), Times; "Stack (redacted, shortened)".
+- Phone (320–390 px): tabs scroll sideways, tables become cards, no sideways page scroll.

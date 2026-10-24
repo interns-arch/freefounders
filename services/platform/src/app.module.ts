@@ -5,6 +5,9 @@ import { OTP_SENDER, OtpService, TicketsService } from './accounts/otp.service';
 import { otpSenderFromEnv } from './accounts/otp-senders';
 import { BillingController, ConsoleController } from './billing/billing.controller';
 import { BillingService } from './billing/billing.service';
+import { ConsoleDashboardController, LogsIngestController } from './console/console.controller';
+import { ConsoleDashboardService } from './console/console.service';
+import { LogsService } from './console/logs.service';
 import { CompanySetupService } from './company/setup.service';
 import { InvitesService } from './invites/invites.service';
 import { APP_GUARD } from '@nestjs/core';
@@ -29,7 +32,7 @@ import { RolesController } from './roles/roles.controller';
 import { RolesService } from './roles/roles.service';
 
 @Module({
-  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController, AccountsController, InvitesController, BillingController, ConsoleController],
+  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController, AccountsController, InvitesController, BillingController, ConsoleController, ConsoleDashboardController, LogsIngestController],
   providers: [
     DbService,
     Throttle,
@@ -50,6 +53,8 @@ import { RolesService } from './roles/roles.service';
     AccountsService,
     InvitesService,
     BillingService,
+    LogsService,
+    ConsoleDashboardService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

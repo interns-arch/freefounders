@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 import { DbService } from '../db/db.service';
 import { authTickets, otpCodes } from '../db/schema';
+import { platformLog } from '../console/log-sink';
 import type { Identifier } from './identifier';
 
 export type OtpPurpose = 'signup' | 'reset' | 'login';
@@ -143,6 +144,8 @@ export class OtpService {
     } catch (err) {
       // Never usable, and the person may ask again at once (failed rows are left out of the per-identifier limits).
       await db.update(otpCodes).set({ failedAt: new Date() }).where(eq(otpCodes.id, id));
+      // Production log (PLAN.md §21.9): channel, purpose and kind only; never the code or the target.
+      platformLog({ level: 'warn', event: 'otp.send_failed', message: `A ${purpose} code by ${target.channel} could not be sent (${err instanceof OtpSendError ? err.kind : 'unavailable'})` });
       throw sendFailed(err, target.channel);
     }
     return { otpId: id, channel: target.channel, ...(otpDevEcho() ? { devCode: code } : {}) };

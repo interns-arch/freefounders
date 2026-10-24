@@ -10,3 +10,8 @@ class TenancyConfig(AppConfig):
         from .schemas import on_connect
 
         connection_created.connect(on_connect, dispatch_uid="tenancy-search-path")
+
+        # Production log to the Platform (no-op unless PLATFORM_LOG_URL is set).
+        from .log_sink import install
+
+        install()

@@ -229,7 +229,7 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         )}
         {access.platform?.account?.isStaff && (
           <DropdownMenuItem onSelect={() => navigate('/console')}>
-            <Gauge className="size-4" /> Owner console
+            <Gauge className="size-4" /> Kaampilot console
           </DropdownMenuItem>
         )}
         {/* Phone app only (PLAN.md §19.32): the punch-in reminder lives on the phone. */}

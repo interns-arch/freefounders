@@ -13,6 +13,9 @@ import { billingSummary, isReadOnly, paymentRequired, SUSPENDED_MESSAGE } from '
 import { heldAccess, platformPermissionsOf } from '../roles/platform-permissions';
 import { ACCESS_TTL_SECONDS, TokensService } from '../keys/tokens.service';
 import { IP_LIMIT_MESSAGE, ipLimit, maxFailedLogins, Throttle } from './throttle';
+import { platformLog } from '../console/log-sink';
+
+const BURSTS = new Set([20, 100, 500, 1000]);
 
 /** "Stay signed in": a refresh session lives until it goes unused this long (founder decision: 1 year). */
 export const REFRESH_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -272,7 +275,11 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
   /** A failed sign-in attempt from this address (a wrong code counts like a wrong password). */
   ipFailed(ip: string | undefined) {
-    this.throttle.fail(`ip:${ip ?? 'unknown'}`);
+    const key = `ip:${ip ?? 'unknown'}`;
+    this.throttle.fail(key);
+    // A burst of failed sign-ins from one network goes to the production log (PLAN.md §21.9) at 20, 100, 500, 1000.
+    const n = this.throttle.count(key);
+    if (BURSTS.has(n)) platformLog({ level: 'warn', event: 'signin.failed_burst', message: `${n} failed sign-ins from ${ip ?? 'an unknown address'} in 15 minutes` });
   }
 
   private async enterAccount(account: typeof accounts.$inferSelect, meta: Meta): Promise<(Issued & { mustChangePassword: boolean }) | ChooseCompany> {

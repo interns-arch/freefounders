@@ -8,13 +8,16 @@ import { AppModule } from './app.module';
 import { companyMiddleware } from './common/company.middleware';
 import { AllExceptionsFilter } from './common/exception.filter';
 import { ExportInterceptor } from './common/export';
+import { ReportingLogger } from './common/log-sink';
 import { DbService } from './db/db.service';
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export async function createApp() {
+  const logLevels: ('warn' | 'error')[] = process.env.NODE_ENV === 'test' ? ['error'] : ['warn', 'error'];
+  // ReportingLogger also sends error() lines to the Platform's production log when PLATFORM_LOG_URL is set.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: process.env.NODE_ENV === 'test' ? ['error'] : ['warn', 'error'],
+    logger: new ReportingLogger({ logLevels }),
   });
   app.setGlobalPrefix('api');
   // Behind a hosting proxy (Render) the client address and https come from X-Forwarded-*.

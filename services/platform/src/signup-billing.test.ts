@@ -905,7 +905,7 @@ describe('owner console audit log (PLAN.md §21.7)', () => {
     assert.equal(all.body.rows[0].companyId, other.companyId, 'newest first');
     assert.equal(all.body.rows[0].action, 'company.suspend');
     assert.ok(all.body.total >= 5);
-    assert.deepEqual(all.body.actions, ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate']);
+    assert.deepEqual(all.body.actions, ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate', 'view.company', 'view.user', 'view.users', 'view.billing', 'view.logs']);
     const byCompany = await call('GET', `/console/audit?company=${target.companyId}`, { token: t });
     assert.deepEqual(byCompany.body.rows.map((r: { action: string }) => r.action), ['company.reactivate', 'company.suspend', 'plan.set', 'trial.extend']);
     assert.equal(byCompany.body.rows[0].companyName, 'Audit Target Co');

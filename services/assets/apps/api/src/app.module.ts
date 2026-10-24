@@ -27,7 +27,7 @@ export class HealthController {
   @Get()
   async health() {
     await this.dbs.db.execute(sql`select 1`);
-    return { status: 'ok', time: new Date().toISOString() };
+    return { status: 'ok', time: new Date().toISOString(), version: process.env.APP_VERSION || null };
   }
 }
 

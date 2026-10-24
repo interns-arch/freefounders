@@ -228,7 +228,7 @@ export interface ConsoleCompany {
 export type SwitchToFreeResult = BillingSummary & { freeFrom: 'now' | 'period_end' };
 
 /** Owner console actions written to the staff audit log (PLAN.md §21.7). */
-export type ConsoleAuditAction = 'trial.extend' | 'plan.set' | 'company.suspend' | 'company.reactivate';
+export type ConsoleAuditAction = 'trial.extend' | 'plan.set' | 'company.suspend' | 'company.reactivate' | 'view.company' | 'view.user' | 'view.users' | 'view.billing' | 'view.logs';
 
 /** GET console/audit: one staff action. */
 export interface ConsoleAuditRow {

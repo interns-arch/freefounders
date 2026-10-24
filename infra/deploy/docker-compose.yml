@@ -87,6 +87,10 @@ services:
       # available" with the APK link. Empty = off (default).
       MOBILE_MIN_VERSION: ${MOBILE_MIN_VERSION:-}
       MOBILE_APK_URL: ${MOBILE_APK_URL:-/download/kaampilot.apk}
+      # Production log + Kaampilot console (PLAN.md §21.9): the version shown in Health (ff.sh sets the deployed commit);
+      # an optional shared token the apps must send to /internal/logs (empty = internal network only).
+      APP_VERSION: ${APP_VERSION:-}
+      LOG_SINK_TOKEN: ${LOG_SINK_TOKEN:-}
     # egress: only the Platform may call out (api.razorpay.com, control.msg91.com); it still publishes no port.
     networks: [internal, egress]
     healthcheck:
@@ -115,6 +119,8 @@ services:
       ALLOWED_HOSTS: ${TASKS_ALLOWED_HOSTS:?}
       CSRF_TRUSTED_ORIGINS: ${PUBLIC_WEB_URL:?}
       DATABASE_URL: postgres://ff_tasks:${TASKS_DB_PASSWORD}@postgres:5432/ff_tasks
+      APP_VERSION: ${APP_VERSION:-}
+      LOG_SINK_TOKEN: ${LOG_SINK_TOKEN:-}
     # The image's own entrypoint runs plain `migrate` + 1 worker (standalone mode). Here: every company's schema, and
     # 2 workers (the reminder ticker runs in tasks-worker instead, NOTIF_SCHEDULER=false).
     entrypoint: []
@@ -175,6 +181,10 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       UPLOAD_DIR: /data/uploads
       PHOTO_CONCURRENCY: "1"
+      # Production log (PLAN.md §21.9): errors go to the Platform on the internal network.
+      PLATFORM_LOG_URL: http://platform:4000/internal/logs
+      APP_VERSION: ${APP_VERSION:-}
+      LOG_SINK_TOKEN: ${LOG_SINK_TOKEN:-}
     volumes:
       - ${FF_HOME:?}/data/assets-uploads:/data/uploads
     networks: [internal]

@@ -15,7 +15,7 @@ import time
 from django.core.management.base import BaseCommand
 from django.db import connection
 
-from tenancy import schemas
+from tenancy import log_sink, schemas
 from tenancy.company_settings import company_env
 
 log = logging.getLogger("tenancy.worker")
@@ -50,8 +50,41 @@ def run_jobs() -> None:
         poll_inbox()
 
 
-def run_pass() -> dict:
-    """Runs one pass for every company. Returns {schema-or-'default': 'ok'|'failed'|'skipped'}."""
+def _punches_today() -> int:
+    """Punch-ins dated today (local date) in the current schema; for the production-log heartbeat."""
+    from django.utils import timezone
+
+    from hr.models import Attendance
+
+    return Attendance.objects.filter(date=timezone.localdate(), check_in__isnull=False).count()
+
+
+def _count_punches(punches: dict, key: str) -> None:
+    if not log_sink.enabled():
+        return
+    try:
+        punches[key] = _punches_today()
+    except Exception:  # noqa: BLE001 -- the heartbeat must never break a pass
+        pass
+
+
+def send_heartbeat(results: dict, punches: dict) -> None:
+    """Heartbeat to the Platform log sink after a pass (only when PLATFORM_LOG_URL is set)."""
+    if not log_sink.enabled():
+        return
+    try:
+        values = list(results.values())
+        log_sink.heartbeat({
+            "results": {s: values.count(s) for s in ("ok", "failed", "skipped")},
+            "punchesToday": {"total": sum(punches.values()), "byCompany": punches},
+        })
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def run_pass(punches: dict | None = None) -> dict:
+    """Runs one pass for every company. Returns {schema-or-'default': 'ok'|'failed'|'skipped'}.
+    With the production log on, `punches` (if given) gets today's punch-ins per company id (or 'default')."""
     # A long-running process gets no request cycle to drop a broken or expired connection: do it here, or one lost
     # connection would fail every later pass.
     if not connection.in_atomic_block:
@@ -65,17 +98,22 @@ def run_pass() -> dict:
             for company in schemas.companies():
                 try:
                     with schemas.use(company["schema"]):
+                        if punches is not None:
+                            _count_punches(punches, company["company_id"])
                         run_jobs()
                     results[company["schema"]] = "ok"
                 except Exception:  # noqa: BLE001 -- one company must not stop the others
-                    log.exception("worker pass failed for %s", company["schema"])
+                    log.exception("worker pass failed for %s", company["schema"],
+                                  extra={"event": "worker.failed", "company_id": company["company_id"]})
                     results[company["schema"]] = "failed"
         else:
+            if punches is not None:
+                _count_punches(punches, "default")
             try:
                 run_jobs()
                 results["default"] = "ok"
             except Exception:  # noqa: BLE001
-                log.exception("worker pass failed")
+                log.exception("worker pass failed", extra={"event": "worker.failed"})
                 results["default"] = "failed"
     finally:
         _unlock()
@@ -90,10 +128,14 @@ class Command(BaseCommand):
         parser.add_argument("--interval", type=int, default=300, help="Seconds between passes (default 300).")
 
     def handle(self, once=False, interval=300, **opts):
+        log_sink.set_service("tasks-worker")
         while True:
             started = time.monotonic()
-            results = run_pass()
+            punches: dict = {}
+            results = run_pass(punches)
             self.stdout.write(f"worker pass: {results}")
+            send_heartbeat(results, punches)
+            log_sink.flush(5)
             if once:
                 return
             time.sleep(max(5, interval - (time.monotonic() - started)))

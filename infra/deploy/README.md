@@ -104,6 +104,8 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 | `FF_COMPANY_*`, `FF_OWNER_*`, `FF_STAFF_*` | first company, owner login and staff account (`bootstrap.sh`) |
 | `MOBILE_MIN_VERSION` | phone app update banner (PLAN.md §19.40). Empty (default) = off. Set it to the newest APK's version (e.g. `1.2.2`) after putting that APK at `FF_HOME/web/download/kaampilot.apk`: every installed app older than it shows a non-blocking banner "A new version of Kaampilot is available" with a link that downloads https://kaampilot.com/download/kaampilot.apk in the phone's browser. Then `ff.sh up -d platform`. |
 | `MOBILE_APK_URL` | where that link goes: a path on this site (default `/download/kaampilot.apk`) or a full https:// address |
+| `LOG_SINK_TOKEN` | optional: the shared token Tasks / Assets must send to the Platform's log sink (`/internal/logs`, PLAN.md §21.9). Empty (default) = internal network only |
+| `LOG_RETENTION_DAYS`, `LOG_RATE_PER_MINUTE` | production log: days kept (30) and entries per minute per service (300); set in docker-compose if ever needed |
 
 WhatsApp, Gmail and AI stay off (no keys). An Owner or Admin turns them on for their company in **Admin → Settings →
 Integrations** (keys are write-only and stored encrypted with `TASKS_SETTINGS_KEY`); the command `ff.sh exec tasks
@@ -194,6 +196,33 @@ switched on, codes go to the platform log (and on screen while `DEMO_MODE=1`).
 4. **`DEMO_MODE` stays `1`** until the founder decides: codes are then sent by MSG91 **and** still shown on screen (test
    mode note). Setting `DEMO_MODE=0` (then `ff.sh up -d --no-deps platform`) hides on-screen codes for good: people
    need the real SMS / email, so do it only once SMS works (and email, or tell people to use their mobile number).
+
+## Kaampilot console (staff) and the production log
+
+The console (PLAN.md §21.9) is at **https://kaampilot.com/console** (or `http://<server>:7395/console`): every company,
+every user, billing and the production log of all services. Only **Kaampilot staff accounts** open it (company owners
+and admins get 403 and are sent Home). There is no staff account in the code for a server; it is made on the server:
+
+1. **The bootstrap staff account** (made once by `bootstrap.sh` from `FF_STAFF_EMAIL` / `FF_STAFF_PASSWORD` in
+   `FF_HOME/.env`). Sign in at `/login` with that email and password (read it on the server:
+   `sudo grep FF_STAFF_ /opt/freefounders/.env`; never send it around), then account menu → **Kaampilot console**.
+2. **Your own account as staff** (recommended for the founder): sign up at `/signup` with your own email or mobile
+   (this makes an account and a company), then on the server:
+   ```
+   app/infra/deploy/ff.sh exec -T platform node dist/companies.js staff --email you@example.com
+   ```
+   (`--off` takes it away again). Sign out and in again; the console appears in the account menu. Staff status is
+   checked in the database on every console call, so taking it away counts at once.
+
+Every console view of a company or a person is written to the staff audit log (Companies tab → Recent actions).
+
+**Production log**: Tasks, the Tasks worker and Assets send their errors to the Platform at
+`http://platform:4000/internal/logs` on the internal Docker network (`PLATFORM_LOG_URL` in `tasks.env` and
+`docker-compose.yml`); this path is outside `/api/platform`, so the gateway never forwards it. Optional extra lock: add
+`LOG_SINK_TOKEN=<random>` to `FF_HOME/.env` (e.g. `head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'`) and
+`ff.sh up -d` (all three services read it). Entries are redacted (no secrets, tokens, codes or request bodies) and kept
+30 days (`LOG_RETENTION_DAYS`). The **Health** strip shows each service's version: `ff.sh` passes the deployed commit as
+`APP_VERSION` (containers pick it up on `ff.sh up -d`).
 
 ## Known limits of the http demo
 - Browsers allow camera, microphone, geolocation and service workers only on https (or localhost): punch-in with

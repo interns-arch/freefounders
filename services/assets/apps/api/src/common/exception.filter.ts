@@ -1,5 +1,7 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Response } from 'express';
+import type { AuthedRequest } from './http';
+import { reportException } from './log-sink';
 
 interface PgError {
   code?: string;
@@ -79,6 +81,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     this.logger.error(exception instanceof Error ? exception.stack ?? exception.message : String(exception));
+    // Production log (no-op unless PLATFORM_LOG_URL is set); never touches the body, headers or query.
+    try {
+      const req = host.switchToHttp().getRequest<AuthedRequest>();
+      reportException(exception, {
+        event: 'request.failed',
+        method: req?.method,
+        path: req?.originalUrl ?? req?.url,
+        status: 500,
+        companyId: req?.companyId,
+        userId: req?.actor?.userId ?? undefined,
+      });
+    } catch {
+      // reporting must never change the response
+    }
     res.status(500).json({ statusCode: 500, message: 'Something went wrong. Please try again.' });
   }
 }

@@ -3137,3 +3137,94 @@ password"; 30 s gap and the per-IP guard). Web rules + typecheck + build; `npm r
 `web-code-signin.spec.ts` (new), `single-login.spec.ts`, `web-signup-billing.spec.ts` pass; `web-account-flows.spec.ts`
 passes up to its billing test, which times out on FakePay's "Payment successful" (the Pay request was still running
 after 5 s while another agent ran the suite; the test does not touch codes; to recheck on a quiet machine).
+
+### 21.9 Kaampilot console dashboard + production log (2026-10-24)
+
+Founder: "production log, and I want a dashboard for my admin page where we can see the complete users of this
+application — I have all the access of the application, I can see the billing and all the things." The owner console
+(`/console`, §21.1 / §21.7) became the **Kaampilot console**, for Kaampilot staff (the application owner) only: same
+guard (`BillingService.assertStaff`: `accounts.is_staff`, checked in the database on every call, 403 for everyone else,
+company owners and admins included); the web screens send anyone else Home and the menu item ("Kaampilot console" in
+the account menu) shows only for staff. Read-only: the only changes are the existing ones (extend trial, set plan,
+suspend / reactivate), unchanged.
+
+**Screens** (`apps/web/src/features/billing/console*.tsx`, tabs in the URL):
+- `/console` **Overview**: Health strip (Platform, Tasks, Tasks worker, Assets: up / down, version, errors in 24 h,
+  the worker's last pass); companies (all, paid active, trial, Free + complimentary, past due / read-only, suspended);
+  people (in companies, accounts + admin-made logins, active today / 7 / 30 days from sign-ins and session refreshes,
+  punch-ins today from the Tasks worker); money and codes (MRR, revenue this month, paid users, failed payments,
+  codes sent / failed today, server errors today); sign-ups per day for 30 days (accounts and companies).
+- `/console/companies`: every company (name, code, owner, plan, state, users used / paid, MRR, apps + modules off,
+  last activity, created), search, plan / state filters, sortable columns, Download; the row menu keeps the staff
+  actions; **Recent actions** (staff audit log) below. A row opens `/console/companies/:id`: people (name, sign-in name
+  or masked email / mobile, role, active, apps, last sign-in), subscription, GST details, invoices, payments, plan
+  changes (checkouts + user changes), staff actions and views, errors in 7 days.
+- `/console/users`: every account and admin-made login across companies (name, username, email / mobile partly hidden
+  `as***@domain` / `+91******3210`, companies, last sign-in, created, verified account or admin-made, staff), server
+  search, pages of 50, Download (masked too); a row opens `/console/users/:kind/:id` (companies with role / apps / last
+  session; the last 20 sign-ins with client, IP, device).
+- `/console/billing`: revenue by month (12), subscriptions, payments (FakePay and Razorpay, paid / failed, reason),
+  invoices; each with Download (xlsx / csv). Refunds happen in the gateway's dashboard (no refund flow yet).
+- `/console/logs`: the **production log**: Health strip, filters (service, level, time window, company code), search,
+  auto-refresh every 15 s (switch), pages of 50, a detail drawer (request, status, company, user id in that service,
+  count, version, redacted stack), Download.
+- Phone: every tab fits 320 px (tables become cards); desktop first.
+
+**API** (Platform, `/api/platform`, staff only; `src/console/console.controller.ts`, `console.service.ts`,
+`logs.service.ts`): `GET console/overview`, `GET console/health`, `GET console/dashboard/companies`,
+`GET console/dashboard/companies/:id`, `GET console/users?q=&page=&pageSize=` (+ `&export=xlsx|csv`),
+`GET console/users/:kind/:id` (kind `account` | `login`), `GET console/billing` (+ `?export=xlsx|csv&sheet=subscriptions|
+invoices|payments|months`), `GET console/logs?service=&level=&company=&from=&to=&q=&page=&pageSize=` (+ `&export=`).
+The older `console/summary`, `console/companies`, `console/audit` and the three actions are unchanged.
+
+**Audit** (privacy): every view of a company's or a person's data writes a `staff_audit` row: `view.company`,
+`view.user`, `view.users` (downloads), `view.billing`, `view.logs`, `details.view = true`, at most one row per staff +
+action + subject every 10 minutes (auto-refresh does not flood it), never failing the view. Recent actions filters them
+too ("Viewed company"…). No password, hash, token or code is ever read by these endpoints.
+
+**Production log** (`platform.service_logs` + `platform.service_heartbeats`, migration `0016_console_logs`):
+- **Platform** writes its own entries in-process (`src/console/log-sink.ts`): the exception filter records every 500
+  with method, path (no query), company id + code, person id; `ReportingLogger` (the Nest logger) records every other
+  `error()` line (events poller, billing clock, provisioning…); key events: `signin.failed_burst` (20 / 100 / 500 / 1000
+  failed sign-ins from one address in 15 minutes), `otp.send_failed` (channel, purpose, kind; never the code or target),
+  `billing.webhook` (gateway + event type, duplicate or not; never the payload) and `billing.webhook_rejected`.
+- **Tasks, its worker and Assets** post to **`POST /internal/logs`** on the Platform (`{service, version, entries[],
+  heartbeat?}`), chosen as the cheapest robust way: no new table in the apps, no cross-company query, works for
+  errors without a company. The route is outside `/api/platform` (main.ts excludes it from the prefix), so the public
+  gateway (which only forwards `/api/platform/*`) never reaches it; anything that arrives through a proxy
+  (`X-Forwarded-For`) is refused, and with `LOG_SINK_TOKEN` set the `x-log-sink-token` header must match too. Apps:
+  `PLATFORM_LOG_URL` (unset = off, so standalone installs and tests are unchanged). Tasks: `tenancy/log_sink.py` (a root
+  `logging.Handler` at ERROR: `django.request` 500s with method / path / company id / user id if already loaded, worker
+  `log.exception` as `worker.failed`; daemon thread + bounded queue); the worker sends a heartbeat after each pass
+  (results ok / failed / skipped, punch-ins today per company counted inside its existing per-company loop). Assets:
+  `src/common/log-sink.ts` (exception filter 500s with method / path / company / actor; `ReportingLogger` for other
+  errors).
+- **Never blocks or fails a request**: in-memory buffers flushed by timers (apps: 20 entries or 2 s, 3 s timeout, all
+  errors swallowed; Platform: inserted on the root pool outside any request transaction, a failed insert is dropped).
+  **Rate limits**: apps 60 entries / minute per process, identical entries within 60 s folded into one with `count`;
+  Platform 300 / minute per service (`LOG_RATE_PER_MINUTE`).
+- **Redaction** (apps before sending, Platform again before storing): `Bearer …`, JWTs, `password= / token= / secret= /
+  otp= / code= / authkey= / api_key= / signature= / cookie=` values, SQL `params:`, emails (`a***@domain`), runs of 6+
+  digits (codes, mobiles); paths without query strings; messages 500 characters (first line), stacks the last 4000.
+  Request bodies, headers and cookies are never read.
+- **Retention**: 30 days (`LOG_RETENTION_DAYS`), purged a minute after start and every 6 hours.
+- **Health**: `GET console/health` probes Tasks `/health` and Assets `/api/health` (3 s; both now return `version`), the
+  Platform's own `APP_VERSION`, the worker's last heartbeat (down after 15 minutes without one) and errors in 24 h.
+  `APP_VERSION` is the deployed commit (`ff.sh` sets it from the app folder's current commit; `dev` in `npm run dev`).
+
+**Dev staff login**: `staff@freefounders.test` / `Demo@1234`, shown as "Kaampilot Staff (dev)" (an older dev database
+that still says "FreeFounders Staff (dev)" is renamed by the seed on the next start). On a server the staff account
+comes from `FF_STAFF_EMAIL` / `FF_STAFF_PASSWORD` (`bootstrap.sh`) or `company -- staff --email` (infra/deploy/README.md
+"Kaampilot console").
+
+**Status 2026-10-24:** Platform typecheck + tests (new `src/console-dashboard.test.ts`, 12: non-staff 403 on every
+endpoint with nothing audited; overview counts equal the database; punch-ins and Health from the heartbeat, Tasks down;
+company list / detail and one deduplicated `view.company` row; users masked incl. the download, detail audited; FakePay
+purchase in payments / invoices / months / overview + the four downloads + the webhook in the log; redaction; Tasks
+entries stored redacted with the company code, filters, CSV; ingest refused through a proxy / without the token, 404
+under `/api/platform`; rate limit; a Platform 500 recorded with its request and the same answer, a failing writer never
+throws; 30-day retention). Tasks `tenancy.tests_log_sink` 8 + full suite 1046 OK; Assets `log-sink.test.ts` 6 + full
+suite 105; root `npm run web:build` (rules + typecheck + build). New `e2e/web-console-dashboard.spec.ts` (owner 403 and
+sent Home; staff Overview + Health, Companies → detail with the audited view, Users masked → detail, Billing, Logs with
+the drawer; 390 / 320 px) and `web-account-flows.spec.ts` updated (`/console/companies`, "Kaampilot console"); both
+still to run on a dev suite started from this branch (the shared :8080 suite was busy with another agent's e2e run).

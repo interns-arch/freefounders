@@ -67,6 +67,7 @@ import {
   subscriptionOf,
   TRIAL_DAYS,
 } from './seats';
+import { platformLog } from '../console/log-sink';
 
 /** Postgres advisory lock: one Platform process runs the billing clock at a time (like the events poller). */
 export const BILLING_LOCK = 4_646_002;
@@ -495,8 +496,17 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException('Unknown payment gateway');
     }
     if (!rawBody?.length) throw new BadRequestException('Empty event');
-    const event = gateway.verifyWebhook(headers, rawBody);
-    return this.storeAndApply(gatewayName, event);
+    let event: GatewayEvent;
+    try {
+      event = gateway.verifyWebhook(headers, rawBody);
+    } catch (err) {
+      platformLog({ level: 'warn', event: 'billing.webhook_rejected', message: `${gatewayName} webhook refused: ${(err as Error).message}` });
+      throw err;
+    }
+    const result = await this.storeAndApply(gatewayName, event);
+    // Production log (PLAN.md §21.9): every webhook that arrived, never its payload.
+    platformLog({ level: 'info', event: 'billing.webhook', message: `${gatewayName} ${event.type}${result.duplicate ? ' (duplicate, ignored)' : ''}`, companyId: null });
+    return result;
   }
 
   /** Stores the event once (billing_events, unique per gateway + event id) and applies it in the same transaction. */
@@ -1398,7 +1408,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       total,
       page: q.page,
       pageSize: q.pageSize,
-      actions: CONSOLE_ACTIONS,
+      actions: [...CONSOLE_ACTIONS, ...VIEW_ACTIONS],
       rows: rows.map(({ row: r, companyName }) => ({
         id: r.id,
         at: iso(r.at),
@@ -1423,9 +1433,11 @@ export interface StaffActor {
 /** Every mutating owner-console action (each writes one staff_audit row). */
 export const CONSOLE_ACTIONS = ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate'] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
+/** Read-only console views of a company's or person's data, also in the staff audit log (PLAN.md §21.9). */
+export const VIEW_ACTIONS = ['view.company', 'view.user', 'view.users', 'view.billing', 'view.logs'] as const;
 export const auditQuerySchema = z.object({
   company: z.string().trim().max(80).optional(),
-  action: z.enum(CONSOLE_ACTIONS).optional(),
+  action: z.enum([...CONSOLE_ACTIONS, ...VIEW_ACTIONS]).optional(),
   page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
 });
