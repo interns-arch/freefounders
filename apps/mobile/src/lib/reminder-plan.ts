@@ -10,6 +10,10 @@
  * ringing every week even if the app is never opened again. "Skip today" (a check-in in the app) cannot cancel one
  * occurrence of a weekly notification, so the reminders that belong to the skipped day are planned as one-off
  * notifications for the next weeks instead; the next time the app opens after that day, the plan goes back to weekly.
+ *
+ * Several reminders a day (PLAN.md §19.39, app 1.2.2+): `count` reminders, `followUpMinutes` apart (the company rule:
+ * reporting time + 30, + 60, + 90 = time + 30 min, count 3, gap 30). An older shell (1.2.0/1.2.1) ignores `count` and
+ * rings the first one and one follow-up; settings saved without `count` keep that meaning (2, or 1 without a follow-up).
  */
 
 export const REMINDER_MODES = ['vibrate', 'ring', 'ring-vibrate'] as const;
@@ -24,13 +28,16 @@ export interface ReminderSettings {
   mode: ReminderMode;
   /** Remind again this many minutes later (0 = off). */
   followUpMinutes: number;
+  /** Reminders in all on a day, the first at `time`, then every `followUpMinutes` (1 when there is no follow-up). */
+  count: number;
 }
 
-export const MAX_FOLLOW_UP = 120;
+export const MAX_FOLLOW_UP = 240;
+export const MAX_COUNT = 10;
 /** Weeks of one-off reminders planned for a skipped day (the plan is refreshed every time the app opens). */
 export const SKIP_WEEKS = 4;
 
-export const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '09:20', days: [1, 2, 3, 4, 5, 6], mode: 'ring-vibrate', followUpMinutes: 10 };
+export const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '09:20', days: [1, 2, 3, 4, 5, 6], mode: 'ring-vibrate', followUpMinutes: 10, count: 2 };
 
 const TIME = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 
@@ -51,6 +58,9 @@ export function parseReminderSettings(raw: unknown): { ok: true; settings: Remin
   const enabled = m.enabled !== false;
   if (enabled && days.length === 0) return { ok: false, error: 'Choose at least one day for the reminder.' };
   const f = typeof m.followUpMinutes === 'number' && Number.isFinite(m.followUpMinutes) ? Math.round(m.followUpMinutes) : m.followUpMinutes === undefined ? 10 : 0;
+  const followUpMinutes = Math.min(MAX_FOLLOW_UP, Math.max(0, f));
+  const asked = typeof m.count === 'number' && Number.isFinite(m.count) ? Math.round(m.count) : 2;
+  const count = followUpMinutes > 0 ? Math.min(MAX_COUNT, Math.max(1, asked)) : 1;
   return {
     ok: true,
     settings: {
@@ -58,7 +68,8 @@ export function parseReminderSettings(raw: unknown): { ok: true; settings: Remin
       time: `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`,
       days,
       mode: reminderMode(m.mode),
-      followUpMinutes: Math.min(MAX_FOLLOW_UP, Math.max(0, f)),
+      followUpMinutes,
+      count,
     },
   };
 }
@@ -81,9 +92,10 @@ export const CHANNELS: Record<ReminderMode, { id: string; name: string; sound: b
 };
 export const VIBRATION_PATTERN = [0, 600, 300, 600, 300, 900];
 
+/** `n` = which reminder of the day (1 … count); `followUp` = n > 1. */
 export type PlannedReminder =
-  | { kind: 'weekly'; day: number; followUp: boolean; weekday: number; hour: number; minute: number }
-  | { kind: 'date'; day: number; followUp: boolean; at: Date };
+  | { kind: 'weekly'; day: number; n: number; followUp: boolean; weekday: number; hour: number; minute: number }
+  | { kind: 'date'; day: number; n: number; followUp: boolean; at: Date };
 
 function atMinutes(date: Date, minutes: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, minutes, 0, 0);
@@ -99,7 +111,8 @@ export function planReminders(s: ReminderSettings, now: Date, skipDate: string |
   const t = parseTime(s.time);
   if (!s.enabled || !t || s.days.length === 0) return [];
   const base = t.hour * 60 + t.minute;
-  const slots = [{ followUp: false, minutes: base }, ...(s.followUpMinutes > 0 ? [{ followUp: true, minutes: base + s.followUpMinutes }] : [])];
+  const count = s.followUpMinutes > 0 ? Math.min(MAX_COUNT, Math.max(1, s.count ?? 2)) : 1;
+  const slots = Array.from({ length: count }, (_, i) => ({ n: i + 1, followUp: i > 0, minutes: base + i * s.followUpMinutes }));
   let skip: Date | null = null;
   if (skipDate) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(skipDate);
@@ -117,10 +130,10 @@ export function planReminders(s: ReminderSettings, now: Date, skipDate: string |
         source = candidates.find((c) => isoWeekday(c) === day && atMinutes(c, slot.minutes).getTime() > now.getTime()) ?? null;
       }
       if (source) {
-        for (let k = 1; k <= SKIP_WEEKS; k++) out.push({ kind: 'date', day, followUp: slot.followUp, at: atMinutes(addDays(source, 7 * k), slot.minutes) });
+        for (let k = 1; k <= SKIP_WEEKS; k++) out.push({ kind: 'date', day, n: slot.n, followUp: slot.followUp, at: atMinutes(addDays(source, 7 * k), slot.minutes) });
       } else {
         const fireIso = ((day - 1 + shift) % 7) + 1;
-        out.push({ kind: 'weekly', day, followUp: slot.followUp, weekday: expoWeekday(fireIso), hour: Math.floor(inDay / 60), minute: inDay % 60 });
+        out.push({ kind: 'weekly', day, n: slot.n, followUp: slot.followUp, weekday: expoWeekday(fireIso), hour: Math.floor(inDay / 60), minute: inDay % 60 });
       }
     }
   }

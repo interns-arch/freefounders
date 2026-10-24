@@ -2,7 +2,7 @@
 # the env file (FF_HOME/.env, mode 600, never in git) and this file. README.md has the whole procedure.
 #
 # Only the gateway publishes a port (FF_PORT, default 7395). Databases and APIs sit on an internal network with no
-# published ports and no internet access (the Platform alone also joins `egress`, to reach api.razorpay.com). Every
+# published ports and no internet access (the Platform alone also joins `egress`, to reach api.razorpay.com and control.msg91.com). Every
 # container has a hard memory ceiling (memswap = mem, so it cannot push the host into swap) and a CPU share; total
 # ~1.9 GB / 1.5 CPU.
 name: freefounders
@@ -74,7 +74,20 @@ services:
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
-    # egress: only the Platform may call out (api.razorpay.com); it still publishes no port.
+      # One-time codes (PLAN.md §21.8): fake (log only; the open demo also shows them on screen) or msg91. Keys only in
+      # FF_HOME/.env (set-msg91.sh), never here.
+      OTP_SENDER: ${OTP_SENDER:-fake}
+      MSG91_AUTHKEY: ${MSG91_AUTHKEY:-}
+      MSG91_SMS_TEMPLATE_ID: ${MSG91_SMS_TEMPLATE_ID:-}
+      MSG91_EMAIL_TEMPLATE_ID: ${MSG91_EMAIL_TEMPLATE_ID:-}
+      MSG91_EMAIL_FROM: ${MSG91_EMAIL_FROM:-}
+      MSG91_EMAIL_FROM_NAME: ${MSG91_EMAIL_FROM_NAME:-}
+      MSG91_EMAIL_DOMAIN: ${MSG91_EMAIL_DOMAIN:-}
+      # Phone app update banner (PLAN.md §19.40): an installed app older than this sees "A new version of Kaampilot is
+      # available" with the APK link. Empty = off (default).
+      MOBILE_MIN_VERSION: ${MOBILE_MIN_VERSION:-}
+      MOBILE_APK_URL: ${MOBILE_APK_URL:-/download/kaampilot.apk}
+    # egress: only the Platform may call out (api.razorpay.com, control.msg91.com); it still publishes no port.
     networks: [internal, egress]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/platform/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]

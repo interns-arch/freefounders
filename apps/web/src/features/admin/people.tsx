@@ -11,7 +11,7 @@ import {
   useRoles,
   useUpdatePerson,
 } from '@freefounders/core/admin';
-import { Link2, MoreHorizontal, Plus, Users } from '@/components/icons';
+import { FileUp, Link2, MoreHorizontal, Plus, Users } from '@/components/icons';
 import { useSearchParams } from 'react-router';
 import { InvitesDialog } from '@/features/account/invites-dialog';
 import { useEffect, useMemo, useState } from 'react';
@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Avatar, Card } from '@/components/ui/primitives';
 import { AppChip, ErrorNote, Pill } from './parts';
 import { DeletePersonDialog, ExitDialog, PersonRolesDialog, PersonSheet, ResetPasswordDialog } from './people-dialogs';
+import { ImportPeopleDialog } from './import-people';
 
 type Open =
   | { kind: 'add' }
@@ -55,6 +56,7 @@ export function PeoplePage() {
   // Invite links (PLAN.md §21.1); /people?invite=1 (Getting started) opens them at once.
   const [params, setParams] = useSearchParams();
   const [inviting, setInviting] = useState(() => params.has('invite'));
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const roleById = useMemo(() => new Map((roles.data ?? []).map((r) => [r.id, r])), [roles.data]);
   const loadError = people.error ?? roles.error ?? apps.error;
@@ -235,6 +237,9 @@ export function PeoplePage() {
             />
             {can('people.manage') && (
             <>
+              <Button variant="outline" onClick={() => setImporting(true)}>
+                <FileUp /> Import
+              </Button>
               <Button variant="outline" onClick={() => setInviting(true)}>
                 <Link2 /> Invite link
               </Button>
@@ -269,6 +274,7 @@ export function PeoplePage() {
         {people.data && <ShowMore {...more.footer} noun="people" className="border-t" />}
       </Card>
 
+      {can('people.manage') && importing && <ImportPeopleDialog onClose={() => setImporting(false)} />}
       {can('people.manage') && (
         <InvitesDialog
           open={inviting}

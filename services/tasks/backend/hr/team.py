@@ -173,11 +173,15 @@ def team_day(users, day: date) -> dict:
     """One row per person with their status for the day."""
     names = department_names()
     cal = Calendar(day, day)
-    records = {a.user_id: a for a in Attendance.objects.filter(user__in=[u.id for u in users], date=day)}
+    records = {a.user_id: a for a in Attendance.objects.filter(user__in=[u.id for u in users], date=day)
+               .select_related("regularization")}
+    from .punch_reminders import sent_today
+    reminded = sent_today([u.id for u in users], day)
     rows = []
     for u in users:
         rec = records.get(u.id)
         row = person(u, names)
+        row["reminders_sent"] = reminded.get(u.id, 0)  # punch-in reminders the server sent (PLAN.md §19.39)
         if rec:
             row.update({
                 "status": rec.status,
@@ -188,6 +192,7 @@ def team_day(users, day: date) -> dict:
                 "attendance_id": rec.id, "note": rec.note, "uniform_ok": rec.uniform_ok,
                 "has_check_in_photo": bool(rec.check_in_photo),
                 "has_check_out_photo": bool(rec.check_out_photo),
+                **services.regularized_fields(rec),
             })
         else:
             row.update({
@@ -196,6 +201,7 @@ def team_day(users, day: date) -> dict:
                 "is_late": False, "is_early_checkout": False, "missing_checkout": False,
                 "attendance_id": None, "note": "", "uniform_ok": None,
                 "has_check_in_photo": False, "has_check_out_photo": False,
+                **services.regularized_fields(None),
             })
         rows.append(row)
     return {
@@ -275,7 +281,7 @@ LABEL = {"present": "Present", "late": "Late", "half_day": "Half day", "absent":
          "holiday": "Holiday", "week_off": "Week off", "not_checked_in": "Not checked in"}
 LETTER = {"present": "P", "late": "P", "half_day": "H", "absent": "A", "leave": "L", "holiday": "HO", "week_off": "WO"}
 UNIFORM_LABEL = {True: "Yes", False: "No"}
-REPORT_TYPES = ("daily", "monthly_summary", "monthly_register", "late", "leave")
+REPORT_TYPES = ("daily", "monthly_summary", "monthly_register", "late", "leave", "regularization")
 
 
 def _ident(u, names):
@@ -291,15 +297,17 @@ def build_report(kind, users, params):
         data = team_day(users, day)
         # The Uniform column (PLAN.md §19.27) only when the company asks, or someone answered that day.
         uniform = services.cfg()["uniform_check"] == "ask" or any(r["uniform_ok"] is not None for r in data["rows"])
+        reg = any(r["regularized"] for r in data["rows"])   # the Regularized column (PLAN.md §19.38) when needed
         rows = []
         for u, r in zip(users, data["rows"]):
             rows.append(_ident(u, names) + [u.whatsapp_phone, LABEL.get(r["status"], "") if r["status"] else "",
                                             _hm(r["check_in"]), _hm(r["check_out"]), _hours(r["working_minutes"]),
                                             "Yes" if r["is_late"] else "", "Yes" if r["is_early_checkout"] else "", r["note"]]
+                        + ([r["regularization_reason"] if r["regularized"] else ""] if reg else [])
                         + ([UNIFORM_LABEL.get(r["uniform_ok"], "")] if uniform else []))
         return (f"Daily attendance {_dmy(day)}", f"attendance-daily-{day.isoformat()}",
                 ident + ["Phone", "Status", "Check in", "Check out", "Hours", "Late", "Early out", "Note"]
-                + (["Uniform"] if uniform else []), rows)
+                + (["Regularized"] if reg else []) + (["Uniform"] if uniform else []), rows)
 
     if kind in ("monthly_summary", "monthly_register"):
         year, month, first, last = parse_month(params)
@@ -349,6 +357,29 @@ def build_report(kind, users, params):
                 for l in leaves]
         return (f"Leave register {_dmy(first)} to {_dmy(last)}", f"leave-register-{first.isoformat()}-to-{last.isoformat()}",
                 ident + ["Leave type", "From", "To", "Days", "Status", "Reason", "Reviewed by"], rows)
+
+    if kind == "regularization":
+        # Regularization requests (PLAN.md §19.38) for days in the period: by person, month, reason and status.
+        from .models import AttendanceCorrection
+        first, last = parse_range(params)
+        reqs = (AttendanceCorrection.objects.filter(user__in=[u.id for u in users], date__range=(first, last))
+                .select_related("user", "reviewed_by").order_by("user__first_name", "user__last_name", "date"))
+        if params.get("status"):
+            reqs = reqs.filter(status=params["status"])
+        rows = []
+        for c in reqs:
+            reviewer = (c.reviewed_by.get_full_name() or c.reviewed_by.username) if c.reviewed_by else ""
+            rows.append(_ident(c.user, names) + [
+                c.date.strftime("%Y-%m"), _dmy(c.date), c.get_reason_type_display(), c.reason,
+                _hm(c.requested_check_in), _hm(c.requested_check_out), c.get_status_display(),
+                _hm(c.original_check_in), _hm(c.original_check_out), LABEL.get(c.original_status, c.original_status),
+                LABEL.get(c.applied_status, c.applied_status), reviewer,
+                timezone.localtime(c.reviewed_at).strftime("%d-%m-%Y %H:%M") if c.reviewed_at else "", c.remarks,
+                timezone.localtime(c.created_at).strftime("%d-%m-%Y %H:%M")])
+        return (f"Regularization {_dmy(first)} to {_dmy(last)}",
+                f"attendance-regularization-{first.isoformat()}-to-{last.isoformat()}",
+                ident + ["Month", "Date", "Reason", "Note", "Requested in", "Requested out", "Status", "Was in", "Was out",
+                         "Was status", "New status", "Reviewed by", "Reviewed at", "Remarks", "Requested on"], rows)
 
     raise ValidationError({"type": f"Use one of: {', '.join(REPORT_TYPES)}."})
 
@@ -600,6 +631,7 @@ def _apply_row(row, by_name, today_text, existing):
     rec.status = status
     if status != "leave":
         rec.leave_request = None
+    rec.regularization = None   # the import now decides the day (no "Regularized" tag)
     rec.note = (f"Imported by {by_name} on {today_text}" + (f": {row['note']}" if row["note"] else ""))[:300]
     rec.save()
 

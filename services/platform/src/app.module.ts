@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AccountsController, InvitesController } from './accounts/accounts.controller';
 import { AccountsService } from './accounts/accounts.service';
-import { FakeOtpSender, OTP_SENDER, OtpService, TicketsService } from './accounts/otp.service';
+import { OTP_SENDER, OtpService, TicketsService } from './accounts/otp.service';
+import { otpSenderFromEnv } from './accounts/otp-senders';
 import { BillingController, ConsoleController } from './billing/billing.controller';
 import { BillingService } from './billing/billing.service';
 import { CompanySetupService } from './company/setup.service';
@@ -44,8 +45,8 @@ import { RolesService } from './roles/roles.service';
     CompanySetupService,
     TicketsService,
     OtpService,
-    // One-time codes go to the Platform log until a real email/SMS sender is connected (PLAN.md §21).
-    { provide: OTP_SENDER, useClass: FakeOtpSender },
+    // One-time codes: the Platform log (OTP_SENDER=fake, default) or MSG91 (OTP_SENDER=msg91, PLAN.md §21.8).
+    { provide: OTP_SENDER, useFactory: otpSenderFromEnv },
     AccountsService,
     InvitesService,
     BillingService,

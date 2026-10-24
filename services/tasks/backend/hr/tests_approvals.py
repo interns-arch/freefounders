@@ -70,9 +70,13 @@ class DepartmentRuleTests(_Base):
     def test_correction_approvers_are_told(self):
         res = self.as_(self.rahul).post("/api/attendance-corrections/", {
             "date": (timezone.localdate() - timedelta(days=1)).isoformat(), "reason": "Forgot to check out",
-            "requested_check_out": timezone.now().isoformat()}, format="json")
+            # A day without a check-in needs the check-in too (regularization, PLAN.md §19.38).
+            "requested_check_in": (timezone.now() - timedelta(days=1, hours=1)).isoformat(),
+            "requested_check_out": (timezone.now() - timedelta(days=1)).isoformat()}, format="json")
         self.assertEqual(res.status_code, 201, res.content)
-        self.assertEqual(self.told(self.dept_approver, "correction_request"), 1)
+        # A regularization goes to the reporting manager (PLAN.md §19.38), not the department approvers.
+        self.assertEqual(self.told(self.lead, "correction_request"), 1)
+        self.assertEqual(self.told(self.dept_approver, "correction_request"), 0)
 
 
 class ManagerRuleTests(_Base):

@@ -40,6 +40,9 @@ export const completeSchema = z.object({
   client: z.enum(['web', 'mobile']).default('web'),
 });
 export const forgotSchema = z.object({ identifier: identifierSchema });
+/** Sign in with a code (PLAN.md §21.8). */
+export const loginCodeStartSchema = z.object({ identifier: identifierSchema });
+export const loginCodeVerifySchema = verifySchema.extend({ client: z.enum(['web', 'mobile']).default('web') });
 export const resetVerifySchema = verifySchema;
 export const resetSchema = z.object({ otpId: z.string().uuid('Ask for a new code'), code: z.string().trim().regex(/^[0-9]{6}$/, 'Enter the 6-digit code'), newPassword: newPasswordSchema });
 export type CompanyInput = z.infer<typeof companySchema>;
@@ -55,6 +58,13 @@ const adminResets = () =>
   });
 const askAdmin = () =>
   badRequest('This email signs in with a login your company admin made, so only your admin can reset its password. Ask them to reset it.', { code: 'Admin login' });
+/** Code sign-in with a username or employee ID: those have no email / mobile of their own to send a code to. */
+const usePassword = () =>
+  badRequest('Codes go to the email or mobile number of a Kaampilot account. With a username or employee ID, sign in with your password.', {
+    identifier: 'Enter the email or mobile number of your account, or sign in with your password',
+  });
+const adminLoginUsesPassword = () =>
+  badRequest('This email signs in with a login your company admin made. Sign in with your password instead.', { code: 'Admin login' });
 const noAccount = () => badRequest('There is no Kaampilot account with this email or mobile number. Check it, or sign up instead.', { code: 'No account' });
 
 /**
@@ -281,6 +291,53 @@ export class AccountsService {
         });
     }, delays[0]);
     t.unref?.();
+  }
+
+  // ─── sign in with a code (PLAN.md §21.8) ────────────────────────────────
+
+  /**
+   * POST auth/login/code/start: a code to the account's email or mobile. Always the same answer, whether an account
+   * exists or not (no account enumeration; the same limits as every code: 30 s gap, 5 per 15 minutes, per IP).
+   */
+  async loginCodeStart(identifier: string, ip?: string) {
+    const id = normaliseIdentifier(identifier);
+    if (!id) throw identifier.includes('@') || /^[+0-9 ()-]+$/.test(identifier.trim()) ? invalidIdentifier() : usePassword();
+    const { otpId, channel, devCode } = await this.otp.start(id, 'login', ip);
+    return { otpId, channel, ...(devCode ? { devCode } : {}) };
+  }
+
+  /**
+   * POST auth/login/code/verify: the code proves the email / mobile, so only now does the answer say that there is no
+   * account, or that the email belongs to an admin-made login (which signs in with its password). The per-IP sign-in
+   * guard applies, and a wrong code counts like a wrong password.
+   */
+  async loginCodeVerify(otpId: string, code: string, meta: Meta) {
+    this.auth.assertIpOpen(meta.ip);
+    let target: string;
+    try {
+      ({ target } = await this.otp.verify(otpId, code, 'login'));
+    } catch (err) {
+      this.auth.ipFailed(meta.ip);
+      throw err;
+    }
+    const id = normaliseIdentifier(target)!;
+    const account = await this.findAccount(id);
+    if (!account) {
+      if (id.kind === 'email' && (await this.isCompanyLogin(id))) throw adminLoginUsesPassword();
+      throw noAccount();
+    }
+    return this.auth.loginVerifiedAccount(account, meta);
+  }
+
+  /** An email that signs in with an admin-made login (a person of a company, no account). */
+  private async isCompanyLogin(id: Identifier): Promise<boolean> {
+    const [legacy] = await this.dbs.db
+      .select({ id: people.id })
+      .from(people)
+      .innerJoin(logins, eq(logins.personId, people.id))
+      .where(and(sql`lower(${people.email}) = ${id.value}`, isNull(people.accountId)))
+      .limit(1);
+    return !!legacy;
   }
 
   // ─── forgot password ────────────────────────────────────────────────────

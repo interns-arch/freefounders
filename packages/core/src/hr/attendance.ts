@@ -1,4 +1,4 @@
-/** Attendance: today, check in/out, the monthly view, corrections, manual mark, punch photos (old pages/HR.jsx). Team views: team.ts. */
+/** Attendance: today, check in/out, the monthly view, regularization (PLAN.md §19.38), manual mark, punch photos (old pages/HR.jsx). Team views: team.ts. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
 import type { UserBrief } from '../tasks/types';
@@ -31,6 +31,16 @@ export interface PunchRefusal {
   accuracy_m?: number;
 }
 
+/** Punch-in reminders (PLAN.md §19.39): `count` reminders, `gap_minutes` apart, the first `first_after_minutes` after the reporting time. */
+export interface PunchReminderRule {
+  enabled: boolean;
+  count: number;
+  gap_minutes: number;
+  first_after_minutes: number;
+  /** "HH:MM" = work start. */
+  reporting_time: string;
+}
+
 export interface HrConfig {
   geofence_enabled: boolean;
   work_start: string;
@@ -39,8 +49,12 @@ export interface HrConfig {
   /** Uniform check at punch-in and the message shown (PLAN.md §19.27). Older servers leave them out (= off). */
   uniform_check?: UniformCheck;
   uniform_message?: string;
+  /** The company's punch-in reminder rule (PLAN.md §19.39); older servers leave it out. */
+  punch_reminders?: PunchReminderRule;
   /** May approve leave/corrections (hr.approve, or a manager under the "manager first" rule). */
   can_approve: boolean;
+  /** Decides regularizations: approvers, and anyone people report to (PLAN.md §19.38). */
+  can_approve_regularization?: boolean;
   /** HR settings (hr.settings). */
   can_manage: boolean;
   /** The managers' attendance screens this person may open: their permissions, plus their own team under the "manager approves" rule (PLAN.md §19.19). */
@@ -67,6 +81,9 @@ export interface AttendanceRecord {
   has_check_out_photo: boolean;
   /** Answer to the uniform question at check-in; null when it was not asked. */
   uniform_ok?: boolean | null;
+  /** Changed by an approved regularization (PLAN.md §19.38). */
+  regularized?: boolean;
+  regularization_reason?: string;
 }
 
 export interface AttendanceToday {
@@ -79,6 +96,10 @@ export interface AttendanceToday {
   photo: PhotoMode;
   uniform_check?: UniformCheck;
   uniform_message?: string;
+  /** Punch-in reminders (PLAN.md §19.39): the rule, why today needs none, and how many the server sent today. */
+  punch_reminders?: PunchReminderRule;
+  day_off?: 'holiday' | 'week_off' | 'leave' | null;
+  reminders_sent?: number;
 }
 
 /** GET /attendance/today/ */
@@ -120,6 +141,13 @@ export interface AttendanceDay {
   has_check_in_photo?: boolean;
   has_check_out_photo?: boolean;
   uniform_ok?: boolean | null;
+  /** Changed by an approved regularization (PLAN.md §19.38): the "Regularized" tag, its reason, On duty / WFH. */
+  regularized?: boolean;
+  regularization_id?: number | null;
+  regularization_reason?: string;
+  work_mode?: string;
+  /** The latest regularization request for the day (any status). */
+  request?: { id: number; status: RegularizationStatus; reason_label: string } | null;
 }
 
 export interface AttendanceMonth {
@@ -138,22 +166,122 @@ export function useAttendanceMonth(year: number, month: number, userId?: number)
   });
 }
 
-export interface AttendanceCorrection {
+/** Why a day needs regularizing (PLAN.md §19.38); the company picks which ones its people may use. */
+export type RegularizationReason = 'forgot_in' | 'forgot_out' | 'late_work' | 'on_duty' | 'wfh' | 'technical' | 'other';
+export type RegularizationStatus = 'pending' | 'approved' | 'rejected';
+export const REGULARIZATION_REASONS: Array<{ value: RegularizationReason; label: string }> = [
+  { value: 'forgot_in', label: 'Forgot to punch in' },
+  { value: 'forgot_out', label: 'Forgot to punch out' },
+  { value: 'late_work', label: 'Punched late due to work' },
+  { value: 'on_duty', label: 'On duty – client visit' },
+  { value: 'wfh', label: 'Work from home' },
+  { value: 'technical', label: 'Technical issue (app/GPS)' },
+  { value: 'other', label: 'Other' },
+];
+/** Reasons that need no times: the shift's hours are used. */
+export const SHIFT_REASONS: RegularizationReason[] = ['on_duty', 'wfh'];
+
+/** An attendance regularization request (the API keeps the old name, attendance corrections). */
+export interface Regularization {
   id: number;
   user: number;
   user_detail: UserBrief;
   date: string;
   requested_check_in: string | null;
   requested_check_out: string | null;
+  reason_type: RegularizationReason;
+  reason_label: string;
+  /** The person's note. */
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  attachment_url: string | null;
+  attachment_name: string | null;
+  /** Days asked for together share this id. */
+  batch: string;
+  status: RegularizationStatus;
   status_display: string;
   reviewed_by_detail: UserBrief | null;
   remarks: string;
+  reviewed_at: string | null;
+  auto_approved: boolean;
+  /** The day before the approval, and the status it got (the from → to). */
+  original_check_in: string | null;
+  original_check_out: string | null;
+  original_status: string;
+  applied_status: string;
+  /** Pending only: the day as recorded now, where the check-in was made and the person's requests that month. */
+  day: {
+    status: AttendanceStatus | null;
+    check_in: string | null;
+    check_out: string | null;
+    working_minutes: number;
+    location_name: string | null;
+    distance_m: number | null;
+    month_requests: number;
+  } | null;
   created_at: string;
 }
+/** @deprecated the old name. */
+export type AttendanceCorrection = Regularization;
 
-/** POST /attendance-corrections/ */
+export interface RegularizationPolicy {
+  enabled: boolean;
+  reasons: Array<{ value: RegularizationReason; label: string }>;
+  /** 0 = unlimited. */
+  monthly_limit: number;
+  used_this_month: number;
+  left_this_month: number | null;
+  days_back: number;
+  /** The first day that may be asked for (YYYY-MM-DD). */
+  earliest: string;
+  mark: 'times' | 'present';
+  work_start: string;
+  work_end: string;
+  /** Today may be asked for once the shift has ended. */
+  shift_ended: boolean;
+}
+
+/** GET /attendance-corrections/policy/ — the company's rules and how many requests I have left this month. */
+export function useRegularizationPolicy(enabled = true) {
+  return useQuery({
+    queryKey: ['hr', 'regularization', 'policy'],
+    queryFn: () => tasksApi.get<RegularizationPolicy>('/attendance-corrections/policy/'),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export interface RegularizationInput {
+  date: string;
+  /** Several days (a range without its week-offs and holidays). */
+  end_date?: string;
+  reason_type: RegularizationReason;
+  /** HH:MM; leave out to keep what was recorded. */
+  check_in_time?: string;
+  check_out_time?: string;
+  reason?: string;
+  /** A photo or document (sent as multipart when given). */
+  attachment?: Blob & { name?: string };
+}
+
+type RegularizationAnswer = Regularization | { results: Regularization[]; count: number };
+
+/** POST /attendance-corrections/ — one day answers the request, a range answers {results, count}. */
+export function useRequestRegularization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ attachment, ...body }: RegularizationInput) => {
+      const clean = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined && v !== ''));
+      if (!attachment) return tasksApi.post<RegularizationAnswer>('/attendance-corrections/', clean);
+      const fd = new FormData();
+      for (const [k, v] of Object.entries(clean)) fd.append(k, String(v));
+      fd.append('attachment', attachment, attachment.name ?? 'attachment');
+      return tasksApi.upload<RegularizationAnswer>('/attendance-corrections/', fd);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hr'] }),
+  });
+}
+
+/** POST /attendance-corrections/ (the old form: full date-times). Kept for older screens. */
 export function useRequestCorrection() {
   const qc = useQueryClient();
   return useMutation({
@@ -162,16 +290,35 @@ export function useRequestCorrection() {
   });
 }
 
-/** Pending corrections of the people I approve for. */
+/** Pending regularizations of the people I approve for. */
 export function usePendingCorrections(enabled = true) {
   return useQuery({
     queryKey: ['hr', 'corrections', 'pending'],
     queryFn: () =>
       tasksApi
-        .get<DrfPage<AttendanceCorrection> | AttendanceCorrection[]>('/attendance-corrections/', { scope: 'team', page_size: 100 })
+        .get<DrfPage<Regularization> | Regularization[]>('/attendance-corrections/', { scope: 'team', status: 'pending', page_size: 100 })
         .then(resultsOf)
         .then((rows) => rows.filter((c) => c.status === 'pending')),
     enabled,
+  });
+}
+export const usePendingRegularizations = usePendingCorrections;
+
+/** GET /attendance-corrections/ — my own regularization requests, newest first (the permanent record, PLAN.md §19.38). */
+export function useMyRegularizations() {
+  return useQuery({
+    queryKey: ['hr', 'regularization', 'mine'],
+    queryFn: () => tasksApi.get<DrfPage<Regularization> | Regularization[]>('/attendance-corrections/', { page_size: 100 }).then(resultsOf),
+  });
+}
+
+/** POST /attendance-corrections/bulk_review/ {ids, decision, remarks} → what was done, and why the others were not. */
+export function useBulkReviewRegularizations() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: number[]; decision: 'approved' | 'rejected'; remarks?: string }) =>
+      tasksApi.post<{ done: number[]; failed: Array<{ id: number; detail: string }> }>('/attendance-corrections/bulk_review/', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hr'] }),
   });
 }
 

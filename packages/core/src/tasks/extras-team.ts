@@ -98,7 +98,14 @@ export interface ChangeRequestLeader {
     changes: string[];
     reason: string;
     status: string;
+    status_display?: string;
     created_at: string;
+    /** The due date before and the one asked for (old kept on the request since PLAN.md §19.41; null for older decided ones). */
+    old_due_at?: string | null;
+    new_due_at?: string | null;
+    reviewed_by?: string | null;
+    reviewed_at?: string | null;
+    remarks?: string;
   }>;
 }
 

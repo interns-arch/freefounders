@@ -239,6 +239,9 @@ export interface ReminderSettings {
   mode: ReminderMode;
   /** Remind again this many minutes later if not punched in (0 = off). */
   followUpMinutes: number;
+  /** Reminders in all on a day, `followUpMinutes` apart (PLAN.md §19.39). Apps with 'reminder-count' (1.2.2+) ring all of
+   * them; 1.2.0/1.2.1 ignore it and ring the first one and one follow-up (at most 120 min later). */
+  count?: number;
 }
 
 /** What the phone answers to every reminder request. */

@@ -1,6 +1,7 @@
 /** HR settings: attendance rules (PLAN.md §16.1), office locations (old pages/HR.jsx). No face check (PLAN.md §19.18). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
+import type { RegularizationReason } from './attendance';
 
 /** One saved rule: its value, whether the company set it (else the default), and what may be chosen. */
 export interface HrSetting<T> {
@@ -26,6 +27,19 @@ export interface HrSettingValues {
   /** Uniform check at punch-in (PLAN.md §19.27). */
   uniform_check: 'off' | 'remind' | 'ask';
   uniform_message: string;
+  /** Punch-in reminders (PLAN.md §19.39): on/off, how many (1–10), minutes apart (5–240), first one after the reporting time (0–240 min). */
+  punch_reminders: boolean;
+  punch_reminder_count: number;
+  punch_reminder_gap: number;
+  punch_reminder_first: number;
+  /** Attendance regularization policy (PLAN.md §19.38). */
+  reg_enabled: boolean;
+  reg_reasons: RegularizationReason[];
+  /** Requests per person per month; 0 = unlimited. */
+  reg_monthly_limit: number;
+  reg_days_back: number;
+  /** times: status from the times like a punch; present: always Present. */
+  reg_mark: 'times' | 'present';
 }
 
 export type HrSettings = { [K in keyof HrSettingValues]: HrSetting<HrSettingValues[K]> };

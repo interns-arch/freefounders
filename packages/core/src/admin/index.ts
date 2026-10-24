@@ -4,3 +4,4 @@ export * from './api';
 export * from './password-strength';
 export * from './role-limits';
 export * from './exports';
+export * from './integrations';

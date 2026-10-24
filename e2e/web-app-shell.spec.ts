@@ -3,7 +3,7 @@
 // the way apps/mobile does (replies dispatched on `document`, like Android's WebView). They prove that inside the app the
 // punch uses the app's camera (no browser camera dialog) and stores the photo, that face check can no longer be switched
 // on (PLAN.md §19.18), and that downloads go to the app instead of the browser. Settings are restored afterwards.
-import { expect, type APIRequestContext, type Browser, type Page, test } from '@playwright/test';
+import { expect, type APIRequestContext, type Browser, type BrowserContext, type Page, test } from '@playwright/test';
 
 /** The company may ask "Are you wearing the uniform?" before a check-in (HR setting, PLAN.md uniform check): answer Yes. */
 async function answerUniform(page: Page) {
@@ -257,26 +257,53 @@ test('in the app: Voice draft listens with the phone (no browser microphone) and
   await ctx.close();
 });
 
-test('an app older than the server needs asks once to update; Later hides it for the session', async ({ browser }) => {
+/** The server's MOBILE_MIN_VERSION is off unless set (PLAN.md §19.40): answer as a server that sets it. */
+const minVersion = (ctx: BrowserContext, version: string | null) =>
+  ctx.route('**/api/platform/app-version', (route) => route.fulfill({ json: { minVersion: version, apkUrl: '/download/kaampilot.apk' } }));
+
+test('an app older than MOBILE_MIN_VERSION shows a non-blocking update banner; × hides it for the session', async ({ browser }) => {
   const ctx = await shellContext(browser, { version: '1.0.0' });
+  await minVersion(ctx, '1.2.2');
   const page = await ctx.newPage();
   await page.goto('/');
   await signIn(page, OWNER.login, OWNER.password);
-  const prompt = page.getByRole('dialog', { name: 'Update the app — one time' });
-  await expect(prompt).toBeVisible();
-  const link = prompt.getByRole('link', { name: 'Update now' });
+  const banner = page.getByRole('status').filter({ hasText: 'A new version of Kaampilot is available' });
+  await expect(banner).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0); // nothing blocks the screen
+  const link = banner.getByRole('link', { name: 'Download the update' });
   await expect(link).toHaveAttribute('target', '_blank'); // a new window always leaves the app: the phone's browser downloads it
-  await expect(link).toHaveAttribute('href', /\.apk$/);
-  await prompt.getByRole('button', { name: 'Later' }).click();
-  await expect(prompt).toBeHidden();
+  await expect(link).toHaveAttribute('href', /\/download\/kaampilot\.apk$/);
+  await banner.getByRole('button', { name: 'Hide the update message' }).click();
+  await expect(banner).toBeHidden();
   await page.reload();
-  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / }).or(page.getByRole('heading').first())).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'Update the app — one time' })).toHaveCount(0);
+  await expect(page.getByRole('heading').first()).toBeVisible();
+  await expect(page.getByText('A new version of Kaampilot is available')).toHaveCount(0);
   await ctx.close();
+});
+
+test('no update banner for an up-to-date app, or when MOBILE_MIN_VERSION is off', async ({ browser }) => {
+  const ctx = await shellContext(browser, { version: '9.9.9' });
+  await minVersion(ctx, '1.2.2');
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await signIn(page, OWNER.login, OWNER.password);
+  await expect(page.getByRole('heading').first()).toBeVisible();
+  await expect(page.getByText('A new version of Kaampilot is available')).toHaveCount(0);
+  await ctx.close();
+  // An old app with the setting off (the default): nothing either.
+  const old = await shellContext(browser, { version: '1.0.0' });
+  await minVersion(old, null);
+  const oldPage = await old.newPage();
+  await oldPage.goto('/');
+  await signIn(oldPage, OWNER.login, OWNER.password);
+  await expect(oldPage.getByRole('heading').first()).toBeVisible();
+  await expect(oldPage.getByText('A new version of Kaampilot is available')).toHaveCount(0);
+  await old.close();
 });
 
 
 test('punch-in reminder: only in an app that can do it; saving sends reminder-set; a check-in sends reminder-skip-today', async ({ browser, request }) => {
+  test.setTimeout(150_000); // three app contexts and a check-in
   const owner = await token(request);
   const hrBefore = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
   const keys = ['photo', 'geofence_enabled', 'uniform_check'];
@@ -304,10 +331,13 @@ test('punch-in reminder: only in an app that can do it; saving sends reminder-se
     expect((await shellLog(op)).some((m) => m.type?.startsWith('reminder'))).toBe(false);
     await old.close();
 
-    // App 1.2.0: the card, defaults from the company (10 min before office start), save → reminder-set.
+    // App 1.2.0: the card, defaults from the company's punch-in reminder rule (PLAN.md §19.39: reporting time + 30 min,
+    // again every 30 min, 3 in all), save → reminder-set.
     const today = await (await request.get('/tasks/api/attendance/today/', { headers: auth(await token(request, person.login, person.password)) })).json();
-    const [h, mi] = String(today.work_start).split(':').map(Number);
-    const t = (h * 60 + mi - 10 + 1440) % 1440;
+    const rule = today.punch_reminders as { enabled: boolean; count: number; gap_minutes: number; first_after_minutes: number; reporting_time: string };
+    expect(rule.enabled).toBe(true);
+    const [h, mi] = String(rule.reporting_time).split(':').map(Number);
+    const t = (h * 60 + mi + rule.first_after_minutes) % 1440;
     const expectedTime = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
     const ctx = await shellContext(browser, { version: '1.2.0', capabilities: ['location', 'photo', 'download', 'print', 'voice', 'reminders'] });
     const page = await ctx.newPage();
@@ -319,13 +349,16 @@ test('punch-in reminder: only in an app that can do it; saving sends reminder-se
     await card.getByRole('switch', { name: 'Punch-in reminder' }).click();
     await expect(card.getByText('Reminder saved on this phone.')).toBeVisible();
     await expect(card.getByLabel('Remind me at')).toHaveValue(expectedTime);
+    await expect(card.getByText(`Remind me again every ${rule.gap_minutes} min until I punch in (${rule.count} reminders in all)`)).toBeVisible();
+    // 1.2.0/1.2.1 ring the first reminder and one follow-up only (no 'reminder-count').
+    if (rule.count > 2) await expect(card.getByText(/This app version rings the first 2 reminders/)).toBeVisible();
     await card.getByLabel('Remind me at').fill('08:45');
     await card.getByRole('button', { name: 'Vibrate', exact: true }).click();
     await card.getByRole('button', { name: 'Sun', exact: true }).click();
     await card.getByRole('button', { name: 'Save reminder' }).click();
     await expect
       .poll(async () => (await shellLog(page)).filter((m) => m.type === 'reminder-set').at(-1)?.settings)
-      .toEqual(expect.objectContaining({ enabled: true, time: '08:45', mode: 'vibrate', followUpMinutes: 10, days: expect.arrayContaining([7]) }));
+      .toEqual(expect.objectContaining({ enabled: true, time: '08:45', mode: 'vibrate', followUpMinutes: rule.gap_minutes, count: rule.count, days: expect.arrayContaining([7]) }));
     await card.getByRole('button', { name: 'Send a test reminder now' }).click();
     await expect.poll(async () => (await shellLog(page)).filter((m) => m.type === 'reminder-test')).toEqual([expect.objectContaining({ mode: 'vibrate' })]);
 

@@ -1,18 +1,18 @@
-/** HR → My attendance: the month as a calendar, a day's punches (with photos) and correction requests. */
-import { errorMessage } from '@freefounders/core';
-import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, hrExports, useAttendanceMonth, useRequestCorrection } from '@freefounders/core/hr';
+/** HR → My attendance: the month as a calendar, a day's punches (with photos) and regularization requests (PLAN.md §19.38). */
+import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, type AttendanceStatus, hrExports, useAttendanceMonth, useMyRegularizations } from '@freefounders/core/hr';
 import { fileSlug } from '@freefounders/core/export';
-import { AlertCircle, CalendarCheck, CalendarX, Clock3, ChevronLeft, ChevronRight, Palmtree, Sun, Timer } from '@/components/icons';
-import { useState } from 'react';
+import { AlertCircle, CalendarCheck, ClipboardCheck, CalendarX, Clock3, ChevronLeft, ChevronRight, Palmtree, Sun, Timer } from '@/components/icons';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/overlays';
+import { NativeSelect } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
-import { Chip, ErrorNote, OkNote, Panel, Tile, fmtDay, fmtTime } from '../tasks/general/parts';
+import { Chip, OkNote, Panel, Tile, fmtDay, fmtTime, todayLocal } from '../tasks/general/parts';
 import { AttendanceChip, PunchPhoto, STATUS_CELL, STATUS_TEXT, UniformChip, hrs } from './parts';
+import { RegularizeDialog, RegularizedTag } from './regularize';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -20,12 +20,24 @@ const TAG: Record<string, string> = { present: '✓', late: 'L', half_day: '½',
 
 export function MonthView({ userId, userName }: { userId?: number; userName?: string }) {
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
+  // From a notification (PLAN.md §19.37): ?date=YYYY-MM-DD opens that day's month with the day selected.
+  const [params] = useSearchParams();
+  const askedDay = /^\d{4}-\d{2}-\d{2}$/.test(params.get('date') ?? '') ? params.get('date')! : null;
+  const [year, setYear] = useState(askedDay ? Number(askedDay.slice(0, 4)) : today.getFullYear());
+  const [month, setMonth] = useState(askedDay ? Number(askedDay.slice(5, 7)) : today.getMonth() + 1);
   const [selected, setSelected] = useState<AttendanceDay | null>(null);
-  const [correcting, setCorrecting] = useState<AttendanceDay | null>(null);
+  const [regularizing, setRegularizing] = useState<AttendanceDay | null>(null);
   const [sent, setSent] = useState('');
   const q = useAttendanceMonth(year, month, userId);
+  const [opened, setOpened] = useState(false);
+  useEffect(() => {
+    if (askedDay && !opened && q.data) {
+      setSelected(q.data.days.find((d) => d.date === askedDay) ?? null);
+      setOpened(true);
+    }
+  }, [askedDay, opened, q.data]);
+  // Keep the open day in step with the month after a request is sent (its request status changes).
+  const shown = selected ? (q.data?.days.find((d) => d.date === selected.date) ?? selected) : null;
 
   const shift = (delta: number) => {
     let m = month + delta;
@@ -115,13 +127,14 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
       ) : (
         <Calendar days={data.days} year={year} month={month} selected={selected} onSelect={(d) => setSelected(selected?.date === d.date ? null : d)} />
       )}
-      {selected && selected.status && (
+      {shown && shown.status && (
         <Panel
           icon={CalendarCheck}
           title={
             <>
-              {new Date(`${selected.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-              <AttendanceChip status={selected.status} extra={selected.holiday ? `: ${selected.holiday}` : ''} />
+              {new Date(`${shown.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+              <AttendanceChip status={shown.status} extra={shown.holiday ? `: ${shown.holiday}` : ''} />
+              {shown.regularized && <RegularizedTag reason={shown.regularization_reason} mode={shown.work_mode} />}
             </>
           }
         >
@@ -129,110 +142,119 @@ export function MonthView({ userId, userName }: { userId?: number; userName?: st
             <div className="rounded-xl border bg-muted/30 px-3 py-2">
               <dt className="font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check in</dt>
               <dd className="mt-0.5 flex items-center font-mono text-lg font-bold tabular-nums">
-                {fmtTime(selected.check_in)}
-                {selected.has_check_in_photo && <PunchPhoto key={`${selected.attendance_id}-in`} id={selected.attendance_id} which="in" label={`${userName ? `${userName} ` : ''}Check-in photo`} />}
+                {fmtTime(shown.check_in)}
+                {shown.has_check_in_photo && <PunchPhoto key={`${shown.attendance_id}-in`} id={shown.attendance_id} which="in" label={`${userName ? `${userName} ` : ''}Check-in photo`} />}
               </dd>
             </div>
             <div className="rounded-xl border bg-muted/30 px-3 py-2">
               <dt className="font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Check out</dt>
               <dd className="mt-0.5 flex items-center font-mono text-lg font-bold tabular-nums">
-                {fmtTime(selected.check_out)}
-                {selected.has_check_out_photo && <PunchPhoto key={`${selected.attendance_id}-out`} id={selected.attendance_id} which="out" label={`${userName ? `${userName} ` : ''}Check-out photo`} />}
+                {fmtTime(shown.check_out)}
+                {shown.has_check_out_photo && <PunchPhoto key={`${shown.attendance_id}-out`} id={shown.attendance_id} which="out" label={`${userName ? `${userName} ` : ''}Check-out photo`} />}
               </dd>
             </div>
             <div className="rounded-xl border bg-muted/30 px-3 py-2">
               <dt className="font-mono text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">Worked</dt>
-              <dd className="mt-0.5 font-mono text-lg font-bold tabular-nums">{hrs(selected.working_minutes)}</dd>
+              <dd className="mt-0.5 font-mono text-lg font-bold tabular-nums">{hrs(shown.working_minutes)}</dd>
             </div>
-            {selected.uniform_ok != null && (
+            {shown.uniform_ok != null && (
               <div className="flex items-center gap-3 sm:col-span-3">
                 <dt className="text-muted-foreground">Uniform</dt>
                 <dd>
-                  <UniformChip ok={selected.uniform_ok} />
+                  <UniformChip ok={shown.uniform_ok} />
                 </dd>
               </div>
             )}
-            {(selected.is_late || selected.is_early_checkout || selected.missing_checkout) && (
+            {(shown.is_late || shown.is_early_checkout || shown.missing_checkout) && (
               <div className="flex items-center gap-3 sm:col-span-3">
                 <dt className="text-muted-foreground">Flags</dt>
                 <dd className="flex gap-1">
-                  {selected.is_late && <Chip tone="warning">late</Chip>}
-                  {selected.is_early_checkout && <Chip>early out</Chip>}
-                  {selected.missing_checkout && <Chip tone="danger">no checkout</Chip>}
+                  {shown.is_late && <Chip tone="warning">late</Chip>}
+                  {shown.is_early_checkout && <Chip>early out</Chip>}
+                  {shown.missing_checkout && <Chip tone="danger">no checkout</Chip>}
+                </dd>
+              </div>
+            )}
+            {shown.regularized && shown.regularization_reason && (
+              <div className="flex items-center gap-3 sm:col-span-3">
+                <dt className="text-muted-foreground">Regularized</dt>
+                <dd>{shown.regularization_reason}</dd>
+              </div>
+            )}
+            {shown.request && (
+              <div className="flex items-center gap-3 sm:col-span-3">
+                <dt className="text-muted-foreground">Request</dt>
+                <dd className="flex flex-wrap items-center gap-1.5">
+                  {shown.request.reason_label}
+                  <Chip tone={shown.request.status === 'pending' ? 'warning' : shown.request.status === 'approved' ? 'success' : 'danger'}>{shown.request.status}</Chip>
                 </dd>
               </div>
             )}
           </dl>
-          {!userId && ['present', 'late', 'half_day', 'absent'].includes(selected.status) && (
-            <Button variant="outline" className="mt-3" onClick={() => setCorrecting(selected)}>
-              Request a correction for this day
+          {!userId && ['present', 'late', 'half_day', 'absent'].includes(shown.status) && shown.date <= todayLocal() && (
+            <Button variant="outline" className="mt-3 w-full sm:w-auto" disabled={shown.request?.status === 'pending'} onClick={() => setRegularizing(shown)}>
+              {shown.request?.status === 'pending' ? 'Regularization waiting for approval' : 'Regularize this day'}
             </Button>
           )}
         </Panel>
       )}
-      <Dialog open={!!correcting} onOpenChange={(o) => !o && setCorrecting(null)}>
-        <DialogContent className="max-w-md">
-          {correcting && (
-            <CorrectionForm
-              day={correcting}
-              onClose={() => setCorrecting(null)}
-              onSaved={() => {
-                setSent(`Correction for ${fmtDay(correcting.date)} sent for approval.`);
-                setCorrecting(null);
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {!userId && <MyRegularizations />}
+      <RegularizeDialog
+        open={!!regularizing}
+        day={regularizing}
+        onClose={() => setRegularizing(null)}
+        onSent={(m) => {
+          setSent(m);
+          setRegularizing(null);
+        }}
+      />
     </div>
   );
 }
 
-function CorrectionForm({ day, onClose, onSaved }: { day: AttendanceDay; onClose: () => void; onSaved: () => void }) {
-  const [f, setF] = useState({ in: '', out: '', reason: '' });
-  const save = useRequestCorrection();
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    save.mutate(
-      {
-        date: day.date,
-        reason: f.reason,
-        ...(f.in ? { requested_check_in: new Date(`${day.date}T${f.in}`).toISOString() } : {}),
-        ...(f.out ? { requested_check_out: new Date(`${day.date}T${f.out}`).toISOString() } : {}),
-      },
-      { onSuccess: onSaved },
-    );
-  };
+const statusText = (s: string) => (s ? (ATTENDANCE_STATUS_LABELS[s as AttendanceStatus] ?? s) : '—');
+
+/** My regularization requests: what was asked, the decision (who, when, comment) and the from → to (PLAN.md §19.38). */
+function MyRegularizations() {
+  const q = useMyRegularizations();
+  const rows = q.data ?? [];
+  if (!q.data || !rows.length) return null;
   return (
-    <form onSubmit={submit} className="grid gap-4">
-      <DialogHeader>
-        <DialogTitle>Correction request — {fmtDay(day.date)}</DialogTitle>
-        <DialogDescription>Enter the times that were actually worked and why; your approver decides.</DialogDescription>
-      </DialogHeader>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1.5">
-          <Label htmlFor="c-in">Correct check-in</Label>
-          <Input id="c-in" type="time" value={f.in} onChange={(e) => setF({ ...f, in: e.target.value })} />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="c-out">Correct check-out</Label>
-          <Input id="c-out" type="time" value={f.out} onChange={(e) => setF({ ...f, out: e.target.value })} />
-        </div>
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="c-reason">Reason *</Label>
-        <Input id="c-reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} placeholder="e.g. Forgot to check out" />
-      </div>
-      {save.error && <ErrorNote>{errorMessage(save.error)}</ErrorNote>}
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!f.reason.trim() || (!f.in && !f.out)} loading={save.isPending}>
-          Send request
-        </Button>
-      </DialogFooter>
-    </form>
+    <Panel
+      icon={ClipboardCheck}
+      tone="neutral"
+      title="My regularization requests"
+      actions={<DownloadMenu filename={fileSlug('regularization', 'my-requests')} target={hrExports.myRegularizations()} loading={!q.data} empty={!rows.length} />}
+    >
+      <ul className="divide-y" aria-label="My regularization requests">
+        {rows.slice(0, 30).map((r) => (
+          <li key={r.id} className="grid gap-1 py-2.5 text-sm">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <strong className="font-semibold">{fmtDay(r.date)}</strong>
+              <span className="text-muted-foreground">{r.reason_label}</span>
+              <Chip tone={r.status === 'pending' ? 'warning' : r.status === 'approved' ? 'success' : 'danger'} className="ml-auto">
+                {r.status_display}
+              </Chip>
+            </div>
+            <div className="font-mono text-xs text-muted-foreground tabular-nums">
+              Asked: in {r.requested_check_in ? fmtTime(r.requested_check_in) : 'as recorded'} · out {r.requested_check_out ? fmtTime(r.requested_check_out) : 'as recorded'}
+            </div>
+            {r.status === 'approved' && (
+              <div className="font-mono text-xs tabular-nums">
+                {fmtTime(r.original_check_in)}–{fmtTime(r.original_check_out)} {statusText(r.original_status)} → {fmtTime(r.requested_check_in ?? r.original_check_in)}–{fmtTime(r.requested_check_out ?? r.original_check_out)} {statusText(r.applied_status)}
+              </div>
+            )}
+            {r.reviewed_by_detail && (
+              <div className="text-xs text-muted-foreground">
+                {r.status_display} by {r.reviewed_by_detail.name}
+                {r.reviewed_at ? `, ${new Date(r.reviewed_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+                {r.remarks ? ` — “${r.remarks}”` : ''}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }
 
@@ -264,7 +286,7 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
               type="button"
               disabled={!d.status}
               onClick={() => onSelect(d)}
-              aria-label={`${fmtDay(d.date)}${d.status ? `: ${ATTENDANCE_STATUS_LABELS[d.status]}` : ''}`}
+              aria-label={`${fmtDay(d.date)}${d.status ? `: ${ATTENDANCE_STATUS_LABELS[d.status]}` : ''}${d.regularized ? ', regularized' : ''}`}
               aria-pressed={isSel}
               className={cn(
                 'relative flex aspect-square min-h-10 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border text-sm transition-[box-shadow,transform,border-color] disabled:cursor-default sm:aspect-auto sm:h-[4.25rem] sm:rounded-xl',
@@ -284,6 +306,16 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
               </span>
               {d.status && <span className={cn('text-xs leading-none font-bold', STATUS_TEXT[d.status])}>{TAG[d.status]}</span>}
               {(d.is_late || d.missing_checkout) && <AlertCircle className="absolute top-1 right-1 size-3 text-destructive" />}
+              {d.regularized && (
+                <span
+                  className="absolute top-0.5 left-0.5 rounded-xs border border-primary/25 bg-primary/8 px-0.5 text-[9px] leading-3 font-bold text-primary sm:px-1 sm:text-[10px]"
+                  title={`Regularized: ${d.regularization_reason ?? ''}`}
+                  aria-hidden
+                >
+                  <span className="sm:hidden">R</span>
+                  <span className="hidden sm:inline">Regularized</span>
+                </span>
+              )}
             </button>
           );
         })}
@@ -299,6 +331,12 @@ function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceD
         ))}
         <span className="inline-flex items-center gap-1.5 rounded-sm border bg-muted/30 px-2 py-0.5">
           <AlertCircle className="size-3 text-destructive" /> Late / no checkout
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-sm border bg-muted/30 py-0.5 pr-2 pl-0.5">
+          <span className="inline-grid h-4 min-w-5 place-items-center rounded-xs border border-primary/25 bg-primary/8 px-0.5 text-[10px] leading-none font-bold text-primary" aria-hidden>
+            R
+          </span>
+          Regularized
         </span>
       </div>
     </div>

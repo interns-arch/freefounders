@@ -40,6 +40,12 @@ export interface TeamDayRow extends TeamPerson {
   uniform_ok?: boolean | null;
   has_check_in_photo: boolean;
   has_check_out_photo: boolean;
+  /** Changed by an approved regularization (PLAN.md §19.38). Older servers leave these out. */
+  regularized?: boolean;
+  regularization_reason?: string;
+  work_mode?: string;
+  /** Punch-in reminders the server sent this day (PLAN.md §19.39). */
+  reminders_sent?: number;
 }
 
 export interface TeamDepartment {
@@ -96,7 +102,7 @@ export function useTeamMonth(year: number, month: number, filters: TeamFilters =
   });
 }
 
-export type AttendanceReportType = 'daily' | 'monthly_summary' | 'monthly_register' | 'late' | 'leave';
+export type AttendanceReportType = 'daily' | 'monthly_summary' | 'monthly_register' | 'late' | 'leave' | 'regularization';
 export type ReportFormat = 'xlsx' | 'csv';
 
 export const ATTENDANCE_REPORT_TYPES: Array<{ value: AttendanceReportType; label: string; period: 'date' | 'month' | 'range' }> = [
@@ -105,6 +111,7 @@ export const ATTENDANCE_REPORT_TYPES: Array<{ value: AttendanceReportType; label
   { value: 'monthly_register', label: 'Monthly register (muster roll)', period: 'month' },
   { value: 'late', label: 'Late arrivals', period: 'range' },
   { value: 'leave', label: 'Leave register', period: 'range' },
+  { value: 'regularization', label: 'Regularization requests', period: 'range' },
 ];
 
 export interface AttendanceReportInput {
@@ -127,6 +134,7 @@ export function attendanceReportFilename(r: AttendanceReportInput): string {
     monthly_register: `attendance-register-${ym}`,
     late: `attendance-late-${r.from}-to-${r.to}`,
     leave: `leave-register-${r.from}-to-${r.to}`,
+    regularization: `attendance-regularization-${r.from}-to-${r.to}`,
   }[r.type];
   return `${stem}.${r.format}`;
 }

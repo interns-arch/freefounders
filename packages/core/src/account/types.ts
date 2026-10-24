@@ -3,7 +3,7 @@ import type { AppKey, SignInTokens } from '../session';
 
 export type OtpChannel = 'email' | 'sms';
 
-/** POST signup/start, auth/forgot. `devCode` only while the OTP sender is fake (OTP_DEV_ECHO=1). */
+/** POST signup/start, auth/forgot, auth/login/code/start. `devCode` only in test mode (OTP_DEV_ECHO=1: dev, or the open demo). */
 export interface OtpSent {
   otpId: string;
   channel?: OtpChannel;

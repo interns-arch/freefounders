@@ -38,6 +38,8 @@ export const accountApi = {
   forgot: (identifier: string) => platformApi.post<OtpSent>('/auth/forgot', { identifier }),
   resetVerify: (otpId: string, code: string) => platformApi.post<{ ok: boolean }>('/auth/reset/verify', { otpId, code }),
   reset: (body: { otpId: string; code: string; newPassword: string }) => platformApi.post<{ ok?: boolean }>('/auth/reset', body),
+  /** Sign in with a code (PLAN.md §21.8): the same answer whether or not an account exists. */
+  loginCodeStart: (identifier: string) => platformApi.post<OtpSent>('/auth/login/code/start', { identifier }),
 
   companies: () => platformApi.get<AccountCompany[]>('/auth/companies'),
   switchCompany: (companyId: string) => platformApi.post<SignInTokens>('/auth/switch', { companyId, ...session.clientHint() }),
@@ -94,6 +96,14 @@ export function useResetVerify() {
 }
 export function useResetPassword() {
   return useMutation({ mutationFn: accountApi.reset });
+}
+/** Sign in with a code, step 1: a code to the account's email or mobile number. */
+export function useLoginCodeStart() {
+  return useMutation({ mutationFn: (identifier: string) => accountApi.loginCodeStart(identifier) });
+}
+/** Step 2: the code signs in (or returns the companies to choose from, like a password sign-in). */
+export function useLoginWithCode() {
+  return useMutation({ mutationFn: ({ otpId, code }: { otpId: string; code: string }) => session.loginWithCode(otpId, code) });
 }
 /** Second step of signing in with an account in several companies. */
 export function useSignInWithTicket() {

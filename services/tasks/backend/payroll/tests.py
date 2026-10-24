@@ -100,6 +100,39 @@ class CalculationTests(Base):
         self.assertEqual(slip.payable_days, Decimal("25.0"))      # 24 present + 1 paid leave
         self.assertEqual(slip.net_payable, Decimal("25000.00"))
 
+    def _half_leave(self, ltype, day):
+        return LeaveRequest.objects.create(user=self.rahul, leave_type=ltype, days=1, half_day=True, reason="x",
+                                           status="approved", start_date=date(YEAR, MONTH, day),
+                                           end_date=date(YEAR, MONTH, day))
+
+    def test_half_day_leave_pays_half_and_the_worked_half(self):
+        """§19.40: paid half-day leave + worked half = full day; paid half-day leave alone = 0.5; unpaid half-day
+        leave + worked half = 0.5 (0.5 loss of pay); unpaid half-day leave alone = 0."""
+        paid = LeaveType.objects.create(name="Casual", annual_quota=12, paid=True)
+        unpaid = LeaveType.objects.create(name="Unpaid", annual_quota=0, paid=False)
+        cases = {1: (paid, "half_day"), 2: (paid, "leave"), 3: (unpaid, "half_day"), 4: (unpaid, "leave")}
+        for day, (ltype, _status) in cases.items():
+            self._half_leave(ltype, day)
+        for day in range(1, 31):
+            if date(YEAR, MONTH, day).weekday() != 6:
+                mark(self.rahul, day, cases[day][1] if day in cases else "present")
+        slip = self.run_payroll().payslips.get(user=self.rahul)
+        # 22 full days + worked halves on 1 and 3 (1.0) + paid leave halves on 1 and 2 (1.0) = 24 of 26
+        self.assertEqual(slip.payable_days, Decimal("24.0"))
+        self.assertEqual(slip.lwp_days, Decimal("2.0"))
+        self.assertEqual(slip.net_payable, Decimal("24000.00"))
+        self.assertEqual((slip.breakdown["paid_leave"], slip.breakdown["unpaid_leave"], slip.breakdown["half_day"]),
+                         (1.0, 1.0, 2))
+
+    def test_half_day_leave_without_an_attendance_row_still_pays_the_leave_half(self):
+        paid = LeaveType.objects.create(name="Casual", annual_quota=12, paid=True)
+        self._half_leave(paid, 1)
+        for day in range(2, 31):
+            if date(YEAR, MONTH, day).weekday() != 6:
+                mark(self.rahul, day)
+        slip = self.run_payroll().payslips.get(user=self.rahul)
+        self.assertEqual(slip.payable_days, Decimal("25.5"))
+
     def test_pf_professional_tax_and_other_deductions(self):
         SalaryStructure.objects.create(
             user=self.manager, monthly_gross=Decimal("30000"), basic=Decimal("15000"),

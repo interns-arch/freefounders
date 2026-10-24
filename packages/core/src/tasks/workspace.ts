@@ -3,9 +3,10 @@
 // Every query key starts with 'tasks', 'task-completions' or 'task-change-requests' so useInvalidateTasks() reloads it.
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, type DrfPage, type Query, resultsOf, tasksApi } from '../http';
+import type { ChainNode, TaskChainInfo } from './chain';
 import { workListQuery } from './exports';
 import { type TaskCategory, useInvalidateTasks } from './tasks';
-import type { Task, TaskFrequency, TaskPriority, TaskScope, TaskStatus, UserBrief } from './types';
+import type { Task, TaskFrequency, TaskPriority, TaskScope, UserBrief } from './types';
 
 const NO_PLACEHOLDER = { placeholderData: undefined } as const;
 const STATIC = { staleTime: 5 * 60_000 } as const;
@@ -59,10 +60,11 @@ export interface DayLog {
   logged_minutes: number;
 }
 
-/** GET /tasks/:id/ — the task with its steps, sub-tasks and daily log. */
+/** GET /tasks/:id/ — the task with its steps, sub-tasks (parts given to others), its place in a chain and daily log. */
 export interface TaskDetail extends WorkTask {
   checklist: ChecklistItem[];
-  subtasks: Array<{ id: number; code: string; title: string; status: TaskStatus; assignee: string }>;
+  subtasks: ChainNode[];
+  chain: TaskChainInfo;
   day_log: DayLog;
 }
 

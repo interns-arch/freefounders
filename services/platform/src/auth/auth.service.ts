@@ -253,6 +253,29 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
    */
   private async loginAccount(account: typeof accounts.$inferSelect, password: string, meta: Meta, ipKey: string): Promise<(Issued & { mustChangePassword: boolean }) | ChooseCompany> {
     await this.verifyAccountPassword(account, password, ipKey);
+    return this.enterAccount(account, meta);
+  }
+
+  /**
+   * Sign-in with a one-time code (PLAN.md §21.8): the code proved the account's email / mobile, so no password. Same
+   * result as a password sign-in: tokens for one company, or the choice of company.
+   */
+  async loginVerifiedAccount(account: typeof accounts.$inferSelect, meta: Meta): Promise<(Issued & { mustChangePassword: boolean }) | ChooseCompany> {
+    await this.dbs.db.update(accounts).set({ lastLoginAt: new Date() }).where(eq(accounts.id, account.id));
+    return this.enterAccount(account, meta);
+  }
+
+  /** The per-IP bot guard of sign-in, for code sign-in: 429 while this address has failed too often. */
+  assertIpOpen(ip: string | undefined) {
+    if (this.throttle.blocked(`ip:${ip ?? 'unknown'}`, ipLimit())) throw new HttpException(IP_LIMIT_MESSAGE, 429);
+  }
+
+  /** A failed sign-in attempt from this address (a wrong code counts like a wrong password). */
+  ipFailed(ip: string | undefined) {
+    this.throttle.fail(`ip:${ip ?? 'unknown'}`);
+  }
+
+  private async enterAccount(account: typeof accounts.$inferSelect, meta: Meta): Promise<(Issued & { mustChangePassword: boolean }) | ChooseCompany> {
     const all = await this.memberships(account.id);
     const open = all.filter((m) => m.state !== 'suspended' || m.role === 'owner');
     if (!open.length) {

@@ -10,7 +10,7 @@
  *                        {"id": "r5", "type": "voice", "lang": "en-IN" | "hi-IN"}   the phone's speech recogniser (mic pop-up)
  *                        {"id": "r6", "type": "voice-stop"}                          "Done": stop listening, r5 gets the words
  *                        {"id": "r7", "type": "reminder-set", "settings": {"enabled": true, "time": "09:20", "days": [1,2,3,4,5,6],
- *                                     "mode": "vibrate" | "ring" | "ring-vibrate", "followUpMinutes": 10}}   punch-in reminder (§19.32)
+ *                                     "mode": "vibrate" | "ring" | "ring-vibrate", "followUpMinutes": 10, "count": 3}}   punch-in reminder (§19.32; count: 1.2.2+, §19.39)
  *                        {"id": "r8", "type": "reminder-get"}          settings on this phone + notification permission
  *                        {"id": "r9", "type": "reminder-skip-today"}   checked in: no more reminders today, back tomorrow
  *                        {"id": "rA", "type": "reminder-off"}

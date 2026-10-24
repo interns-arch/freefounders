@@ -268,6 +268,9 @@ updated in the same change. Removing a function is not.
 - **Top bar**: menu button and compact logo (phones/tablets), then the notifications bell.
 - **Content**: a loader until access is ready; lazily loaded screens show a loader while loading.
 - **Phones**: the sidebar becomes a left drawer opened by "Menu"; it closes after any navigation.
+- **Update banner** (phone app only, PLAN.md §19.40): when the server sets `MOBILE_MIN_VERSION` and the installed app is
+  older, a non-blocking strip under the header (role status): "A new version of Kaampilot is available (you have {x})."
+  + link "Download the update" (opens the APK in the phone's browser) + × "Hide the update message" (for the session).
 
 ### Notifications bell (PLAN.md §19.37)
 - One bell for every app: the Tasks and Assets notifications, merged newest first, refreshed every 30 s. If one app fails
@@ -336,6 +339,18 @@ Home of the Admin workspace: `/people`.
      - "Activate" (inactive, not yourself) — no confirmation.
 - **States**: skeleton rows; refresh bar; load error with "Try again"; empty "No one found." (+ "Try another name, email or ID."
   when searching).
+
+#### Import people (dialog, Manage people; PLAN.md §19.40)
+- Header button **"Import"** (next to "Invite link") → dialog "Import people": "One row per person: Name, Email, Mobile,
+  Employee ID, Department, Designation, Reports to (their employee ID or email), Join date and Role (Admin or Member)…".
+- "Template:" **XLSX** / **CSV** buttons (download the template with one example row).
+- "People file (.xlsx or .csv)" + **"Check file"** → "{n} ready · {m} with errors · {free} of {limit} seats free" and a
+  table: Person (name, "Row {line} · email · employee ID"), Department · designation, Role, Check ("OK" + notes such as
+  "No email or employee ID: added without a login", or "Error" + every problem of the row: missing name, bad email /
+  mobile / employee ID, duplicate in the file, already in People, signs in someone else / has a Kaampilot account,
+  unknown department, unknown or looping "Reports to", bad date, bad role, no free seat).
+- **"Import {n} people"** (disabled with 0 ready) → "Import finished", "Added {a} · Skipped {s}", a warning box with
+  **"Sign-in sheet (CSV)"** (name, sign-in ID, generated password; shown only now) and the skipped rows; "Done".
 
 #### Add person / Edit {name} (side panel)
 - Title "Add person" / "Edit {full name}"; add: "They can sign in with their email, employee ID or username.".
@@ -434,6 +449,14 @@ connected.". The module list comes from the apps (§0.4).
 "Rename" (inline: "New name for {name}", "Save", "Cancel"), "Deactivate"/"Activate" (at once). Add: "New department" (max 60)
 + "Add department". Empty: "No departments yet.". Codes never change, so renaming is safe.
 
+#### Integrations (Owner / Admin, company with Tasks; PLAN.md §19.40)
+"Your own WhatsApp, Gmail and AI keys. Keys are stored encrypted and never shown again in full; each change is recorded."
+· three sections **WhatsApp**, **Gmail**, **AI** (title + one line). Fields: on/off switches (saved at once), text fields
+with "Save" (enabled when changed; empty + Save removes the company's value), and **keys**: "••••abcd" / "Set on the
+server" / "Not set" + **"Add"** or **"Replace"** (a password field "Paste the new value" + "Save" / "Cancel") and
+**"Remove"** (only the company's own value). Under each field: "Changed by {name}, {date}" / "Removed by …" / "Set on the
+server".
+
 #### App settings
 "Each app keeps its own detailed settings. These open in the app." · link cards (only for apps in the plan): Tasks — "Task
 rules" (`/tasks/settings`: "Completion evidence, departments, task categories, notifications"), "HR settings"
@@ -474,7 +497,8 @@ given per action). Dates read "8 Oct, 05:30 pm"; relative due dates "6 hours fro
 | 11 | `employees` | "Reports" | Managers |
 | 12 | `time` | "Time Report" | everyone |
 | 13 | `disputes` | "Disputes" | Managers |
-| 14 | `deleted` | "Deleted" | Admins |
+| 14 | `chains` | "Chains" | Admins and the Owner (company-wide task view; PLAN.md §19.41) |
+| 15 | `deleted` | "Deleted" | Admins |
 
 - **Design note**: today an unknown tab, or one the person may not see, shows an empty area. A new design should show the
   default tab (or a friendly "not available" message) instead.
@@ -627,7 +651,27 @@ given per action). Dates read "8 Oct, 05:30 pm"; relative due dates "6 hours fro
   auto-accept); `?review=reject` opens the send-back box.
 - **"Checklist"** (done/total): warning while steps are open; each step: checkbox, text, due, done note; tick → Step done
   dialog; untick → reopens; remove (open steps; confirm). "Add a step…" + due time → "Add step".
-- **"Sub-tasks"** (if any): code, title, assignee, status.
+- **"Sub-tasks"** (Task chain, PLAN.md §19.41; shown when the task has parts, or I may give parts, or I am an admin):
+  "{done}/{total} done"; buttons **"Give a part to someone"** (the holder or an admin, while the task is open and fewer
+  than 5 levels deep; a Member may pass on parts of a task someone else gave them, a self-made task needs Assign tasks)
+  and **"Task chain"** (admins / Owner, when the task has parts or is a part); a warning line while the task can't be
+  completed ("This task can't be completed yet — N sub-tasks still open: …; N done but waiting for you to accept: …";
+  **Complete** is then disabled with that text); empty hint "Need help from others on this? Give them a part — …".
+  Each part: result label (On time / Delayed / Overdue / In progress / Pending), code + title (opens it), assignee ·
+  due · effort · "waiting for you to accept" / approved / rejected · "split into N more parts".
+- **Part-of note** at the top of a part: "Sub-task of {code} {title} — held by {name}, due {date}. Main task: {code}.
+  When you complete this, {name} accepts it."
+- **Give parts of {code}** (dialog; bottom sheet on phones): "Effort left to give: X of Y · giving Z now. What you give
+  is earned by them; you keep the rest." (red, button disabled, when over). Per part: "Give to" (`/tasks/assignees/?part_of=`;
+  never the holder), "Due by" ("No later than {parent due}"), "What should they do?", "Effort" (minutes/hours),
+  "Details (optional)", "Remove this part"; "Another person"; "Give N parts". Parts the server refuses stay with their
+  reason ("N parts given. Fix the rest below."); toast "N parts given".
+- **Task chain** (dialog, admins / Owner): tiles People, Sub-tasks, Done, On time, Delayed, Overdue; the tree from the
+  main task down (indented per level): code + title (opens it), result, holder · given by · due · done · days late ·
+  effort kept "of" effort · approval. The task it was opened from is highlighted.
+- **Chains tab** (`?tab=chains`, admins / Owner): Open / Done / All; "{n} chains · tasks split into sub-tasks, overdue
+  first"; Download (Excel / CSV); table (cards on phones): Main task (given by), Held by, Progress "d/n done", People,
+  Levels, Overdue, Due, Result; a row opens the Task chain dialog. Empty "No chains here yet."
 - **"Daily progress log"** (logged/total days): "N days with nothing written."; "Logged day by day: Xh · recorded total on the
   task: Yh"; one row per day ("today" marked) with the entry ("→ Next: …", "N% · Xh · author") or "Nothing written" / "Not yet";
   "Add"/"Edit" on writable days.
@@ -739,6 +783,11 @@ good), Actually took, Status. Empty "No disputes in this range — everyone agre
 - Header: avatar, name, "Their tasks and how they are doing". "Period": This Month (default), This Week, Today, This Year, All Time.
 - Stats: "Total", "Completed", "Pending", "Overdue", "In time", "Delayed", "Time earned", "Score" ("Only tasks assigned by someone
   else are scored"). Self-assigned note. 💡 review hint.
+- **"Excel report"** (admins / Owner, next to Period; PLAN.md §19.41): one .xlsx for the picked period,
+  `tasks-performance-{name}-{period}-{date}.xlsx`, 8 sheets each with filter arrows: Summary (score and counts — the same
+  numbers as the stats above), Month by month, Tasks received (who gave them; chain columns "Sub-task of", "Main task",
+  "Given to sub-tasks (h)"), Given by whom, Tasks delegated, Delegated to whom, Change requests (old due → new due,
+  reason, outcome), Completion reviews. In the phone app the file is saved through the app.
 - "Tasks": Status (Open/Done/All), "Overdue only", "Recurring only", "N shown"; rows open the task detail. No row actions.
 - Empty "No tasks match this filter."
 
@@ -1037,6 +1086,13 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 **Footer**
 - "Formula (open, not a black box): **{formula}**."
 - Then either " Change is measured against {prev start} – {prev end}." or " No earlier period to compare against in this range."
+
+**Who asks most to change a due date** (same date range; original 2bc1425, PLAN.md §19.30 / §19.41): "{n} requests to
+move a due date or time, from {p} people · {w} still waiting"; Download (Excel / CSV); ranked most first: Person (role ·
+department), Requests, Approved, Rejected, Waiting, Tasks, Approval rate, Last asked. Open a person ("Show {name}'s
+requests"): each request (latest 20) — task code (opens it) and title, "Due {old} → {new}" (old "not known" for requests
+decided before 2026-10-24), other changes asked, "Reason: …", the outcome "{Approved/Rejected} by {name} on {date} —
+{remarks}", a status label, the day asked. Empty "Nobody asked to move a due date in this range."
 
 **Bottom**: the "Tasks given & received" card (2.2-A; admins only).
 
@@ -1408,7 +1464,9 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
   - Each day shows its number and a tag: ✓ present, L late, ½ half day, ✗ absent, Lv leave, H holiday, "off" week off.
   - Today is emphasised. A marker shows when the day was late or has no checkout.
   - Future days, or days with no status, are not clickable. Clicking a day toggles its detail.
-  - Legend: Present, Late, Half Day, Absent, Leave, "Off/Holiday".
+  - A regularized day carries a small rectangular tag: "R" on phones, "Regularized" on wider screens (PLAN.md §19.38).
+  - Legend: Present, Late, Half Day, Absent, Leave, "Off/Holiday", "Late / no checkout", "Regularized".
+  - `?date=YYYY-MM-DD` (from a notification) opens that month with the day selected.
 - **Day detail panel**:
   - Title: long date (for example "Wednesday, 8 October") plus the status chip (": {holiday name}" for holidays).
   - "Check in" time, with a photo thumbnail when a photo exists.
@@ -1416,20 +1474,43 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
   - "Worked".
   - "Flags": "late", "early out", "no checkout".
   - Thumbnails open a large view titled "[{name} ]Check-in photo" / "Check-out photo". Photos load with the sign-in token, never a public URL. If a photo cannot load, the thumbnail is not shown.
-  - Button **"Request a correction for this day"**: own records only, and only for days that are present, late, half day or absent.
-- **Dialog "Correction request — {day}"**:
-  - "Correct check-in" (time).
-  - "Correct check-out" (time).
-  - "Reason *": placeholder "e.g. Forgot to check out".
-  - Rule: a reason is required, plus at least one time. "Send request" stays disabled otherwise.
-  - Buttons: "Cancel", "Send request".
-  - Success: the dialog closes and the page shows "Correction for {day} sent for approval."
-  - Approvers are notified (see section 5). The server rejects a request with no time: "Provide a corrected check-in or check-out time."
+  - Title also shows the "Regularized" tag (with "· On duty" / "· WFH"); lines "Regularized: {reason}" and
+    "Request: {reason} {pending|approved|rejected}" for the day's latest request.
+  - Button **"Regularize this day"**: own records only; present, late, half day or absent days up to today. While a request
+    for the day is pending it reads "Regularization waiting for approval" (disabled).
+- **Dialog "Regularize attendance"** (also from Today → "Regularize a day"; PLAN.md §19.38):
+  - Description: "{left} of {limit} requests left this month · up to {n} days back. Your approver decides." (or "No monthly limit").
+  - "Recorded in {time} out {time}" with the status chip, the Regularized tag and the day's request status.
+  - "Reason": one tap among the reasons the company allows (Forgot to punch in / Forgot to punch out / Punched late due to
+    work / On duty – client visit / Work from home / Technical issue (app/GPS) / Other). Pre-selected from the record: no
+    check-in → Forgot to punch in; check-in without check-out → Forgot to punch out.
+  - "Day" (from the earliest allowed day to yesterday, or today once the shift has ended) and "Several days" → "From" / "To"
+    (week-offs and holidays skipped, at most 15 days).
+  - "Check-in" / "Check-out": pre-filled with the recorded times, else the shift. For On duty / Work from home they may be
+    left empty (the shift is used).
+  - "Note" (required for "Other"), "Photo or document (optional)" (photos are shrunk before upload).
+  - "Send request" is disabled when regularization is off, the month's requests are used up, a request for the day is
+    pending, or required fields are empty. Server messages: "Monthly limit reached: you can raise {n} regularization
+    request(s) a month and have used {u} in {Month YYYY} ({left} left).", "Regularization is allowed for the last {n} day(s)
+    only (from {date}).", "A future day cannot be regularized.", "Today can be regularized after the shift ends ({time}).",
+    "You already have a pending request for {date}.", "{date} is approved leave; cancel the leave instead.", "There is no
+    check-in on {date}: give the check-in time too.", "Check-out must be after check-in.".
+  - Success: "Regularization for {day} sent for approval." Nothing changes in attendance until it is approved.
+- **"My regularization requests"** (own month only; Download): each request with its day, reason, status, the times asked,
+  for an approved one "{was in}–{was out} {was status} → {new in}–{new out} {new status}", and "{Approved|Rejected} by
+  {name}, {when} — "{comment}"".
 - **States**: skeleton for the calendar; error state with Retry.
 
 #### 4.3.5 My Leave (`?tab=leave`)
 
 - Button **"Apply for leave"**: disabled until leave types are loaded.
+- Button **"Mark leave"** (people with Approve leave; also in Approvals → Leave; PLAN.md §19.40) → dialog "Mark leave"
+  ("Approved at once; the employee is notified and their attendance shows the leave."): "Employee *" (only people you
+  approve leave for; yourself only as the Owner; "{name} ({employee ID})"), "Leave type *" with that person's "{n} days
+  left" / "no limit", "From *", "To *", "Half day (counts 0.5)" (one date), "Reason *", submit "Mark leave". Beyond the
+  person's balance the server answers "{name} has {n} day(s) of {type} left; this request needs {m}. Choose “Beyond
+  balance” to mark it anyway." and the box "Beyond balance (logged on the leave)" appears. Rows marked beyond the balance
+  read "beyond balance" under the remarks.
 - When no leave types exist: "No leave types configured yet — an admin can add them in HR Settings."
 - **Balance tiles**, one per active leave type:
   - Label "{name}" plus " (unpaid)" for unpaid types.
@@ -1495,9 +1576,13 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 #### 4.3.8 Approvals (`?tab=approvals`)
 
 - **Who**: see section 5. The list shows only people the viewer may review.
-- **Two sections**:
+- **Two tabs** "Leave" and "Regularization", each with its pending count (a notification opens the right one). A reporting
+  manager without the approve permission sees only Regularization (no tab row).
   - **"Leave requests ({n})"**: rows "{name} — {type} ({n} day/days)", the reason, and "{from} – {to}".
-  - **"Attendance corrections ({n})"**: rows "{name} — {date}", the reason, and "in {time} · out {time}".
+  - **"Regularization requests ({n})"**: rows "{name} — {date}" with the reason chip and the note; "Recorded in · out ·
+    status · hours" against "Requested in · out" (or "as recorded"); "Check-in {distance} from {office}"; "{n} requests
+    this month"; the attachment (signed link).
+  - Bulk: "Select all" / a checkbox per row, "Approve selected", "Reject selected" → "Approved {n}. Not done: {reasons}".
   - The count shows "…" while loading.
 - **Per row**:
   - "Remarks…" text field (optional; the server stores up to 300 characters).
@@ -1506,7 +1591,9 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 - **Effects**:
   - Approved leave writes Leave into attendance for the working days.
   - The requester gets a "Leave approved/rejected: {type}" notification.
-  - An approved correction rewrites the punches, recalculates hours and status, and notes "Corrected by {user}".
+  - An approved regularization rewrites the day: times, hours, late / early flags and status with the HR rules (or always
+    Present, per the policy), notes "Regularized by {name}: {reason}", tags the day and keeps the from → to on the request.
+    The requester gets "Regularization approved/rejected: {date}", which opens My attendance on that day.
 - **Server errors shown**:
   - "You cannot review this request."
   - Self-review: "You cannot approve your own request — it must be reviewed by someone else." This is followed by either " Ask one of: {names}." or " No other approver exists yet: add an HR Manager (or another admin) in My Team, and ask them to review it."
@@ -1529,7 +1616,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 | "Half day below (hours)" | number, step 0.5 | 0.5–24 | 4 |
 | "Full day (hours)" | number, step 0.5 | 1–24 | 8 |
 | "Photo at check-in / check-out" | select: "Off" / "Optional" / "Required at every punch" | — | off (Kaampilot companies are set up with "required") |
-| "Leave and corrections are approved by" | select: "Approvers in the person's department" / "The person's manager (reports to) first" | — | department |
+| "Leave and corrections are approved by" | select: "Approvers in the person's department" / "The person's manager (reports to) first" (leave; regularization always goes to the reporting manager first) | — | department |
 | "Remind approvers after (hours; 0 = never)" | number | 0–720 | 24 |
 | "Keep photos for (days)" | number | 1–3650 | 90 |
 | "Weekly off" | day toggles Mon–Sun (index 0 = Mon) | 0–6 | Sun |
@@ -1537,6 +1624,11 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
 | "Uniform at punch-in" (own card, "Save uniform check") | choice "Off" (No question) / "Reminder only" (OK, punch in) / "Must confirm" (Yes punches in, No blocks) + "Message" (≤ 200 chars, blank = default) | — | off; "Are you wearing the company shirt / jersey today?" |
 | "Face check at check-in and check-out" | checkbox | — | off |
 | "First face capture becomes the person's face profile" | checkbox; disabled unless face check is on | — | on |
+
+| "Regularization" (own card, "Save regularization") | "People can request regularization" · "Requests per person per month (0 = no limit)" · "How many days back" · "An approved day counts as" (Worked out from the times / Always Present) · "Reasons people can pick" | limit 0–1000, days back 0–90 | on · 3 · 7 · from the times · all reasons |
+| "Punch-in reminders" (own card, "Save reminders"; PLAN.md §19.39) | "Remind people who have not punched in" · "Number of reminders" · "Minutes between reminders" · "First reminder after reporting time (min)"; preview "Reporting time 09:30: reminders at 10:00, 10:30, 11:00." | count 1–10, gap 5–240, first 0–240 | on · 3 · 30 · 30 |
+
+- **Punch-in reminders** (PLAN.md §19.39): a person who has not punched in by the reporting time (Work starts) gets "Reminder 1 of 3: you have not punched in yet today (reporting time 09:30). Open Kaampilot to punch in." in the bell (Attendance tab; tapping opens Attendance → Today with Punch in), and on WhatsApp when the company has it set up (Task settings → Notifications → "Punch-in reminders to people who have not punched in": WhatsApp on, email off by default). Then every gap until the count; nothing after the punch-in, on approved leave, a holiday, the weekly off, a day HR already marked, after work ends, for switched-off people or people without "Punch in and out". **Daily / Live attendance** show "Reminded 2×" next to a person not checked in. The phone app's "Punch-in reminder" card starts from the same rule ("Remind me at" = reporting time + first delay; "Remind me again every 30 min until I punch in (3 reminders in all)"); apps 1.2.0/1.2.1 show "This app version rings the first 2 reminders. Update the Kaampilot app to get all 3." Checking in, or opening Today on leave / a holiday / the weekly off, cancels the rest of today's phone reminders.
 
 - Range errors read "Between {lo} and {hi}".
 - The server also has `face_threshold` (0.3–0.8, default 0.6), but it is **not editable in this UI**.
@@ -1625,7 +1717,7 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
    - A day with no check-out shows the "no checkout" flag.
 8. **Success**: "Checked in ✅" / "Checked out ✅". Tiles and buttons refresh.
 9. **Fallbacks for staff**:
-   - Request a correction (3.4).
+   - Regularize the day (My attendance → tap the day, or Today → "Regularize a day"; PLAN.md §19.38).
    - An HR manager can "Mark present" with a reason (3.7).
 10. **Photo privacy and retention**:
     - Photos are visible only to the employee and the people who can see their attendance (`hr.manage`: everyone; `hr.approve`: their department).
@@ -1650,12 +1742,17 @@ Every page is loaded on demand, so a loader shows on first open. The HR page als
   - The requester's active reports-to manager can approve even without `hr.approve`. Such a manager sees the "Approvals" tab, but not the "Team" tab.
   - Notifications go to the manager only. Department approvers and HR can still decide (for example when the manager is away).
   - If the person has no manager, the department rule applies.
+- **Regularization** (PLAN.md §19.38): always the person's reporting manager (People → reports to), who is told, sees it in
+  Approvals → Regularization and may decide it without the approve permission. Without a manager it goes to the people with
+  the approve-attendance permission for that person (department, else company-wide). HR / Admin / Owner can decide any
+  request in their scope. Every request needs a decision; there is no auto-approve.
 - **Always**:
-  - Nobody can approve their own request, including admins.
+  - Nobody can approve their own request, including admins (the Owner may decide their own regularization, PLAN.md §19.24).
   - Only pending requests can be decided.
   - Remarks are optional (up to 300 characters).
 - **Notifications**:
-  - On submit: "Leave request from {name}" / "Attendance correction from {name}", linking to HR with the label "Review it".
+  - On submit: "Leave request from {name}" / "Attendance regularization from {name}" ("{reason}: {date or range} (in · out)"),
+    linking to Approvals with the label "Review it".
   - On a leave decision, the requester is told "Leave approved/rejected: {type}".
 - **Reminders** ("Remind approvers after (hours; 0 = never)", default 24):
   - After N hours pending, the approvers get one reminder: "Waiting for you: {title}".

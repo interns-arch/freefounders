@@ -134,6 +134,17 @@ export const session = {
     await keep(res.ok ? data : { message: data.message }, res.status);
   },
 
+  /**
+   * Sign in with a one-time code instead of a password (PLAN.md §21.8; the code came from POST auth/login/code/start).
+   * Same answers as `login`: the list to choose from, or signed in.
+   */
+  async loginWithCode(otpId: string, code: string): Promise<ChooseCompany | void> {
+    const res = await post('/login/code/verify', { otpId, code, ...clientHint() });
+    const data = (await res.json().catch(() => ({}))) as Partial<SignInTokens & ChooseCompany> & { message?: string };
+    if (res.ok && Array.isArray(data.chooseCompany) && data.ticket) return { chooseCompany: data.chooseCompany, ticket: data.ticket };
+    await keep(res.ok ? data : { message: data.message }, res.status);
+  },
+
   /** Second step of a sign-in with several companies. */
   async loginWithTicket(ticket: string, companyId: string): Promise<void> {
     const res = await post('/login', { ticket, companyId, ...clientHint() });

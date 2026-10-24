@@ -29,3 +29,16 @@ class OutboxEvent(models.Model):
 
     class Meta:
         ordering = ["id"]
+
+
+class SettingChange(models.Model):
+    """Who changed a company setting from Settings → Integrations, and when (PLAN.md §19.40). Never the value."""
+
+    key = models.CharField(max_length=100)
+    action = models.CharField(max_length=10)          # "set" or "removed"
+    actor_id = models.IntegerField(null=True, blank=True)
+    actor_name = models.CharField(max_length=150, blank=True, default="")
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]

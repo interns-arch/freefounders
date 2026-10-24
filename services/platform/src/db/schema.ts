@@ -312,6 +312,8 @@ export const otpCodes = platform.table(
     attempts: integer('attempts').notNull().default(0),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
+    /** The sender (MSG91) refused or could not be reached: never usable, and not counted against the person's resend limits (§21.8). */
+    failedAt: timestamp('failed_at', { withTimezone: true }),
     ip: text('ip'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

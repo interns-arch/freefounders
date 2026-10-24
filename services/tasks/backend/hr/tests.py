@@ -351,7 +351,8 @@ class CorrectionTests(Base):
         self.assertEqual(res.status_code, 200)
         rec = Attendance.objects.get(user=self.rahul, date=day)
         self.assertEqual(rec.working_minutes, 540)
-        self.assertEqual(rec.status, "present")
+        # 09:30Z is 15:00 in India: late is worked out again on approval (regularization, PLAN.md §19.38).
+        self.assertEqual((rec.status, rec.is_late), ("late", True))
         # double review blocked
         self.assertEqual(self.client.post(f"/api/attendance-corrections/{cid}/review/",
                                           {"decision": "rejected"}).status_code, 400)

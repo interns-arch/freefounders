@@ -17,19 +17,26 @@ GROUPS = [
      ("task_assigned", "task_inloop")),
     ("task_done", "Work completed, sent for review, accepted or sent back",
      ("task_completed", "task_completed_alert", "task_completion_review", "task_completion_accepted",
-      "task_completion_rejected", "done_today")),
+      "task_completion_rejected", "done_today", "subtasks_all_done")),
     ("task_changes", "Change requests and new category requests",
-     ("task_change_request", "task_change_reviewed", "task_change_log", "category_request")),
+     ("task_change_request", "task_change_reviewed", "task_change_log", "category_request",
+      "task_cancelled")),
     ("task_updates", "Comments and progress updates", ("task_comment", "task_progress")),
-    ("task_due", "Due and overdue reminders", ("task_due", "task_overdue_weekly")),
+    ("task_due", "Due and overdue reminders", ("task_due", "task_overdue_weekly",
+                                                "subtask_due_after_parent")),
     ("digests", "Daily and day-end summaries", ("task_daily", "task_day_end")),
-    ("hr", "Leave and attendance", ("leave_reviewed", "face_enrolled", "leave_request", "correction_request")),
+    ("hr", "Leave and attendance", ("leave_reviewed", "face_enrolled", "leave_request", "correction_request",
+                                        "correction_reviewed")),
     ("approvals", "Reminders about requests waiting for approval", ("approval_reminder", "approval_escalated",
                                                                          "task_completion_reminder")),
     ("mistakes", "Mistake register", ("mistake_logged", "mistake_update", "mistake_repeat", "mistake_escalated",
                                       "mistake_digest")),
     ("leads", "Leads and customer messages", ("lead_assigned", "status_change", "follow_up_due", "customer_message")),
+    ("punch_reminders", "Punch-in reminders to people who have not punched in", ("punch_reminder",)),
 ]
+# A group whose channel is off until the company switches it on (default: on). Punch-in reminders go out several
+# times a morning (PLAN.md §19.39): no email unless asked for.
+DEFAULT_OFF = {("punch_reminders", "email")}
 _GROUP_OF = {t: key for key, _label, types in GROUPS for t in types}
 
 
@@ -46,13 +53,20 @@ def allows(type_: str, channel: str) -> bool:
     group = _GROUP_OF.get(type_)
     if group is None:
         return True
-    return (saved().get(group) or {}).get(channel, True) is not False
+    return _on(saved(), group, channel)
+
+
+def _on(rules: dict, group: str, channel: str) -> bool:
+    value = (rules.get(group) or {}).get(channel)
+    if value is None:
+        return (group, channel) not in DEFAULT_OFF
+    return value is not False
 
 
 def table() -> list[dict]:
     rules = saved()
     return [
-        {"key": key, "label": label, **{c: (rules.get(key) or {}).get(c, True) is not False for c in CHANNELS}}
+        {"key": key, "label": label, **{c: _on(rules, key, c) for c in CHANNELS}}
         for key, label, _types in GROUPS
     ]
 

@@ -77,4 +77,15 @@ export const tasksExports = {
   mistakes: (filters: MistakeFilters = {}) => t('/mistakes/', mistakesQuery(filters)),
   sops: (params: { search?: string; all?: boolean } = {}) => t('/sops/', { search: params.search?.trim() || undefined, all: params.all ? 'true' : undefined }),
   links: (filters: LinkFilters = {}) => t('/links/', linksQuery(filters)),
+  /**
+   * One person's performance workbook (PLAN.md §19.41): 8 sheets with filters for the period picked on their profile
+   * (admins / Owner). One fixed format: GET /tasks/person_export/?user=&range=(&start&end).
+   */
+  personReport: (user: number, range: string, custom?: { start: string; end: string }): ExportTarget => ({
+    api: 'tasks',
+    path: '/tasks/person_export/',
+    query: { user, range, start: range === 'custom' ? custom?.start : undefined, end: range === 'custom' ? custom?.end : undefined },
+    formats: ['xlsx'],
+    param: 'none',
+  }),
 };

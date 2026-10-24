@@ -2356,6 +2356,204 @@ visible) and "clicking a notification opens the right page".
 
 Goes live with a website + Tasks API (migration notifications 0004 via `migrate_companies`) + Assets API update. No new APK.
 
+### 19.38 Attendance regularization (2026-10-24)
+Founder: "add an attendance regularization feature" (as Keka / greytHR / SalaryBox). Requirements: a monthly limit the
+company types (any number, 0 = unlimited, default 3); approval by the employee's **reporting manager** (else the people
+with the approve-attendance permission); **every request needs approval** (no auto-approve, nothing changes until then);
+on approval the day is corrected automatically (payroll uses it); a permanent record visible to the employee, the manager
+and HR, downloadable.
+- **Built on the corrections** (kept and grown, not replaced): same table `hr.AttendanceCorrection`, same endpoint
+  `/attendance-corrections/`, same reminders / escalation. Old clients that send `requested_check_in/out` date-times still
+  work (kept exactly). Migration **hr 0009**: `reason_type` (forgot_in, forgot_out, late_work, on_duty, wfh, technical,
+  other), `reason` now optional (the note; required for Other), `attachment` (`regularization_docs/`, served only by signed
+  links, photos compressed, ≤ 10 MB), `batch` (days asked together), `reviewed_at`, `original_check_in/out`,
+  `original_status`, `applied_status` (the from → to), index (user, date); `Attendance.regularization` (FK: the "Regularized"
+  tag); approved corrections made before are linked to their days. **hr 0010** drops the short-lived `auto_approved`.
+- **Policy** (HR settings → "Regularization", own save; `CompanySetting`): `reg_enabled` (REGULARIZATION_ENABLED, on),
+  `reg_reasons` (REGULARIZATION_REASONS, all; new setting kind "codes"), `reg_monthly_limit` (REGULARIZATION_MONTHLY_LIMIT,
+  3; 0–1000, 0 = unlimited; counts pending + approved days in the calendar month), `reg_days_back`
+  (REGULARIZATION_DAYS_BACK, 7; 0–90), `reg_mark` (REGULARIZATION_MARK: `times` = Present / Late / Half day from the times
+  with the HR rules, or `present` = always Present). On duty / WFH reasons tag the day "On duty" / "WFH" (counted present);
+  without times they use the shift. Refused: future days, today before the shift ends, older than the limit, a second pending
+  request for a day, an approved full-day leave day, check-out without any check-in, out ≤ in, over the monthly limit
+  ("Monthly limit reached: … used {u} … ({left} left)").
+- **Approvals**: `hr/regularization.py` — `approvers_for` = the reporting manager, else department approvers, else the
+  company-wide ones; `may_review` = the manager (no permission needed) or an approver whose scope covers the person; never
+  one's own request except the Owner (§19.24). `hr/config` → `can_approve_regularization` (anyone people report to), so
+  managers see Approvals → Regularization. Approve rewrites the day (`apply`: times, hours, late / early, status, note
+  "Regularized by {name}: {reason}", tag) and keeps the from → to; payroll reads the corrected day.
+- **API**: `GET /attendance-corrections/policy/` (rules + used / left this month), `POST /attendance-corrections/` (JSON or
+  multipart; `date`, `end_date`, `reason_type`, `check_in_time`, `check_out_time`, `reason`, `attachment`; a range answers
+  `{results, count}`), `POST /:id/review/`, `POST /bulk_review/ {ids, decision, remarks}` → `{done, failed}`,
+  `GET /:id/attachment/` (fresh signed link; the person and their approvers), list filters `scope=team`, `status`, `from`,
+  `to`, `user`. Monthly / Daily / Live rows carry `regularized`, `regularization_reason`, `work_mode` (+ the day's `request`
+  in My attendance).
+- **Notifications**: approvers get `correction_request` ("Attendance regularization from {name}", Approvals area, link
+  `/hr?tab=approvals&correction=<id>`); the person gets `correction_reviewed` (Attendance area, link
+  `/hr?tab=history&date=<day>&regularization=<id>` → My attendance on that day). WhatsApp / email follow the existing
+  "Leave and attendance" rule group (now also covering `correction_reviewed`).
+- **Web**: My attendance — day panel with the Regularized tag, the day's request, "Regularize this day"; calendar tag
+  ("R" on phones); "My regularization requests" (the permanent record, Download). Today — "Regularize a day". Form
+  `features/hr/regularize.tsx`: reason in one tap (guessed from the record), times pre-filled, several days, note,
+  attachment: tap the day → Regularize → Send on a phone. Approvals — tabs Leave / Regularization with counts, recorded vs
+  requested, distance of the check-in, requests that month, attachment, bulk approve / reject. Daily / Live — the tag.
+  Downloads — My attendance and Daily files get a "Regularized" column when a day of the file is regularized; the request
+  list file has reason, note, was / new times and status, reviewer, reviewed at; Reports → "Regularization requests" (person,
+  month, reason, times, status, before / after, who decided). Home's refused-punch link reads "Regularize a day".
+- HR import and "Mark" clear the tag (they decide the day afterwards).
+
+| Check | Result |
+|---|---|
+| Tasks | new `hr/tests_regularization.py` (26: within policy, monthly limit + 0 = unlimited, rejected not counted, too far back, future, today before shift end, off / reasons, needs a time / note, one pending per day, date range, settings, approve rewrites + recompute + from → to + tag, half day, always-present mark, reject, own request (Owner may), scope, reporting manager without permission, no manager → approvers, bulk, every request waits, payroll, import / mark clear the tag, report + downloads, attachment privacy, size); `tests.py` / `tests_approvals.py` updated for late recompute and the manager rule |
+| Web | `npm run web:build` |
+| e2e | new `web-regularization` (phone: employee requests from My attendance, reporting manager approves in Approvals, day corrected + tag + record, limit message); `web-hr` (Approvals tabs), `web-attendance-team` green |
+
+Goes live with a website + Tasks API update (migrations hr 0009–0010 via `migrate_companies`). No new APK.
+
+### 19.39 Punch-in reminders from the server (2026-10-24)
+Founder: "Attendance reminder every 3 times after every 30 min from reporting time if not marked, leave." A person who
+has not punched in by the reporting time (= the company's **Work starts**; there is no per-person shift) gets reminder
+1 at reporting + 30 min, 2 at + 60, 3 at + 90, and none once they punch in.
+
+| Part | What |
+|---|---|
+| Rule | `hr/punch_reminders.py`, run by the ticker (`send_followup_reminders`: `run_worker` every 5 min per company schema, or the in-process ticker standalone). Reminder *n* is due when its slot (reporting + first + (n − 1) × gap) has passed **and** `gap` minutes have passed since reminder n − 1, so a worker that was down sends **one catch-up**, then the next a gap later (no burst). Nothing before the first slot, nothing after **Work ends**, never more than the count. |
+| Who is skipped | holiday, weekly off (company), approved leave (a LEAVE day or an approved request covering today, half days too), a day row without check-in that HR already decided (absent, half day, leave…), inactive (exited) people, people without `attendance.punch` (attendance not tracked). |
+| Record | **`AttendanceReminderLog`** (user, date, n, sent_at, channels) unique `(user, date, n)`, migration **hr 0011** (after the regularization 0009–0010). The row is written before sending, so restarts, a second worker or a re-run never repeat a reminder (at most once). Deleted with the person (`people_delete` RELATIONS + PERSONAL). |
+| Channels | In-app notification type `punch_reminder` → area **Attendance** (§19.37), link `/hr?tab=today` (web: `/attendance`, Punch in). Text: "Reminder 1 of 3: you have not punched in yet today (reporting time 09:30). Open Kaampilot to punch in." (standalone install: its own app name). WhatsApp through the existing sender (company's WhatsApp set-up, generic template if configured; `outside_hours="skip"`), new notification-rule group **"Punch-in reminders to people who have not punched in"**: WhatsApp on, **email off by default** (`rules.DEFAULT_OFF`), both switchable. |
+| Settings | HR settings → **"Punch-in reminders"** card (own save): `punch_reminders` (PUNCH_REMINDERS_ENABLED, default on), `punch_reminder_count` (PUNCH_REMINDER_COUNT, 3, 1–10), `punch_reminder_gap` (PUNCH_REMINDER_GAP_MINUTES, 30, 5–240), `punch_reminder_first` (PUNCH_REMINDER_FIRST_MINUTES, 30, 0–240); per company in `CompanySetting` like the other HR rules, preview of the times. |
+| API | `GET /attendance/today/` + `punch_reminders` {enabled, count, gap_minutes, first_after_minutes, reporting_time}, `day_off` (holiday / week_off / leave / null), `reminders_sent`; `GET /hr/config/` + `punch_reminders`; `team_day` rows + `reminders_sent` → Daily / Live show **"Reminded 2×"** next to people not checked in. |
+| Phone | No server push yet, so the phone's **local** reminders (§19.32) follow the same rule: the card's defaults are time = reporting + first delay, "Remind me again every 30 min until I punch in (3 reminders in all)" (`followUpMinutes` = gap, new `count`); the person still switches it on (no automatic Android pop-up). A check-in, or opening Today/Home on leave / a holiday / the weekly off (`day_off`), sends `reminder-skip-today` (cancels the rest of today). **Works with the current APK 1.2.1**, which ignores `count` and rings the first reminder + one follow-up (2 of 3; the card says "This app version rings the first 2 reminders"). The shell code for all *n* (`count` 1–10, gap up to 240, "Reminder 2 of 3" texts, capability `reminder-count`) is in `apps/mobile` (app.json 1.2.2 / versionCode 5) and needs a **new APK** to take effect. Limits: the phone only knows a leave/holiday when the app is opened that day; the server reminder covers it. |
+
+| Check | Result |
+|---|---|
+| Tasks | new `hr/tests_punch_reminders.py` (13: due times +30/+60/+90 and no 4th, punch-in stops, leave / HR-marked / holiday / week off / inactive / not tracked skipped, after work end, settings count / gap / first / off / clamped, idempotent + unique row, catch-up without burst, rules email off / WhatsApp on, ticker calls it, today / config / team_day fields, settings validation); `tenancy` per-company test (one company off, the other reminded, nothing across schemas); `tests_settings` rules default updated; full suite green |
+| Mobile | `npm run mobile:check` (33 tests; new: several reminders a day, skip cancels the rest, count parsing / old settings) |
+| Web | `npm run web:build`; e2e `web-hr` (Punch-in reminders card) and `web-app-shell` (card defaults from the rule, old-app note, `count` sent) |
+| Manual | dev `co_demo` at 11:22: one pass sent reminder 1 to the 10 not-punched-in people (second pass: 0); owner's bell shows it in Attendance, `today.reminders_sent` = 1, Daily shows "Reminded 1×". |
+
+Goes live with a website + Tasks API update (migration hr 0011 via `migrate_companies`; the worker must be restarted to pick up the job). No new APK needed; APK 1.2.2 gives all 3 phone reminders.
+
+### 19.40 Open items closed (2026-10-24)
+The items left open in the feature-list review, each small and tested.
+
+- **Half-day leave in payroll** (Tasks `payroll/services.py::count_days`): a day with an approved half-day leave is half
+  leave + half work: 0.5 paid (paid type) or 0.5 loss of pay (unpaid type) for the leave half, plus 0.5 when the person
+  punched in for the other half (never more than one day; a full "present" punch still counts 0.5 that day). A half-day
+  leave with no attendance row still pays its 0.5. Payslip breakdown `paid_leave` / `unpaid_leave` can be x.5; `half_day`
+  counts the worked halves. A half-day leave no longer blocks the punch (`hr/services.py::check_in`; a full-day leave
+  still does). The balance already counted 0.5 (§19.33).
+- **HR marks leave for someone** (web for the API of §19.33): **Mark leave** button on My leave and in Approvals → Leave
+  (people with Approve leave only): Employee (only whom they approve leave for, `GET /leaves/markable/`; themself only as
+  the Owner, §19.24), type with that person's "N days left", From / To, Half day (one date), Reason. Approved at once,
+  attendance updated, the employee notified ("Leave marked: …", links to the leave); beyond the balance only after
+  ticking "Beyond balance", logged on the leave (`beyond_balance`, `_by`, `_at`; the list shows "beyond balance"). Audit:
+  the leave records who marked it (`reviewed_by`, `reviewed_at`, remark "Marked by <name>"). A non-Owner sending
+  themself as `user` just applies (pending), as before; the Owner's own mark is approved.
+- **Bulk import of people** (Admin → People & access → **Import**, Manage people): template download (XLSX / CSV: Name,
+  Email, Mobile, Employee ID, Department, Designation, Reports to (employee ID or email), Join date, Role Admin/Member),
+  upload a CSV or XLSX (≤ 500 rows, ≈ 700 KB; read by the Platform without a library: `people/people-import.ts`), preview
+  with errors per row, then **Import N people**. Platform `GET /people/import/template?format=`, `POST
+  /people/import/preview {fileName, content(base64)}` (nothing saved), `POST /people/import {rows}` (checked again).
+  Checks: name, email / mobile / employee ID formats, duplicates in the file, already in People (email or employee ID),
+  an email that signs in an admin-made person of another company or belongs to a Kaampilot account ("invite them with a
+  link instead"), an employee ID that is someone's username — **never taken over**; department must exist (name or
+  code); reports-to = an existing person or a row of the file (no loops); join date as 2026-10-01 / 01-10-2026 / an
+  Excel date; only an owner or admin adds Admins; **seats**: rows past the plan's free seats get "The Free plan is for up
+  to 3 users…" and are not added. Each row is added like "Add person": the person, a login with a generated password
+  when they have an email or employee ID (hashed; shown once — the result offers a **Sign-in sheet (CSV)** to download),
+  the Admin or Member role (opens their apps, takes the seat; if that fails the person is removed again), then managers
+  from the file and one directory push.
+- **Integrations** (Admin → Settings → **Integrations**, Owner / Admin = Tasks admin level): the company's WhatsApp
+  (on/off, phone number ID, access token, app secret, webhook verify token, template name / language), Gmail (on/off,
+  sender, client ID / secret, refresh token, read leads + inbox search) and AI (on/off, provider, model, API address, API
+  key, Anthropic key, NVIDIA key) values that `company_setting` set before (`CompanySetting`, secrets encrypted with
+  SETTINGS_KEY). Tasks `GET/PUT /api/integrations/` (`tenancy/integrations.py`): a secret is never returned — only
+  "••••" + its last 4 characters (12+ long), or "Set on the server" when only the environment has it; **Replace** /
+  **Remove** (removing falls back to the environment value). Every change is recorded in `tenancy.SettingChange` (key,
+  set / removed, who, when — never the value; migration tenancy 0003) and shown under the field ("Changed by …").
+- **Old phone apps prompted to update**: `MOBILE_MIN_VERSION` on the Platform is now **off unless set** (was 1.1.0);
+  `GET /api/platform/app-version` → `{minVersion, apkUrl}`. Inside an app older than it, the web app shows a
+  **non-blocking banner** under the header, "A new version of Kaampilot is available (you have x)" + "Download the
+  update" (https://kaampilot.com/download/kaampilot.apk, opened in the phone's browser), hidden for the session with ×
+  (the old one-time dialog is gone). The web app reads the shell version from `window.FreeFoundersApp.version`
+  (native-bridge `appInfo()`). Voice keeps its own 1.1.0 check. The e2e answers `/app-version` itself (on / off). Docs:
+  infra/deploy/README.md (Settings), docker-compose (`MOBILE_MIN_VERSION`, `MOBILE_APK_URL`), services/platform/.env.example.
+- **Backups**: `infra/deploy/backup.sh` — `pg_dumpall` of the stack's Postgres container (every database and company
+  schema, roles) to `FF_HOME/backups/db-<stamp>.sql.gz` and the uploaded files (`data/tasks-media`,
+  `data/assets-uploads`) to `media-<stamp>.tar.gz`; checked (`gzip -t`, "dump complete"), written via `.part` files,
+  14-day rotation, non-zero exit on failure. Cron line and restore steps in infra/deploy/README.md "Backups". Not run on
+  the server yet (deploy time).
+
+| Check | Result |
+|---|---|
+| Tasks | payroll `tests.py` +2 (half-day leave paid / unpaid / worked / no row), new `hr/tests_mark_leave.py` (4: people list, half-day mark notified, own-records rule, half-day punch), new `tenancy/tests_integrations.py` (4: admins only, write-only + masked + encrypted + audited, remove → server value, bad input) |
+| Platform | new `people-import.test.ts` (4: CSV / XLSX reading + dates, template, preview errors + in-file manager + Free seats + import + login works, no token); `integration.test.ts` app-version off by default |
+| Web | `npm run web:build` |
+| e2e | new `web-open-items` (import 2 of 3 rows → manager set → Mark half-day leave for the new person; Integrations key masked, Replace / Remove); `web-app-shell` banner tests |
+
+Goes live with website + Platform + Tasks updates (migration tenancy 0003 via `migrate_companies`). No new APK needed
+(the banner is in the web app); set `MOBILE_MIN_VERSION` when a newer APK is on the site.
+
+### 19.41 Task chains, person Excel report, change-request ranking (2026-10-24)
+Founder: give a part of a task to someone (chains, 5 levels), a per-person Excel report, and a ranking of who asks most
+to move a date. All three were built in the original app after the copy (branch `feature/delegated-dashboard-whatsapp`,
+read-only): **ported** `5fde3aa` (person Excel report), `1dabd35` (sub-tasks and Task chain); `2bc1425` (ranking) was
+already ported in §19.30 and is extended here. `5206167` (notice WhatsApp title in bold) is not part of this. As in
+§19.30, the original's "admin / Super Admin" = `tasks.view_all` (company-wide task view: Admin role and the Owner).
+**No new permission keys.**
+
+**1. Task chains** (`crm/chain.py`, rules in one place; no new table — `Task.parent` already existed)
+- The holder of a task (or an admin) gives parts with **Sub-tasks → "Give a part to someone"** (one or more people in
+  one go). A part: due no later than its task, its effort comes **out of** what that task has left, never repeats, never
+  to the holder, not of a finished task; parts of parts up to **5 levels** below the main task ("A chain can go 5 levels
+  deep…"). The old rule "sub-tasks are one level deep" is replaced.
+- **Who may give parts** (FreeFounders decision, not in the original, which had no assign permission): with Assign tasks
+  as for any task; **without it (a Member) only for a task someone else gave them** — any active colleague, the Owner
+  only from an Owner (3fbf6e7). A task you made yourself is split only with Assign tasks, so it is no way around it
+  (`TaskViewSet._may_pass_part_on`; `GET /tasks/assignees/?part_of=` lists who may get a part).
+- A part's completion goes to **the person who gave it** to accept (the normal giver rule). The task above **can't be
+  completed** (complete and status PATCH) while a part is open or done-but-not-accepted (400 `needs: subtasks` with the
+  codes); a sent-back part blocks again. Accepting the last part (one or bulk) tells the holder "All sub-tasks done".
+- **Effort split**: what was given to parts is earned by those people; the holder keeps the rest (`own_effort_map`) in
+  the score (`_task_buckets` → Reports, Team performance, profile, Excel), Time report, workload and Team performance load.
+- **Cancel cascade**: deleting a task, or approving a cancel request, sends its unfinished parts (all levels) to the
+  Deleted bin, and their people are told; restoring the task brings back the parts cancelled with it.
+- **Due date moved earlier** (admin edit or approved request): each open part now due after it is flagged to whoever
+  gave it ("Check the date: …"; nothing moves by itself).
+- Notifications `subtasks_all_done`, `task_cancelled`, `subtask_due_after_parent`: link `/tasks/{id}` (§19.37), area
+  "tasks", in the notification rules groups task_done / task_changes / task_due; no WhatsApp.
+- API: `GET /tasks/{id}/` adds `subtasks` (result, approval, parts below…) and `chain` (parent, root, level,
+  can_give_part, effort left, blocked, can_view_chain); `GET /tasks/{id}/chain/` (tree + summary) and
+  `GET /tasks/chains/?status=open|done|all` for `tasks.view_all`.
+- Web (`features/tasks/work/task-chain.tsx`, core `tasks/chain.ts`): Sub-tasks block, "Sub-task of … held by …" note,
+  Complete disabled with the reason, "Give parts of T-…" dialog (bottom sheet on phones), **Task chain** dialog (tree,
+  indented per level, fits 320 px), **Tasks → Chains** tab (admins / Owner; table, cards on phones; Download). New icon
+  `Network` (Hugeicons HierarchyIcon).
+
+**2. Person Excel report** (`crm/person_export.py`, openpyxl already installed): `GET /tasks/person_export/?user=&range=`
+(+custom start/end), `tasks.view_all`. 8 sheets, every one with filter arrows and a frozen header: Summary and score,
+Month by month, Tasks received (+ "Sub-task of", "Main task", "Given to sub-tasks (h)"), Given by whom, Tasks delegated,
+Delegated to whom, Change requests (+ Old due / New due), Completion reviews. Numbers come from the same helpers as the
+screen (`_person_rows` = `/tasks/employees_report/?user=`); text written formula-safe; header colour = brand indigo.
+Web: Team performance → a name → "Open full profile" → **Excel report** (admins / Owner) — the shared `DownloadButton`
+(`tasksExports.personReport`), so in the Android app it is saved through the native bridge (§19.31). The original's
+"downloads do not work inside the app" message is not ported.
+
+**3. Change-request ranking** (Team performance, `tasks.team_performance` as in §19.30): `TaskChangeRequest.old_due_at`
+(migration `crm 0023`, filled on create; pending requests back-filled) so each request shows **old → new** due date even
+after approval; the API adds `old_due_at`, `new_due_at`, `status_display`, `reviewed_by/at`, `remarks`. Web: "Last asked"
+column, each request "Due {old} → {new}", reason, outcome (by whom, when, remarks), Download (Excel / CSV).
+
+| Check | Result |
+|---|---|
+| Tasks (SQLite) | 1031 run, OK (22 skipped). New `crm/tests_task_chain.py` (original 15 + 10: Member passes on a part / self-made task needs Assign, who can get a part, cancel request cascades, approved earlier date flags, notification link + area, approver at each level, effort split in Team performance + Time report, Chains permission + status filter, old → new survives approval in ranking + Excel, ranking counts + permission), `crm/tests_person_export.py` (original 8 + 3: every sheet filtered, Summary = employees_report field by field for two ranges, Owner + formula-safe), `tests_detail` sub-task test as in the original |
+| Tasks tenancy (Postgres) | 37 pass; dev migrated (`migrate_companies`, 89 companies, `crm 0023`) |
+| Web | `npm run web:build` (rules + typecheck + build) clean |
+| e2e | new `web-task-chains` 3 / 3 (a Member gives a part on a 390 px phone, main task blocked until the part is done and accepted, effort left, Owner: Chains tab + tree + "Task chain" button, Member 403; person Excel 8 sheet names + autofilter on all + Summary = API, Member 403; in the app shell the report goes through the bridge, ranking shows old → new); `web-tasks`, `web-tasks-general`, `web-tasks-ported`, `web-downloads` 16 / 16; `web-admin` "delete with the defaults…" passes (it failed only while `crm 0023` was not yet applied to the running suite) |
+
+Goes live with Tasks + website updates (`migrate_companies` for `crm 0023`). No new APK needed.
+
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)
 
 Founder: "use Notion's architecture for making and giving new users; plan how we share this with millions of users and
@@ -2827,3 +3025,76 @@ non-staff 403, filters by id / code / action, pages, bad action 400, CSV downloa
 build; e2e web-account-flows checks Recent actions after suspend / reactivate. The Word feature list was not rebuilt (it
 was renamed to `docs/Kaampilot_Feature_List.docx` meanwhile); its four "To check" rows (Switch to Free, Action log,
 Selfie optional, leave balance) are now live.
+
+### 21.8 MSG91 codes + sign in with a code (2026-10-23)
+
+**Delivery by MSG91** (founder: "read the MSG91 API doc and implement the OTP authenticator"). Our server still makes and
+checks every code (6 digits, sha256 stored, 10 minutes, 5 tries, 30 s gap, 5 per identifier and `OTP_IP_LIMIT` per IP
+per 15 minutes); MSG91 only delivers it. `OTP_SENDER=fake|msg91` (default fake), env read on every send
+(`accounts/otp-senders.ts`), one startup line like payments: `One-time codes: MSG91 (…)` or `One-time codes are OFF
+(sending answers 503): OTP_SENDER=msg91 but MSG91_AUTHKEY … not set`; the server never fails to start.
+- **SMS** = MSG91 **SendOTP** (docs.msg91.com/otp/sendotp): `POST https://control.msg91.com/api/v5/otp?template_id=
+  <MSG91_SMS_TEMPLATE_ID>&mobile=91XXXXXXXXXX&otp=<our code>&otp_length=6&otp_expiry=10`, header `authkey`, JSON body
+  `{app: "Kaampilot", minutes: "10"}` (extra template variables). Chosen over the Flow API (`POST /api/v5/flow`,
+  `recipients[].mobiles` + `VAR1…`) because SendOTP takes our own code as a documented field (`otp`), uses MSG91's OTP
+  route and needs no sender ID in the request (the OTP template carries the sender ID and DLT template ID). MSG91's
+  Verify / Retry endpoints are never called. Success `{request_id, type:"success"}`; errors are HTTP 200 with
+  `type:"error"` (checked), 401 without / with a bad authkey.
+- **Email** = MSG91 **Email API** (docs.msg91.com/email/send-email): `POST /api/v5/email/send` with `{recipients:[{to:
+  [{email}], variables:{otp, minutes, app, purpose}}], from:{name: MSG91_EMAIL_FROM_NAME or "Kaampilot", email:
+  MSG91_EMAIL_FROM}, domain: MSG91_EMAIL_DOMAIN or the From domain, template_id: MSG91_EMAIL_TEMPLATE_ID}`; template
+  variables `{{otp}}` `{{minutes}}` `{{app}}` `{{purpose}}` (sign in / finish signing up / reset your password). Without
+  the email template + From: email codes stay on the fake sender on a dev machine or with `DEMO_MODE=1`, and answer 503
+  "Codes by email aren't set up yet. Use your mobile number instead." in production.
+- **WhatsApp**: not built (MSG91 needs an integrated WhatsApp number and a Meta-approved authentication template; not
+  trivial). **Voice / MSG91 retry**: not used (our resend sends a new code).
+- **Failures**: 10 s timeout. A refused send (HTTP 4xx or `type:"error"`) → 400 "We couldn't send the code. Check the
+  number and try again." (email: "…Check the email address…"); no answer / 5xx / 429 → 503 "We couldn't send the code
+  right now. Try again in a minute."; 401/403 (bad authkey, IP not whitelisted) → 503 "Codes can't be sent right now…"
+  and the log says to check `MSG91_AUTHKEY` and the IP whitelist. The `otp_codes` row gets `failed_at` (migration
+  `0015_otp_send_failed`): never usable, **not counted** against the person's 30 s gap / 5 per 15 minutes (they never
+  got it), still counted per IP (abuse guard).
+- **Logs**: MSG91's request id, the channel, purpose and a masked target (`******3210`, `as***@domain`); never the
+  code, the authkey or the request URL (the code is in SendOTP's query string). Provider messages are cut to 200
+  characters with digit runs removed.
+- **Echo**: unchanged rule: the code comes back (`devCode`, "Test mode" note) only with `OTP_DEV_ECHO=1` outside
+  production, or with `DEMO_MODE=1`. Production with `DEMO_MODE=0` never echoes. On the server `DEMO_MODE` stays 1 until
+  the founder decides (codes then go by MSG91 and are still shown on screen).
+
+**Sign in with a code** (the "OTP authenticator" for people): /login → **Sign in with a code instead** (a link, so
+"Sign in" stays the only button of that name; opens `/login?code=1`, keeps `?next`) → email or mobile of an account →
+**Send code** → `POST auth/login/code/start {identifier}` (purpose `login`; the same answer whether or not an account
+exists: a real code is sent, like forgot password) → "Enter your code" (code field, test-mode note, live resend
+countdown) → **Sign in** → `POST auth/login/code/verify {otpId, code, client}` → the same result as a password sign-in
+(tokens + refresh cookie, or `{chooseCompany, ticket}` then `auth/login {ticket, companyId}`; suspended companies:
+owners only). The per-IP sign-in guard applies and a wrong code counts like a wrong password; 5 tries per code. A
+username / employee ID → 400 "Codes go to the email or mobile number of a Kaampilot account. With a username or employee
+ID, sign in with your password." (also checked on the screen). After the code: no account → "There is no Kaampilot
+account…"; the email of an admin-made login → "This email signs in with a login your company admin made. Sign in with
+your password instead." "Use your password instead" goes back.
+
+**Server switch**: `infra/deploy/set-msg91.sh` (authkey with `read -s`, OTP template ID, optional email template / From /
+domain → `/opt/freefounders/.env`, `OTP_SENDER=msg91`, recreates only the platform container; `--off` = fake again);
+`docker-compose.yml` passes `OTP_SENDER` + `MSG91_*`; `infra/deploy/README.md` "Switching on MSG91 codes" lists what to get
+from MSG91 (authkey; DLT entity + sender ID + DLT-approved template `Your Kaampilot code is {#var#}. It is valid for 10
+minutes. Do not share it with anyone.`, entered in MSG91 as an OTP template with `##OTP##`; email domain + template; the
+server IP 52.66.83.8 if IP whitelisting is on).
+
+**Files**: `services/platform/src/accounts/msg91.sender.ts`, `otp-senders.ts`, `otp.service.ts` (`OtpSendError`,
+`canSend`, `failed_at`), `accounts.service.ts` / `accounts.controller.ts` (`auth/login/code/*`), `auth/auth.service.ts`
+(`loginVerifiedAccount`, `assertIpOpen`, `ipFailed`); `packages/core` (`session.loginWithCode`, `useLoginCodeStart`,
+`useLoginWithCode`); `apps/web/src/features/account/code-sign-in.tsx`, `app/pages/login.tsx`. Tests:
+`services/platform/src/otp-msg91.test.ts` (a local MSG91 stand-in, no network), `e2e/web-code-signin.spec.ts`.
+
+**Status 2026-10-24:** Platform typecheck + 162 tests pass (new `otp-msg91.test.ts`, 12 tests against a local MSG91
+stand-in: SendOTP request shape (authkey header, `mobile=91…`, template id, our code in `otp`, `otp_length` 6,
+`otp_expiry` 10, body variables); refused (200 `type:error`, 400) → the plain message, row `failed_at`, asking again works
+at once; 500 / no answer within the timeout → 503, five failed sends leave the quota untouched; 401 → 503 + log hint;
+missing authkey / template → 503 with nothing stored; email: dev fallback, production 503, then the exact Email API
+payload once set up; production never echoes; no code / authkey / full number in the logs; code sign-in: one company →
+tokens + cookie, used once; wrong codes count down to "tried too many times"; two companies → choice + ticket;
+unknown identifier same start answer then "no account"; username → password guidance; admin-made email → "use your
+password"; 30 s gap and the per-IP guard). Web rules + typecheck + build; `npm run smoke` 10 / 10; e2e
+`web-code-signin.spec.ts` (new), `single-login.spec.ts`, `web-signup-billing.spec.ts` pass; `web-account-flows.spec.ts`
+passes up to its billing test, which times out on FakePay's "Payment successful" (the Pay request was still running
+after 5 s while another agent ran the suite; the test does not touch codes; to recheck on a quiet machine).

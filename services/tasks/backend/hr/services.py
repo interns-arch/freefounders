@@ -51,7 +51,47 @@ def cfg():
         # Uniform check at punch-in (PLAN.md §19.27): off | remind (message only) | ask (answer saved on the day).
         "uniform_check": _env("UNIFORM_CHECK", "off").lower() if _env("UNIFORM_CHECK", "off").lower() in UNIFORM_MODES else "off",
         "uniform_message": (_env("UNIFORM_MESSAGE", "") or "").strip()[:UNIFORM_MESSAGE_MAX] or UNIFORM_MESSAGE_DEFAULT,
+        # Punch-in reminders from the server (PLAN.md §19.39): `count` reminders, `gap` minutes apart, the first one
+        # `first` minutes after the reporting time (work start), to people who have not punched in.
+        "punch_reminders": _env("PUNCH_REMINDERS_ENABLED", "true").lower() != "false",
+        "punch_reminder_count": _bounded(_env("PUNCH_REMINDER_COUNT", "3"), 3, 1, 10),
+        "punch_reminder_gap": _bounded(_env("PUNCH_REMINDER_GAP_MINUTES", "30"), 30, 5, 240),
+        "punch_reminder_first": _bounded(_env("PUNCH_REMINDER_FIRST_MINUTES", "30"), 30, 0, 240),
+        # Attendance regularization policy (PLAN.md §19.38).
+        "reg_enabled": _env("REGULARIZATION_ENABLED", "true").lower() != "false",
+        "reg_reasons": _codes(_env("REGULARIZATION_REASONS", ""), REG_REASON_CODES),
+        "reg_monthly_limit": _int(_env("REGULARIZATION_MONTHLY_LIMIT", "3"), 3),
+        "reg_days_back": _int(_env("REGULARIZATION_DAYS_BACK", "7"), 7),
+        "reg_mark": _env("REGULARIZATION_MARK", "times") if _env("REGULARIZATION_MARK", "times") in REG_MARKS else "times",
     }
+
+
+def _bounded(value, default, lo, hi):
+    try:
+        return min(hi, max(lo, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int(value, default):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _codes(text, default):
+    """A stored list of reason codes ("forgot_out,wfh"); "none" = an empty list; blank = the default."""
+    text = (text or "").strip()
+    if not text:
+        return list(default)
+    return [c for c in REG_REASON_CODES if c in {x.strip() for x in text.split(",")}]
+
+
+# Regularization (PLAN.md §19.38): reason codes in the order the screens show them; what an approved day counts as.
+REG_REASON_CODES = ("forgot_in", "forgot_out", "late_work", "on_duty", "wfh", "technical", "other")
+# times: decided from the times with the HR rules (present / late / half day), like a punch; present: always Present.
+REG_MARKS = ("times", "present")
 
 
 PHOTO_MODES = ("off", "optional", "required")
@@ -80,6 +120,15 @@ EDITABLE = {
     "approval_remind_hours": ("APPROVAL_REMIND_HOURS", "int", (0, 720)),
     "uniform_check": ("UNIFORM_CHECK", "choice", UNIFORM_MODES),
     "uniform_message": ("UNIFORM_MESSAGE", "text", UNIFORM_MESSAGE_MAX),
+    "punch_reminders": ("PUNCH_REMINDERS_ENABLED", "bool", None),
+    "punch_reminder_count": ("PUNCH_REMINDER_COUNT", "int", (1, 10)),
+    "punch_reminder_gap": ("PUNCH_REMINDER_GAP_MINUTES", "int", (5, 240)),
+    "punch_reminder_first": ("PUNCH_REMINDER_FIRST_MINUTES", "int", (0, 240)),
+    "reg_enabled": ("REGULARIZATION_ENABLED", "bool", None),
+    "reg_reasons": ("REGULARIZATION_REASONS", "codes", REG_REASON_CODES),
+    "reg_monthly_limit": ("REGULARIZATION_MONTHLY_LIMIT", "int", (0, 1000)),
+    "reg_days_back": ("REGULARIZATION_DAYS_BACK", "int", (0, 90)),
+    "reg_mark": ("REGULARIZATION_MARK", "choice", REG_MARKS),
 }
 
 # Face check settings that no longer exist (PLAN.md §19.18). An older screen may still send them: "off" (or blank) is
@@ -123,6 +172,13 @@ def clean_setting(key, value) -> str:
         if any(d < 0 or d > 6 for d in out):
             raise ValueError("Days are 0 (Monday) to 6 (Sunday)")
         return ",".join(map(str, out)) or "none"
+    if kind == "codes":
+        items = value if isinstance(value, list) else str(value).split(",")
+        wanted = {str(c).strip() for c in items if str(c).strip()}
+        unknown = wanted - set(extra)
+        if unknown:
+            raise ValueError(f"Unknown: {', '.join(sorted(unknown))}")
+        return ",".join(c for c in extra if c in wanted) or "none"
     if kind == "text":
         text = " ".join(str(value).split())
         if len(text) > extra:
@@ -278,7 +334,8 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None
     existing = Attendance.objects.filter(user=user, date=today).first()
     if existing and existing.check_in:
         raise HRError("You have already checked in today.")
-    if existing and existing.status == AttendanceStatus.LEAVE:
+    if existing and existing.status == AttendanceStatus.LEAVE and not (
+            existing.leave_request_id and existing.leave_request.half_day):   # half-day leave: the other half is worked
         raise HRError("You are on approved leave today.")
     asks_uniform = conf["uniform_check"] == "ask"
     if asks_uniform and uniform is None:
@@ -439,14 +496,30 @@ def leave_balances(user, year=None):
 
 # --------------------------------------------------------------- report
 
+def regularized_fields(rec) -> dict:
+    """The "Regularized" tag of a day (PLAN.md §19.38): set when an approved regularization last changed it."""
+    reg = rec.regularization if rec and rec.regularization_id else None
+    if not reg:
+        return {"regularized": False, "regularization_id": None, "regularization_reason": "", "work_mode": ""}
+    from .regularization import MODE_LABELS
+    return {"regularized": True, "regularization_id": reg.id,
+            "regularization_reason": reg.get_reason_type_display(), "work_mode": MODE_LABELS.get(reg.reason_type, "")}
+
+
 def monthly_report(user, year: int, month: int) -> dict:
     """Day-by-day + totals for one employee/month. Days with no record are
     classified as week-off / holiday / absent (never 'absent' in the future)."""
     first = date(year, month, 1)
     last = date(year + (month == 12), (month % 12) + 1, 1) - timedelta(days=1)
-    records = {a.date: a for a in Attendance.objects.filter(user=user, date__range=(first, last))}
+    records = {a.date: a for a in Attendance.objects.filter(user=user, date__range=(first, last))
+               .select_related("regularization")}
     holidays = {h.date: h.name for h in Holiday.objects.filter(date__range=(first, last))}
     today = timezone.localdate()
+    # Regularization requests of the month (PLAN.md §19.38): the latest per day, shown with the day.
+    from .models import AttendanceCorrection
+    requests = {}
+    for c in AttendanceCorrection.objects.filter(user=user, date__range=(first, last)).order_by("created_at"):
+        requests[c.date] = c
 
     days, totals = [], {s.value: 0 for s in AttendanceStatus}
     total_minutes = 0
@@ -465,6 +538,7 @@ def monthly_report(user, year: int, month: int) -> dict:
                 "attendance_id": rec.id, "uniform_ok": rec.uniform_ok,
                 "has_check_in_photo": bool(rec.check_in_photo),
                 "has_check_out_photo": bool(rec.check_out_photo),
+                **regularized_fields(rec),
             }
         else:
             if cur in holidays:
@@ -477,9 +551,12 @@ def monthly_report(user, year: int, month: int) -> dict:
                 status = AttendanceStatus.ABSENT
             entry = {"date": cur.isoformat(), "status": status, "check_in": None,
                      "check_out": None, "working_minutes": 0, "is_late": False,
-                     "is_early_checkout": False, "missing_checkout": False}
+                     "is_early_checkout": False, "missing_checkout": False, **regularized_fields(None)}
             if cur in holidays:
                 entry["holiday"] = holidays[cur]
+        req = requests.get(cur)
+        entry["request"] = ({"id": req.id, "status": req.status, "reason_label": req.get_reason_type_display()}
+                            if req else None)
         if status:
             totals[status] = totals.get(status, 0) + 1
         days.append(entry)

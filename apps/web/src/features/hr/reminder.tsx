@@ -6,8 +6,13 @@
  *
  * Shown on Attendance → Today and on /attendance/reminder (account menu → Punch-in reminder). In a normal browser the
  * card shows nothing on Today and a short note on its own page; in an app from before reminders, a note to update.
+ *
+ * Company rule (PLAN.md §19.39): the server reminds people who have not punched in (in-app, WhatsApp if set up) at the
+ * reporting time + 30, + 60, + 90 min. The phone's own reminder starts from the same rule (time = reporting + first
+ * delay, again every gap, count in all; the person switches it on, as before). Apps 1.2.0/1.2.1 ring the first reminder
+ * and one follow-up only. On leave / a holiday / the weekly off, punch.tsx skips today on the phone.
  */
-import { useAttendanceToday, useHrConfig } from '@freefounders/core/hr';
+import { type PunchReminderRule, useAttendanceToday, useHrConfig } from '@freefounders/core/hr';
 import { useEffect, useState } from 'react';
 import { AlarmClock, Bell, BellOff, Smartphone } from '@/components/icons';
 import { Segmented } from '@/components/common/controls';
@@ -48,6 +53,21 @@ export function minutesBefore(hhmm: string | undefined, minutes: number): string
   if (!m) return '09:20';
   const t = (((Number(m[1]) * 60 + Number(m[2]) - minutes) % 1440) + 1440) % 1440;
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+
+/** "09:30" plus 30 minutes → "10:00" (wraps at midnight). */
+export const minutesAfter = (hhmm: string | undefined, minutes: number) => minutesBefore(hhmm, -minutes);
+
+/** The phone reminder for the company's rule (PLAN.md §19.39): reporting + first delay, then every gap, `count` in all. */
+export function reminderFromRule(rule: PunchReminderRule, weekOffs: number[] | undefined, enabled = false): ReminderSettings {
+  return {
+    enabled,
+    time: minutesAfter(rule.reporting_time, rule.first_after_minutes),
+    days: workingDays(weekOffs),
+    mode: 'ring-vibrate',
+    followUpMinutes: rule.count > 1 ? rule.gap_minutes : 0,
+    count: rule.count,
+  };
 }
 
 /** The company's working days as ISO weekdays (HR week-offs are Python weekdays: 0 = Monday). */
@@ -97,13 +117,15 @@ function ReminderForm() {
   const [err, setErr] = useState<{ message: string; settings: boolean } | null>(null);
   const [msg, setMsg] = useState('');
 
-  const defaults: ReminderSettings = {
-    enabled: false,
-    time: minutesBefore(today.data?.work_start, 10),
-    days: workingDays(cfg.data?.week_offs),
-    mode: 'ring-vibrate',
-    followUpMinutes: 10,
-  };
+  // The company's reminder rule when it has one (PLAN.md §19.39), else 10 min before office start + one follow-up.
+  const rule = today.data?.punch_reminders ?? cfg.data?.punch_reminders;
+  const defaults: ReminderSettings = rule?.enabled
+    ? reminderFromRule(rule, cfg.data?.week_offs)
+    : { enabled: false, time: minutesBefore(today.data?.work_start, 10), days: workingDays(cfg.data?.week_offs), mode: 'ring-vibrate', followUpMinutes: 10, count: 2 };
+  const gap = rule?.enabled && rule.count > 1 ? rule.gap_minutes : 10;
+  const ruleCount = rule?.enabled && rule.count > 1 ? rule.count : 2;
+  // Apps before 1.2.2 ring the first reminder and one follow-up only.
+  const allCount = appCan('reminder-count');
 
   useEffect(() => {
     let live = true;
@@ -171,6 +193,7 @@ function ReminderForm() {
   }
 
   const on = form.enabled;
+  const repeats = form.followUpMinutes > 0 ? Math.max(2, form.count ?? 2) : 1;
   const saved = state?.settings;
   const dirty = !saved || JSON.stringify({ ...saved, enabled: true }) !== JSON.stringify({ ...form, enabled: true });
   const toggleDay = (d: number) => setForm({ ...form, days: form.days.includes(d) ? form.days.filter((x) => x !== d) : [...form.days, d].sort((a, b) => a - b) });
@@ -241,13 +264,22 @@ function ReminderForm() {
           </div>
 
           <label className="flex items-center justify-between gap-3 text-sm">
-            <span>Remind again after 10 min if I haven&rsquo;t punched in</span>
+            <span>
+              {form.followUpMinutes > 0
+                ? `Remind me again every ${form.followUpMinutes} min until I punch in (${repeats} reminders in all)`
+                : `Remind me again every ${gap} min until I punch in`}
+            </span>
             <Switch
-              aria-label="Remind again after 10 min if I haven't punched in"
+              aria-label="Remind me again until I punch in"
               checked={form.followUpMinutes > 0}
-              onCheckedChange={(c) => setForm({ ...form, followUpMinutes: c ? 10 : 0 })}
+              onCheckedChange={(c) => setForm({ ...form, followUpMinutes: c ? gap : 0, count: c ? ruleCount : 1 })}
             />
           </label>
+          {repeats > 2 && !allCount && (
+            <p role="note" className="text-xs text-muted-foreground">
+              This app version rings the first 2 reminders. Update the Kaampilot app to get all {repeats}.
+            </p>
+          )}
 
           {err && (
             <div className="space-y-2">

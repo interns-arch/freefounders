@@ -14,6 +14,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Chip, ErrorNote, SectionHead, type Tone, fmtDay } from '../tasks/general/parts';
 import { compressImage } from '@/lib/compress-image';
 import { cn } from '@/lib/utils';
+import { MarkLeaveButton } from './mark-leave';
 
 const LEAVE_TONE: Record<LeaveRequest['status'], Tone> = { pending: 'warning', approved: 'success', rejected: 'danger', cancelled: 'neutral' };
 
@@ -36,9 +37,12 @@ export function MyLeaveTab() {
     <div className="max-w-4xl space-y-4">
       <SectionHead
         actions={
-          <Button variant="cta" onClick={() => setApplying(true)} disabled={!types.data}>
-            <Plus /> Apply for leave
-          </Button>
+          <>
+            <MarkLeaveButton />
+            <Button variant="cta" onClick={() => setApplying(true)} disabled={!types.data}>
+              <Plus /> Apply for leave
+            </Button>
+          </>
         }
       >
         Balances
@@ -111,6 +115,7 @@ export function MyLeaveTab() {
                   <TD className="text-xs">
                     {l.remarks || '—'}
                     {l.reviewed_by_detail && <div className="text-muted-foreground">by {l.reviewed_by_detail.name}</div>}
+                    {l.beyond_balance && <div className="text-warning">beyond balance</div>}
                   </TD>
                   <TD className="text-right">
                     {['pending', 'approved'].includes(l.status) && (

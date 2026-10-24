@@ -49,7 +49,7 @@ export function HrPage() {
     daily: S.daily(access) || !!screens.daily,
     dashboard: S.dashboard(access) || !!screens.dashboard,
     reports: S.reports(access) || !!screens.reports,
-    approvals: S.approvals(access) || !!cfg.data?.can_approve,
+    approvals: S.approvals(access) || !!cfg.data?.can_approve || !!cfg.data?.can_approve_regularization,
     payroll: S.payroll(access),
     settings: S.settings(access),
   };

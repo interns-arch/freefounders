@@ -32,7 +32,7 @@ import { T } from './ui';
 const VERSION = Constants.expoConfig?.version ?? '0.0.0';
 
 /** What this shell can do, so the web app shows only what works here (older shells report no list). */
-const CAPABILITIES = ['location', 'photo', 'download', 'print', 'voice', ...(notifications() ? ['reminders'] : [])];
+const CAPABILITIES = ['location', 'photo', 'download', 'print', 'voice', ...(notifications() ? ['reminders', 'reminder-count'] : [])];
 
 installReminderHandler();
 

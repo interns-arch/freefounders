@@ -32,6 +32,15 @@ class AttendanceSerializer(serializers.ModelSerializer):
     has_check_in_photo = serializers.SerializerMethodField()
     has_check_out_photo = serializers.SerializerMethodField()
 
+    regularized = serializers.SerializerMethodField()
+    regularization_reason = serializers.SerializerMethodField()
+
+    def get_regularized(self, obj):
+        return bool(obj.regularization_id)
+
+    def get_regularization_reason(self, obj):
+        return obj.regularization.get_reason_type_display() if obj.regularization_id else ""
+
     def get_has_check_in_photo(self, obj):
         return bool(obj.check_in_photo)
 
@@ -44,7 +53,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
                   "status", "status_display", "working_minutes", "is_late",
                   "is_early_checkout", "missing_checkout", "face_verified",
                   "face_confidence", "location_name", "note", "has_check_in_photo", "has_check_out_photo",
-                  "uniform_ok"]
+                  "uniform_ok", "regularized", "regularization_reason"]
 
 
 class MarkSerializer(serializers.Serializer):
@@ -64,24 +73,61 @@ class MarkSerializer(serializers.Serializer):
 
 
 class CorrectionSerializer(serializers.ModelSerializer):
+    """An attendance regularization request (PLAN.md §19.38). Created through `regularization.create_requests` (the
+    view), which checks the company's policy; `end_date`, `check_in_time` and `check_out_time` are only inputs."""
     user_detail = UserBriefSerializer(source="user", read_only=True)
     reviewed_by_detail = UserBriefSerializer(source="reviewed_by", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    reason_label = serializers.CharField(source="get_reason_type_display", read_only=True)
+    attachment_url = serializers.SerializerMethodField()
+    attachment_name = serializers.SerializerMethodField()
+    day = serializers.SerializerMethodField()
+    end_date = serializers.DateField(write_only=True, required=False, allow_null=True)
+    check_in_time = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=8)
+    check_out_time = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=8)
 
     class Meta:
         model = AttendanceCorrection
-        fields = ["id", "user", "user_detail", "date", "requested_check_in",
-                  "requested_check_out", "reason", "status", "status_display",
-                  "reviewed_by_detail", "remarks", "created_at"]
-        read_only_fields = ["user", "status", "reviewed_by_detail", "remarks"]
+        fields = ["id", "user", "user_detail", "date", "end_date", "requested_check_in",
+                  "requested_check_out", "check_in_time", "check_out_time", "reason_type", "reason_label", "reason",
+                  "attachment", "attachment_url", "attachment_name", "batch", "status", "status_display",
+                  "reviewed_by_detail", "remarks", "reviewed_at", "original_check_in",
+                  "original_check_out", "original_status", "applied_status", "day", "created_at"]
+        read_only_fields = ["user", "status", "reviewed_by_detail", "remarks", "batch", "reviewed_at",
+                            "original_check_in", "original_check_out", "original_status", "applied_status"]
+        extra_kwargs = {"attachment": {"write_only": True, "required": False}}
+
+    def get_attachment_url(self, obj):
+        return file_url(obj.attachment)
+
+    def get_attachment_name(self, obj):
+        return obj.attachment.name.rsplit("/", 1)[-1] if obj.attachment else None
+
+    def get_day(self, obj):
+        """The day as recorded now (pending requests only: a decided one keeps its from -> to)."""
+        if obj.status != "pending":
+            return None
+        from .regularization import day_context
+        return day_context(obj)
+
+    def validate_attachment(self, value):
+        from config.images import check_size, compress_upload
+        try:
+            check_size(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
+        return compress_upload(value)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
 
     def validate(self, attrs):
-        if not attrs.get("requested_check_in") and not attrs.get("requested_check_out"):
-            raise serializers.ValidationError("Provide a corrected check-in or check-out time.")
         from django.utils import timezone
         if attrs.get("date") and attrs["date"] > timezone.localdate():
-            raise serializers.ValidationError({"date": "A correction is for a day that has already started."})
+            raise serializers.ValidationError({"date": "A future day cannot be regularized.", "code": "future"})
         return attrs
+
+    def update(self, instance, validated_data):
+        for key in ("end_date", "check_in_time", "check_out_time", "date"):
+            validated_data.pop(key, None)
+        return super().update(instance, validated_data)
 
 
 class LeaveTypeSerializer(serializers.ModelSerializer):

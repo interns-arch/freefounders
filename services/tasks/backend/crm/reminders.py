@@ -401,6 +401,8 @@ def send_followup_reminders(force=False) -> int:
         lead.save(update_fields=["reminded_at"])
         sent += 1
     sent += send_task_reminders()
+    from hr.punch_reminders import send_punch_reminders
+    send_punch_reminders()              # not punched in by the reporting time (PLAN.md §19.39); counted on its own
     from hr.approvals import remind_and_escalate
     sent += remind_and_escalate()       # leave / corrections waiting too long (PLAN.md §17.2)
     sent += remind_task_approvals()     # change requests / completion reviews waiting too long

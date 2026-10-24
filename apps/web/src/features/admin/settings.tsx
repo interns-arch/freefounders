@@ -1,4 +1,4 @@
-import { errorMessage } from '@freefounders/core';
+import { errorMessage, useAccess } from '@freefounders/core';
 import {
   APP_NAMES,
   APP_SETTINGS_LINKS,
@@ -27,11 +27,13 @@ import { Input, Label } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Switch } from '@/components/ui/primitives';
 import { brandColours } from '@/lib/brand-colour';
 import { cn } from '@/lib/utils';
+import { IntegrationsCard } from './integrations';
 import { AppChip, ErrorNote, Pill, SyncNote } from './parts';
 
 /** Settings Center (PLAN.md §16): company name and look, module switches, departments, links to each app's own settings. */
 export function SettingsPage() {
   const company = useCompanySettings();
+  const access = useAccess();
 
   return (
     <div className="space-y-5">
@@ -47,6 +49,7 @@ export function SettingsPage() {
           <ProfileCard key={company.data.id} company={company.data} />
           <ModulesCard company={company.data} />
           <DepartmentsCard />
+          {access.isAdmin && company.data.apps.includes('tasks') && <IntegrationsCard />}
           <Card role="region" aria-labelledby="app-settings">
             <CardHeader className="flex-col gap-1">
               <CardTitle id="app-settings" className="text-base">

@@ -578,7 +578,13 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         assignee = serializer.validated_data.get("assigned_to")
-        if assignee and not can_assign_to(user, assignee):
+        parent = serializer.validated_data.get("parent")
+        if parent:
+            # Sub-tasks (Task chain, original 1dabd35): whoever holds a task may give parts of it to others, and
+            # they may pass parts of their part on (see chain.py)
+            self._check_new_part(user, parent, serializer.validated_data)
+        if assignee and not can_assign_to(user, assignee) \
+                and not (parent and self._may_pass_part_on(user, parent, assignee)):
             raise PermissionDenied(assign_refusal(user, assignee))
         # B6: effort is mandatory when creating a task by hand -- scoring
         # depends on it (system-created tasks from forms/templates are exempt).
@@ -605,13 +611,6 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             user,
             serializer.validated_data.get("department", ""),
             serializer.validated_data.get("category", ""))
-        # E1: sub-tasks are one level deep and only under tasks you can see
-        parent = serializer.validated_data.get("parent")
-        if parent:
-            if parent.deleted_at or not visible_tasks(user).filter(pk=parent.pk).exists():
-                raise ValidationError({"parent": "Unknown parent task."})
-            if parent.parent_id:
-                raise ValidationError({"parent": "Sub-tasks can't have their own sub-tasks."})
         lead = serializer.validated_data.get("lead")
         if lead and not visible_leads(user).filter(pk=lead.pk).exists():
             raise PermissionDenied("You cannot link a task to a lead you cannot see.")
@@ -675,6 +674,51 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             )
         _notify_task_assigned(task, user)
 
+    @staticmethod
+    def _may_pass_part_on(user, parent, assignee) -> bool:
+        """Giving a part of a task SOMEONE ELSE gave you (a chain) needs no Assign permission: any active colleague
+        may get it, the Owner only from an Owner (original 3fbf6e7). A task you made for yourself is split under
+        the usual Assign rule, so a self-made task is never a way around it (PLAN.md §19.41)."""
+        from accounts.access import is_owner
+        if parent.assigned_to_id != user.id or not parent.created_by_id or parent.created_by_id == user.id:
+            return False
+        if not (assignee.is_active and assignee.pk != user.pk):
+            return False
+        return not (is_owner(assignee) and not is_owner(user))
+
+    def _check_new_part(self, user, parent, data):
+        """A sub-task ("part") of `parent`: only its holder (or an admin) gives parts, never of a finished task, at
+        most chain.MAX_DEPTH levels below the main task, due no later than the task it comes from, and its effort
+        comes out of what that task has left. Who may receive it is the usual Assign rule (checked above)."""
+        from . import chain
+        if parent.deleted_at or not visible_tasks(user).filter(pk=parent.pk).exists():
+            raise ValidationError({"parent": "Unknown task."})
+        if parent.assigned_to_id != user.id and not has_capability(user, "tasks.view_all"):
+            raise PermissionDenied("Only the person this task is assigned to can give parts of it.")
+        if parent.status == TaskStatus.DONE:
+            raise ValidationError({"parent": "This task is already completed."})
+        if chain.depth_of(parent) >= chain.MAX_DEPTH:
+            raise ValidationError({"parent": f"A chain can go {chain.MAX_DEPTH} levels deep — "
+                                             "this part can't be split further."})
+        assignee = data.get("assigned_to")
+        if assignee and assignee.pk == parent.assigned_to_id:
+            raise ValidationError({"assigned_to": "This task is already theirs — pick someone else."})
+        due = data.get("due_at")
+        if parent.due_at and due and due > parent.due_at:
+            raise ValidationError({"due_at": (
+                f"A sub-task must be due by {timezone.localtime(parent.due_at):%d %b %Y, %I:%M %p}"
+                f" — when {parent.code} itself is due.")})
+        effort = data.get("effort_minutes") or 0
+        if parent.effort_minutes:
+            left = max(0, parent.effort_minutes - chain.given_effort(parent))
+            if effort > left:
+                raise ValidationError({"effort_minutes": (
+                    f"Only {left} min of {parent.code}'s {parent.effort_minutes} min is left to "
+                    "give — a part's effort comes out of the task it belongs to.")})
+        # parts are one-off pieces of work; the main task carries any repeat
+        data["frequency"] = TaskFrequency.ONE_TIME
+        data["repeat_until"] = None
+
     def perform_update(self, serializer):
         """B1 edit lockdown (Sir's anti-manipulation rule):
         - Admin: full edit, logged.
@@ -708,7 +752,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             if new_assignee and new_assignee != task.assigned_to and not can_assign_to(user, new_assignee):
                 raise PermissionDenied(assign_refusal(user, new_assignee))
 
-        old_assignee, old_status = task.assigned_to, task.status
+        old_assignee, old_status, old_due = task.assigned_to, task.status, task.due_at
 
         # B3: completion evidence -- enforced no matter which path marks it done
         if data.get("status") == TaskStatus.DONE and old_status != TaskStatus.DONE:
@@ -716,6 +760,9 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
 
         updated = serializer.save()
         self._after_status_change(updated, user, old_status, old_assignee, is_admin)
+        if updated.due_at != old_due:
+            from . import chain
+            chain.flag_late_parts(updated, user, act)
 
     def _enforce_checklist_done(self, task):
         """A task built out of steps is finished when the STEPS are finished --
@@ -730,6 +777,10 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                 "needs": "checklist"})
 
     def _enforce_completion_evidence(self, task, remarks="", has_new_file=False):
+        from . import chain
+        blocked = chain.completion_block_message(task)
+        if blocked:
+            raise ValidationError({"detail": blocked, "needs": "subtasks"})
         self._enforce_checklist_done(task)
         # P2: a completion description is ALWAYS required now (reviewer's
         # rule) -- the settings toggle only governs the proof attachment.
@@ -793,6 +844,8 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
         instance.deleted_at = timezone.now()
         instance.save(update_fields=["deleted_at"])
         act(instance, self.request.user, "Moved to Deleted Tasks")
+        from . import chain
+        chain.cancel_open_parts(instance, self.request.user, act)
 
     @action(detail=True, methods=["post"], permission_classes=[HasCapability.of("tasks.bin")])
     def restore(self, request, pk=None):
@@ -800,9 +853,12 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
         task = visible_tasks(request.user, include_deleted=True).filter(pk=pk, deleted_at__isnull=False).first()
         if not task:
             raise ValidationError({"detail": "This task is not in the Deleted bin."})
+        was_deleted_at = task.deleted_at
         task.deleted_at = None
         task.save(update_fields=["deleted_at"])
         act(task, request.user, "Restored from Deleted Tasks")
+        from . import chain
+        chain.restore_parts(task, was_deleted_at, request.user, act)    # parts cancelled with it come back
         return Response(TaskSerializer(task, context={"request": request}).data)
 
     def retrieve(self, request, *args, **kwargs):
@@ -812,13 +868,102 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
         task = self.get_object()
         from .serializers import TaskChecklistItemSerializer
         data["checklist"] = TaskChecklistItemSerializer(task.checklist.all(), many=True).data
-        data["subtasks"] = [
-            {"id": s.id, "code": s.code, "title": s.title, "status": s.status,
-             "assignee": s.assigned_to.get_full_name() or s.assigned_to.username}
-            for s in task.subtasks.select_related("assigned_to").filter(deleted_at__isnull=True)
-        ]
+        data.update(self._chain_payload(task, request.user))
         data["day_log"] = day_log_payload(task, request.user)
         return Response(data)
+
+    def _chain_payload(self, task, user):
+        """Sub-tasks of this task and where it sits in its chain (original 1dabd35). Everyone who sees the task
+        sees the task above theirs and the parts given from it; the whole tree is for admins (`chain` action)."""
+        from . import chain
+        now = timezone.now()
+        parts = list(chain.alive_parts(task).select_related("assigned_to", "created_by").order_by("due_at", "id"))
+        latest = {}
+        for c in TaskCompletion.objects.filter(task__in=parts).order_by("created_at"):
+            latest[c.task_id] = c
+        below = Counter(Task.objects.filter(parent__in=parts, deleted_at__isnull=True)
+                        .values_list("parent_id", flat=True))
+        subtasks = []
+        for p in parts:
+            n = chain.node(p, now, latest.get(p.id))
+            n["parts_below"] = below.get(p.id, 0)
+            subtasks.append(n)
+        parent = None
+        if task.parent_id:
+            pt = Task.objects.select_related("assigned_to", "created_by").get(pk=task.parent_id)
+            parent = {"id": pt.id, "code": pt.code, "title": pt.title,
+                      "assignee": chain._name(pt.assigned_to),
+                      "given_by": chain._name(pt.created_by), "due_at": pt.due_at,
+                      "status_display": pt.get_status_display()}
+        level = chain.depth_of(task)
+        root = chain.root_of(task) if task.parent_id else task
+        is_admin_ = has_capability(user, "tasks.view_all")
+        given = sum(p.effort_minutes or 0 for p in parts)
+        open_, waiting = chain.blocking_parts(task) if parts else ([], [])
+        holder = task.assigned_to_id == user.id or is_admin_
+        return {
+            "subtasks": subtasks,
+            "chain": {
+                "parent": parent,
+                "root": {"id": root.id, "code": root.code, "title": root.title} if root.pk != task.pk else None,
+                "level": level, "max_depth": chain.MAX_DEPTH,
+                # the holder (or an admin): with the Assign permission, or for a task someone else gave them
+                "can_give_part": (task.status != TaskStatus.DONE and not task.deleted_at
+                                  and level < chain.MAX_DEPTH and holder
+                                  and (has_capability(user, "tasks.assign")
+                                       or (task.assigned_to_id == user.id and bool(task.created_by_id)
+                                           and task.created_by_id != user.id))),
+                "effort_given": given,
+                "effort_left": max(0, task.effort_minutes - given) if task.effort_minutes else None,
+                "parts_total": len(parts),
+                "parts_done": sum(1 for p in parts if p.status == TaskStatus.DONE),
+                "parts_open": len(open_), "parts_waiting": len(waiting),
+                "blocked": chain.completion_block_message(task) if parts else None,
+                "can_view_chain": is_admin_ and bool(parts or task.parent_id),
+            },
+        }
+
+    @action(detail=True, methods=["get"], permission_classes=[HasCapability.of("tasks.view_all")])
+    def chain(self, request, pk=None):
+        """The whole Task chain this task belongs to, from its main task down: who gave what to whom and how each
+        part went. Admins and the Owner (company-wide task view)."""
+        from . import chain as ch
+        task = Task.objects.filter(pk=pk).first()
+        if not task:
+            raise NotFound("Unknown task.")
+        root = ch.root_of(task)
+        t = ch.tree(root)
+        return Response({"tree": t, "summary": ch.summarize(t), "focus": task.id})
+
+    @action(detail=False, methods=["get"], permission_classes=[HasCapability.of("tasks.view_all")])
+    def chains(self, request):
+        """Every main task that has sub-tasks, with progress. ?status=open (default) | done | all. Admins and
+        the Owner."""
+        from . import chain as ch
+        status_f = request.query_params.get("status", "open")
+        if status_f not in ("open", "done", "all"):
+            raise ValidationError({"status": "Use open, done or all."})
+        parent_ids = set(Task.objects.filter(parent__isnull=False, deleted_at__isnull=True)
+                         .values_list("parent_id", flat=True))
+        roots = {}
+        for pid in parent_ids:
+            r = ch.root_of(Task.objects.get(pk=pid))
+            if not r.deleted_at:
+                roots[r.pk] = r
+        rows = []
+        for r in roots.values():
+            if status_f == "open" and r.status == TaskStatus.DONE:
+                continue
+            if status_f == "done" and r.status != TaskStatus.DONE:
+                continue
+            t = ch.tree(r)
+            rows.append({**{k: t[k] for k in ("id", "code", "title", "assignee", "given_by",
+                                               "status", "status_display", "result",
+                                               "due_at", "completed_at")},
+                         **ch.summarize(t)})
+        rows.sort(key=lambda x: (x["status"] == TaskStatus.DONE, -x["overdue"],
+                                 x["due_at"] or timezone.now()))
+        return Response({"rows": rows[:300], "total": len(rows)})
 
     def _can_touch_detail(self, user, task) -> bool:
         return (user.pk in (task.assigned_to_id, task.created_by_id)
@@ -1131,8 +1276,20 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
     # ---- extra actions ---------------------------------------------------
     @action(detail=False, methods=["get"])
     def assignees(self, request):
-        """A1: the people THIS user may assign to -- every active user with tasks.assign, else only themselves."""
+        """A1: the people THIS user may assign to -- every active user with tasks.assign, else only themselves.
+        ?part_of=<task id>: who may get a part of that task (Task chain): the same list, or for a task someone
+        else gave this user every active colleague but the Owners (unless they are one) -- never its holder."""
         users = list(assignable_users(request.user).order_by("first_name", "username"))
+        part_of = request.query_params.get("part_of")
+        if part_of:
+            try:
+                parent = visible_tasks(request.user).get(pk=int(part_of))
+            except (TypeError, ValueError, Task.DoesNotExist):
+                raise ValidationError({"part_of": "Unknown task."})
+            if not has_capability(request.user, "tasks.assign"):
+                others = User.objects.filter(is_active=True).order_by("first_name", "username")
+                users = [u for u in others if self._may_pass_part_on(request.user, parent, u)]
+            users = [u for u in users if u.pk != parent.assigned_to_id]
         return Response(people_for_picker(users))
 
     # C1 soft-warning thresholds: a full workday of pending effort, or a
@@ -1164,11 +1321,14 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
 
         qs = Task.objects.filter(assigned_to=target, deleted_at__isnull=True) \
                          .exclude(status=TaskStatus.DONE)
-        rows = list(qs.values_list("priority", "effort_minutes", "due_at"))
+        raw = list(qs.values_list("id", "priority", "effort_minutes", "due_at"))
+        from .chain import own_effort_map      # parts given away aren't their load
+        own = own_effort_map(r[0] for r in raw)
+        rows = [(p, own.get(tid, e), d) for tid, p, e, d in raw]
         now = timezone.now()
         by_priority = Counter(p for p, _, _ in rows)
         pending_effort = sum(e for _, e, _ in rows if e)
-        no_effort = sum(1 for _, e, _ in rows if not e)
+        no_effort = sum(1 for _, _, e, _ in raw if not e)
         open_count = len(rows)
         return Response({
             "user": target.pk,
@@ -1307,9 +1467,13 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             qs = qs.filter(assigned_to=user)
 
         people = {}
-        for assignee_id, name, username, effort, actual in qs.values_list(
-                "assigned_to_id", "assigned_to__first_name",
-                "assigned_to__username", "effort_minutes", "actual_minutes"):
+        done_rows = list(qs.values_list(
+            "id", "assigned_to_id", "assigned_to__first_name",
+            "assigned_to__username", "effort_minutes", "actual_minutes"))
+        from .chain import own_effort_map      # earned once, by whoever did the part
+        own = own_effort_map(r[0] for r in done_rows)
+        for tid, assignee_id, name, username, effort, actual in done_rows:
+            effort = own.get(tid, effort)
             row = people.setdefault(assignee_id, {
                 "user": assignee_id, "name": name or username,
                 "done": 0, "time_earned_minutes": 0, "time_spent_minutes": 0,
@@ -1318,7 +1482,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             row["done"] += 1
             if effort:
                 row["time_earned_minutes"] += effort
-            else:
+            elif tid not in own:              # all given to sub-tasks isn't "missing"
                 row["no_effort_tasks"] += 1   # visible, so assigners learn
             row["time_spent_minutes"] += actual or 0
         rows = sorted(people.values(), key=lambda r: -r["time_earned_minutes"])
@@ -1396,6 +1560,14 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             .values("id", "assigned_to_id", "created_by_id", "status", "due_at",
                     "completed_at", "created_at", "effort_minutes", "actual_minutes",
                     "group__name")
+        raw = list(raw)
+        # Sub-tasks (Task chain): effort given away to parts is earned by those people, so the holder is
+        # assigned / earns only what they kept
+        from .chain import own_effort_map
+        own = own_effort_map(t["id"] for t in raw)
+        for t in raw:
+            if t["id"] in own:
+                t["effort_minutes"] = own[t["id"]]
         from .scoring import corrective_task_ids
         corrective = corrective_task_ids([t["id"] for t in raw])
         per = {u.pk: [] for u in users}
@@ -1700,7 +1872,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
         start, end = self._report_bounds(request.query_params, now)
         users = {u.pk: u for u in User.objects.filter(is_active=True)}
         crs = (TaskChangeRequest.objects.filter(requested_by_id__in=list(users))
-               .select_related("task").order_by("-created_at", "-id"))
+               .select_related("task", "reviewed_by").order_by("-created_at", "-id"))
         if start:
             crs = crs.filter(created_at__date__range=(start, end))
 
@@ -1723,11 +1895,17 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                 r[cr.status] += 1
             r["tasks"].add(cr.task_id)
             if len(r["requests"]) < self.LEADER_RECENT:
+                old_due, new_due = cr.due_change()
                 r["requests"].append({
                     "id": cr.id, "task": cr.task_id, "task_code": cr.task.code,
                     "task_title": cr.task.title,
                     "changes": cr.describe(), "reason": cr.reason,
-                    "status": cr.status, "created_at": cr.created_at,
+                    "status": cr.status, "status_display": cr.get_status_display(),
+                    "created_at": cr.created_at,
+                    # old -> new due date (PLAN.md §19.41: the old one is kept on the request since then)
+                    "old_due_at": old_due, "new_due_at": new_due,
+                    "reviewed_by": (cr.reviewed_by.get_full_name() or cr.reviewed_by.username) if cr.reviewed_by else None,
+                    "reviewed_at": cr.reviewed_at, "remarks": cr.remarks,
                 })
 
         rows = sorted(per.values(), key=lambda r: (-r["total"], r["name"].lower()))
@@ -1742,6 +1920,29 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             "pending": sum(r["pending"] for r in rows),
             "rows": rows,
         })
+
+    RANGE_LABELS = {"today": "Today", "yesterday": "Yesterday",
+                    "this_week": "This week", "last_week": "Last week",
+                    "this_month": "This month", "last_month": "Last month",
+                    "this_year": "This year", "all": "All time", "custom": "Custom"}
+
+    @action(detail=False, methods=["get"], url_path="person_export",
+            permission_classes=[HasCapability.of("tasks.view_all")])
+    def person_export(self, request):
+        """GET ?user=<id>&range=...(&start&end) -> one person's performance as an Excel workbook, 8 sheets with
+        filters (score, month by month, tasks received and who gave them, tasks delegated and to whom, change
+        requests, completion reviews). Admins and the Owner (original app 5fde3aa; PLAN.md §19.41)."""
+        from config.exports import file_response
+        from .person_export import build_person_workbook
+        p = request.query_params
+        try:
+            person = User.objects.get(pk=int(p.get("user", "")))
+        except (TypeError, ValueError, User.DoesNotExist):
+            raise ValidationError({"user": "Pass a valid user id."})
+        start, end = self._report_bounds(p, timezone.now())
+        label = self.RANGE_LABELS.get(p.get("range", "this_month"), "This month")
+        data, filename = build_person_workbook(self, person, start, end, label, request.user)
+        return file_response(data, filename)
 
     @action(detail=False, methods=["get"],
             permission_classes=[HasCapability.of("tasks.team_performance")])
@@ -1807,10 +2008,14 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
 
         # --- what each person is carrying RIGHT NOW (not range-bound) -------
         load = {}
-        for uid, due, eff in Task.objects.filter(
-                assigned_to_id__in=ids, deleted_at__isnull=True
+        open_rows = list(Task.objects.filter(
+            assigned_to_id__in=ids, deleted_at__isnull=True
         ).exclude(status=TaskStatus.DONE).values_list(
-                "assigned_to_id", "due_at", "effort_minutes"):
+            "id", "assigned_to_id", "due_at", "effort_minutes"))
+        from .chain import own_effort_map      # parts given away are not their load
+        own = own_effort_map(r[0] for r in open_rows)
+        for tid, uid, due, eff in open_rows:
+            eff = own.get(tid, eff)
             b = load.setdefault(uid, {"open_tasks": 0, "open_overdue": 0,
                                       "pending_effort_minutes": 0})
             b["open_tasks"] += 1
@@ -2680,6 +2885,8 @@ class TaskCompletionViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
             _linked_task_finished(task, task.completion_note)
             act(task, request.user, f"Completion accepted by {who}"
                                     + (f": {remarks[:180]}" if remarks else ""))
+            from . import chain
+            chain.notify_if_all_parts_done(task)    # the last accepted part frees the task above
             notify(c.submitted_by, "task_completion_accepted",
                    f"Accepted: {task.code} {task.title}"[:200],
                    NL_JOIN([f"{who} accepted your work on {task.code}.",
@@ -2749,6 +2956,14 @@ class TaskCompletionViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
         accepted = sum(len(t) for t in by_submitter.values())
         if by_submitter:
             _in_background(lambda: _notify_bulk_accepted(user.pk, remarks, by_submitter))
+            # accepting the last sub-task of a task frees that task to complete
+            from . import chain
+            done_ids = [tid for rows in by_submitter.values() for _, _, tid in rows]
+            seen = set()
+            for part in Task.objects.filter(pk__in=done_ids, parent__isnull=False):
+                if part.parent_id not in seen:
+                    seen.add(part.parent_id)
+                    chain.notify_if_all_parts_done(part)
         return Response({"accepted": accepted, "skipped": len(ids) - accepted})
 
 
@@ -2920,6 +3135,8 @@ class TaskChangeRequestViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
                 raise PermissionDenied(delete_refusal(actor, task))
             task.deleted_at = timezone.now()
             task.save(update_fields=["deleted_at"])
+            from . import chain
+            chain.cancel_open_parts(task, actor, act)       # its unfinished parts go with it
             return ["cancelled (moved to Deleted Tasks)"]
         for field in ("title", "description", "category", "priority", "frequency"):
             if field in changes and changes[field] is not None:
@@ -2955,6 +3172,9 @@ class TaskChangeRequestViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
                 applied.append(f"assigned_to -> {target.username}")
                 _notify_task_assigned(task, actor)
         task.save()
+        if "due_at" in changes:
+            from . import chain
+            chain.flag_late_parts(task, actor, act)
         return applied
 
 

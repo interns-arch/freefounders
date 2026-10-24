@@ -28,6 +28,7 @@ import { FilePick, Linkify, ProofreadText, fmtDT, fmtEffort, relDue } from '@/fe
 import { cn } from '@/lib/utils';
 import { useTaskDialogs } from './dialogs';
 import { PriorityPill, SectionHead, StatusPill, TaskCode } from './task-bits';
+import { PartOfNote, SubtasksSection } from './task-chain';
 import { safeHref } from '@/lib/safe-url';
 
 /**
@@ -234,6 +235,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
         </dl>
       </SheetHeader>
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5 scrollbar-thin">
+        <PartOfNote t={t} />
         {(t.description || t.external_url) && (
           <div className="space-y-2">
             {t.description && (
@@ -253,7 +255,12 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
           <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 p-2">
             {canAct && isAssignee && (
               <>
-                <Button size="sm" disabled={openSteps > 0} title={openSteps > 0 ? `Finish the ${openSteps} open step(s) first` : 'Complete this task'} onClick={() => dialogs.open({ kind: 'complete', task: t })}>
+                <Button
+                  size="sm"
+                  disabled={openSteps > 0 || !!t.chain?.blocked}
+                  title={openSteps > 0 ? `Finish the ${openSteps} open step(s) first` : (t.chain?.blocked ?? 'Complete this task')}
+                  onClick={() => dialogs.open({ kind: 'complete', task: t })}
+                >
                   <CheckCircle2 /> Complete
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => dialogs.open({ kind: 'progress', task: t })}>
@@ -432,19 +439,8 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
           </div>
         </Section>
 
-        {t.subtasks.length > 0 && (
-          <Section title="Sub-tasks" count={t.subtasks.length}>
-            <ul className="divide-y rounded-lg border text-sm">
-              {t.subtasks.map((s) => (
-                <li key={s.id} className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-                  <TaskCode code={s.code} /> <span className="font-medium">{s.title}</span>
-                  <span className="text-muted-foreground">— {s.assignee}</span>
-                  <StatusPill status={s.status as TaskDetail['status']} label={s.status.replace('_', ' ')} className="ml-auto capitalize" />
-                </li>
-              ))}
-            </ul>
-          </Section>
-        )}
+        {/* sub-tasks: parts of this task given to others (Task chain, PLAN.md §19.41) */}
+        <SubtasksSection t={t} />
 
         {dl && dl.days.length > 1 && (
           <Section title="Daily progress log" count={`${dl.logged_days}/${dl.days.length} days`}>

@@ -5,13 +5,15 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { ChooseCompanyCard } from '@/features/account/choose-company';
+import { CodeSignIn } from '@/features/account/code-sign-in';
 import { safeNext } from '../session-guard';
 import { BrandFooter, BrandHeader, BrandPanel } from './login-brand';
 
 /**
  * Sign in (PLAN.md §19.14), the front page of kaampilot.com (§19.35): one short form, the login field focused, a
  * show-password button; then straight to Home (or ?next=). Desktop: the brand panel on the left (what Kaampilot is, a
- * small preview, "Start free"); phones: a compact header above the form.
+ * small preview, "Start free"); phones: a compact header above the form. "Sign in with a code instead" (?code=1, PLAN.md
+ * §21.8): a one-time code to the account's email / mobile replaces the password.
  */
 export function LoginPage() {
   const [params] = useSearchParams();
@@ -28,6 +30,15 @@ export function LoginPage() {
   const loginRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const next = safeNext(params.get('next'));
+  const codeMode = params.get('code') === '1';
+  /** /login with ?code=1 on or off, keeping ?next. */
+  const modeHref = (code: boolean) => {
+    const q = new URLSearchParams();
+    if (next) q.set('next', next);
+    if (code) q.set('code', '1');
+    const s = q.toString();
+    return s ? `/login?${s}` : '/login';
+  };
 
   // Already signed in (another tab, or the refresh cookie still works): go straight on.
   useEffect(() => {
@@ -62,6 +73,16 @@ export function LoginPage() {
           <BrandHeader />
           {choose ? (
             <ChooseCompanyCard choose={choose} onDone={() => navigate(next ?? '/', { replace: true })} onBack={() => setChoose(null)} />
+          ) : codeMode ? (
+            <CodeSignIn
+              initial={login}
+              onSignedIn={(c) => (c ? setChoose(c) : navigate(next ?? '/', { replace: true }))}
+              passwordLink={
+                <Link to={modeHref(false)} replace className="font-medium text-primary hover:underline">
+                  Use your password instead
+                </Link>
+              }
+            />
           ) : (
           <form onSubmit={submit} noValidate className="space-y-5 rounded-xl border bg-card p-5 shadow-card sm:p-7" aria-labelledby="signin-title">
             <h1 id="signin-title" className="text-2xl font-bold tracking-tight">
@@ -147,7 +168,11 @@ export function LoginPage() {
             <Button type="submit" className="h-11 w-full" size="lg" loading={signIn.isPending}>
               Sign in
             </Button>
-            <p className="text-center text-sm">
+            <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center text-sm">
+              {/* A link, not a button: "Sign in" stays the only button of that name on this form. */}
+              <Link to={modeHref(true)} replace className="font-medium text-primary hover:underline">
+                Sign in with a code instead
+              </Link>
               <Link to="/forgot" className="font-medium text-primary hover:underline">
                 Forgot password?
               </Link>

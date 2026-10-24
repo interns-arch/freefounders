@@ -22,6 +22,7 @@ const HINT: Record<AttendanceReportType, string> = {
   monthly_register: 'The muster roll: one row per person, one column per day (P, A, H, L, WO, HO).',
   late: 'Every late check-in in the period, with how many minutes late.',
   leave: 'Leave requests that touch the period, with their type, days and status.',
+  regularization: 'Regularization requests for days in the period: person, month, reason, times asked, status, the day before and after, who decided.',
 };
 
 interface Recent extends AttendanceReportInput {

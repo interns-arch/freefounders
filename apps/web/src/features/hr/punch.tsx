@@ -98,9 +98,11 @@ export function usePunch(onDone?: (which: Which) => void) {
   const data: AttendanceToday | undefined = q.data;
   // Checked in somewhere else (a computer, or before this app had reminders): today's reminders are not needed either.
   const checkedInToday = !!data?.attendance?.check_in;
+  // On leave, a holiday or the weekly off (PLAN.md §19.39): no punch-in reminders on the phone today either.
+  const dayOff = !!data?.day_off;
   useEffect(() => {
-    if (checkedInToday) skipTodaysReminder();
-  }, [checkedInToday]);
+    if (checkedInToday || dayOff) skipTodaysReminder();
+  }, [checkedInToday, dayOff]);
   // With punch photos switched on, the camera step comes first.
   const usesCamera = !!data && !!data.photo && data.photo !== 'off';
   /** The location / camera steps and the punch, with the rules `d` (fresh for a check-in). */

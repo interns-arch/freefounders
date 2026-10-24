@@ -259,7 +259,9 @@ class NotificationRuleTests(_Base):
     def test_only_admins_change_rules(self):
         self.assertEqual(self.as_(self.member).get("/api/notification-rules/").status_code, 403)
         rows = self.as_(self.admin).get("/api/notification-rules/").json()
-        self.assertTrue(all(r["email"] and r["whatsapp"] for r in rows), "nothing saved = everything on")
+        # Nothing saved = everything on, except punch-in reminders by email (several a morning; PLAN.md §19.39).
+        self.assertTrue(all((r["email"] or r["key"] == "punch_reminders") and r["whatsapp"] for r in rows))
+        self.assertFalse(next(r for r in rows if r["key"] == "punch_reminders")["email"])
         self.assertEqual(self.as_(self.admin).put("/api/notification-rules/", {"rockets": {"email": False}}, format="json").status_code, 400)
         self.assertEqual(self.as_(self.admin).put("/api/notification-rules/", {"task_given": {"sms": False}}, format="json").status_code, 400)
 

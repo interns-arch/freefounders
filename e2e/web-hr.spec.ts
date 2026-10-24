@@ -206,10 +206,45 @@ test('HR settings: attendance rules are saved', async ({ browser, request }) => 
   }
 });
 
+test('HR settings: punch-in reminders (PLAN.md §19.39): defaults, preview, save, range checked', async ({ browser, request }) => {
+  const owner = await token(request);
+  const before = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
+  const keys = ['punch_reminders', 'punch_reminder_count', 'punch_reminder_gap', 'punch_reminder_first', 'work_start'];
+  const restore = Object.fromEntries(keys.map((k) => [k, before[k].custom ? before[k].value : '']));
+  expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { punch_reminders: '', punch_reminder_count: '', punch_reminder_gap: '', punch_reminder_first: '', work_start: '09:30' } })).ok()).toBeTruthy();
+  try {
+    const { ctx, page } = await ownerPage(browser, '/attendance/settings');
+    const card = page.getByRole('form', { name: 'Punch-in reminders' });
+    await expect(card).toBeVisible({ timeout: 30_000 }); // the settings screen is loaded on first open
+    await expect(card.getByLabel('Number of reminders')).toHaveValue('3');
+    await expect(card.getByLabel('Minutes between reminders')).toHaveValue('30');
+    await expect(card.getByLabel('First reminder after reporting time (min)')).toHaveValue('30');
+    await expect(card.getByText('Reporting time 09:30: reminders at 10:00, 10:30, 11:00.')).toBeVisible();
+    await card.getByLabel('Number of reminders').fill('11');
+    // 1–10 only: the browser refuses 11 before sending (the server says "Between 1 and 10" too).
+    expect(await card.getByLabel('Number of reminders').evaluate((el) => (el as HTMLInputElement).checkValidity())).toBe(false);
+    await card.getByLabel('Number of reminders').fill('4');
+    await card.getByLabel('Minutes between reminders').fill('15');
+    await expect(card.getByText('Reporting time 09:30: reminders at 10:00, 10:15, 10:30, 10:45.')).toBeVisible();
+    await card.getByRole('button', { name: 'Save reminders' }).click();
+    await expect(card.getByRole('status')).toHaveText('Saved');
+    const after = await (await request.get('/tasks/api/hr/settings/', { headers: auth(owner) })).json();
+    expect([after.punch_reminders.value, after.punch_reminder_count.value, after.punch_reminder_gap.value]).toEqual([true, 4, 15]);
+    // The person's punch screen gets the rule (the phone app plans its own reminders from it).
+    const today = await (await request.get('/tasks/api/attendance/today/', { headers: auth(owner) })).json();
+    expect(today.punch_reminders).toEqual(expect.objectContaining({ enabled: true, count: 4, gap_minutes: 15, first_after_minutes: 30 }));
+    await ctx.close();
+  } finally {
+    await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: restore });
+  }
+});
+
 test('approvers see Approvals; payroll tabs are in-app Attendance sections', async ({ browser }) => {
   const { ctx, page } = await ownerPage(browser, '/tasks/hr?tab=approvals');
   await expect(page.getByRole('heading', { name: /^Leave requests \(/ })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /^Attendance corrections \(/ })).toBeVisible();
+  // Leave and Regularization are two tabs (PLAN.md §19.38).
+  await page.getByRole('group', { name: 'Approvals' }).getByRole('button', { name: /^Regularization/ }).click();
+  await expect(page.getByRole('heading', { name: /^Regularization requests \(/ })).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Attendance and leave sections' });
   await expect(nav.getByRole('button', { name: 'Approvals' })).toHaveAttribute('aria-current', 'page');
   // Payroll (module `payroll`, hr.manage) is a real tab now: it opens /attendance/payroll, not the classic screen.

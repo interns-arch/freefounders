@@ -277,7 +277,8 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
   const now = useMinuteClock();
   const approves = !!cfg.data?.can_approve;
   const leaves = usePendingLeaves(approves);
-  const corrections = usePendingCorrections(approves);
+  // Regularization also reaches the reporting manager (PLAN.md §19.38).
+  const corrections = usePendingCorrections(approves || !!cfg.data?.can_approve_regularization);
   const d = p.data;
   const a = d?.attendance;
   const pending = (leaves.data?.length ?? 0) + (corrections.data?.length ?? 0);
@@ -327,7 +328,7 @@ function AttendanceCard({ index, onOpen }: { index: number; onOpen: (to?: string
                 {p.err}{' '}
                 {!p.fix && (
                   <button type="button" className="cursor-pointer font-medium underline" onClick={() => onOpen('/attendance/history')}>
-                    Request a correction
+                    Regularize a day
                   </button>
                 )}
               </p>

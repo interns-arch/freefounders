@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from tenancy.integrations import integrations
 from tenancy.views import create_company
 
 from crm import internal_flows
@@ -31,6 +32,7 @@ urlpatterns = [
     path("internal/tasks", internal_flows.create_task),
     path("internal/exit-tasks", internal_flows.exit_tasks),
     path("internal/companies", create_company),
+    path("integrations/", integrations),
     path("team/", views.team_directory),
     path("roles/", views.roles),
     path("departments/", views.departments),

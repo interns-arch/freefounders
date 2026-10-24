@@ -95,3 +95,11 @@ def set_value(name: str, value: str) -> None:
         key=name, defaults={"value": encrypt(value) if secret and value else value, "secret": secret}
     )
     forget(schemas.current() if schemas.enabled() else "-")
+
+
+def remove_value(name: str) -> None:
+    """Drops the company's own value: the environment variable (if any) applies again."""
+    from .models import CompanySetting
+
+    CompanySetting.objects.filter(key=name).delete()
+    forget(schemas.current() if schemas.enabled() else "-")

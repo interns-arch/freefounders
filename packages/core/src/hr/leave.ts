@@ -72,8 +72,26 @@ export function useLeaveTypes() {
   return useQuery({ queryKey: ['hr', 'leave-types'], queryFn: () => tasksApi.get<DrfPage<LeaveType> | LeaveType[]>('/leave-types/').then(resultsOf) });
 }
 
-export function useLeaveBalances() {
-  return useQuery({ queryKey: ['hr', 'balances'], queryFn: () => tasksApi.get<LeaveBalance[]>('/leaves/balances/') });
+/** GET /leaves/balances/ — mine, or `userId`'s (someone I approve for or manage). */
+export function useLeaveBalances(userId?: number, enabled = true) {
+  return useQuery({
+    queryKey: ['hr', 'balances', userId ?? 'me'],
+    queryFn: () => tasksApi.get<LeaveBalance[]>('/leaves/balances/', userId ? { user: userId } : undefined),
+    enabled,
+  });
+}
+
+/** Someone HR may mark leave for (GET /leaves/markable/): the people they approve leave for; themself only as the Owner. */
+export interface MarkablePerson {
+  id: number;
+  name: string;
+  username: string;
+  employee_id: string;
+  department: string;
+}
+
+export function useMarkablePeople(enabled = true) {
+  return useQuery({ queryKey: ['hr', 'leaves', 'markable'], queryFn: () => tasksApi.get<MarkablePerson[]>('/leaves/markable/'), enabled });
 }
 
 /** GET /leaves/?page_size=100 — my requests. */
@@ -90,6 +108,10 @@ export interface LeaveInput {
   half_day?: boolean;
   /** A supporting document (sent as multipart when given). */
   document?: Blob & { name?: string };
+  /** HR marks leave for this person (approved at once; PLAN.md §19.40). */
+  user?: number;
+  /** With `user`: mark it even beyond the person's balance (logged on the request). */
+  beyond_balance?: boolean;
 }
 
 /** POST /leaves/ — JSON, or multipart with the supporting document. */

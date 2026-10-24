@@ -43,16 +43,24 @@ def _flags(r):
     return ", ".join(out)
 
 
+def _regularized(r) -> str:
+    """"Yes: Forgot to punch out" for a regularized day (PLAN.md §19.38), else blank."""
+    return f"Yes: {r['regularization_reason']}" if r.get("regularized") else ""
+
+
 def month_days(data):
     """A person's month (services.monthly_report + the person): one row per day."""
     who = (data.get("user") or {}).get("name", "")
-    header = ["Date", "Day", "Employee", "Status", "Check in", "Check out", "Hours", "Notes", "Uniform", "Holiday"]
+    # The Regularized column (PLAN.md §19.38) when a day of the file was regularized.
+    reg = any(d.get("regularized") for d in data["days"])
+    header = ["Date", "Day", "Employee", "Status", "Check in", "Check out", "Hours", "Notes", "Uniform", "Holiday"] + (
+        ["Regularized"] if reg else [])
     rows = []
     for d in data["days"]:
         day = date.fromisoformat(d["date"])
         rows.append([day, day.strftime("%a"), who, LABEL.get(d["status"] or "", "") if d["status"] else "Upcoming",
                      _local(d["check_in"]), _local(d["check_out"]), _hours(d["working_minutes"]), _flags(d),
-                     UNIFORM.get(d.get("uniform_ok"), ""), d.get("holiday") or ""])
+                     UNIFORM.get(d.get("uniform_ok"), ""), d.get("holiday") or ""] + ([_regularized(d)] if reg else []))
     return header, rows
 
 
@@ -60,6 +68,9 @@ def team_day_rows(data, bucket="all"):
     keep = DAY_FILTERS.get(bucket or "all", DAY_FILTERS["all"])
     header = ["Date", "Employee ID", "Name", "Department", "Designation", "Phone", "Status", "Check in", "Check out",
               "Hours", "Notes", "Uniform", "Remark"]
+    reg = any(r.get("regularized") for r in data["rows"])
+    if reg:   # the Regularized column (PLAN.md §19.38) when someone's day was regularized
+        header.append("Regularized")
     day = date.fromisoformat(data["date"])
     rows = []
     for r in data["rows"]:
@@ -68,7 +79,7 @@ def team_day_rows(data, bucket="all"):
         rows.append([day, r["employee_code"], r["name"], r["department"], r["designation"], r["phone"],
                      LABEL.get(r["status"] or "", "") if r["status"] else "Upcoming",
                      _local(r["check_in"]), _local(r["check_out"]), _hours(r["working_minutes"]), _flags(r),
-                     UNIFORM.get(r.get("uniform_ok"), ""), r.get("note") or ""])
+                     UNIFORM.get(r.get("uniform_ok"), ""), r.get("note") or ""] + ([_regularized(r)] if reg else []))
     return header, rows[:EXPORT_MAX]
 
 
@@ -118,12 +129,19 @@ CORRECTION_COLUMNS = [
     ("Employee", lambda r: (r.get("user_detail") or {}).get("name", "")),
     ("Username", lambda r: (r.get("user_detail") or {}).get("username", "")),
     ("Date", "date"),
+    ("Reason", "reason_label"),
+    ("Note", "reason"),
     ("Requested check in", "requested_check_in"),
     ("Requested check out", "requested_check_out"),
-    ("Reason", "reason"),
     ("Status", "status_display"),
+    ("Was check in", "original_check_in"),
+    ("Was check out", "original_check_out"),
+    ("Was status", lambda r: LABEL.get(r.get("original_status") or "", r.get("original_status") or "")),
+    ("New status", lambda r: LABEL.get(r.get("applied_status") or "", r.get("applied_status") or "")),
     ("Reviewed by", lambda r: (r.get("reviewed_by_detail") or {}).get("name", "")),
+    ("Reviewed at", "reviewed_at"),
     ("Remarks", "remarks"),
+    ("Attachment", lambda r: "Yes" if r.get("attachment_name") else ""),
     ("Requested on", "created_at"),
 ]
 

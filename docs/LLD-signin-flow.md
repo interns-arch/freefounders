@@ -7,8 +7,8 @@ stays alive afterwards. Traced from the code (2026-10-21). Related: `docs/LLD-re
 
 | Layer | File | What it does in sign-in |
 |---|---|---|
-| Screen | `apps/web/src/app/pages/login.tsx`, `features/account/choose-company.tsx` | Form, errors, company chooser, redirect |
-| Client session | `packages/core/src/session.ts` | `login()`, `loginWithTicket()`, `refresh()`, access token kept in memory |
+| Screen | `apps/web/src/app/pages/login.tsx`, `features/account/choose-company.tsx`, `features/account/code-sign-in.tsx` | Form, errors, company chooser, redirect; "Sign in with a code instead" (`/login?code=1`) |
+| Client session | `packages/core/src/session.ts` | `login()`, `loginWithCode()`, `loginWithTicket()`, `refresh()`, access token kept in memory |
 | Client HTTP | `packages/core/src/http.ts` | Adds `Authorization: Bearer`, on 401 refreshes once and retries |
 | Gateway | `infra/gateway/dev-gateway.mjs` (dev), `infra/deploy/Caddyfile` (server) | `/api/platform/*` → Platform :4000 |
 | Controller | `services/platform/src/auth/auth.controller.ts` | `POST auth/login`, `auth/refresh`, cookie handling |
@@ -28,6 +28,16 @@ stays alive afterwards. Traced from the code (2026-10-21). Related: `docs/LLD-re
    `{ login, password, client }` and header `X-Requested-With: XMLHttpRequest`.
    `client` is `'web'` in browsers and `'mobile'` only for a native client that stores the refresh token itself
    (the Android app is the web app in a WebView, so it is `'web'` and uses the cookie).
+
+**Sign in with a code instead** (PLAN.md §21.8): the link under the button opens `/login?code=1` (keeps `?next`).
+Email or mobile of an account → **Send code** → `POST auth/login/code/start {identifier}` (`useLoginCodeStart`) →
+"Enter your code" (code field, test-mode note when `devCode` came back, live resend countdown) → **Sign in** →
+`session.loginWithCode(otpId, code)` → `POST auth/login/code/verify {otpId, code, client}`. The answer is the same as
+`auth/login` (tokens + cookie, or `{chooseCompany, ticket}` → Phase 6). A username or employee ID is refused on the
+screen and by the server with "sign in with your password". Server side: `AccountsService.loginCodeStart/Verify`
+(OTP purpose `login`, all code limits; the per-IP sign-in guard; a wrong code counts like a wrong password) →
+`AuthService.loginVerifiedAccount` (= Phase 5B without the password). Delivery: `OTP_SENDER` (fake / MSG91, see
+`docs/LLD-registration-login.md` §4.9).
 
 ## Phase 2 — Gateway
 4. The gateway (one address, :8080 locally / :7395 on the server) forwards `/api/platform/*` unchanged to the Platform
@@ -203,6 +213,11 @@ sequenceDiagram
 | Account in one open company | tokens at once |
 | Account in several open companies | `chooseCompany` + 5-minute ticket |
 | Ticket used, expired or wrong company | 401 "Please sign in again" (the 5-minute choice ran out), start again |
+| Code sign-in with a username / employee ID | 400 "…sign in with your password" |
+| Code sign-in, wrong code | 400 "Wrong code. N tries left." (5 per code), counts toward the per-IP guard |
+| Code sign-in, no account for the verified email / mobile | 400 "There is no Kaampilot account…" (only after the code; the start answer is identical) |
+| Code sign-in, email of an admin-made login | 400 "This email signs in with a login your company admin made. Sign in with your password instead." |
+| Code could not be sent (MSG91 refused / down / not set up) | 400 "We couldn't send the code. Check the number and try again." / 503; the code is never usable and the person may ask again at once |
 
 ## Timings and sizes
 Access token 15 min · refresh token 365 days sliding, 60 s rotation grace · choose-company ticket 5 min · JWKS cache in

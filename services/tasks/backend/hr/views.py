@@ -7,6 +7,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from accounts.access import is_owner
 from accounts.models import User
 from accounts.permissions import HasCapability, HasPermission, has_capability, refuse_own_records
 
@@ -14,6 +15,7 @@ from config.exports import ExportMixin, export_file, export_format
 
 from . import approvals, services
 from . import exports as hr_exports
+from . import punch_reminders
 from .models import (
     Attendance, AttendanceCorrection, CorrectionStatus, FaceProfile,
     LeaveRequest, LeaveStatus, LeaveType, OfficeLocation,
@@ -122,7 +124,7 @@ class AttendanceViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
     export_name = "attendance-records"
 
     def get_queryset(self):
-        qs = Attendance.objects.select_related("user", "location").filter(
+        qs = Attendance.objects.select_related("user", "location", "regularization").filter(
             user__in=managed_users(self.request.user))
         p = self.request.query_params
         if p.get("user"):
@@ -150,6 +152,11 @@ class AttendanceViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
             "work_start": conf["work_start"], "work_end": conf["work_end"],
             "photo": conf["photo"],
             "uniform_check": conf["uniform_check"], "uniform_message": conf["uniform_message"],
+            # Punch-in reminders (PLAN.md §19.39): the company rule (the phone app plans its own reminders from it),
+            # why today needs none (holiday / week_off / leave) and how many the server sent today.
+            "punch_reminders": punch_reminders.rule(conf),
+            "day_off": punch_reminders.day_off_reason(request.user, timezone.localdate()),
+            "reminders_sent": punch_reminders.sent_today([request.user.id], timezone.localdate()).get(request.user.id, 0),
         })
 
     @action(detail=True, methods=["get"], url_path=r"photo/(?P<which>in|out)")
@@ -307,37 +314,53 @@ class AttendanceViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
         reason = str(request.data.get("reason", "")).strip()[:120]
         record.note = (f"Marked {status_value} by {request.user.get_full_name() or request.user.username}"
                        + (f": {reason}" if reason else ""))
-        record.save(update_fields=["status", "note"])
+        record.regularization = None   # HR's mark now decides the day (no "Regularized" tag)
+        record.save(update_fields=["status", "note", "regularization"])
         return Response(AttendanceSerializer(record).data)
 
 
 class CorrectionViewSet(ExportMixin, viewsets.ModelViewSet):
+    """Attendance regularization requests (PLAN.md §19.38; the endpoint keeps its old name, attendance corrections).
+    Mine by default; ?scope=team: the people I approve for. ?status=, ?from=, ?to= (date), ?user=."""
     permission_classes = [IsAuthenticated]
     serializer_class = CorrectionSerializer
     export_columns = hr_exports.CORRECTION_COLUMNS
-    export_name = "attendance-corrections"
+    export_name = "attendance-regularizations"
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
+        from . import regularization
         qs = AttendanceCorrection.objects.select_related("user", "reviewed_by")
-        if self.request.query_params.get("scope") == "team" and approvals.is_approver(self.request.user):
-            qs = qs.filter(user__in=approvals.reviewable_users(self.request.user))
+        p = self.request.query_params
+        if p.get("scope") == "team" and regularization.is_reviewer(self.request.user):
+            # The reporting manager sees their team's requests; approvers their scope (PLAN.md §19.38).
+            qs = qs.filter(user__in=regularization.reviewable_users(self.request.user))
         else:
             qs = qs.filter(user=self.request.user)
-        if self.request.query_params.get("status"):
-            qs = qs.filter(status=self.request.query_params["status"])
+        if p.get("status"):
+            qs = qs.filter(status=p["status"])
+        if p.get("from"):
+            qs = qs.filter(date__gte=p["from"])
+        if p.get("to"):
+            qs = qs.filter(date__lte=p["to"])
+        if p.get("user") and str(p["user"]).isdigit():
+            qs = qs.filter(user_id=p["user"])
         return qs
 
     def create(self, request, *args, **kwargs):
+        from . import regularization
         if not has_capability(request.user, "attendance.self"):
             raise PermissionDenied("Your role does not include My attendance.")
-        return super().create(request, *args, **kwargs)
-
-    def perform_create(self, serializer):
-        correction = serializer.save(user=self.request.user)
-        approvals.notify_submitted("correction", correction)
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = dict(ser.validated_data)
+        created = regularization.create_requests(request.user, data, attachment=data.pop("attachment", None))
+        out = CorrectionSerializer(created, many=True, context=self.get_serializer_context()).data
+        # One day: the request (as before); a range: every day's request.
+        return Response(out[0] if len(out) == 1 else {"results": out, "count": len(out)}, status=http.HTTP_201_CREATED)
 
     def perform_update(self, serializer):
-        """Only the person's own request, only while pending: a reviewed correction stays as it was decided, and an
+        """Only the person's own request, only while pending: a reviewed request stays as it was decided, and an
         approver cannot rewrite the times they are about to approve."""
         correction = self.get_object()
         if correction.user_id != self.request.user.id or correction.status != CorrectionStatus.PENDING:
@@ -349,34 +372,58 @@ class CorrectionViewSet(ExportMixin, viewsets.ModelViewSet):
             raise PermissionDenied("Only your own pending requests can be withdrawn.")
         instance.delete()
 
+    @action(detail=False, methods=["get"])
+    def policy(self, request):
+        """The company's regularization policy and how many requests I have left this month (the request form)."""
+        from . import regularization
+        return Response(regularization.policy_for(request.user))
+
+    @action(detail=True, methods=["get"])
+    def attachment(self, request, pk=None):
+        """The request's attachment, for the person and whoever may decide it (a fresh signed link)."""
+        from config.media import file_url
+        from . import regularization
+        c = AttendanceCorrection.objects.select_related("user").filter(pk=pk).first()
+        if c is None or not c.attachment:
+            raise ValidationError({"detail": "No attachment."})
+        if c.user_id != request.user.id:
+            regularization.check_reviewer(request.user, c)
+        return Response({"url": file_url(c.attachment)})
+
     @action(detail=True, methods=["post"])
     def review(self, request, pk=None):
+        from . import regularization
         correction = AttendanceCorrection.objects.select_related("user").filter(pk=pk).first()
-        _check_reviewer(request.user, correction)
-        if correction.status != CorrectionStatus.PENDING:
-            raise ValidationError({"detail": "This request has already been reviewed."})
+        regularization.check_reviewer(request.user, correction)
+        regularization.decide(correction, request.user, request.data.get("decision"),
+                              str(request.data.get("remarks", "")))
+        return Response(CorrectionSerializer(correction, context=self.get_serializer_context()).data)
+
+    @action(detail=False, methods=["post"])
+    def bulk_review(self, request):
+        """{ids: [...], decision, remarks}: each request is checked on its own; the answer lists what was done and why
+        the others were not."""
+        from . import regularization
+        ids = request.data.get("ids") or []
+        if not isinstance(ids, list) or not ids or len(ids) > 200:
+            raise ValidationError({"ids": "Choose between 1 and 200 requests."})
         decision = request.data.get("decision")
         if decision not in ("approved", "rejected"):
             raise ValidationError({"decision": "Use 'approved' or 'rejected'."})
-        correction.status = decision
-        correction.reviewed_by = request.user
-        correction.remarks = str(request.data.get("remarks", ""))[:300]
-        correction.save()
-
-        if decision == CorrectionStatus.APPROVED:
-            rec, _ = Attendance.objects.get_or_create(user=correction.user, date=correction.date)
-            if correction.requested_check_in:
-                rec.check_in = correction.requested_check_in
-            if correction.requested_check_out:
-                rec.check_out = correction.requested_check_out
-            if rec.check_in and rec.check_out:
-                rec.working_minutes = max(0, int((rec.check_out - rec.check_in).total_seconds() // 60))
-                hours = rec.working_minutes / 60
-                rec.status = ("half_day" if hours < services.cfg()["half_day_hours"]
-                              else "late" if rec.is_late else "present")
-            rec.note = f"Corrected by {request.user.username}"
-            rec.save()
-        return Response(CorrectionSerializer(correction).data)
+        remarks = str(request.data.get("remarks", ""))
+        done, failed = [], []
+        by_id = {c.pk: c for c in AttendanceCorrection.objects.select_related("user").filter(
+            pk__in=[i for i in ids if str(i).isdigit()])}
+        for raw in ids:
+            c = by_id.get(int(raw)) if str(raw).isdigit() else None
+            try:
+                regularization.check_reviewer(request.user, c)
+                regularization.decide(c, request.user, decision, remarks)
+                done.append(c.pk)
+            except (PermissionDenied, ValidationError) as exc:
+                detail = exc.detail.get("detail", exc.detail) if isinstance(exc.detail, dict) else exc.detail
+                failed.append({"id": raw, "detail": str(detail[0] if isinstance(detail, list) else detail)})
+        return Response({"done": done, "failed": failed})
 
 
 # ----------------------------------------------------------------- leave
@@ -416,14 +463,32 @@ class LeaveRequestViewSet(ExportMixin, viewsets.ModelViewSet):
         """POST /leaves/ with `user` = someone else: HR marking leave for them (PLAN.md §19). Needs Approve leave for
         that person; None when the person applies for themself."""
         uid = request.data.get("user")
-        if not uid or str(uid) == str(request.user.id):
+        if not uid:
             return None
+        if str(uid) == str(request.user.id):
+            # Nobody marks (approves) their own leave except the Owner (PLAN.md §19.24); anyone else applies.
+            return request.user if is_owner(request.user) and can_approve(request.user) else None
         target = User.objects.filter(pk=uid, is_active=True).first() if str(uid).isdigit() else None
         if not target:
             raise ValidationError({"user": "Unknown or inactive employee."})
         if not can_approve(request.user) or not approvals.may_review(request.user, target):
             raise PermissionDenied("You cannot mark leave for this person.")
         return target
+
+    @action(detail=False, methods=["get"])
+    def markable(self, request):
+        """People this user may mark leave for (PLAN.md §19.40): everyone they approve leave for; themself only as
+        the Owner. Empty without Approve leave."""
+        me = request.user
+        if not can_approve(me):
+            return Response([])
+        people = [u for u in approvals.reviewable_users(me).filter(is_active=True).order_by("first_name", "username")
+                  if approvals.may_review(me, u)]
+        if is_owner(me) and all(u.pk != me.pk for u in people):
+            people.insert(0, me)
+        return Response([{"id": u.pk, "name": _name(u), "username": u.username,
+                          "employee_id": u.employee_code or "", "department": u.department or ""}
+                         for u in people])
 
     def create(self, request, *args, **kwargs):
         if self._on_behalf_of(request) is None and not has_capability(request.user, "leave.self"):
@@ -634,6 +699,11 @@ def hr_settings(request):
     })
 
 
+def regularization_reviewer(user) -> bool:
+    from .regularization import is_reviewer
+    return is_reviewer(user)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def hr_config(request):
@@ -646,7 +716,11 @@ def hr_config(request):
         "week_offs": conf["week_offs"],
         # Uniform check at punch-in (PLAN.md §19.27): read by every employee's punch screen.
         "uniform_check": conf["uniform_check"], "uniform_message": conf["uniform_message"],
+        # Punch-in reminders (PLAN.md §19.39): defaults for the phone app's own reminder.
+        "punch_reminders": punch_reminders.rule(conf),
         "can_approve": approvals.is_approver(request.user),
+        # Regularization goes to the reporting manager (PLAN.md §19.38): anyone people report to sees Approvals.
+        "can_approve_regularization": regularization_reviewer(request.user),
         "can_manage": can_manage_hr(request.user),
         # The managers' attendance screens this person may open: their permissions, plus their own team under the
         # "manager approves" rule (PLAN.md §19.19).

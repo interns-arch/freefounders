@@ -1,16 +1,17 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { randomBytes } from 'node:crypto';
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthService, hashPassword } from '../auth/auth.service';
 import { badRequest, type Caller, notFound } from '../common/http';
 import { DbService } from '../db/db.service';
 import { accountUsernameTaken, lockUsername, usernameConflict } from '../accounts/username';
 import { accounts, type AppKey, APPS, companies, departments, logins, people, personApps, personRoles, PLATFORM_ROLES, refreshSessions, roles } from '../db/schema';
-import { EXPORT_MAX, when } from '../common/export';
+import { EXPORT_MAX, type ExportFormat, exportFile, when } from '../common/export';
 import type { SheetCell } from '../common/sheet';
-import { assertNewSeat, assertSeatFor } from '../billing/seats';
+import { assertNewSeat, assertSeatFor, isReadOnly, paymentRequired, READ_ONLY_MESSAGE, seatLimit, seatsFullMessage, seatsUsed, subscriptionOf } from '../billing/seats';
+import { IMPORT_COLUMNS, IMPORT_EXAMPLE, IMPORT_MAX_ROWS, type ImportRow, parseDate, parseRole, readImportFile } from './people-import';
 import { ProvisionClient } from '../provision/provision.client';
 import { RolesService } from '../roles/roles.service';
 import { DirectoryService } from './directory.service';
@@ -91,6 +92,52 @@ export const deletePersonSchema = z.object({ confirm: z.string().max(200, 'Too l
 const DELETE_KEYS: Record<AppKey, Array<keyof DeleteOptions>> = { tasks: ['tasks', 'leads', 'history'], assets: ['history', 'assets'] };
 const APP_LABEL: Record<AppKey, string> = { tasks: 'Tasks', assets: 'Assets' };
 export const grantSchema = z.object({ appRole: z.string().trim().max(60).optional() });
+
+/** Bulk import (PLAN.md §19.40): the file as uploaded (base64), or the rows checked in the preview. */
+export const importFileSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  content: z.string().min(1, 'Choose a file').max(1_000_000, 'The file is too big (at most about 700 KB)'),
+});
+const importCell = z.string().max(300).optional().default('');
+export const importRowsSchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        line: z.number().int().positive().optional(),
+        fullName: importCell,
+        email: importCell,
+        mobile: importCell,
+        employeeCode: importCell,
+        department: importCell,
+        designation: importCell,
+        reportsTo: importCell,
+        joinDate: importCell,
+        role: importCell,
+      }),
+    )
+    .min(1, 'Nothing to import')
+    .max(IMPORT_MAX_ROWS),
+});
+const importFieldsSchema = z.object({
+  fullName: personFields.fullName,
+  email: personFields.email,
+  employeeCode: personFields.employeeCode,
+  mobile: personFields.mobile,
+  designation: personFields.designation,
+});
+const FIELD_LABEL: Record<string, string> = { fullName: 'Name', email: 'Email', employeeCode: 'Employee ID', mobile: 'Mobile', designation: 'Designation' };
+const emptyRow = (): Omit<ImportRow, 'line'> => ({ fullName: '', email: '', mobile: '', employeeCode: '', department: '', designation: '', reportsTo: '', joinDate: '', role: '' });
+
+/** The message of a refused step (HttpException body or Error), for an import result line. */
+function problemText(err: unknown): string {
+  if (err instanceof HttpException) {
+    const body = err.getResponse();
+    if (typeof body === 'string') return body;
+    const m = (body as { message?: unknown }).message;
+    return Array.isArray(m) ? m.join(' ') : String(m ?? err.message);
+  }
+  return err instanceof Error ? err.message : 'Could not be added';
+}
 
 export type PersonCreate = z.infer<typeof personCreateSchema>;
 export type PersonUpdate = z.infer<typeof personUpdateSchema>;
@@ -566,6 +613,198 @@ export class PeopleService {
     await this.directory.push(companyId); // the new user gets their department and manager
     if (app === 'assets') await this.moduleRef.get(FlowsService, { strict: false }).onboardIfJoining(companyId, id);
     return { app, localUserId };
+  }
+
+  // ─── bulk import (PLAN.md §19.40) ─────────────────────────────────────────────
+
+  /** The template file: the columns and one example row. */
+  importTemplate(format: ExportFormat) {
+    return exportFile(format, 'people-import-template', [...IMPORT_COLUMNS], [IMPORT_EXAMPLE]);
+  }
+
+  /** Reads the uploaded file and checks every row; nothing is saved. */
+  async importPreview(caller: Caller, input: z.infer<typeof importFileSchema>) {
+    let rows: ImportRow[];
+    try {
+      rows = readImportFile(input.fileName, Buffer.from(input.content, 'base64'));
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : 'This file could not be read');
+    }
+    const plan = await this.planImport(caller, rows);
+    return { ...plan, rows: plan.rows.map(({ departmentId: _d, reportsToId: _r, reportsToLine: _l, ...r }) => r) };
+  }
+
+  /**
+   * Adds the rows that pass the checks, each the way the single "Add person" does it: the person, a login with a
+   * generated password when they have an email or employee ID (returned once, never stored readable), and the Admin or
+   * Member role (which opens their apps and takes a seat). Rows with problems are skipped and reported.
+   */
+  async importPeople(caller: Caller, input: z.infer<typeof importRowsSchema>) {
+    const plan = await this.planImport(caller, input.rows.map((r, i) => ({ ...emptyRow(), ...r, line: r.line ?? i + 2 })));
+    const created = new Map<number, string>();
+    const results: Array<{ line: number; fullName: string; status: 'added' | 'skipped'; error?: string; personId?: string; signIn?: string | null; password?: string | null }> = [];
+    for (const r of plan.rows) {
+      if (r.errors.length) {
+        results.push({ line: r.line, fullName: r.fullName, status: 'skipped', error: r.errors.join(' ') });
+        continue;
+      }
+      try {
+        const res = await this.create(caller, {
+          fullName: r.fullName,
+          email: r.email || null,
+          employeeCode: r.employeeCode || null,
+          mobile: r.mobile || null,
+          platformRole: r.level,
+          departmentId: r.departmentId,
+          designation: r.designation || null,
+          reportsTo: r.reportsToId,
+          joinDate: r.joinDate || null,
+          ...(r.login ? { login: {} } : {}),
+        });
+        if (r.level === 'member') {
+          try {
+            await this.rolesSvc.setLevel(caller, res.person.id, 'member');
+          } catch (err) {
+            // Nothing half-made (e.g. the last seat was taken meanwhile): the person is not added.
+            await this.dbs.db.delete(logins).where(eq(logins.personId, res.person.id));
+            await this.dbs.db.delete(people).where(eq(people.id, res.person.id));
+            throw err;
+          }
+        }
+        created.set(r.line, res.person.id);
+        results.push({ line: r.line, fullName: r.fullName, status: 'added', personId: res.person.id, signIn: r.login ? r.email || r.employeeCode : null, password: res.generatedPassword ?? null });
+      } catch (err) {
+        results.push({ line: r.line, fullName: r.fullName, status: 'skipped', error: problemText(err) });
+      }
+    }
+    // Managers who are themselves in the file: set once both are added.
+    for (const r of plan.rows) {
+      const id = created.get(r.line);
+      const manager = r.reportsToLine ? created.get(r.reportsToLine) : undefined;
+      if (id && manager) await this.dbs.db.update(people).set({ reportsTo: manager, updatedAt: new Date() }).where(eq(people.id, id));
+    }
+    const added = results.filter((r) => r.status === 'added').length;
+    const sync = added ? await this.directory.push(caller.companyId) : {};
+    this.log.log(`People import in ${caller.companyId} by ${caller.personId}: ${added} added, ${results.length - added} skipped`);
+    return { added, skipped: results.length - added, results, sync };
+  }
+
+  /** Every check of an import, row by row: fields, duplicates, other people's sign-ins, managers, seats. */
+  private async planImport(caller: Caller, rows: ImportRow[]) {
+    const db = this.dbs.db;
+    const cid = caller.companyId;
+    const { sub, plan } = await subscriptionOf(this.dbs, cid);
+    if (isReadOnly(sub.state)) throw paymentRequired(READ_ONLY_MESSAGE);
+    const limit = seatLimit(sub, plan);
+    const used = await seatsUsed(this.dbs, cid);
+    const depts = await db.select({ id: departments.id, name: departments.name, code: departments.code }).from(departments).where(eq(departments.companyId, cid));
+    const existing = await db.select({ id: people.id, email: people.email, employeeCode: people.employeeCode }).from(people).where(eq(people.companyId, cid));
+    const lower = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+    const inCompanyEmail = new Map(existing.filter((e) => e.email).map((e) => [lower(e.email), e.id]));
+    const inCompanyCode = new Map(existing.filter((e) => e.employeeCode).map((e) => [lower(e.employeeCode), e.id]));
+    const emails = [...new Set(rows.map((r) => lower(r.email)).filter(Boolean))];
+    const codes = [...new Set(rows.map((r) => lower(r.employeeCode)).filter(Boolean))];
+    // Sign-ins that belong to someone else: an admin-made person elsewhere with this email (it signs them in), an
+    // account with this email, a login or account whose username is this employee ID. Never taken over.
+    const elsewhere = new Set(
+      emails.length
+        ? (await db.select({ e: sql<string>`lower(${people.email})` }).from(people).where(and(inArray(sql`lower(${people.email})`, emails), sql`${people.accountId} is null`, ne(people.companyId, cid)))).map((r) => r.e)
+        : [],
+    );
+    const accountEmails = new Set(emails.length ? (await db.select({ e: sql<string>`lower(${accounts.email})` }).from(accounts).where(inArray(sql`lower(${accounts.email})`, emails))).map((r) => r.e) : []);
+    const takenNames = new Set(
+      codes.length
+        ? [
+            ...(await db.select({ u: sql<string>`lower(${logins.username})` }).from(logins).where(inArray(sql`lower(${logins.username})`, codes))).map((r) => r.u),
+            ...(await db.select({ u: sql<string>`lower(${accounts.username})` }).from(accounts).where(inArray(sql`lower(${accounts.username})`, codes))).map((r) => r.u),
+          ]
+        : [],
+    );
+
+    const fileEmail = new Map<string, number>();
+    const fileCode = new Map<string, number>();
+    for (const r of rows) {
+      if (r.email && !fileEmail.has(lower(r.email))) fileEmail.set(lower(r.email), r.line);
+      if (r.employeeCode && !fileCode.has(lower(r.employeeCode))) fileCode.set(lower(r.employeeCode), r.line);
+    }
+
+    const planned = rows.map((r) => {
+      const errors: string[] = [];
+      const warnings: string[] = [];
+      const fields = importFieldsSchema.safeParse({ fullName: r.fullName, email: r.email, employeeCode: r.employeeCode, mobile: r.mobile, designation: r.designation });
+      if (!fields.success) {
+        const seen = new Set<string>();
+        for (const issue of fields.error.issues) {
+          const key = String(issue.path[0] ?? '');
+          if (seen.has(key)) continue;
+          seen.add(key);
+          errors.push(`${FIELD_LABEL[key] ?? key}: ${issue.message}.`);
+        }
+      }
+      const email = lower(r.email);
+      const code = lower(r.employeeCode);
+      if (email && fileEmail.get(email) !== r.line) errors.push(`Email ${r.email} is also on line ${fileEmail.get(email)}.`);
+      if (code && fileCode.get(code) !== r.line) errors.push(`Employee ID ${r.employeeCode} is also on line ${fileCode.get(code)}.`);
+      if (email && inCompanyEmail.has(email)) errors.push(`${r.email} is already in People.`);
+      else if (email && elsewhere.has(email)) errors.push(`${r.email} already signs in someone else in Kaampilot; use another email.`);
+      else if (email && accountEmails.has(email)) errors.push(`${r.email} has a Kaampilot account; invite them with a link instead.`);
+      if (code && inCompanyCode.has(code)) errors.push(`Employee ID ${r.employeeCode} is already in People.`);
+      else if (code && takenNames.has(code)) errors.push(`Employee ID ${r.employeeCode} is someone else's username; use another.`);
+      const level = parseRole(r.role);
+      if (!level) errors.push(`Role "${r.role}": use Admin or Member.`);
+      else if (level === 'admin' && caller.role === 'member') errors.push('Only an owner or admin can add admins.');
+      let departmentId: string | null = null;
+      if (r.department) {
+        const d = depts.find((x) => lower(x.name) === lower(r.department) || lower(x.code) === lower(r.department));
+        if (d) departmentId = d.id;
+        else errors.push(`Department "${r.department}" does not exist; add it in Settings → Departments first.`);
+      }
+      let joinDate = '';
+      if (r.joinDate) {
+        joinDate = parseDate(r.joinDate) ?? '';
+        if (!joinDate) errors.push(`Join date "${r.joinDate}": use a date like 2026-10-01.`);
+      }
+      let reportsToId: string | null = null;
+      let reportsToLine: number | null = null;
+      if (r.reportsTo) {
+        const key = lower(r.reportsTo);
+        const inFile = fileCode.get(key) ?? fileEmail.get(key);
+        if (inCompanyCode.has(key) || inCompanyEmail.has(key)) reportsToId = (inCompanyCode.get(key) ?? inCompanyEmail.get(key))!;
+        else if (inFile && inFile !== r.line) reportsToLine = inFile;
+        else if (inFile === r.line) errors.push('A person cannot report to themselves.');
+        else errors.push(`Reports to "${r.reportsTo}": nobody with this employee ID or email.`);
+      }
+      const login = !!(email || code);
+      if (!login) warnings.push('No email or employee ID: added without a login (give one later with Reset password).');
+      return { ...r, joinDate: joinDate || r.joinDate, level: level ?? 'member', departmentId, reportsToId, reportsToLine, login, errors, warnings };
+    });
+
+    // Managers inside the file: no loops.
+    const byLine = new Map(planned.map((p) => [p.line, p]));
+    for (const p of planned) {
+      const seen = new Set<number>([p.line]);
+      for (let next = p.reportsToLine; next; next = byLine.get(next)?.reportsToLine ?? null) {
+        if (seen.has(next)) {
+          p.errors.push('Reports-to makes a loop inside the file.');
+          break;
+        }
+        seen.add(next);
+      }
+    }
+    // Seats (PLAN.md §21): each new person takes one; rows past the free ones are not added.
+    let free = limit === null ? Number.POSITIVE_INFINITY : Math.max(0, limit - used);
+    for (const p of planned) {
+      if (p.errors.length) continue;
+      if (free <= 0) p.errors.push(seatsFullMessage(limit ?? 0, plan, sub.state));
+      else free--;
+    }
+    // A manager row that will not be added leaves the rows under it without a manager: say so (they are still added).
+    for (const p of planned) {
+      const m = p.reportsToLine ? byLine.get(p.reportsToLine) : undefined;
+      if (m && m.errors.length) p.warnings.push(`Reports to "${p.reportsTo}" is not being added (line ${m.line}), so no manager is set.`);
+    }
+    const ok = planned.filter((p) => !p.errors.length).length;
+    return { rows: planned, ready: ok, problems: planned.length - ok, seats: { limit, used, free: limit === null ? null : Math.max(0, limit - used) } };
   }
 
   /** Takes an app away. Signs the person out so their next token no longer lists it. */

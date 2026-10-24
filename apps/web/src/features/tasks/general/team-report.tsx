@@ -335,6 +335,19 @@ function DueChangeLeaders({ range, custom }: { range: string; custom: CustomRang
   return (
     <Panel
       title="Who asks most to change a due date"
+      actions={
+        <DownloadMenu
+          ariaLabel="Download the due-date change requests"
+          rows={() => ({
+            title: 'Due date change requests',
+            header: ['Rank', 'Person', 'Role', 'Department', 'Requests', 'Approved', 'Rejected', 'Waiting', 'Tasks', 'Approval rate %', 'Last asked'],
+            rows: (d?.rows ?? []).map((r, i) => [i + 1, r.name, r.role, r.department, r.total, r.approved, r.rejected, r.pending, r.tasks, r.approval_rate, r.last_at ? new Date(r.last_at) : null]),
+          })}
+          filename={fileSlug('tasks', 'due-date-requests', range === 'custom' ? `${custom.start}-to-${custom.end}` : range, todayStamp())}
+          empty={!!d && d.rows.length === 0}
+          loading={!d && !q.error}
+        />
+      }
       description={d ? `${d.total} request${d.total === 1 ? '' : 's'} to move a due date or time, from ${d.people} ${d.people === 1 ? 'person' : 'people'}${d.pending ? ` · ${d.pending} still waiting` : ''}.` : 'Requests to move a due date or time, counted on the day they were raised.'}
       bodyClassName="p-0"
     >
@@ -356,6 +369,7 @@ function DueChangeLeaders({ range, custom }: { range: string; custom: CustomRang
               <TH className="text-right">Waiting</TH>
               <TH className="text-right">Tasks</TH>
               <TH className="text-right">Approval rate</TH>
+              <TH className="text-right">Last asked</TH>
             </TR>
           </THead>
           <TBody>
@@ -378,10 +392,11 @@ function DueChangeLeaders({ range, custom }: { range: string; custom: CustomRang
                   <TD className={cn('text-right tabular', r.pending > 0 && 'text-warning')}>{r.pending}</TD>
                   <TD className="text-right tabular">{r.tasks}</TD>
                   <TD className="text-right tabular">{pctText(r.approval_rate)}</TD>
+                  <TD className="text-right text-xs whitespace-nowrap tabular">{shortDate(r.last_at)}</TD>
                 </TR>
                 {open === r.user && (
                   <TR>
-                    <TD colSpan={8} className="pt-0">
+                    <TD colSpan={9} className="pt-0">
                       <LeaderRequests r={r} />
                     </TD>
                   </TR>
@@ -395,25 +410,45 @@ function DueChangeLeaders({ range, custom }: { range: string; custom: CustomRang
   );
 }
 
+const shortDate = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—');
+const dueText = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'not known';
+
+/** Each request: the task, old → new due date, the reason and how it ended (PLAN.md §19.41). */
 function LeaderRequests({ r }: { r: ChangeRequestLeader }) {
   return (
-    <ul className="divide-y rounded-lg bg-muted/40 text-sm">
-      {r.requests.map((x) => (
-        <li key={x.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2">
-          <Link to={`/tasks/tasks/${x.task}`} className="font-mono text-xs font-semibold text-primary hover:underline">
-            {x.task_code}
-          </Link>
-          <span className="min-w-0 flex-1">
-            <span className="font-medium">{x.task_title}</span>
-            <span className="block text-xs text-muted-foreground">
-              {x.changes.join(' · ')}
-              {x.reason ? ` — “${x.reason}”` : ''}
+    <ul className="divide-y rounded-lg bg-muted/40 text-sm" aria-label={`${r.name}'s requests`}>
+      {r.requests.map((x) => {
+        const others = x.changes.filter((line) => !line.startsWith('Due date'));
+        return (
+          <li key={x.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2" data-testid="leader-request">
+            <Link to={`/tasks/tasks/${x.task}`} className="font-mono text-xs font-semibold text-primary hover:underline">
+              {x.task_code}
+            </Link>
+            <span className="min-w-0 flex-1 basis-48">
+              <span className="font-medium break-words">{x.task_title}</span>
+              <span className="block text-xs">
+                <span className="text-muted-foreground">Due </span>
+                <span className="tabular">{dueText(x.old_due_at)}</span>
+                <span className="text-muted-foreground"> → </span>
+                <strong className="font-semibold tabular">{dueText(x.new_due_at)}</strong>
+                {others.length > 0 && <span className="text-muted-foreground"> · also {others.join(' · ')}</span>}
+              </span>
+              {x.reason && <span className="block text-xs text-muted-foreground break-words">Reason: “{x.reason}”</span>}
+              {x.status !== 'pending' && (x.reviewed_by || x.remarks) && (
+                <span className="block text-xs text-muted-foreground break-words">
+                  {x.status_display ?? x.status}
+                  {x.reviewed_by ? ` by ${x.reviewed_by}` : ''}
+                  {x.reviewed_at ? ` on ${shortDate(x.reviewed_at)}` : ''}
+                  {x.remarks ? ` — “${x.remarks}”` : ''}
+                </span>
+              )}
             </span>
-          </span>
-          <Chip tone={REQUEST_TONE[x.status] ?? 'neutral'}>{x.status}</Chip>
-          <span className="text-xs text-muted-foreground tabular">{new Date(x.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
-        </li>
-      ))}
+            <Chip tone={REQUEST_TONE[x.status] ?? 'neutral'}>{x.status_display ?? x.status}</Chip>
+            <span className="text-xs text-muted-foreground tabular">{shortDate(x.created_at)}</span>
+          </li>
+        );
+      })}
       {r.total > r.requests.length && <li className="px-4 py-2 text-xs text-muted-foreground">Showing the latest {r.requests.length} of {r.total}.</li>}
     </ul>
   );

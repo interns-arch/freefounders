@@ -97,6 +97,8 @@ function AllowSteps({ where }: { where: Help }) {
   );
 }
 
+const VOICE_APP_VERSION = '1.1.0';
+
 export function VoiceNote({ onDraft, disabled }: { onDraft: (d: VoiceDraft) => void; disabled?: boolean }) {
   const [state, setState] = useState<State>('idle');
   const [lang, setLang] = useState(savedLang);
@@ -111,7 +113,8 @@ export function VoiceNote({ onDraft, disabled }: { onDraft: (d: VoiceDraft) => v
   const draft = useVoiceTaskDraft();
   const inApp = isInApp();
   const versions = useAppVersionInfo(inApp).data;
-  const oldApp = inApp && isOlderVersion(appInfo()?.version, versions?.minVersion);
+  // Voice needs app 1.1.0 (it asks Android for the microphone), whatever the server's update prompt is set to.
+  const oldApp = inApp && isOlderVersion(appInfo()?.version, VOICE_APP_VERSION);
 
   // never leave the microphone on
   useEffect(

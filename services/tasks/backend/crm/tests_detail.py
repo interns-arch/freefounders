@@ -61,22 +61,29 @@ class ChecklistTests(Base):
 
 
 class SubtaskTests(Base):
-    def test_subtask_created_via_api_one_level_only(self):
+    """Sub-tasks are given by the task's holder and can go several levels deep now (Task chain, original
+    1dabd35) -- the full rules live in tests_task_chain."""
+    def test_holder_gives_a_part_and_the_part_can_be_split_again(self):
+        due = (timezone.now() + timedelta(days=2)).isoformat()
         parent = Task.objects.create(title="Parent", assigned_to=self.rahul,
-                                     created_by=self.manager)
-        self.as_(self.manager)
+                                     created_by=self.manager, effort_minutes=60,
+                                     due_at=timezone.now() + timedelta(days=3))
+        self.as_(self.manager)                 # the giver can't split it -- the holder does
         res = self.client.post("/api/tasks/", {
-            "due_at": (timezone.now() + timedelta(days=1)).isoformat(),
-            "title": "Child", "assigned_to": self.rahul.id,
+            "due_at": due, "title": "Child", "assigned_to": self.amit.id,
+            "effort_minutes": 15, "parent": parent.id}, format="json")
+        self.assertEqual(res.status_code, 403)
+        self.as_(self.rahul)
+        res = self.client.post("/api/tasks/", {
+            "due_at": due, "title": "Child", "assigned_to": self.amit.id,
             "effort_minutes": 15, "parent": parent.id}, format="json")
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["parent_code"], parent.code)
-        # grandchild refused
+        self.as_(self.amit)                    # a part of the part
         res = self.client.post("/api/tasks/", {
-            "due_at": (timezone.now() + timedelta(days=1)).isoformat(),
-            "title": "Grandchild", "assigned_to": self.rahul.id,
-            "effort_minutes": 15, "parent": res.data["id"]}, format="json")
-        self.assertEqual(res.status_code, 400)
+            "due_at": due, "title": "Grandchild", "assigned_to": self.vikram.id,
+            "effort_minutes": 5, "parent": res.data["id"]}, format="json")
+        self.assertEqual(res.status_code, 201)
 
 
 class CommentTests(Base):

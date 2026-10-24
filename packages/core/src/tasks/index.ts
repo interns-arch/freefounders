@@ -8,5 +8,7 @@ export * from './extras-leads';
 export * from './extras-intake';
 export * from './extras-links';
 export * from './extras-mistakes';
+// Sub-tasks and the Task chain (PLAN.md §19.41).
+export * from './chain';
 // Downloads (PLAN.md §19.31): the list targets for the Download control.
 export * from './exports';

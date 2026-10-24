@@ -1,5 +1,7 @@
 import { useAccess } from '@freefounders/core';
-import { useEmployeesReport, useWorkTaskList } from '@freefounders/core/tasks';
+import { tasksExports, useEmployeesReport, useWorkTaskList } from '@freefounders/core/tasks';
+import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { DownloadButton } from '@/components/common/download-menu';
 import { AlarmClock, ClipboardList, Lightbulb, Repeat } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -24,7 +26,10 @@ const STATUS: Record<string, string> = { open: 'open,in_progress', done: 'done',
  * Opened with ?user=<id> on /tasks/tasks (Reports, All Tasks, My team and Team performance link there).
  */
 export function PersonProfileSheet({ userId, href, onClose }: { userId: number; href: (id: number) => string; onClose: () => void }) {
-  const me = useAccess().tasks.me;
+  const access = useAccess();
+  const me = access.tasks.me;
+  // One person's Excel report (PLAN.md §19.41): admins and the Owner; the server checks too.
+  const canExport = access.tasks.can('tasks.view_all');
   const [range, setRange] = useState('this_month');
   const [status, setStatus] = useState('open');
   const [overdue, setOverdue] = useState(false);
@@ -48,7 +53,21 @@ export function PersonProfileSheet({ userId, href, onClose }: { userId: number; 
           </div>
         </SheetHeader>
         <SheetBody className="space-y-5">
-          <Segmented label="Period" value={range} onChange={setRange} options={RANGES} className="max-w-full overflow-x-auto" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented label="Period" value={range} onChange={setRange} options={RANGES} className="max-w-full overflow-x-auto" />
+            {canExport && (
+              <DownloadButton
+                format="xlsx"
+                size="sm"
+                className="max-sm:w-full sm:ml-auto"
+                target={tasksExports.personReport(userId, range)}
+                filename={fileSlug('tasks', 'performance', s?.name ?? `user-${userId}`, range, todayStamp())}
+                aria-label={`Excel report for ${name}, ${RANGES.find(([v]) => v === range)?.[1] ?? range}`}
+              >
+                Excel report
+              </DownloadButton>
+            )}
+          </div>
           {stats.error ? (
             <ErrorState error={stats.error} onRetry={() => stats.refetch()} />
           ) : !s ? (

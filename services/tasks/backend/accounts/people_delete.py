@@ -49,7 +49,7 @@ DELETE -- the row belongs to the person (and its own dependents go with it, by t
   mistakes.Mistake.employee / reported_by  mistakes logged against them and by them (+events)
   mistakes.SOP.created_by                  SOPs they wrote (mistakes citing them -> NULL sop)
   hr.Attendance.user (+punch photos), hr.AttendanceCorrection.user, hr.CompOff.user, hr.LeaveRequest.user
-  (+document), hr.FaceProfile.user, payroll.SalaryStructure.user, payroll.Advance.user, payroll.Payslip.user
+  (+document), hr.FaceProfile.user, hr.AttendanceReminderLog.user, payroll.SalaryStructure.user, payroll.Advance.user, payroll.Payslip.user
   accounts.UserAccessRole.user, admin.LogEntry.user, token_blacklist.OutstandingToken.user, and the m2m rows
   (group memberships, task subscriptions, link favourites, notice reads, auth groups/permissions)
   tenancy.OutboxEvent                      events about a deleted task (payload.taskId)
@@ -130,6 +130,7 @@ RELATIONS = {
     "hr.LeaveRequest.beyond_balance_by": NULL,
     "hr.FaceProfile.user": DELETE,
     "hr.FaceProfile.enrolled_by": NULL,
+    "hr.AttendanceReminderLog.user": DELETE,
     # payroll
     "payroll.SalaryStructure.user": DELETE,
     "payroll.SalaryStructure.created_by": NULL,
@@ -384,7 +385,7 @@ def _delete_everything(user, using, counts, files):
 
 # Rows that are personal data or access, not history: removed even when history is kept.
 PERSONAL = (
-    "hr.FaceProfile.user", "notifications.Notification.user", "notifications.WhatsAppDelivery.user",
+    "hr.FaceProfile.user", "hr.AttendanceReminderLog.user", "notifications.Notification.user", "notifications.WhatsAppDelivery.user",
     "token_blacklist.OutstandingToken.user", "accounts.UserAccessRole.user", "accounts.User_groups.user",
     "accounts.User_user_permissions.user", "workspace.Group_members.user", "crm.Task_subscribers.user",
     "workspace.Link_favorites.user", "workspace.NoticeRead.user",

@@ -2,6 +2,8 @@
 import { ApiError, errorMessage } from '@freefounders/core';
 import {
   type HrSettingValues,
+  REGULARIZATION_REASONS,
+  type RegularizationReason,
   UNIFORM_MESSAGE_DEFAULT,
   useAddLeaveType,
   useAddOffice,
@@ -11,7 +13,7 @@ import {
   useOfficeLocations,
   useSaveHrSettings,
 } from '@freefounders/core/hr';
-import { CalendarHeart, LocateFixed, MapPin, Settings2, Shirt, X } from '@/components/icons';
+import { AlarmClock, CalendarHeart, ClipboardCheck, LocateFixed, MapPin, Settings2, Shirt, X } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -28,6 +30,8 @@ export function HrSettingsTab() {
     <div className="max-w-3xl space-y-4">
       <AttendanceRules />
       <UniformCheck />
+      <RegularizationPolicy />
+      <PunchReminders />
       <Offices />
       <LeaveTypes />
     </div>
@@ -36,6 +40,10 @@ export function HrSettingsTab() {
 
 type Form = { [K in keyof HrSettingValues]: HrSettingValues[K] | string };
 const UNIFORM_KEYS: string[] = ['uniform_check', 'uniform_message'];
+/** Punch-in reminders have their own card and save (PLAN.md §19.39). */
+const PUNCH_KEYS: string[] = ['punch_reminders', 'punch_reminder_count', 'punch_reminder_gap', 'punch_reminder_first'];
+/** The regularization policy has its own card and save too (PLAN.md §19.38). */
+const REG_KEYS: string[] = ['reg_enabled', 'reg_reasons', 'reg_monthly_limit', 'reg_days_back', 'reg_mark'];
 
 /** Working hours and attendance rules, saved for this company. */
 function AttendanceRules() {
@@ -59,8 +67,8 @@ function AttendanceRules() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');
-    // The uniform check has its own card and save (below); never resend it from here.
-    const rules = Object.fromEntries(Object.entries(form).filter(([k]) => !UNIFORM_KEYS.includes(k)));
+    // The uniform check and the regularization policy have their own cards and saves (below); never resend them from here.
+    const rules = Object.fromEntries(Object.entries(form).filter(([k]) => !UNIFORM_KEYS.includes(k) && !REG_KEYS.includes(k) && !PUNCH_KEYS.includes(k)));
     save.mutate(rules, {
       onSuccess: (d) => {
         setMsg('Saved');
@@ -136,6 +144,171 @@ function AttendanceRules() {
         <div className="mt-4 flex items-center gap-3">
           <Button type="submit" loading={save.isPending}>
             {save.isPending ? 'Saving…' : 'Save rules'}
+          </Button>
+          {msg && (
+            <span className="text-sm text-success" role="status">
+              {msg}
+            </span>
+          )}
+        </div>
+      </Panel>
+    </form>
+  );
+}
+
+/**
+ * Attendance regularization (PLAN.md §19.38): on/off, the reasons people may pick, the monthly limit (any number), how far
+ * back and what an approved day counts as. Every request goes to the reporting manager (else HR) and needs approval. Its own save.
+ */
+function RegularizationPolicy() {
+  const q = useHrSettings();
+  const save = useSaveHrSettings();
+  const [f, setF] = useState<{ enabled: boolean; reasons: RegularizationReason[]; limit: string; back: string; mark: 'times' | 'present' } | null>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    const d = q.data;
+    if (d?.reg_enabled && !f) {
+      setF({
+        enabled: d.reg_enabled.value,
+        reasons: d.reg_reasons.value,
+        limit: String(d.reg_monthly_limit.value),
+        back: String(d.reg_days_back.value),
+        mark: d.reg_mark.value,
+      });
+    }
+  }, [q.data, f]);
+  if (!q.data || !f) return q.error || (q.data && !q.data.reg_enabled) ? null : <Skeleton className="h-60" />;
+  const fieldErrors = save.error instanceof ApiError ? (save.error.errors ?? {}) : {};
+  const fe = (k: string) => fieldErrors[k] && <p className="text-xs text-destructive">{fieldErrors[k]}</p>;
+  const toggle = (list: RegularizationReason[], v: RegularizationReason) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    save.mutate(
+      { reg_enabled: f.enabled, reg_reasons: f.reasons, reg_monthly_limit: f.limit, reg_days_back: f.back, reg_mark: f.mark },
+      { onSuccess: () => setMsg('Saved') },
+    );
+  };
+  return (
+    <form onSubmit={submit} aria-label="Regularization">
+      <Panel icon={ClipboardCheck} title="Regularization" description="People ask to fix a past day (a missed punch, on duty, work from home). Every request goes to the person’s reporting manager (without one, to HR / people who approve attendance) and needs approval; on approval the day is corrected and worked out again with the rules above.">
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox checked={f.enabled} onCheckedChange={(c) => setF({ ...f, enabled: c === true })} /> People can request regularization
+        </label>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="reg-limit">Requests per person per month (0 = no limit)</Label>
+            <Input id="reg-limit" type="number" min={0} max={1000} value={f.limit} onChange={(e) => setF({ ...f, limit: e.target.value })} />
+            {fe('reg_monthly_limit')}
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="reg-back">How many days back</Label>
+            <Input id="reg-back" type="number" min={0} max={90} value={f.back} onChange={(e) => setF({ ...f, back: e.target.value })} />
+            {fe('reg_days_back')}
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="reg-mark">An approved day counts as</Label>
+            <NativeSelect id="reg-mark" value={f.mark} onChange={(e) => setF({ ...f, mark: e.target.value as 'times' | 'present' })}>
+              <option value="times">Worked out from the times (Present, Late or Half day)</option>
+              <option value="present">Always Present</option>
+            </NativeSelect>
+            <p className="text-xs text-muted-foreground">On duty and Work from home days are tagged “On duty” / “WFH” and count as present days.</p>
+          </div>
+        </div>
+        <fieldset className="mt-4">
+          <legend className="mb-1.5 text-[13px] font-medium">Reasons people can pick</legend>
+          <div role="group" aria-label="Allowed reasons" className="grid gap-1.5 sm:grid-cols-2">
+            {REGULARIZATION_REASONS.map((r) => (
+              <label key={r.value} className="flex items-center gap-2 text-sm">
+                <Checkbox checked={f.reasons.includes(r.value)} onCheckedChange={() => setF({ ...f, reasons: toggle(f.reasons, r.value) })} aria-label={r.label} /> {r.label}
+              </label>
+            ))}
+          </div>
+          {fe('reg_reasons')}
+        </fieldset>
+        {save.error && !Object.keys(fieldErrors).length && <ErrorNote className="mt-3">{errorMessage(save.error)}</ErrorNote>}
+        <div className="mt-4 flex items-center gap-3">
+          <Button type="submit" loading={save.isPending}>
+            Save regularization
+          </Button>
+          {msg && (
+            <span className="text-sm text-success" role="status">
+              {msg}
+            </span>
+          )}
+        </div>
+      </Panel>
+    </form>
+  );
+}
+
+/** "09:30" + 30 → "10:00". */
+function plus(hhmm: string, minutes: number): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm);
+  if (!m) return '';
+  const t = (((Number(m[1]) * 60 + Number(m[2]) + minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Punch-in reminders (PLAN.md §19.39): people who have not punched in by the reporting time (work start) are reminded
+ * `count` times, `gap` minutes apart, the first `first` minutes after it (in the app, WhatsApp when set up, and the phone
+ * app's own reminder). Nobody on leave, a holiday or the weekly off. Its own save.
+ */
+function PunchReminders() {
+  const q = useHrSettings();
+  const save = useSaveHrSettings();
+  const [f, setF] = useState<{ on: boolean; count: string; gap: string; first: string } | null>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    const d = q.data;
+    if (d?.punch_reminders && !f) {
+      setF({ on: d.punch_reminders.value, count: String(d.punch_reminder_count.value), gap: String(d.punch_reminder_gap.value), first: String(d.punch_reminder_first.value) });
+    }
+  }, [q.data, f]);
+  if (!q.data || !f) return q.error || (q.data && !q.data.punch_reminders) ? null : <Skeleton className="h-48" />;
+  const fieldErrors = save.error instanceof ApiError ? (save.error.errors ?? {}) : {};
+  const fe = (k: string) => fieldErrors[k] && <p className="text-xs text-destructive">{fieldErrors[k]}</p>;
+  const start = q.data.work_start.value;
+  const n = Math.max(1, Math.min(10, Number(f.count) || 1));
+  const times = Array.from({ length: n }, (_, i) => plus(start, (Number(f.first) || 0) + i * (Number(f.gap) || 0))).filter(Boolean);
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    save.mutate({ punch_reminders: f.on, punch_reminder_count: f.count, punch_reminder_gap: f.gap, punch_reminder_first: f.first }, { onSuccess: () => setMsg('Saved') });
+  };
+  return (
+    <form onSubmit={submit} aria-label="Punch-in reminders">
+      <Panel icon={AlarmClock} title="Punch-in reminders" description="People who have not punched in by the reporting time (work starts) get a reminder in the app, on WhatsApp when it is set up, and on the phone app. Nobody on leave, a holiday or the weekly off; it stops once they punch in.">
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox checked={f.on} onCheckedChange={(c) => setF({ ...f, on: c === true })} /> Remind people who have not punched in
+        </label>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="pr-count">Number of reminders</Label>
+            <Input id="pr-count" type="number" min={1} max={10} value={f.count} onChange={(e) => setF({ ...f, count: e.target.value })} />
+            {fe('punch_reminder_count')}
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="pr-gap">Minutes between reminders</Label>
+            <Input id="pr-gap" type="number" min={5} max={240} value={f.gap} onChange={(e) => setF({ ...f, gap: e.target.value })} />
+            {fe('punch_reminder_gap')}
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="pr-first">First reminder after reporting time (min)</Label>
+            <Input id="pr-first" type="number" min={0} max={240} value={f.first} onChange={(e) => setF({ ...f, first: e.target.value })} />
+            {fe('punch_reminder_first')}
+          </div>
+        </div>
+        {f.on && times.length > 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Reporting time {start}: reminders at {times.join(', ')}.
+          </p>
+        )}
+        {save.error && !Object.keys(fieldErrors).length && <ErrorNote className="mt-3">{errorMessage(save.error)}</ErrorNote>}
+        <div className="mt-4 flex items-center gap-3">
+          <Button type="submit" loading={save.isPending}>
+            Save reminders
           </Button>
           {msg && (
             <span className="text-sm text-success" role="status">

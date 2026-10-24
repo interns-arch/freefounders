@@ -2,7 +2,7 @@
 
 Day accounting for a month:
     working_days = calendar days − week-offs − holidays
-    payable_days = present + late (full) + half-days (0.5) + approved PAID leave
+    payable_days = present + late (full) + half-days (0.5) + approved PAID leave (a half-day leave: 0.5)
     lwp_days     = working_days − payable_days        (loss of pay)
     earned_gross = monthly_gross × payable_days ÷ working_days
 
@@ -52,43 +52,60 @@ def structure_for(user, on_date: date):
             .order_by("-effective_from", "-id").first())
 
 
-def paid_leave_dates(user, first: date, last: date) -> set:
-    """Approved leave days of a PAID leave type inside the range."""
-    out = set()
+def approved_leave_days(user, first: date, last: date) -> dict:
+    """{date: (paid, half_day)} for the approved leave inside the range (a half-day leave is one date)."""
+    out = {}
     leaves = LeaveRequest.objects.filter(
-        user=user, status=LeaveStatus.APPROVED, leave_type__paid=True,
-        start_date__lte=last, end_date__gte=first,
+        user=user, status=LeaveStatus.APPROVED, start_date__lte=last, end_date__gte=first,
     ).select_related("leave_type")
     for leave in leaves:
         cur = max(leave.start_date, first)
         stop = min(leave.end_date, last)
         while cur <= stop:
-            out.add(cur)
+            out[cur] = (bool(leave.leave_type.paid), bool(leave.half_day))
             cur += timedelta(days=1)
     return out
 
 
+WORKED = (AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY)
+
+
 def count_days(user, year: int, month: int, working_days: Decimal) -> dict:
-    """Turn a month of attendance into payable days."""
+    """Turn a month of attendance into payable days.
+
+    A half-day leave (PLAN.md §19.40) is half leave + half work: 0.5 paid (paid type) or 0.5 loss of pay (unpaid type)
+    for the leave half, plus 0.5 when the person punched in for the other half (never more than one day)."""
     first, last = month_bounds(year, month)
     records = {a.date: a for a in Attendance.objects.filter(user=user, date__range=(first, last))}
-    paid_leaves = paid_leave_dates(user, first, last)
+    leaves = approved_leave_days(user, first, last)
+    half_leave_days = {d for d, (_paid, half) in leaves.items() if half}
 
-    present = half = paid_leave = unpaid_leave = 0
-    for day, rec in records.items():
+    present = half = 0
+    paid_leave = unpaid_leave = Decimal(0)
+    for day in sorted(set(records) | half_leave_days):
         if is_week_off(day):
             continue
-        if rec.status in (AttendanceStatus.PRESENT, AttendanceStatus.LATE):
+        rec = records.get(day)
+        status = rec.status if rec else None
+        leave = leaves.get(day)
+        if day in half_leave_days:
+            if status in WORKED:
+                half += 1                       # worked the other half
+            if leave[0]:
+                paid_leave += Decimal("0.5")
+            else:
+                unpaid_leave += Decimal("0.5")
+        elif status in (AttendanceStatus.PRESENT, AttendanceStatus.LATE):
             present += 1
-        elif rec.status == AttendanceStatus.HALF_DAY:
+        elif status == AttendanceStatus.HALF_DAY:
             half += 1
-        elif rec.status == AttendanceStatus.LEAVE:
-            if day in paid_leaves:
+        elif status == AttendanceStatus.LEAVE:
+            if leave and leave[0]:
                 paid_leave += 1
             else:
                 unpaid_leave += 1
 
-    payable = Decimal(present) + (Decimal(half) / 2) + Decimal(paid_leave)
+    payable = Decimal(present) + (Decimal(half) / 2) + paid_leave
     payable = min(payable, working_days)
     lwp = max(Decimal(0), working_days - payable)
     return {

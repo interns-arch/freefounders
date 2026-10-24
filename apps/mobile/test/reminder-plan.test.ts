@@ -31,7 +31,7 @@ test('weekday numbering: ISO 1 = Monday … 7 = Sunday; expo 1 = Sunday … 7 = 
 test('settings from the web: cleaned, defaults, refusals', () => {
   assert.deepEqual(parseReminderSettings({ enabled: true, time: '9:05', days: [5, 1, 1, 9, 0, 3.5], mode: 'vibrate', followUpMinutes: 500 }), {
     ok: true,
-    settings: { enabled: true, time: '09:05', days: [1, 5], mode: 'vibrate', followUpMinutes: 120 },
+    settings: { enabled: true, time: '09:05', days: [1, 5], mode: 'vibrate', followUpMinutes: 240, count: 2 },
   });
   const d = parseReminderSettings({ time: '08:50', days: [1] });
   assert.ok(d.ok && d.settings.mode === 'ring-vibrate' && d.settings.followUpMinutes === 10 && d.settings.enabled);
@@ -48,19 +48,19 @@ test('settings from the web: cleaned, defaults, refusals', () => {
 test('plan: one weekly reminder per chosen day, plus the follow-up', () => {
   const plan = planReminders(S({ days: [1, 3, 7] }), WED(7));
   assert.deepEqual(plan, [
-    { kind: 'weekly', day: 1, followUp: false, weekday: 2, hour: 9, minute: 20 },
-    { kind: 'weekly', day: 1, followUp: true, weekday: 2, hour: 9, minute: 30 },
-    { kind: 'weekly', day: 3, followUp: false, weekday: 4, hour: 9, minute: 20 },
-    { kind: 'weekly', day: 3, followUp: true, weekday: 4, hour: 9, minute: 30 },
-    { kind: 'weekly', day: 7, followUp: false, weekday: 1, hour: 9, minute: 20 },
-    { kind: 'weekly', day: 7, followUp: true, weekday: 1, hour: 9, minute: 30 },
+    { kind: 'weekly', day: 1, n: 1, followUp: false, weekday: 2, hour: 9, minute: 20 },
+    { kind: 'weekly', day: 1, n: 2, followUp: true, weekday: 2, hour: 9, minute: 30 },
+    { kind: 'weekly', day: 3, n: 1, followUp: false, weekday: 4, hour: 9, minute: 20 },
+    { kind: 'weekly', day: 3, n: 2, followUp: true, weekday: 4, hour: 9, minute: 30 },
+    { kind: 'weekly', day: 7, n: 1, followUp: false, weekday: 1, hour: 9, minute: 20 },
+    { kind: 'weekly', day: 7, n: 2, followUp: true, weekday: 1, hour: 9, minute: 30 },
   ]);
   assert.equal(planReminders(S({ followUpMinutes: 0, days: [2] }), WED(7)).length, 1);
   assert.deepEqual(planReminders(S({ enabled: false }), WED(7)), []);
   // A follow-up past midnight rings early the next day.
   assert.deepEqual(planReminders(S({ time: '23:55', days: [7] }), WED(7)), [
-    { kind: 'weekly', day: 7, followUp: false, weekday: 1, hour: 23, minute: 55 },
-    { kind: 'weekly', day: 7, followUp: true, weekday: 2, hour: 0, minute: 5 }, // Monday 00:05
+    { kind: 'weekly', day: 7, n: 1, followUp: false, weekday: 1, hour: 23, minute: 55 },
+    { kind: 'weekly', day: 7, n: 2, followUp: true, weekday: 2, hour: 0, minute: 5 }, // Monday 00:05
   ]);
 });
 
@@ -116,7 +116,7 @@ test('next reminder: later today, or the next chosen day', () => {
 test('bridge: reminder requests', () => {
   assert.deepEqual(parseMessage(JSON.stringify({ id: 'r1', type: 'reminder-set', settings: { enabled: true, time: '09:20', days: [1, 2], mode: 'ring', followUpMinutes: 0 } })), {
     kind: 'request',
-    request: { id: 'r1', type: 'reminder-set', settings: { enabled: true, time: '09:20', days: [1, 2], mode: 'ring', followUpMinutes: 0 } },
+    request: { id: 'r1', type: 'reminder-set', settings: { enabled: true, time: '09:20', days: [1, 2], mode: 'ring', followUpMinutes: 0, count: 1 } },
   });
   assert.deepEqual(parseMessage(JSON.stringify({ id: 'r2', type: 'reminder-set', settings: { time: '09:20', days: [] } })), {
     kind: 'invalid',
@@ -126,4 +126,29 @@ test('bridge: reminder requests', () => {
   for (const type of ['reminder-get', 'reminder-skip-today', 'reminder-off'] as const) assert.deepEqual(parseMessage(JSON.stringify({ id: 'r3', type })), { kind: 'request', request: { id: 'r3', type } });
   assert.deepEqual(parseMessage('{"id":"r4","type":"reminder-test","mode":"loud"}'), { kind: 'request', request: { id: 'r4', type: 'reminder-test', mode: 'ring-vibrate' } });
   assert.deepEqual(parseMessage('{"id":"r5","type":"reminder-test","mode":"vibrate"}'), { kind: 'request', request: { id: 'r5', type: 'reminder-test', mode: 'vibrate' } });
+});
+
+test('several reminders a day (PLAN.md §19.39): reporting 09:30 → 10:00, 10:30, 11:00; skip today cancels the rest', () => {
+  const rule = S({ time: '10:00', days: [3], followUpMinutes: 30, count: 3 });
+  const plan = planReminders(rule, WED(7));
+  assert.deepEqual(
+    plan.map((p) => (p.kind === 'weekly' ? `${p.n} ${p.hour}:${p.minute}` : '')),
+    ['1 10:0', '2 10:30', '3 11:0'],
+  );
+  assert.deepEqual(nextReminder(plan, WED(10, 10)), WED(10, 30));
+  // Punched in at 10:10: reminders 2 and 3 of today become one-offs from next week, reminder 1 stays weekly.
+  const skipped = planReminders(rule, WED(10, 10), '2026-10-21');
+  assert.deepEqual(skipped.filter((p) => p.kind === 'weekly').map((p) => p.n), [1]);
+  assert.equal(skipped.filter((p) => p.kind === 'date').length, 2 * SKIP_WEEKS);
+  assert.deepEqual(nextReminder(skipped, WED(10, 10)), new Date(2026, 9, 28, 10, 0));
+  // Settings: count clamped to 1–10, 1 without a follow-up; an older saved setting (no count) = 2 (first + follow-up).
+  const p = (raw: object) => {
+    const r = parseReminderSettings({ time: '10:00', days: [3], ...raw });
+    return r.ok ? [r.settings.count, r.settings.followUpMinutes] : null;
+  };
+  assert.deepEqual(p({ followUpMinutes: 30, count: 3 }), [3, 30]);
+  assert.deepEqual(p({ followUpMinutes: 30, count: 50 }), [10, 30]);
+  assert.deepEqual(p({ followUpMinutes: 0, count: 3 }), [1, 0]);
+  assert.deepEqual(p({ followUpMinutes: 10 }), [2, 10]);
+  assert.equal(DEFAULT_REMINDER.count, 2);
 });

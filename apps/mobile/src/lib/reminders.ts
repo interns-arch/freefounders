@@ -124,10 +124,11 @@ async function cancelOurs(N: NotificationsModule) {
   await Promise.all(all.filter((n) => n.identifier.startsWith(ID_PREFIX)).map((n) => N.cancelScheduledNotificationAsync(n.identifier).catch(() => {})));
 }
 
-function content(followUp: boolean, channel: string) {
+function content(n: number, count: number, channel: string) {
   return {
-    title: followUp ? 'Not punched in yet?' : 'Time to punch in',
-    body: followUp ? 'Tap to open Kaampilot and check in.' : 'Your office day is about to start. Tap to check in.',
+    // Several a day (PLAN.md §19.39): "Reminder 2 of 3", like the server's reminder.
+    title: count > 1 ? `Reminder ${n} of ${count}: not punched in yet` : 'Time to punch in',
+    body: count > 1 || n > 1 ? 'You have not punched in yet today. Tap to open Kaampilot and punch in.' : 'Your office day is about to start. Tap to check in.',
     data: { path: REMINDER_PATH, kind: 'punch-reminder' },
     sound: channel === CHANNELS.vibrate.id ? false : 'default',
     priority: 'max' as const,
@@ -151,7 +152,7 @@ async function apply(N: NotificationsModule, stored: Stored | null, now = new Da
       p.kind === 'weekly'
         ? { type: N.SchedulableTriggerInputTypes.WEEKLY, weekday: p.weekday, hour: p.hour, minute: p.minute, channelId }
         : { type: N.SchedulableTriggerInputTypes.DATE, date: p.at, channelId };
-    await N.scheduleNotificationAsync({ identifier, content: content(p.followUp, channelId), trigger });
+    await N.scheduleNotificationAsync({ identifier, content: content(p.n, stored.settings.count, channelId), trigger });
   }
   const next = nextReminder(plan, now);
   return { settings: stored.settings, permission, next: next ? next.toISOString() : null, skipped: skip === localDate(now) ? skip : null };
@@ -204,7 +205,7 @@ export async function testReminder(mode: ReminderMode): Promise<{ at: string }> 
   const channelId = CHANNELS[mode].id;
   await N.scheduleNotificationAsync({
     identifier: 'ff-test-punch-reminder',
-    content: { ...content(false, channelId), title: 'Test: time to punch in' },
+    content: { ...content(1, 1, channelId), title: 'Test: time to punch in' },
     trigger: { type: N.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 5, channelId },
   });
   return { at: new Date(Date.now() + 5000).toISOString() };

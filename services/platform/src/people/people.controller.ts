@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { type Caller, CurrentCaller, Needs, uuidParam, ZodPipe } from '../common/http';
 import { exportFile, exportFormat } from '../common/export';
 import { PEOPLE_SCREEN } from '../roles/platform-permissions';
-import { deletePersonSchema, grantSchema, type PersonCreate, personCreateSchema, type PersonUpdate, personUpdateSchema, PeopleService, setLoginSchema } from './people.service';
+import { deletePersonSchema, grantSchema, importFileSchema, importRowsSchema, type PersonCreate, personCreateSchema, type PersonUpdate, personUpdateSchema, PeopleService, setLoginSchema } from './people.service';
 
 /** People & access (PLAN.md §19.19: each action is its own Admin permission). */
 @Controller('people')
@@ -27,6 +27,27 @@ export class PeopleController {
   @Post()
   create(@CurrentCaller() caller: Caller, @Body(new ZodPipe(personCreateSchema)) body: PersonCreate) {
     return this.people.create(caller, body);
+  }
+
+  /** Bulk import (PLAN.md §19.40): the template, a preview of the file (nothing saved), then the import of the rows. */
+  @Needs('people.manage')
+  @Get('import/template')
+  importTemplate(@Query('format') format?: string) {
+    return this.people.importTemplate(exportFormat(format) ?? 'xlsx');
+  }
+
+  @Needs('people.manage')
+  @Post('import/preview')
+  @HttpCode(200)
+  importPreview(@CurrentCaller() caller: Caller, @Body(new ZodPipe(importFileSchema)) body: z.infer<typeof importFileSchema>) {
+    return this.people.importPreview(caller, body);
+  }
+
+  @Needs('people.manage')
+  @Post('import')
+  @HttpCode(200)
+  importPeople(@CurrentCaller() caller: Caller, @Body(new ZodPipe(importRowsSchema)) body: z.infer<typeof importRowsSchema>) {
+    return this.people.importPeople(caller, body);
   }
 
   @Needs('people.manage')

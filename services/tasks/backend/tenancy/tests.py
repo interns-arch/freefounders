@@ -237,6 +237,43 @@ class MultiCompanyTests(SimpleTestCase):
                 self.assertEqual(company_env("HR_WORK_START", "x"), "09:30")
                 self.assertEqual(company_env("WHATSAPP_ACCESS_TOKEN"), "env-token")
 
+    def test_punch_reminders_per_company(self):
+        """PLAN.md §19.39: each company's own rule, its own people, its own log (never across schemas)."""
+        from datetime import date, datetime, timedelta
+
+        from django.utils import timezone
+
+        from hr.models import AttendanceReminderLog
+        from hr.punch_reminders import send_punch_reminders
+        from notifications.models import Notification
+
+        day = date(timezone.localdate().year + 1, 3, 1)
+        while day.weekday() != 0:
+            day += timedelta(days=1)
+        now = timezone.make_aware(datetime(day.year, day.month, day.day, 10, 5), timezone.get_current_timezone())
+        env = {"HR_WORK_START": "09:30", "HR_WORK_END": "18:30", "HR_WEEK_OFF_DAYS": "6"}
+        try:
+            with mock.patch.dict("os.environ", env):
+                with schemas.use(ACME):
+                    set_value("PUNCH_REMINDERS_ENABLED", "false")
+                    forget()
+                    self.assertEqual(send_punch_reminders(now=now), 0)
+                with schemas.use(BETA):
+                    forget()
+                    self.assertGreaterEqual(send_punch_reminders(now=now), 1)
+                    self.assertEqual(send_punch_reminders(now=now), 0, "idempotent")
+                    self.assertTrue(AttendanceReminderLog.objects.filter(user=self.beta_user, date=day, n=1).exists())
+                with schemas.use(ACME):
+                    self.assertFalse(AttendanceReminderLog.objects.filter(date=day).exists())
+                    self.assertFalse(Notification.objects.filter(type="punch_reminder").exists())
+        finally:
+            with schemas.use(ACME):
+                CompanySetting.objects.filter(key="PUNCH_REMINDERS_ENABLED").delete()
+            with schemas.use(BETA):
+                AttendanceReminderLog.objects.filter(date=day).delete()
+                Notification.objects.filter(type="punch_reminder").delete()
+            forget()
+
     def test_uploads_are_stored_under_the_company(self):
         storage = CompanyFileSystemStorage()
         with schemas.use(ACME):

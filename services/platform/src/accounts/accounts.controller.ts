@@ -7,7 +7,7 @@ import { type AuthedRequest, type Caller, CurrentCaller, Needs, Public, ReadOnly
 import { acceptSchema, inviteSchema, InvitesService } from '../invites/invites.service';
 import { countCompanyNameCheck } from '../company/company-name';
 import { countUsernameCheck } from './username';
-import { AccountsService, companySchema, completeSchema, forgotSchema, resetSchema, resetVerifySchema, startSchema, verifySchema } from './accounts.service';
+import { AccountsService, companySchema, completeSchema, forgotSchema, loginCodeStartSchema, loginCodeVerifySchema, resetSchema, resetVerifySchema, startSchema, verifySchema } from './accounts.service';
 
 const usernameSchema = z.object({ username: z.string().trim().min(1, 'Enter a username').max(60) });
 const newCompanySchema = companySchema.extend({ client: z.enum(['web', 'mobile']).default('web') });
@@ -75,6 +75,24 @@ export class AccountsController {
   async complete(@Body(new ZodPipe(completeSchema)) body: z.infer<typeof completeSchema>, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
     const out = await this.accounts.signupComplete(body, meta(req, body.client));
     return { ...respondTokens(res, out, body.client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs, setupIncomplete: out.setupIncomplete };
+  }
+
+  /** Sign in with a code instead of a password (PLAN.md §21.8): step 1, a code to the account's email / mobile. */
+  @Public()
+  @Post('auth/login/code/start')
+  @HttpCode(200)
+  loginCodeStart(@Body(new ZodPipe(loginCodeStartSchema)) body: z.infer<typeof loginCodeStartSchema>, @Req() req: AuthedRequest) {
+    return this.accounts.loginCodeStart(body.identifier, req.ip);
+  }
+
+  /** Step 2: the code → the same answer as auth/login (tokens, or `{chooseCompany, ticket}` for several companies). */
+  @Public()
+  @Post('auth/login/code/verify')
+  @HttpCode(200)
+  async loginCodeVerify(@Body(new ZodPipe(loginCodeVerifySchema)) body: z.infer<typeof loginCodeVerifySchema>, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
+    const result = await this.accounts.loginCodeVerify(body.otpId, body.code, meta(req, body.client));
+    if ('chooseCompany' in result) return result;
+    return { ...respondTokens(res, result, body.client), mustChangePassword: false };
   }
 
   @Public()

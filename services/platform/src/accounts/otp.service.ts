@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, HttpException, Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 import { DbService } from '../db/db.service';
@@ -34,11 +34,39 @@ export function demoMode(): boolean {
   return process.env.DEMO_MODE === '1';
 }
 
-/** Sends a one-time code by email or SMS. The real senders (SES, a DLT SMS template / WhatsApp) come with §20 step 0. */
+/**
+ * Sends a one-time code by email or SMS: the fake sender (log only) or MSG91 (`OTP_SENDER=msg91`, msg91.sender.ts,
+ * chosen in otp-senders.ts). A send that fails throws `OtpSendError`.
+ */
 export interface OtpSender {
   send(target: Identifier, code: string, purpose: OtpPurpose): Promise<void>;
+  /**
+   * Can a code go out on this channel now? false → 503 before anything is stored (MSG91 chosen but its keys are not set;
+   * email codes not set up in production). Missing = always.
+   */
+  canSend?(channel: 'email' | 'sms'): boolean;
+  /** The answer when `canSend` is false (default: "Codes can't be sent right now…"). */
+  unavailableMessage?(channel: 'email' | 'sms'): string;
 }
 export const OTP_SENDER = 'OTP_SENDER';
+
+/**
+ * A code the provider did not take. `rejected`: refused this number / address (4xx or an error answer);
+ * `unavailable`: no answer, a timeout or a 5xx; `config`: our keys are wrong or missing (401/403, IP not whitelisted).
+ */
+export class OtpSendError extends Error {
+  constructor(
+    readonly kind: 'rejected' | 'unavailable' | 'config',
+    detail: string,
+  ) {
+    super(detail);
+    this.name = 'OtpSendError';
+  }
+}
+
+export const CODES_OFF_MESSAGE = "Codes can't be sent right now. Try again later, or sign in with your password.";
+export const SEND_FAILED_MESSAGE = "We couldn't send the code. Check the number and try again.";
+const SEND_UNAVAILABLE_MESSAGE = "We couldn't send the code right now. Try again in a minute.";
 
 /** Writes the code to the Platform log. Nothing leaves the machine. */
 export class FakeOtpSender implements OtpSender {
@@ -53,6 +81,15 @@ const codeHash = (otpId: string, code: string) => sha256(`${otpId}:${code}`);
 /** 429 with the seconds until a new code can be asked for (the web shows a live countdown). */
 const tooMany = (message: string, retryAfterSeconds: number) =>
   new HttpException({ statusCode: 429, message, retryAfterSeconds: Math.max(1, Math.ceil(retryAfterSeconds)) }, 429);
+/** A send that failed at the provider, in words for the person (the details are in the log, never the code). */
+function sendFailed(err: unknown, channel: 'email' | 'sms'): HttpException {
+  const kind = err instanceof OtpSendError ? err.kind : 'unavailable';
+  if (!(err instanceof OtpSendError)) new Logger('OTP').error(`Sending a code: ${(err as Error)?.message ?? err}`);
+  if (kind === 'config') return new ServiceUnavailableException(CODES_OFF_MESSAGE);
+  if (kind === 'unavailable') return new ServiceUnavailableException(SEND_UNAVAILABLE_MESSAGE);
+  const message = channel === 'sms' ? SEND_FAILED_MESSAGE : "We couldn't send the code. Check the email address and try again.";
+  return new BadRequestException({ message, errors: { identifier: message } });
+}
 const waitText = (s: number) => (s <= 90 ? `${Math.max(1, Math.ceil(s))} seconds` : `${Math.ceil(s / 60)} minutes`);
 
 @Injectable()
@@ -65,11 +102,16 @@ export class OtpService {
   /** Sends a 6-digit code (10 minutes, 5 tries). Limited per identifier and per IP address. */
   async start(target: Identifier, purpose: OtpPurpose, ip?: string): Promise<{ otpId: string; channel: 'email' | 'sms'; devCode?: string }> {
     const db = this.dbs.db;
+    // MSG91 chosen but not set up (or email codes not set up): say so before anything is stored or counted.
+    if (this.sender.canSend && !this.sender.canSend(target.channel)) {
+      throw new ServiceUnavailableException(this.sender.unavailableMessage?.(target.channel) ?? CODES_OFF_MESSAGE);
+    }
     const since = new Date(Date.now() - WINDOW_MS);
+    // Codes the sender could not deliver do not count against the person (they never got them); per IP they still do.
     const [byTarget] = await db
       .select({ n: sql<number>`count(*)::int`, first: sql<Date | null>`min(${otpCodes.createdAt})`, last: sql<Date | null>`max(${otpCodes.createdAt})` })
       .from(otpCodes)
-      .where(and(eq(otpCodes.target, target.value), gt(otpCodes.createdAt, since)));
+      .where(and(eq(otpCodes.target, target.value), gt(otpCodes.createdAt, since), isNull(otpCodes.failedAt)));
     if ((byTarget?.n ?? 0) >= PER_TARGET) {
       const wait = byTarget?.first ? (new Date(byTarget.first).getTime() + WINDOW_MS - Date.now()) / 1000 : WINDOW_MS / 1000;
       throw tooMany(`Too many codes asked for. You can ask for a new one in ${waitText(wait)}.`, wait);
@@ -96,7 +138,13 @@ export class OtpService {
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const id = randomUUID();
     await db.insert(otpCodes).values({ id, target: target.value, channel: target.channel, purpose, codeHash: codeHash(id, code), expiresAt: new Date(Date.now() + OTP_TTL_MS), ip: ip ?? null });
-    await this.sender.send(target, code, purpose);
+    try {
+      await this.sender.send(target, code, purpose);
+    } catch (err) {
+      // Never usable, and the person may ask again at once (failed rows are left out of the per-identifier limits).
+      await db.update(otpCodes).set({ failedAt: new Date() }).where(eq(otpCodes.id, id));
+      throw sendFailed(err, target.channel);
+    }
     return { otpId: id, channel: target.channel, ...(otpDevEcho() ? { devCode: code } : {}) };
   }
 
@@ -111,7 +159,7 @@ export class OtpService {
     const [claim] = await db
       .update(otpCodes)
       .set({ attempts: sql`${otpCodes.attempts} + 1` })
-      .where(and(eq(otpCodes.id, otpId), eq(otpCodes.purpose, purpose), isNull(otpCodes.usedAt), gt(otpCodes.expiresAt, sql`now()`), lt(otpCodes.attempts, OTP_MAX_ATTEMPTS)))
+      .where(and(eq(otpCodes.id, otpId), eq(otpCodes.purpose, purpose), isNull(otpCodes.usedAt), isNull(otpCodes.failedAt), gt(otpCodes.expiresAt, sql`now()`), lt(otpCodes.attempts, OTP_MAX_ATTEMPTS)))
       .returning();
     if (!claim) throw new BadRequestException({ message: 'This code has expired or was tried too many times. Ask for a new one.', errors: { code: 'Expired' } });
     const want = Buffer.from(claim.codeHash, 'hex');

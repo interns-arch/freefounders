@@ -1,6 +1,7 @@
 /** Attendance → Today: check in / check out (GPS and/or punch photo, per company setting). Built for phones. */
 import { useAccess } from '@freefounders/core';
-import { Activity, Camera, Clock, LogIn, LogOut, MapPin, Timer } from '@/components/icons';
+import { Activity, Camera, ClipboardCheck, Clock, LogIn, LogOut, MapPin, Timer } from '@/components/icons';
+import { useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
@@ -9,13 +10,19 @@ import { cn } from '@/lib/utils';
 import { ErrorNote, OkNote, Tile, fmtTime } from '../tasks/general/parts';
 import { AttendanceChip, hrs } from './parts';
 import { usePunch } from './punch';
+import { RegularizeDialog, RegularizedTag } from './regularize';
 import { PunchReminderCard } from './reminder';
 
 export function TodayTab() {
   const p = usePunch();
   const now = useMinuteClock();
   // Punching in is its own permission (PLAN.md §19.19), the same check as the Home card: without it, no buttons.
-  const punches = useAccess().tasks.can('attendance.punch');
+  const access = useAccess();
+  const punches = access.tasks.can('attendance.punch');
+  // Regularize a past day (or today after the shift) from here too (PLAN.md §19.38): two taps to the form.
+  const regularizes = access.tasks.can('attendance.self');
+  const [regularizing, setRegularizing] = useState(false);
+  const [sent, setSent] = useState('');
   const data = p.data;
   if (p.query.error && !data) return <ErrorState error={p.query.error} onRetry={() => p.query.refetch()} />;
   if (!data) {
@@ -120,8 +127,39 @@ export function TodayTab() {
         <Tile icon={LogIn} tone="success" label="Check in" value={time(a?.check_in)} />
         <Tile icon={LogOut} tone="info" label="Check out" value={time(a?.check_out)} />
         <Tile icon={Timer} tone="warning" label="Worked" value={hrs(a?.working_minutes)} />
-        <Tile icon={Activity} tone="neutral" label="Status" value={a ? <AttendanceChip status={a.status} /> : '—'} alert={!!a?.is_late} />
+        <Tile
+          icon={Activity}
+          tone="neutral"
+          label="Status"
+          value={
+            a ? (
+              <span className="inline-flex flex-wrap gap-1">
+                <AttendanceChip status={a.status} />
+                {a.regularized && <RegularizedTag reason={a.regularization_reason} />}
+              </span>
+            ) : (
+              '—'
+            )
+          }
+          alert={!!a?.is_late}
+        />
       </div>
+      {regularizes && (
+        <div className="max-w-2xl space-y-2">
+          <OkNote>{sent}</OkNote>
+          <Button variant="outline" className="h-11 w-full min-[400px]:w-auto" onClick={() => setRegularizing(true)}>
+            <ClipboardCheck /> Regularize a day
+          </Button>
+          <RegularizeDialog
+            open={regularizing}
+            onClose={() => setRegularizing(false)}
+            onSent={(m) => {
+              setSent(m);
+              setRegularizing(false);
+            }}
+          />
+        </div>
+      )}
       {/* Phone app only (PLAN.md §19.32): nothing in a browser. */}
       {punches && <PunchReminderCard />}
       {p.camera}

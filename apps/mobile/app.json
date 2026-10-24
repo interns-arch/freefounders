@@ -2,7 +2,7 @@
   "expo": {
     "name": "Kaampilot",
     "slug": "kaampilot",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "freefounders",
@@ -37,7 +37,7 @@
         "android.permission.ACCESS_BACKGROUND_LOCATION"
       ],
       "predictiveBackGestureEnabled": false,
-      "versionCode": 4
+      "versionCode": 5
     },
     "plugins": [
       "expo-router",

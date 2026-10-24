@@ -12,10 +12,12 @@ passwords; they only verify the signed access token.
 | `accounts/username.ts` | `usernameShape()`, `usernameTaken()`, `lockUsername()`, `assertUsernameFree()` | Account usernames (§21.5): shape + reserved words, "free" across `accounts.username`, `logins.username` and employee IDs, advisory lock per name, per-IP check limit |
 | `accounts/otp.service.ts` | `OtpService` | 6-digit codes: `start()` (send, rate-limit), `verify()` (check, count attempts, optionally consume) |
 | | `TicketsService` | Short-lived single-use tickets: `signup` (proves the identifier, 30 min) and `login` (choose-company step, 5 min) |
-| | `OtpSender` / `FakeOtpSender` | Delivery interface. Fake = Platform log (+ `devCode` in the response only with `OTP_DEV_ECHO=1` or `DEMO_MODE=1`) |
-| `accounts/accounts.service.ts` | `AccountsService` | Sign-up (`signupStart/Verify/Complete`), new company for an account, forgot / reset password, `usernameAvailable`, `setUsername` |
+| | `OtpSender` / `FakeOtpSender` / `OtpSendError` | Delivery interface (`send`, optional `canSend(channel)` → 503 before anything is stored). Fake = Platform log (+ `devCode` in the response only with `OTP_DEV_ECHO=1` or `DEMO_MODE=1`). A failed send throws `OtpSendError` (`rejected` / `unavailable` / `config`) |
+| `accounts/otp-senders.ts` | `EnvOtpSender`, `otpSenderFromEnv()` | The provider: `OTP_SENDER=fake` (default) or `msg91`, env read on every send; one startup line ("One-time codes: MSG91 …" or "… are OFF (sending answers 503): …") |
+| `accounts/msg91.sender.ts` | `Msg91OtpSender`, `msg91Config()` | MSG91 delivery of OUR code (§21.8): SMS = SendOTP `POST /api/v5/otp?template_id&mobile=91…&otp=<code>&otp_length=6&otp_expiry=10`, email = `POST /api/v5/email/send` (template + variables); header `authkey`; 10 s timeout; logs request id + masked target, never the code / authkey / URL |
+| `accounts/accounts.service.ts` | `AccountsService` | Sign-up (`signupStart/Verify/Complete`), sign in with a code (`loginCodeStart/Verify`, §21.8), new company for an account, forgot / reset password, `usernameAvailable`, `setUsername` |
 | `accounts/accounts.controller.ts` | controllers | HTTP layer, Zod validation, throttles |
-| `auth/auth.service.ts` | `AuthService` | Sign-in (`login`, `loginAccount`, `loginWithTicket`), `switchCompany`, `issueFor`, `refresh`, `logout`, `revokeAll`, `me`, `changePassword` |
+| `auth/auth.service.ts` | `AuthService` | Sign-in (`login`, `loginAccount`, `loginVerifiedAccount` (code sign-in), `loginWithTicket`), `switchCompany`, `issueFor`, `refresh`, `logout`, `revokeAll`, `me`, `changePassword` |
 | `auth/auth.controller.ts` | controller | `auth/*` routes; sets / clears the refresh cookie (web) or returns it in the body (`client: 'mobile'`) |
 | `auth/auth.guard.ts` | `AuthGuard` | Reads `Authorization: Bearer <access>`, verifies it, loads the caller |
 | `auth/throttle.ts` | `Throttle` | In-memory counters: per IP for sign-in (`LOGIN_IP_LIMIT`, default 1000 / 15 min); account lock only if `LOGIN_MAX_FAILED` > 0 (default 0 = off) |
@@ -68,6 +70,8 @@ erDiagram
 | `GET auth/username-available?u=` | public (optional bearer) | — | `{available, reason?: 'taken' / 'invalid' / 'reserved', message, username?}` · 429 after 60 / min per IP |
 | `PUT auth/username` | bearer (account) | `{username}` | `{ok, username}` · 409 taken · 400 invalid / reserved · 403 admin-made login |
 | `POST auth/login` | public | `{login, password, client?}` or `{ticket, companyId, client?}` | sign-in response, or `{chooseCompany:[{companyId,name,code,role}], ticket}` · 401 wrong · 402 suspended · 429 network limit |
+| `POST auth/login/code/start` | public | `{identifier}` (email or mobile of an account) | `{otpId, channel, devCode?}` (same answer whether the account exists or not) · 400 username / employee ID ("sign in with your password") · 429 `{retryAfterSeconds}` · 503 codes not set up / sender down · 400 "We couldn't send the code. Check the number…" |
+| `POST auth/login/code/verify` | public | `{otpId, code, client?}` | same as `auth/login`: sign-in response, or `{chooseCompany, ticket}` · 400 wrong (tries left) / expired / no account / admin-made email · 429 network limit |
 | `POST auth/refresh` | refresh cookie / body | `{refreshToken?}` (mobile) | new sign-in response (rotated refresh) |
 | `GET auth/companies` | bearer | — | `[{companyId, name, code, role, current}]` |
 | `POST auth/switch` | bearer | `{companyId}` | sign-in response for that company |
@@ -209,6 +213,33 @@ with the reason.
   ("Available" or the message under the field); Create / Save stay disabled while it is taken, too short / long or being
   checked; a 409 at submit returns to the field with the message.
 
+### 4.9 Sign in with a code + MSG91 delivery (§21.8)
+```mermaid
+sequenceDiagram
+  participant U as /login?code=1
+  participant P as Platform
+  participant M as MSG91
+  U->>P: POST auth/login/code/start {identifier}
+  P->>P: normalise (email / +91 mobile; username → 400 "use your password"), limits (30 s, 5 / 15 min, per IP)
+  P->>P: INSERT otp_codes (purpose 'login', sha256 only)
+  P->>M: SMS: POST /api/v5/otp?template_id&mobile=91…&otp=<our code>  | email: POST /api/v5/email/send
+  alt MSG91 refused / down / timeout (10 s)
+    P->>P: otp_codes.failed_at = now (never usable, not counted per identifier)
+    P-->>U: 400 "We couldn't send the code…" / 503
+  else accepted
+    P-->>U: {otpId, channel, devCode?}
+  end
+  U->>P: POST auth/login/code/verify {otpId, code}
+  P->>P: per-IP guard; claim one try; compare; consume (a wrong code counts per IP like a wrong password)
+  P->>P: account by the verified email / mobile (none → 400 "no account"; admin-made email → "use your password")
+  P-->>U: tokens (+ cookie) or {chooseCompany, ticket}
+```
+Our server stays the source of truth for codes (MSG91 SendOTP takes our code in `otp`; MSG91's Verify / Retry are never
+called). Codes are shown on screen only with `OTP_DEV_ECHO=1` outside production, or `DEMO_MODE=1`; production with
+`DEMO_MODE=0` never echoes. Email codes with `OTP_SENDER=msg91` and no email template: fake sender in dev / demo, 503
+"Codes by email aren't set up yet" in production. Unknown identifiers get a real code (like forgot), so the start answer
+is identical; the verified code then reveals "no account".
+
 ## 5. How the apps trust the token
 - **Tasks (Django):** `accounts/platform_auth.py` verifies the JWT against the Platform JWKS (cached), maps `cid` to the
   company schema (`TENANCY=schemas`) and `apps.tasks` to the local user; writes refused with 402 when `ro`.
@@ -227,9 +258,10 @@ with the reason.
 | `LOGIN_MAX_FAILED` | 0 (no lock) | > 0 brings back a 15-minute lock after that many wrong passwords |
 | `LOGIN_IP_LIMIT` | 1000 per 15 min | per-network bot guard |
 | `OTP_DEV_ECHO` / `DEMO_MODE` | off | show the code on screen (test and demo only) |
+| `OTP_SENDER` | fake | `msg91`: `MSG91_AUTHKEY` + `MSG91_SMS_TEMPLATE_ID` (SMS), `MSG91_EMAIL_TEMPLATE_ID` + `MSG91_EMAIL_FROM` (+ `MSG91_EMAIL_DOMAIN`, `MSG91_EMAIL_FROM_NAME`) for email; missing → 503 "Codes can't be sent right now" |
 | `COOKIE_SECURE` | true | set `false` only for a plain-http demo |
 | `PLATFORM_SECRET` | required in production | encrypts the signing keys |
 
 ## 7. Not built yet
-Real OTP delivery (SMS / WhatsApp / email: replace `FakeOtpSender`), CAPTCHA after suspicious attempts, Google sign-in,
+WhatsApp delivery of codes (MSG91 WhatsApp needs an integrated number + an approved authentication template), CAPTCHA after suspicious attempts, Google sign-in,
 authenticator codes for admins, "Where you're signed in" screen, audit log of sign-ins, https on the demo server.

@@ -216,10 +216,20 @@ describe('public endpoints', () => {
   });
 
   test('app-version: what the phone app update prompt needs, without signing in', async () => {
-    const res = await call('GET', '/app-version');
-    assert.equal(res.status, 200);
-    assert.match(String(res.body.minVersion), /^\d+\.\d+\.\d+$/);
-    assert.ok(String(res.body.apkUrl).endsWith('.apk'));
+    const saved = process.env.MOBILE_MIN_VERSION;
+    try {
+      delete process.env.MOBILE_MIN_VERSION;
+      const off = await call('GET', '/app-version');
+      assert.equal(off.status, 200);
+      assert.equal(off.body.minVersion, null, 'off unless MOBILE_MIN_VERSION is set (§19.40)');
+      process.env.MOBILE_MIN_VERSION = '1.2.2';
+      const res = await call('GET', '/app-version');
+      assert.equal(res.body.minVersion, '1.2.2');
+      assert.ok(String(res.body.apkUrl).endsWith('.apk'));
+    } finally {
+      if (saved === undefined) delete process.env.MOBILE_MIN_VERSION;
+      else process.env.MOBILE_MIN_VERSION = saved;
+    }
   });
 
   test('mutating requests need the CSRF header', async () => {

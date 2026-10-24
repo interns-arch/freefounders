@@ -72,6 +72,9 @@ class Attendance(models.Model):
     check_out_photo = models.FileField(upload_to=attendance_photo_path, blank=True, default="")
     # Answer to the company's uniform question at check-in (PLAN.md §19.27); empty when it was not asked.
     uniform_ok = models.BooleanField(null=True, blank=True)
+    # The approved regularization that last changed this day (PLAN.md §19.38): the "Regularized" tag and its reason.
+    regularization = models.ForeignKey("hr.AttendanceCorrection", null=True, blank=True,
+                                       on_delete=models.SET_NULL, related_name="applied_days")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -93,19 +96,54 @@ class CorrectionStatus(models.TextChoices):
     REJECTED = "rejected", "Rejected"
 
 
+class RegularizationReason(models.TextChoices):
+    """Why a day needs regularizing (PLAN.md §19.38). The company chooses which ones its people may pick."""
+    FORGOT_IN = "forgot_in", "Forgot to punch in"
+    FORGOT_OUT = "forgot_out", "Forgot to punch out"
+    LATE_WORK = "late_work", "Punched late due to work"
+    ON_DUTY = "on_duty", "On duty – client visit"
+    WFH = "wfh", "Work from home"
+    TECHNICAL = "technical", "Technical issue (app/GPS)"
+    OTHER = "other", "Other"
+
+
+def regularization_doc_path(instance, filename):
+    """Attachments are served only by signed, expiring links (config/media.py), like leave documents."""
+    import os
+    import uuid
+    ext = os.path.splitext(filename or "")[1].lower()[:8] or ".bin"
+    day = instance.date or date.today()
+    return f"regularization_docs/{day:%Y/%m}/{uuid.uuid4().hex}{ext}"
+
+
 class AttendanceCorrection(models.Model):
-    """"I forgot to check out" -- reviewed by a manager/admin."""
+    """An attendance regularization request (PLAN.md §19.38; began as "I forgot to check out" corrections): the
+    person asks for a past day (or today after the shift) to be fixed, an approver decides, and on approval the day is
+    rewritten with the HR rules. The from -> to of the change is kept here (original_* / requested_* / applied_status,
+    reviewed_by, reviewed_at)."""
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                              related_name="attendance_corrections")
     date = models.DateField()
     requested_check_in = models.DateTimeField(null=True, blank=True)
     requested_check_out = models.DateTimeField(null=True, blank=True)
-    reason = models.TextField(max_length=1000)
+    reason_type = models.CharField(max_length=16, choices=RegularizationReason.choices,
+                                   default=RegularizationReason.OTHER)
+    # The person's note (required for "Other").
+    reason = models.TextField(max_length=1000, blank=True, default="")
+    attachment = models.FileField(upload_to=regularization_doc_path, blank=True, default="")
+    # Days asked for together (a date range, e.g. two days on duty) share this id.
+    batch = models.CharField(max_length=32, blank=True, default="")
     status = models.CharField(max_length=10, choices=CorrectionStatus.choices,
                               default=CorrectionStatus.PENDING)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                     on_delete=models.SET_NULL, related_name="reviewed_corrections")
     remarks = models.CharField(max_length=300, blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    # The day as it was just before the approval, and the status it got (the audit of the change).
+    original_check_in = models.DateTimeField(null=True, blank=True)
+    original_check_out = models.DateTimeField(null=True, blank=True)
+    original_status = models.CharField(max_length=10, blank=True, default="")
+    applied_status = models.CharField(max_length=10, blank=True, default="")
     # Approval reminders (PLAN.md §17.2): when the approver was reminded, and when it went to HR.
     reminded_at = models.DateTimeField(null=True, blank=True)
     escalated_at = models.DateTimeField(null=True, blank=True)
@@ -113,6 +151,7 @@ class AttendanceCorrection(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [models.Index(fields=["user", "date"], name="hr_regularize_user_date")]
 
 
 class LeaveType(models.Model):
@@ -225,3 +264,22 @@ class FaceProfile(models.Model):
 
     def __str__(self):
         return f"Face profile: {self.user}"
+
+
+class AttendanceReminderLog(models.Model):
+    """One punch-in reminder sent by the server (PLAN.md §19.39): reminder `n` of the day to a person who had not
+    punched in. Unique per person, day and number, so a restart or a second worker never sends it twice."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="punch_reminders")
+    date = models.DateField()
+    n = models.PositiveSmallIntegerField()
+    sent_at = models.DateTimeField(default=timezone.now)
+    # What went out: the in-app notification id and the WhatsApp result (as on Notification.channels).
+    channels = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ["-date", "user_id", "n"]
+        constraints = [models.UniqueConstraint(fields=["user", "date", "n"], name="uniq_punch_reminder")]
+        indexes = [models.Index(fields=["date", "user"])]
+
+    def __str__(self):
+        return f"{self.user} {self.date} reminder {self.n}"

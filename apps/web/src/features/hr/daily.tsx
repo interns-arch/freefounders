@@ -20,6 +20,7 @@ import { Avatar, Card } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, OkNote, type Tone, fmtTime, todayLocal } from '../tasks/general/parts';
 import { AttendanceChip, PunchPhoto, UniformChip, hrs } from './parts';
+import { RegularizedTag } from './regularize';
 
 type Filter = 'all' | 'in' | 'late' | 'missing' | 'leave' | 'off' | 'out';
 
@@ -128,6 +129,10 @@ export function TeamDayView({ live }: { live: boolean }) {
             {r.is_late && r.status !== 'late' && <Chip tone="warning">Late</Chip>}
             {r.is_early_checkout && <Chip tone="warning">Left early</Chip>}
             {r.missing_checkout && <Chip tone="danger">No check-out</Chip>}
+            {!r.check_in && !!r.reminders_sent && (
+              <Chip title="Punch-in reminders sent that day">Reminded {r.reminders_sent}×</Chip>
+            )}
+            {r.regularized && <RegularizedTag reason={r.regularization_reason} mode={r.work_mode} />}
           </span>
         ) : (
           <span className="text-muted-foreground">Upcoming</span>

@@ -148,6 +148,7 @@
  *   MoreHorizontal        MoreHorizontalIcon
  *   Mouse                 Mouse01Icon
  *   MoveHorizontal        ArrowHorizontalIcon
+ *   Network               HierarchyIcon
  *   Package               PackageIcon
  *   PackageCheck          PackageDeliveredIcon
  *   PackageSearch         PackageSearchIcon
@@ -323,6 +324,7 @@ import {
   GridViewIcon,
   HammerIcon,
   HardHatIcon,
+  HierarchyIcon,
   HashtagIcon,
   HeadphonesIcon,
   HelpCircleIcon,
@@ -598,6 +600,7 @@ export const Moon = icon(Moon02Icon, 'Moon');
 export const MoreHorizontal = icon(MoreHorizontalIcon, 'MoreHorizontal');
 export const Mouse = icon(Mouse01Icon, 'Mouse');
 export const MoveHorizontal = icon(ArrowHorizontalIcon, 'MoveHorizontal');
+export const Network = icon(HierarchyIcon, 'Network');
 export const Package = icon(PackageIcon, 'Package');
 export const PackageCheck = icon(PackageDeliveredIcon, 'PackageCheck');
 export const PackageSearch = icon(PackageSearchIcon, 'PackageSearch');

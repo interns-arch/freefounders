@@ -331,10 +331,32 @@ class TaskChangeRequest(models.Model):
     # Stamped so the reminder fires once rather than on every scheduler tick.
     reminded_at = models.DateTimeField(null=True, blank=True)  # approver reminded (PLAN.md §17.2)
     admin_alerted_at = models.DateTimeField(null=True, blank=True)
+    # The task's due date when a request to move it was raised: approving it overwrites the task, and the
+    # change-request ranking / person Excel report still show "old -> new" (PLAN.md §19.41). Filled by save().
+    old_due_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["status"])]
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.old_due_at is None and "due_at" in (self.changes or {}) and self.task_id:
+            self.old_due_at = Task.objects.filter(pk=self.task_id).values_list("due_at", flat=True).first()
+        super().save(*args, **kwargs)
+
+    def due_change(self):
+        """(old due, new due) as datetimes for a request that moves the due date, else (None, None). Requests
+        raised before old_due_at existed fall back to the task's current date while still pending."""
+        if "due_at" not in (self.changes or {}):
+            return None, None
+        new = self.changes.get("due_at")
+        if isinstance(new, str):
+            from django.utils.dateparse import parse_datetime
+            new = parse_datetime(new)
+        old = self.old_due_at
+        if old is None and self.status == ChangeRequestStatus.PENDING:
+            old = self.task.due_at
+        return old, new
 
     # Raw keys like "due_at"/"assigned_to" are meaningless in an email, and a
     # bare user id ("assignee -> 48") is worse. One renderer, used by both the

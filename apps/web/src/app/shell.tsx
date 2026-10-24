@@ -12,7 +12,7 @@ import { useHotkeys } from '@/lib/hotkeys';
 import { cn } from '@/lib/utils';
 import { ADMIN_NAV } from '@/features/admin/nav';
 import { SwitchingOverlay } from '@/features/account/switcher';
-import { AppUpdatePrompt } from './app-update';
+import { AppUpdateBanner } from './app-update';
 import { BillingBanners } from '@/features/billing/banners';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
@@ -316,6 +316,7 @@ export function AppShell() {
           <UserMenu access={access} onShortcuts={() => setHelp(true)} />
         </header>
         <BillingBanners key={access.claims?.cid} access={access} />
+        <AppUpdateBanner />
         <main id="content" ref={mainRef} tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none lg:p-6 lg:pb-8 [&_h1:focus]:outline-none">
           {access.ready ? (
             <ReadOnlyContext.Provider value={access.readOnly}>
@@ -348,7 +349,6 @@ export function AppShell() {
         </nav>
       </div>
       <SwitchingOverlay />
-      <AppUpdatePrompt />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent className="max-w-md">
           <DialogHeader>

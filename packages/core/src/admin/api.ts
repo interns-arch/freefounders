@@ -112,6 +112,69 @@ export function useCreatePerson() {
   const invalidate = useInvalidateAdmin();
   return useMutation({ mutationFn: adminApi.createPerson, onSuccess: invalidate });
 }
+
+// ─── bulk import of people (PLAN.md §19.40) ──────────────────────────────────
+
+/** A row of the import file as read by the Platform (the header is line 1). */
+export interface PeopleImportRow {
+  line: number;
+  fullName: string;
+  email: string;
+  mobile: string;
+  employeeCode: string;
+  department: string;
+  designation: string;
+  reportsTo: string;
+  joinDate: string;
+  role: string;
+  level: 'admin' | 'member';
+  /** A login with a generated password is made (they have an email or employee ID). */
+  login: boolean;
+  errors: string[];
+  warnings: string[];
+}
+export interface PeopleImportPreview {
+  rows: PeopleImportRow[];
+  ready: number;
+  problems: number;
+  seats: { limit: number | null; used: number; free: number | null };
+}
+export interface PeopleImportResult {
+  added: number;
+  skipped: number;
+  results: Array<{ line: number; fullName: string; status: 'added' | 'skipped'; error?: string; personId?: string; signIn?: string | null; password?: string | null }>;
+}
+
+async function fileToBase64(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/** GET /people/import/template?format= — the template file (Name, Email, Mobile, Employee ID, Department, …). */
+export function usePeopleImportTemplate() {
+  return useMutation({
+    mutationFn: async (format: 'xlsx' | 'csv') => ({ filename: `people-import-template.${format}`, blob: await platformApi.blob('/people/import/template', { format }) }),
+  });
+}
+/** POST /people/import/preview — reads the file and checks every row; nothing is saved. */
+export function usePeopleImportPreview() {
+  return useMutation({
+    mutationFn: async (file: File) => platformApi.post<PeopleImportPreview>('/people/import/preview', { fileName: file.name, content: await fileToBase64(file) }),
+  });
+}
+/** POST /people/import — adds the rows that pass the checks (like "Add person"); generated passwords come back once. */
+export function useImportPeople() {
+  const invalidate = useInvalidateAdmin();
+  return useMutation({
+    mutationFn: (rows: PeopleImportRow[]) =>
+      platformApi.post<PeopleImportResult>('/people/import', {
+        rows: rows.map(({ line, fullName, email, mobile, employeeCode, department, designation, reportsTo, joinDate, role }) => ({ line, fullName, email, mobile, employeeCode, department, designation, reportsTo, joinDate, role })),
+      }),
+    onSuccess: invalidate,
+  });
+}
 export function useUpdatePerson() {
   const invalidate = useInvalidateAdmin();
   return useMutation({

@@ -10,7 +10,7 @@ running standalone and must **never be modified** from here:
 
 | Original (read-only, do not edit) | Copied to | Copied from |
 |---|---|---|
-| `Desktop/Automation_Task-main/Automation_Task-main` (Django, live for CarTrends on EC2) | `services/tasks/` | branch `feature/delegated-dashboard-whatsapp` @ `bc785fe`; Tasks changes ported up to `2bc1425` on 2026-10-20 (PLAN.md §19.30) |
+| `Desktop/Automation_Task-main/Automation_Task-main` (Django, live for CarTrends on EC2) | `services/tasks/` | branch `feature/delegated-dashboard-whatsapp` @ `bc785fe`; Tasks changes ported up to `2bc1425` on 2026-10-20 (PLAN.md §19.30), then `5fde3aa` + `1dabd35` on 2026-10-24 (§19.41; `5206167` not yet) |
 | `Desktop/assessets managaeman system` (NestJS + React) | `services/assets/` | branch `main` @ `627165f` |
 
 Copies were taken with `git archive` on 2026-10-07; history stays in the original repos.

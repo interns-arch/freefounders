@@ -101,7 +101,18 @@ def _describe(kind, obj) -> tuple[str, str]:
         return (f"Leave request from {name}",
                 f"{obj.leave_type.name}: {obj.start_date} to {obj.end_date} ({obj.days} day(s))"
                 + (f"\nReason: {obj.reason}" if getattr(obj, "reason", "") else ""))
-    return (f"Attendance correction from {name}", f"For {obj.date}" + (f"\nReason: {obj.reason}" if getattr(obj, "reason", "") else ""))
+    # A regularization (PLAN.md §19.38): the reason, the day(s) and the times asked for.
+    from django.utils import timezone as tz
+    days = [obj.date]
+    if getattr(obj, "batch", ""):
+        days = list(type(obj).objects.filter(batch=obj.batch).order_by("date").values_list("date", flat=True)) or days
+    when = f"{days[0]:%d-%m-%Y}" + (f" to {days[-1]:%d-%m-%Y} ({len(days)} days)" if len(days) > 1 else "")
+    times = " · ".join(t for t in (
+        f"in {tz.localtime(obj.requested_check_in):%H:%M}" if obj.requested_check_in else "",
+        f"out {tz.localtime(obj.requested_check_out):%H:%M}" if obj.requested_check_out else "") if t)
+    return (f"Attendance regularization from {name}",
+            f"{obj.get_reason_type_display()}: {when}" + (f" ({times})" if times else "")
+            + (f"\nNote: {obj.reason}" if getattr(obj, "reason", "") else ""))
 
 
 def review_link(kind: str, obj) -> str:
@@ -110,11 +121,19 @@ def review_link(kind: str, obj) -> str:
     return f"/hr?tab=approvals&{'leave' if kind == 'leave' else 'correction'}={obj.pk}"
 
 
+def _approvers(kind, target) -> list:
+    """Leave: the leave rule above. Regularization: the reporting manager first (PLAN.md §19.38)."""
+    if kind == "leave":
+        return approvers_for(target)
+    from .regularization import approvers_for as regularization_approvers
+    return regularization_approvers(target)
+
+
 def notify_submitted(kind: str, obj) -> None:
     """Today nobody hears about a new leave request or correction; now its approvers do."""
     from notifications.service import notify
     title, body = _describe(kind, obj)
-    for user in approvers_for(obj.user):
+    for user in _approvers(kind, obj.user):
         notify(user, "leave_request" if kind == "leave" else "correction_request", title, body,
                link=review_link(kind, obj), link_label="Review it")
 
@@ -135,7 +154,7 @@ def remind_and_escalate() -> int:
         waiting = model.objects.filter(status=pending, user__is_active=True).select_related("user")
         for obj in waiting.filter(created_at__lte=now - timedelta(hours=hours), reminded_at__isnull=True):
             title, body = _describe(kind, obj)
-            for user in approvers_for(obj.user):
+            for user in _approvers(kind, obj.user):
                 notify(user, "approval_reminder", f"Waiting for you: {title}", body, link=review_link(kind, obj),
                        link_label="Review it")
                 sent += 1

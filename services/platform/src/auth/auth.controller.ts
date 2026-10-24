@@ -155,16 +155,16 @@ export class AuthController {
   }
 
   /**
-   * The phone app's update prompt (PLAN.md §19.30, original app 0980b4d): an installed app older than `minVersion` asks
-   * once per session to update, and "Update now" opens `apkUrl` in the phone's browser. MOBILE_MIN_VERSION (default
-   * 1.1.0, the first app with voice) and MOBILE_APK_URL (default /download/kaampilot.apk, served by the web app from
-   * apps/web/public/download/; a full https:// address works too). An empty MOBILE_MIN_VERSION turns the prompt off.
+   * The phone app's update banner (PLAN.md §19.30, §19.40): an installed app older than `minVersion` shows "A new version
+   * of Kaampilot is available" with a link to `apkUrl` (opened in the phone's browser). MOBILE_MIN_VERSION is off unless
+   * set (e.g. 1.2.2); MOBILE_APK_URL defaults to /download/kaampilot.apk (served by the web app from
+   * apps/web/public/download/, i.e. https://kaampilot.com/download/kaampilot.apk live; a full https:// address works too).
    */
   @Public()
   @Get('app-version')
   appVersion() {
     return {
-      minVersion: (process.env.MOBILE_MIN_VERSION ?? '1.1.0').trim() || null,
+      minVersion: (process.env.MOBILE_MIN_VERSION ?? '').trim() || null,
       apkUrl: (process.env.MOBILE_APK_URL ?? '').trim() || '/download/kaampilot.apk',
     };
   }

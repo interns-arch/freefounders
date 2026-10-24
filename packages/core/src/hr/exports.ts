@@ -16,7 +16,9 @@ export const hrExports = {
   myLeave: (): ExportTarget => ({ api: 'tasks', path: '/leaves/' }),
   /** Approvals: pending leave of the people I approve for. */
   pendingLeave: (): ExportTarget => ({ api: 'tasks', path: '/leaves/', query: { scope: 'team', status: 'pending' } }),
-  /** Approvals: pending attendance corrections of the people I approve for. */
+  /** My attendance: all my regularization requests (request, reason, decision, from → to). */
+  myRegularizations: (): ExportTarget => ({ api: 'tasks', path: '/attendance-corrections/' }),
+  /** Approvals: pending attendance regularizations of the people I approve for. */
   pendingCorrections: (): ExportTarget => ({ api: 'tasks', path: '/attendance-corrections/', query: { scope: 'team', status: 'pending' } }),
   /** Live (no date) / Daily: everyone's day, narrowed by search, department and the status tile. */
   teamDay: (date: string | undefined, filters: TeamFilters, bucket: TeamDayBucket = 'all'): ExportTarget => ({

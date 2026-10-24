@@ -13,6 +13,7 @@ import { DeletedTab, RequestsTab, ReviewsTab } from './inbox-tabs';
 import { TaskListTab } from './list-tab';
 import { PersonProfileSheet } from './person-profile';
 import { DisputesTab, ReportsTab, TimeTab } from './reports-tab';
+import { ChainsTab } from './task-chain';
 import { TaskDetailSheet } from './task-detail';
 import { TaskFormSheet } from './task-form';
 import { TabCount } from './task-bits';
@@ -25,7 +26,7 @@ type Tab = [value: string, label: string, count?: number];
 
 /**
  * The task workspace at /tasks/tasks (?tab=dashboard|my|all|delegated|subscribed|reviews|requests|templates|directory|
- * activities|employees|time|disputes|deleted). /tasks/tasks/:taskId opens a task over the list (links in emails and
+ * activities|employees|time|disputes|chains|deleted). /tasks/tasks/:taskId opens a task over the list (links in emails and
  * notifications; ?review=accept|reject from the completion email). ?user=<id> opens that person's profile.
  */
 export function TaskWorkspacePage() {
@@ -66,6 +67,8 @@ export function TaskWorkspacePage() {
           ['disputes', 'Disputes'],
         ] as Tab[])
       : ([['time', 'Time Report']] as Tab[])),
+    // Task chains (PLAN.md §19.41): every task split into parts, for admins and the Owner (company-wide view).
+    ...(isAdmin ? [['chains', 'Chains'] as Tab] : []),
     ...(can('tasks.bin') ? [['deleted', 'Deleted'] as Tab] : []),
   ];
 
@@ -117,6 +120,7 @@ export function TaskWorkspacePage() {
         {area === 'employees' && can('tasks.reports') && <ReportsTab onProfile={openProfile} />}
         {area === 'time' && <TimeTab />}
         {area === 'disputes' && can('tasks.reports') && <DisputesTab />}
+        {area === 'chains' && isAdmin && <ChainsTab />}
         {area === 'deleted' && can('tasks.bin') && <DeletedTab />}
       </div>
       {form && <TaskFormSheet template={form.template} onClose={() => setForm(null)} />}
