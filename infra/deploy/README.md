@@ -132,7 +132,7 @@ nobody came back from). Our GST invoice (Billing → Invoices) is the tax invoic
      webhook with the same Secret Key, so there is no separate webhook secret. Its test event is answered 200.
    - *Developers → Whitelisting → Add New → Website URL*: `https://kaampilot.com` (production only: Cashfree blocks
      checkout on a domain that is not approved). The site needs reachable Contact Us and Terms and Conditions pages for
-     the approval; it takes a few minutes to a day. The Android app opens checkout from kaampilot.com inside its WebView,
+     the approval: they are `https://kaampilot.com/contact`, `/terms`, `/privacy` and `/refunds` (PLAN.md §21.11); it takes a few minutes to a day. The Android app opens checkout from kaampilot.com inside its WebView,
      so the domain approval covers it (add the app package `com.freefounders.app` too if Cashfree asks for it).
    - Account activation / KYC must be complete for production payments.
 2. **On the server** (as the user that owns `/opt/freefounders`):

@@ -3334,3 +3334,20 @@ order → cancelled; amount mismatch refused; another company 404, no secret / s
 new order → active); `razorpay.test.ts` removed. Mobile protocol tests 12 OK; root `npm run web:build` OK. e2e not
 re-run here (the shared :8080 suite belonged to another checkout); `web-signup-billing` (FakePay) is unchanged in
 behaviour.
+
+### 21.11 Public policy pages (2026-10-24)
+
+Cashfree whitelists a production website only when it has reachable Contact Us and Terms pages; card networks and
+gateways also expect Privacy and Refund / Cancellation policies. The web app now has four public static pages (no
+sign-in, no data: `apps/web/src/features/account/legal.tsx`), linked in one line under the sign-in form on every screen
+size (`legal-links.tsx`) and at the foot of each page: `/contact`, `/terms`, `/privacy`, `/refunds`. They say
+"Kaampilot, operated by CarTrends" and state only what the product does (selfie + GPS punch, data in India, passwords
+hashed only, Cashfree for payments with no card / UPI / bank details seen, MSG91 for codes, nothing charged by itself,
+cancel at period end).
+
+**Founder to confirm** (written as placeholders until then): the address `support@kaampilot.com` (no support address
+existed in the repo; it must receive mail), "Registered office: available on request at support@kaampilot.com" (replace
+with the registered address when ready), the "aim to reply within 2 working days" line, and the refund rules: prepaid
+per period, cancel any time to stop the next period, no partial refunds; duplicate charges or payments taken but failed
+on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
+top of `legal.tsx`.

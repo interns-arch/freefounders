@@ -7,6 +7,7 @@ import { Input, Label } from '@/components/ui/input';
 import { ChooseCompanyCard } from '@/features/account/choose-company';
 import { CodeSignIn } from '@/features/account/code-sign-in';
 import { safeNext } from '../session-guard';
+import { LegalLinks } from '@/features/account/legal-links';
 import { BrandFooter, BrandHeader, BrandPanel } from './login-brand';
 
 /**
@@ -188,6 +189,7 @@ export function LoginPage() {
           </p>
           <p className="mt-2 text-center text-xs text-muted-foreground">Signed in with a username or employee ID? Your company admin resets those passwords.</p>
           <BrandFooter />
+          <LegalLinks className="mt-6 border-t pt-4" />
         </div>
       </main>
     </div>

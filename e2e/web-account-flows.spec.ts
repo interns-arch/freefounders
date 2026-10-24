@@ -435,11 +435,29 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   expect((await request.get('/api/platform/console/audit', { headers: { ...H, authorization: `Bearer ${ownerToken}` } })).status()).toBe(403);
 });
 
+test('policy pages (PLAN.md §21.11): linked under the sign-in form, open signed out, each links to the others', async ({ page }) => {
+  await page.context().clearCookies();
+  for (const [link, heading] of [
+    ['Contact us', 'Contact us'],
+    ['Terms & Conditions', 'Terms & Conditions'],
+    ['Privacy Policy', 'Privacy Policy'],
+    ['Refund & Cancellation', 'Refund & Cancellation Policy'],
+  ]) {
+    await page.goto('/login');
+    await page.getByRole('navigation', { name: 'Policies' }).getByRole('link', { name: link, exact: true }).click();
+    await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByText('operated by CarTrends').first()).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Policies' }).getByRole('link')).toHaveCount(4);
+  }
+  await expect(page.getByRole('link', { name: 'support@kaampilot.com' }).first()).toHaveAttribute('href', 'mailto:support@kaampilot.com');
+});
+
 for (const width of [390, 320]) {
   test(`account pages fit a ${width} px phone (no sideways scroll)`, async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width, height: 760 } });
     const page = await ctx.newPage();
-    for (const path of ['/login', '/signup', '/forgot', '/join/not-a-real-invite-token-xxxxxxxxxx']) {
+    for (const path of ['/login', '/signup', '/forgot', '/join/not-a-real-invite-token-xxxxxxxxxx', '/contact', '/terms', '/privacy', '/refunds']) {
       await page.goto(path);
       await page.locator('h1').first().waitFor();
       await page.waitForTimeout(300);

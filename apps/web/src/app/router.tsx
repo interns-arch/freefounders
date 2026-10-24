@@ -26,6 +26,11 @@ export const router = createBrowserRouter([
   { path: '/signup', lazy: async () => ({ Component: (await import('@/features/account/signup')).SignupPage }), errorElement: <RouteError /> },
   { path: '/forgot', lazy: async () => ({ Component: (await import('@/features/account/forgot')).ForgotPage }), errorElement: <RouteError /> },
   { path: '/join/:token', lazy: async () => ({ Component: (await import('@/features/account/join')).JoinPage }), errorElement: <RouteError /> },
+  // Public policy pages (PLAN.md §21.11): Contact, Terms, Privacy, Refund & Cancellation; linked from the sign-in page.
+  { path: '/contact', lazy: async () => ({ Component: (await import('@/features/account/legal')).ContactPage }), errorElement: <RouteError /> },
+  { path: '/terms', lazy: async () => ({ Component: (await import('@/features/account/legal')).TermsPage }), errorElement: <RouteError /> },
+  { path: '/privacy', lazy: async () => ({ Component: (await import('@/features/account/legal')).PrivacyPage }), errorElement: <RouteError /> },
+  { path: '/refunds', lazy: async () => ({ Component: (await import('@/features/account/legal')).RefundsPage }), errorElement: <RouteError /> },
   {
     element: <RequireSession />,
     errorElement: <RouteError />,
