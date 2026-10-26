@@ -245,6 +245,7 @@ function VisitorsCard({ index, onOpen }: { index: number; onOpen: (to?: string) 
       <div className="flex flex-wrap gap-2">
         {b.visitors.waiting > 0 && <Pill tone="warn">{b.visitors.waiting} waiting at the gate</Pill>}
         {b.visitors.approvals > 0 && <Pill tone="info">{b.visitors.approvals} waiting for your answer</Pill>}
+        {b.visitors.parcels > 0 && <Pill tone="info">{b.visitors.parcels === 1 ? 'A parcel is' : `${b.visitors.parcels} parcels are`} waiting for you</Pill>}
         {!b.visitors.total && <p className="text-sm text-muted-foreground">Nobody is waiting at the gate.</p>}
       </div>
     </WorkspaceCard>

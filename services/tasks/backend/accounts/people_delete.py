@@ -156,6 +156,12 @@ RELATIONS = {
     "visitors.VehicleEntry.in_by": NULL,
     "visitors.VehicleEntry.out_by": NULL,
     "visitors.GateLog.actor": NULL,
+    "visitors.Visit.invited_by": NULL,
+    "visitors.Delivery.recipient": NULL,
+    "visitors.Delivery.received_by": NULL,
+    "visitors.Delivery.closed_by": NULL,
+    "visitors.WatchEntry.added_by": NULL,
+    "visitors.WatchEntry.removed_by": NULL,
 }
 
 

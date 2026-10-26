@@ -42,15 +42,17 @@ def hr_badges(user) -> dict:
 
 
 def visitor_badges(user) -> dict:
-    """Visitors (PLAN.md §22): QR sign-ins waiting at the gate (for the gate) and my visitors waiting for my Allow."""
+    """Visitors (PLAN.md §22): QR sign-ins waiting at the gate (for the gate), my visitors waiting for my Allow, and
+    my parcels waiting at the gate (V2)."""
     from tenancy.profile import module_on
     if not module_on("visitors"):
-        return {"waiting": 0, "approvals": 0}
-    from visitors.models import Visit, VisitStatus
+        return {"waiting": 0, "approvals": 0, "parcels": 0}
+    from visitors.models import Delivery, DeliveryStatus, Visit, VisitStatus
     from visitors.services import can_gate
     waiting = Visit.objects.filter(status=VisitStatus.WAITING).count() if can_gate(user) else 0
     approvals = Visit.objects.filter(status=VisitStatus.WAITING_HOST, host=user).count()
-    return {"waiting": waiting, "approvals": approvals}
+    parcels = Delivery.objects.filter(status=DeliveryStatus.AT_GATE, recipient=user).count()
+    return {"waiting": waiting, "approvals": approvals, "parcels": parcels}
 
 
 @api_view(["GET"])

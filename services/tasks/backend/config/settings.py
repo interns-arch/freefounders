@@ -151,6 +151,7 @@ REST_FRAMEWORK = {
         "ai": env("THROTTLE_AI", "30/min"),  # per person: AI drafting, proofreading, voice notes, summaries
         # per address: the open QR visitor sign-in (no login, PLAN.md section 22.8); each company also limits per address + link
         "visitor_public": env("THROTTLE_VISITOR_PUBLIC", "30/hour"),
+        "visitor_pass": env("THROTTLE_VISITOR_PASS", "120/hour"),
     },
     "NUM_PROXIES": int(env("NUM_PROXIES", "0")) or None,
 }

@@ -44,17 +44,21 @@ class Visitor(models.Model):
 
 
 class VisitStatus(models.TextChoices):
+    EXPECTED = "expected", "Expected"                   # invited in advance by an employee (V2), not at the gate yet
     WAITING = "waiting", "Waiting at the gate"          # sent from the open QR link, the guard has not seen them in
     WAITING_HOST = "waiting_host", "Waiting for the host"
     INSIDE = "inside", "Inside"
     OUT = "out", "Checked out"
     DENIED = "denied", "Denied by the host"
     REJECTED = "rejected", "Turned away at the gate"
+    CANCELLED = "cancelled", "Invite cancelled"
+    NO_SHOW = "no_show", "Did not come"
 
 
 class VisitSource(models.TextChoices):
     GATE = "gate", "At the gate"
     OPEN_LINK = "open_link", "QR self sign-in"
+    INVITE = "invite", "Invited in advance"
 
 
 class GateLink(models.Model):
@@ -110,6 +114,18 @@ class Visit(models.Model):
     # Open link: a one-way hash of the sender's address (rate limit per address), never the address itself.
     ip_hash = models.CharField(max_length=24, blank=True, default="", db_index=True)
     gate_link = models.ForeignKey(GateLink, null=True, blank=True, on_delete=models.SET_NULL, related_name="visits")
+    # Pre-invites (V2): the window the host expects them in, who invited, a shared id for a group invite.
+    email = models.EmailField(blank=True, default="")
+    expected_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    expected_until = models.DateTimeField(null=True, blank=True)
+    invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="visitor_invites")
+    group = models.CharField(max_length=12, blank=True, default="", db_index=True)
+    # The pass link sent to the visitor (WhatsApp / email): when, and what each channel answered.
+    pass_sent_at = models.DateTimeField(null=True, blank=True)
+    pass_channels = models.JSONField(default=list, blank=True)
+    # Watchlist (V2): why the gate was warned about this visitor (kept with the visit).
+    watch_note = models.CharField(max_length=200, blank=True, default="")
     anonymised = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
@@ -164,6 +180,60 @@ class VehicleEntry(models.Model):
         return max(0, int((end - self.in_at).total_seconds() // 60))
 
 
+class DeliveryStatus(models.TextChoices):
+    AT_GATE = "at_gate", "Waiting at the gate"
+    COLLECTED = "collected", "Collected"
+    RETURNED = "returned", "Returned to the courier"
+
+
+class Delivery(models.Model):
+    """A parcel / courier received at the gate (V2): the person it is for is told, and it is handed over later."""
+    courier = models.CharField(max_length=60, blank=True, default="")
+    tracking_no = models.CharField(max_length=60, blank=True, default="", db_index=True)
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                  related_name="deliveries")
+    recipient_label = models.CharField(max_length=80, blank=True, default="")   # "Accounts", "Reception"…
+    parcels = models.PositiveSmallIntegerField(default=1)
+    description = models.CharField(max_length=200, blank=True, default="")
+    photo = models.FileField(upload_to=photo_path, blank=True, default="")
+    location = models.ForeignKey("hr.OfficeLocation", null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="deliveries")
+    status = models.CharField(max_length=10, choices=DeliveryStatus.choices, default=DeliveryStatus.AT_GATE,
+                              db_index=True)
+    received_at = models.DateTimeField(default=timezone.now, db_index=True)
+    received_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="+")
+    # Handed over: to whom (typed: the recipient or someone collecting for them), when, by which guard.
+    collected_by_name = models.CharField(max_length=80, blank=True, default="")
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                  related_name="+")
+    notes = models.CharField(max_length=300, blank=True, default="")
+    reminded_at = models.DateTimeField(null=True, blank=True)
+    anonymised = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-received_at"]
+
+
+class WatchEntry(models.Model):
+    """Watchlist / blocklist (V2): a mobile number or name the gate is warned about. Only admins edit it; removing an
+    entry keeps the row (who added / removed, when) for the record."""
+    mobile = models.CharField(max_length=16, blank=True, default="", db_index=True)
+    name = models.CharField(max_length=80, blank=True, default="")
+    reason = models.CharField(max_length=200)
+    active = models.BooleanField(default=True, db_index=True)
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="+")
+    added_at = models.DateTimeField(default=timezone.now)
+    removed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    removed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-added_at"]
+
+
 class GateAction(models.TextChoices):
     VISIT_IN = "visit_in", "Visitor checked in"
     VISIT_OUT = "visit_out", "Visitor checked out"
@@ -176,6 +246,15 @@ class GateAction(models.TextChoices):
     VEHICLE_IN = "vehicle_in", "Vehicle in"
     VEHICLE_OUT = "vehicle_out", "Vehicle out"
     VEHICLE_EDIT = "vehicle_edit", "Vehicle record changed"
+    INVITE = "invite", "Visitor invited"
+    INVITE_CANCEL = "invite_cancel", "Invite cancelled"
+    PASS_SENT = "pass_sent", "Visitor pass sent"
+    WATCH_ALERT = "watch_alert", "Watchlist match let in"
+    WATCH_ADD = "watch_add", "Added to the watchlist"
+    WATCH_REMOVE = "watch_remove", "Removed from the watchlist"
+    DELIVERY_IN = "delivery_in", "Parcel received"
+    DELIVERY_OUT = "delivery_out", "Parcel handed over"
+    DELIVERY_RETURN = "delivery_return", "Parcel returned"
     SETTINGS = "settings", "Visitor settings changed"
     LINK = "link", "Visitor QR link changed"
 
@@ -188,6 +267,7 @@ class GateLog(models.Model):
     action = models.CharField(max_length=20, choices=GateAction.choices, db_index=True)
     visit = models.ForeignKey(Visit, null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
     vehicle = models.ForeignKey(VehicleEntry, null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
+    delivery = models.ForeignKey(Delivery, null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
     summary = models.CharField(max_length=300, blank=True, default="")
     # {"field": [before, after]} for edits
     changes = models.JSONField(default=dict, blank=True)

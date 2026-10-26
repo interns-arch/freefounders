@@ -9,6 +9,8 @@ from tenancy.company_settings import company_env, set_value
 KEY = "VISITORS_SETTINGS"
 ID_MODES = ("off", "optional", "required")
 PHOTO_MODES = ("off", "optional", "required")
+WATCH_ACTIONS = ("stop", "warn")     # a watchlist match: the gate cannot let them in / is warned and may
+BADGE_FORMATS = ("card", "label")    # printed badge: A6 card on any printer, or a 62 mm label printer
 ID_TYPES = ["Aadhaar", "PAN", "Driving licence", "Voter ID", "Passport", "Company ID", "Other"]
 DEFAULT_PURPOSES = ["Meeting", "Interview", "Delivery", "Vendor / supplier", "Maintenance / repair", "Personal", "Other"]
 DEFAULT_CONSENT = (
@@ -28,6 +30,11 @@ DEFAULTS = {
     "retention_days": 180,
     "open_link": True,               # the open QR sign-in (one QR for the whole company)
     "consent_text": DEFAULT_CONSENT,
+    # V2
+    "send_pass": True,               # the pass link goes to the visitor by WhatsApp (and email when given)
+    "watch_action": "stop",          # a mobile number on the watchlist: "stop" refuses check-in, "warn" asks the guard
+    "badge_format": "card",
+    "delivery_reminder_hours": 24,   # a parcel still at the gate after N hours: one reminder (0 = none)
 }
 
 
@@ -68,7 +75,7 @@ def clean(data: dict) -> tuple[dict, dict]:
                 if not purposes:
                     raise ValueError("Add at least one purpose")
                 cur[key] = purposes[:30]
-            elif key in ("host_approval", "photo_vehicle", "open_link"):
+            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass"):
                 if not isinstance(value, bool):
                     raise ValueError("On or off")
                 cur[key] = value
@@ -80,6 +87,16 @@ def clean(data: dict) -> tuple[dict, dict]:
                 if value not in ID_MODES:
                     raise ValueError(f"One of: {', '.join(ID_MODES)}")
                 cur[key] = value
+            elif key == "watch_action":
+                if value not in WATCH_ACTIONS:
+                    raise ValueError(f"One of: {', '.join(WATCH_ACTIONS)}")
+                cur[key] = value
+            elif key == "badge_format":
+                if value not in BADGE_FORMATS:
+                    raise ValueError(f"One of: {', '.join(BADGE_FORMATS)}")
+                cur[key] = value
+            elif key == "delivery_reminder_hours":
+                cur[key] = _bounded_int(value, 0, 168, "Parcel reminder")
             elif key == "overstay_hours":
                 cur[key] = _bounded_int(value, 0, 72, "Overstay")
             elif key == "retention_days":

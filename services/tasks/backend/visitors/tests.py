@@ -301,3 +301,17 @@ class CompanyIsolationTests(SimpleTestCase):
             self.assertEqual(Visit.objects.count(), 1)
             Visit.objects.all().delete()
             Visitor.objects.all().delete()
+
+    def test_pass_page_only_with_its_own_company(self):
+        from tenancy import schemas
+        cache.clear()
+        with schemas.use(self.A):
+            vis = Visitor.objects.create(name="Pia", mobile="9000000009")
+            v = Visit.objects.create(visitor=vis, name="Pia", status="expected", pass_no="V00001")
+        try:
+            self.assertEqual(APIClient().get(f"/api/visitors/pass/vis_a_t/{v.pass_token}/").status_code, 200)
+            self.assertEqual(APIClient().get(f"/api/visitors/pass/vis_b_t/{v.pass_token}/").status_code, 404)
+        finally:
+            with schemas.use(self.A):
+                Visit.objects.all().delete()
+                Visitor.objects.all().delete()

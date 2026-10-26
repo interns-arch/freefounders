@@ -3,7 +3,7 @@
  * 2026-10-26: one fixed QR per company, printed once; "Make a new QR" replaces it and the old one stops working).
  */
 import { errorMessage } from '@freefounders/core';
-import { type PhotoRule, type VisitorSettings, useChangeVisitorLink, useSaveVisitorSettings, useVisitorLink, useVisitorSettings } from '@freefounders/core/visitors';
+import { type BadgeFormat, type PhotoRule, type VisitorSettings, type WatchAction, useChangeVisitorLink, useSaveVisitorSettings, useVisitorLink, useVisitorSettings } from '@freefounders/core/visitors';
 import QRCodeLib from 'qrcode';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -57,7 +57,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
       toast.error(errorMessage(e));
     }
   };
-  const toggle = (k: 'host_approval' | 'photo_vehicle' | 'open_link', label: string, hint: string) => (
+  const toggle = (k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass', label: string, hint: string) => (
     <label className="flex cursor-pointer items-start justify-between gap-4 py-2">
       <span>
         <span className="block font-medium">{label}</span>
@@ -76,6 +76,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
           {toggle('host_approval', 'Host approves first', 'Off: the guard lets visitors in and the host is told. On: the host taps Allow or Deny and the guard sees the answer.')}
           {toggle('open_link', 'Visitor QR sign-in', 'Visitors scan the QR at the gate and fill in their details themselves; the guard checks them in.')}
           {toggle('photo_vehicle', 'Vehicle photo required', 'A photo of the vehicle / number plate at vehicle check-in.')}
+          {toggle('send_pass', 'Send the visitor pass', 'The pass link (QR) goes to the visitor by WhatsApp, and by email when given: at check-in and with every invite.')}
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Visitor photo (guard)">
@@ -110,6 +111,21 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
           </Field>
           <Field label="Keep records for (days)" hint="Then photos and ID digits are deleted and names removed" error={errors.retention_days}>
             <Input type="number" min={30} max={3650} value={f.retention_days} onChange={(e) => set('retention_days', Number(e.target.value))} />
+          </Field>
+          <Field label="Watchlist number at the gate" hint="A name match always only warns">
+            <NativeSelect value={f.watch_action} onChange={(e) => set('watch_action', e.target.value as WatchAction)}>
+              <option value="stop">Stop: the guard cannot let them in</option>
+              <option value="warn">Warn: the guard decides</option>
+            </NativeSelect>
+          </Field>
+          <Field label="Printed badge">
+            <NativeSelect value={f.badge_format} onChange={(e) => set('badge_format', e.target.value as BadgeFormat)}>
+              <option value="card">A6 card (any printer)</option>
+              <option value="label">62 mm label printer</option>
+            </NativeSelect>
+          </Field>
+          <Field label="Parcel reminder after (hours)" hint="0 = no reminder" error={errors.delivery_reminder_hours}>
+            <Input type="number" min={0} max={168} value={f.delivery_reminder_hours} onChange={(e) => set('delivery_reminder_hours', Number(e.target.value))} />
           </Field>
         </div>
         <Field label="Purposes of visit" hint="One per line" error={errors.purposes}>

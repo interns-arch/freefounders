@@ -19,7 +19,7 @@ from rest_framework.throttling import AnonRateThrottle
 from config.exports import ExportMixin, export_file, export_format
 
 from . import conf, services as sv
-from .models import GateAction, GateLog, VehicleEntry, Visit, VisitStatus
+from .models import Delivery, GateAction, GateLog, VehicleEntry, Visit, VisitStatus, WatchEntry
 
 
 def _brief(u):
@@ -46,6 +46,10 @@ def visit_row(v: Visit, now=None):
         "check_in_by": sv.name_of(v.check_in_by), "check_out_at": _dt(v.check_out_at),
         "check_out_by": sv.name_of(v.check_out_by), "minutes_inside": mins, "overstay": bool(v.overstay_alerted_at),
         "host_decision_at": _dt(v.host_decision_at), "returning": (v.visitor.visits if v.visitor_id else 0) > 1,
+        # V2: invites, the pass link, the watchlist
+        "email": v.email, "expected_at": _dt(v.expected_at), "expected_until": _dt(v.expected_until),
+        "window": sv._window(v), "invited_by": sv.name_of(v.invited_by), "group": v.group, "watch_note": v.watch_note,
+        "pass_sent_at": _dt(v.pass_sent_at), "pass_channels": v.pass_channels, "pass_path": sv.pass_path(v),
     }
 
 
@@ -117,20 +121,29 @@ class VisitViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, view
 
     def get_queryset(self):
         u = self.request.user
-        qs = sv.visible_visits(u).select_related("host", "location", "visitor", "check_in_by", "check_out_by")
+        qs = sv.visible_visits(u).select_related("host", "location", "visitor", "check_in_by", "check_out_by",
+                                                 "invited_by")
         if self.action != "list":
             return qs
         p = self.request.query_params
         scope = p.get("scope") or ""
-        start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+        start = sv.day_start()
         if scope == "today":
-            qs = qs.filter(Q(created_at__gte=start) | Q(status__in=sv.ACTIVE))
+            # Today at the gate: today's visits, anyone still at the gate or inside, and today's expected visitors
+            # (an invite made today for next week is not "today").
+            qs = qs.filter(Q(created_at__gte=start) & ~Q(status=VisitStatus.EXPECTED) | Q(status__in=sv.ACTIVE)
+                           | sv.expected_today())
         elif scope == "inside":
             qs = qs.filter(status=VisitStatus.INSIDE)
         elif scope == "waiting":
             qs = qs.filter(status__in=(VisitStatus.WAITING, VisitStatus.WAITING_HOST))
+        elif scope == "expected":
+            qs = qs.filter(sv.expected_today())
         elif scope == "mine":
-            qs = qs.filter(host=u)
+            qs = qs.filter(Q(host=u) | Q(invited_by=u)).exclude(status=VisitStatus.EXPECTED)
+        elif scope == "upcoming":
+            # My invites still to come (today included), soonest first.
+            return qs.filter(Q(host=u) | Q(invited_by=u), status=VisitStatus.EXPECTED).order_by("expected_at", "pk")
         if p.get("status"):
             qs = qs.filter(status__in=p["status"].split(","))
         d1, d2 = _day_range(self.request)
@@ -194,6 +207,33 @@ class VisitViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, view
     def photo(self, request, pk=None):
         return _photo(self.get_object().photo)
 
+    @action(detail=False, methods=["get"])
+    def find(self, request):
+        """The gate scans a pass (or types its number / code): which visit is it, and what can be done."""
+        _need(sv.can_gate(request.user))
+        v = sv.find_pass(request.query_params.get("code"))
+        if not v:
+            raise ValidationError({"code": "No visitor pass with this code."})
+        return Response(visit_row(v))
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        v = self.get_object()
+        _need(sv.can_manage_invite(request.user, v), "Only the person who invited them can cancel.")
+        return Response(visit_row(sv.cancel_invite(request.user, v)))
+
+    @action(detail=True, methods=["post"])
+    def send_pass(self, request, pk=None):
+        v = self.get_object()
+        _need(sv.can_manage_invite(request.user, v))
+        if v.status not in (VisitStatus.EXPECTED, VisitStatus.INSIDE, VisitStatus.WAITING_HOST):
+            raise ValidationError({"detail": "The pass of a finished visit cannot be sent."})
+        if not (v.mobile or v.email):
+            raise ValidationError({"detail": "No mobile number or email to send it to."})
+        sv.send_pass(v, actor=request.user)
+        v.refresh_from_db()
+        return Response(visit_row(v))
+
 
 class VehicleViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
@@ -248,6 +288,123 @@ class VehicleViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, vi
         return _photo(e.photo_in if which == "in" else e.photo_out)
 
 
+def delivery_row(d: Delivery, now=None):
+    return {
+        "id": d.pk, "courier": d.courier, "tracking_no": d.tracking_no, "recipient": _brief(d.recipient),
+        "recipient_label": d.recipient_label, "parcels": d.parcels, "description": d.description,
+        "has_photo": bool(d.photo), "location": _loc(d.location), "status": d.status,
+        "status_display": d.get_status_display(), "received_at": _dt(d.received_at),
+        "received_by": sv.name_of(d.received_by), "collected_by_name": d.collected_by_name, "closed_at": _dt(d.closed_at),
+        "closed_by": sv.name_of(d.closed_by), "notes": d.notes, "reminded": bool(d.reminded_at),
+    }
+
+
+class DeliveryViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """Parcels and couriers at the gate (V2). The gate receives and hands over; the person it is for sees their own."""
+    permission_classes = [IsAuthenticated]
+    export_name = "deliveries"
+    export_columns = [
+        ("Received", "received_at"), ("Courier", "courier"), ("Tracking no.", "tracking_no"),
+        ("For", lambda r: (r["recipient"] or {}).get("name") or r["recipient_label"]), ("Parcels", "parcels"),
+        ("What", "description"), ("Gate", "location.name"), ("Status", "status_display"),
+        ("Received by", "received_by"), ("Handed to", "collected_by_name"), ("Closed", "closed_at"),
+        ("Closed by", "closed_by"), ("Notes", "notes"),
+    ]
+
+    def row(self, d, now=None):
+        return delivery_row(d, now)
+
+    def get_queryset(self):
+        u = self.request.user
+        _need(sv.can_gate(u) or sv.can_view_all(u) or sv.can_invite(u))
+        qs = sv.visible_deliveries(u).select_related("recipient", "location", "received_by", "closed_by")
+        if self.action != "list":
+            return qs
+        p = self.request.query_params
+        scope = p.get("scope") or ""
+        if scope == "at_gate":
+            qs = qs.filter(status="at_gate")
+        elif scope == "mine":
+            qs = qs.filter(recipient=u)
+        elif scope == "today":
+            start = sv.day_start()
+            qs = qs.filter(Q(status="at_gate") | Q(received_at__gte=start) | Q(closed_at__gte=start))
+        if p.get("status"):
+            qs = qs.filter(status__in=p["status"].split(","))
+        d1, d2 = _day_range(self.request)
+        if d1:
+            qs = qs.filter(received_at__gte=_aware(d1))
+        if d2:
+            qs = qs.filter(received_at__lt=_aware(d2, end=True))
+        q = (p.get("q") or "").strip()
+        if q:
+            qs = qs.filter(Q(courier__icontains=q) | Q(tracking_no__icontains=q) | Q(recipient_label__icontains=q)
+                           | Q(recipient__first_name__icontains=q) | Q(recipient__last_name__icontains=q)
+                           | Q(collected_by_name__icontains=q))
+        return qs.order_by("-received_at")
+
+    def create(self, request):
+        _need(sv.can_gate(request.user))
+        return Response(delivery_row(sv.delivery_in(request.user, request.data)), status=201)
+
+    @action(detail=True, methods=["post"])
+    def collect(self, request, pk=None):
+        _need(sv.can_gate(request.user))
+        return Response(delivery_row(sv.delivery_close(request.user, self.get_object(), request.data)))
+
+    @action(detail=True, methods=["post"], url_path="return")
+    def return_(self, request, pk=None):
+        _need(sv.can_gate(request.user))
+        return Response(delivery_row(sv.delivery_close(request.user, self.get_object(), request.data, returned=True)))
+
+    @action(detail=True, methods=["get"])
+    def photo(self, request, pk=None):
+        return _photo(self.get_object().photo)
+
+
+def watch_row(e: WatchEntry):
+    return {"id": e.pk, "mobile": e.mobile, "name": e.name, "reason": e.reason, "active": e.active,
+            "added_by": sv.name_of(e.added_by), "added_at": _dt(e.added_at), "removed_by": sv.name_of(e.removed_by),
+            "removed_at": _dt(e.removed_at)}
+
+
+class WatchViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """The watchlist (V2): admins with visitor settings add and remove; the register people can read it."""
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        u = self.request.user
+        _need(sv.can_settings(u) or sv.can_view_all(u))
+        qs = WatchEntry.objects.select_related("added_by", "removed_by")
+        if self.request.query_params.get("all") != "1":
+            qs = qs.filter(active=True)
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        return Response([watch_row(e) for e in self.get_queryset()[:500]])
+
+    def create(self, request):
+        _need(sv.can_settings(request.user), "Only an admin can change the watchlist.")
+        return Response(watch_row(sv.watch_add(request.user, request.data)), status=201)
+
+    def destroy(self, request, pk=None):
+        _need(sv.can_settings(request.user), "Only an admin can change the watchlist.")
+        e = WatchEntry.objects.filter(pk=pk).first()
+        if not e:
+            raise Http404
+        return Response(watch_row(sv.watch_remove(request.user, e)))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def invites_view(request):
+    """Invite one visitor or a group in advance (V2)."""
+    u = request.user
+    _need(sv.can_invite(u) or sv.can_gate(u) or sv.can_view_all(u))
+    rows = sv.create_invites(u, request.data if isinstance(request.data, dict) else {})
+    return Response([visit_row(v) for v in rows], status=201)
+
+
 class ActivityViewSet(_List, mixins.ListModelMixin, viewsets.GenericViewSet):
     """Guard activity (view_all): every gate action."""
     permission_classes = [IsAuthenticated]
@@ -258,7 +415,7 @@ class ActivityViewSet(_List, mixins.ListModelMixin, viewsets.GenericViewSet):
     def row(self, g, now=None):
         return {"id": g.pk, "at": _dt(g.at), "actor": _brief(g.actor), "action": g.action,
                 "action_display": g.get_action_display(), "summary": g.summary, "changes": g.changes,
-                "visit": g.visit_id, "vehicle": g.vehicle_id}
+                "visit": g.visit_id, "vehicle": g.vehicle_id, "delivery": g.delivery_id}
 
     def get_queryset(self):
         _need(sv.can_view_all(self.request.user))
@@ -293,7 +450,8 @@ def config_view(request):
     return Response({
         "can": can, "purposes": s["purposes"], "host_approval": s["host_approval"], "photo_visitor": s["photo_visitor"],
         "photo_vehicle": s["photo_vehicle"], "id_proof": s["id_proof"], "id_types": conf.ID_TYPES,
-        "overstay_hours": s["overstay_hours"], "locations": _locations(),
+        "overstay_hours": s["overstay_hours"], "locations": _locations(), "send_pass": s["send_pass"],
+        "watch_action": s["watch_action"], "badge_format": s["badge_format"],
         "vehicle_types": [{"value": k, "label": v} for k, v in VehicleEntry._meta.get_field("type").choices],
     })
 
@@ -359,15 +517,17 @@ def lookup_view(request):
         mobile = sv.clean_mobile(request.query_params.get("mobile"), required=True)
     except ValidationError:
         return Response({"found": False})
+    hit = sv.watch_match(mobile, "")
+    watch = {"reason": hit.reason, "stop": sv.is_hard_stop(hit, mobile, conf.get())} if hit else None
     vis = Visitor.objects.filter(mobile=mobile, anonymised=False).first()
     if not vis:
-        return Response({"found": False})
+        return Response({"found": False, "watch": watch})
     last = vis.visit_set.order_by("-created_at").first()
     return Response({"found": True, "id": vis.pk, "name": vis.name, "company": vis.company, "visits": vis.visits,
                      "has_photo": bool(vis.photo), "id_type": vis.id_type, "id_last4": vis.id_last4,
                      "last_purpose": last.purpose if last else "", "last_host": _brief(last.host) if last else None,
                      "last_host_label": last.host_label if last else "",
-                     "last_visit_at": _dt(vis.last_visit_at)})
+                     "last_visit_at": _dt(vis.last_visit_at), "watch": watch})
 
 
 @api_view(["GET"])
@@ -465,6 +625,10 @@ def _public(request, code, token):
     if recent.filter(ip_hash=ip).count() >= PER_IP_HOUR or recent.filter(gate_link=link).count() >= PER_LINK_HOUR:
         return Response({"detail": "Too many sign-ins from here. Please ask the guard."}, status=429)
     v = sv.public_submit(link, data, ip)
+    hit = sv.watch_match(v.mobile, v.name)
+    if hit:  # the gate sees it on the waiting card; the visitor is told nothing different
+        v.watch_note = sv.text(f"Watchlist: {hit.reason}", 200)
+        v.save(update_fields=["watch_note"])
     return Response({"code": v.short_code}, status=201)
 
 
@@ -486,3 +650,44 @@ def public_view(request, code, token):
         return Response(NOT_FOUND, status=404)
     with schemas.use(schema):
         return _public(request, code, token)
+
+
+PASS_NOT_FOUND = {"detail": "This visitor pass is not valid."}
+
+
+class PassThrottle(AnonRateThrottle):
+    scope = "visitor_pass"
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([PassThrottle])
+def public_pass_view(request, code, token):
+    """The visitor's own pass (V2): /v/<company code>/p/<pass token>, sent by WhatsApp / email. No sign-in; shows only
+    this visit. The company comes from the code and the token is looked up in that company's schema only."""
+    from tenancy import schemas
+    from tenancy.profile import module_on
+
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{1,50}", code or "") or not re.fullmatch(r"[A-Za-z0-9_\-]{10,60}", token or ""):
+        return Response(PASS_NOT_FOUND, status=404)
+
+    def one():
+        if not module_on("visitors"):
+            return Response(PASS_NOT_FOUND, status=404)
+        v = Visit.objects.filter(pass_token=token, anonymised=False).select_related("host", "location").first()
+        if not v or v.status in (VisitStatus.WAITING, VisitStatus.REJECTED, VisitStatus.DENIED):
+            return Response(PASS_NOT_FOUND, status=404)
+        res = Response(sv.public_pass(v))
+        res["Cache-Control"] = "no-store"
+        return res
+    if not schemas.enabled():
+        return one()
+    try:
+        schema = schemas.schema_for_code(code)
+    except ValueError:
+        return Response(PASS_NOT_FOUND, status=404)
+    if not _registered(schema):
+        return Response(PASS_NOT_FOUND, status=404)
+    with schemas.use(schema):
+        return one()

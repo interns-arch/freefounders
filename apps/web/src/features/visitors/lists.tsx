@@ -1,15 +1,19 @@
-/** Inside now (roll call), My visitors (hosts), the Register and Guard activity (Admin / Owner) — PLAN.md §22. */
+/** Inside now (roll call), My visitors (hosts: invites, answers, parcels), the Register and Guard activity — PLAN.md §22. */
 import { errorMessage } from '@freefounders/core';
 import { fileSlug } from '@freefounders/core/export';
 import {
   type ActivityFilters,
+  type Delivery,
   type Visit,
   type VisitFilters,
   type VisitorConfig,
   VISIT_STATUS_LABELS,
   formatMinutes,
+  useCancelInvite,
   useDecideVisit,
+  useDeliveries,
   useGateActivity,
+  useSendPass,
   useGuards,
   useInsideNow,
   useVisitPhoto,
@@ -19,7 +23,8 @@ import {
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { Car, Check, UserCheck, Users, X } from '@/components/icons';
+import { CalendarClock, Car, Check, Copy, Package, Send, UserCheck, UserPlus, Users, X } from '@/components/icons';
+import { useConfirm } from '@/components/common/confirm';
 import { DataTable } from '@/components/common/data-table';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState, PageHeader } from '@/components/common/page';
@@ -29,7 +34,8 @@ import { Input, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/primitives';
 import { cn, todayISO } from '@/lib/utils';
-import { PrivatePhoto, StatusBadge, clock, hostName } from './parts';
+import { InviteSheet } from './invites';
+import { PrivatePhoto, StatusBadge, WatchNote, clock, copyText, hostName, passSentNote, passUrl, passWasSent } from './parts';
 
 // ─── Inside now ───────────────────────────────────────────────────────────────
 
@@ -117,12 +123,23 @@ export function InsidePage() {
 
 // ─── My visitors (hosts) ──────────────────────────────────────────────────────
 
-export function MyVisitorsPage() {
+export function MyVisitorsPage({ config }: { config: VisitorConfig }) {
   const list = useVisits({ scope: 'mine' }, { live: true, pageSize: 100 });
+  const upcoming = useVisits({ scope: 'upcoming' }, { live: true, pageSize: 100 });
+  const parcels = useDeliveries({ scope: 'mine', status: 'at_gate' }, { live: true, pageSize: 50 });
   const decide = useDecideVisit();
+  const cancel = useCancelInvite();
+  const send = useSendPass();
+  const confirm = useConfirm();
+  const [inviting, setInviting] = useState(false);
   const [params] = useSearchParams();
   const focus = Number(params.get('visit')) || null;
+  const focusDelivery = Number(params.get('delivery')) || null;
   const rows = list.data?.results ?? [];
+  const asking = rows.filter((v) => v.status === 'waiting_host');
+  const recent = rows.filter((v) => v.status !== 'waiting_host');
+  const expected = upcoming.data?.results ?? [];
+  const atGate = parcels.data?.results ?? [];
   const answer = async (v: Visit, decision: 'allow' | 'deny') => {
     try {
       await decide.mutateAsync({ id: v.id, decision });
@@ -131,30 +148,140 @@ export function MyVisitorsPage() {
       toast.error(errorMessage(e));
     }
   };
+  const cancelInvite = async (v: Visit) => {
+    const r = await confirm({ title: `Cancel ${v.name}'s invite?`, description: 'Their pass stops working. If it was sent, they are told.', confirmText: 'Cancel invite', destructive: true });
+    if (!r.confirmed) return;
+    try {
+      await cancel.mutateAsync(v.id);
+      toast.success('Invite cancelled');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  const resend = async (v: Visit) => {
+    try {
+      toast.success(passSentNote(await send.mutateAsync(v.id)));
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  const loading = list.isLoading || upcoming.isLoading;
+  const nothing = !loading && !rows.length && !expected.length && !atGate.length;
   return (
-    <div className="space-y-4">
-      <PageHeader title="My visitors" description="People who came to the gate to meet you." />
-      {list.isLoading ? null : rows.length === 0 ? (
-        <EmptyState icon={UserCheck} title="No visitors yet" description="When someone comes to meet you, the gate checks them in and you are told here." />
-      ) : (
-        <div className="grid gap-2 lg:grid-cols-2">
-          {rows.map((v) => (
+    <div className="space-y-5">
+      <PageHeader
+        title="My visitors"
+        description="Visitors you invited or who came to meet you, and parcels waiting for you at the gate."
+        actions={
+          config.can.invite && (
+            <Button variant="cta" size="lg" onClick={() => setInviting(true)}>
+              <UserPlus /> Invite visitor
+            </Button>
+          )
+        }
+      />
+      {nothing && (
+        <EmptyState
+          icon={UserCheck}
+          title="No visitors yet"
+          description="Invite a visitor and they get a pass with a QR to show at the gate. Walk-ins who come to meet you show here too."
+        />
+      )}
+
+      {asking.length > 0 && (
+        <MySection title="Waiting for your answer">
+          {asking.map((v) => (
             <MyVisitCard key={v.id} visit={v} focus={focus === v.id}>
-              {v.status === 'waiting_host' && (
-                <>
-                  <Button size="lg" variant="success" onClick={() => void answer(v, 'allow')} loading={decide.isPending}>
-                    <Check /> Allow
-                  </Button>
-                  <Button size="lg" variant="outline" onClick={() => void answer(v, 'deny')} disabled={decide.isPending}>
-                    <X /> Deny
-                  </Button>
-                </>
-              )}
+              <Button size="lg" variant="success" onClick={() => void answer(v, 'allow')} loading={decide.isPending}>
+                <Check /> Allow
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => void answer(v, 'deny')} disabled={decide.isPending}>
+                <X /> Deny
+              </Button>
             </MyVisitCard>
           ))}
-        </div>
+        </MySection>
       )}
+
+      {atGate.length > 0 && (
+        <MySection title={`Parcels for you at the gate (${atGate.length})`}>
+          {atGate.map((d) => (
+            <ParcelCard key={d.id} delivery={d} focus={focusDelivery === d.id} />
+          ))}
+        </MySection>
+      )}
+
+      {expected.length > 0 && (
+        <MySection title={`Expected (${expected.length})`}>
+          {expected.map((v) => (
+            <Card key={v.id} className={cn(focus === v.id && 'ring-2 ring-primary/40')} data-testid={`expected-${v.id}`}>
+              <CardContent className="space-y-1 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{v.name}</span>
+                  <span className="font-mono text-[13px] text-muted-foreground">{v.pass_no}</span>
+                  <StatusBadge visit={v} />
+                </div>
+                <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                  <CalendarClock className="size-4" aria-hidden /> {v.window}
+                  {v.host && v.invited_by && v.invited_by !== v.host.name ? ` · for ${v.host.name}` : ''}
+                </p>
+                <p className="text-[13px] text-muted-foreground">{[v.company, v.purpose, v.mobile || v.email, v.people > 1 ? `${v.people} people` : null].filter(Boolean).join(' · ')}</p>
+                <p className="text-[13px] text-muted-foreground">{passSentNote(v)}</p>
+                <div className="flex flex-wrap gap-2 pt-1 max-sm:[&>button]:flex-1">
+                  <Button variant="outline" onClick={() => copyText(passUrl(v), 'Pass link copied')}>
+                    <Copy /> Copy link
+                  </Button>
+                  {(v.mobile || v.email) && (
+                    <Button variant="outline" onClick={() => void resend(v)} loading={send.isPending && send.variables === v.id}>
+                      <Send /> {passWasSent(v) ? 'Send again' : 'Send pass'}
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={() => void cancelInvite(v)}>
+                    <X /> Cancel invite
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </MySection>
+      )}
+
+      {recent.length > 0 && (
+        <MySection title="Recent visitors">
+          {recent.map((v) => (
+            <MyVisitCard key={v.id} visit={v} focus={focus === v.id} />
+          ))}
+        </MySection>
+      )}
+      {inviting && <InviteSheet config={config} onClose={() => setInviting(false)} />}
     </div>
+  );
+}
+
+function MySection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-[17px] font-semibold">{title}</h2>
+      <div className="grid gap-2 lg:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+function ParcelCard({ delivery: d, focus }: { delivery: Delivery; focus: boolean }) {
+  return (
+    <Card className={cn(focus && 'ring-2 ring-primary/40')} data-testid={`my-parcel-${d.id}`}>
+      <CardContent className="flex gap-3 pt-4">
+        <Package className="mt-0.5 size-6 shrink-0 text-muted-foreground" aria-hidden />
+        <div className="min-w-0 space-y-1">
+          <p className="font-semibold">
+            {d.parcels} parcel{d.parcels > 1 ? 's' : ''}
+            {d.courier ? ` from ${d.courier}` : ''}
+          </p>
+          <p className="text-[13px] text-muted-foreground">{[d.tracking_no, d.description, d.location?.name, `received ${clock(d.received_at)}`].filter(Boolean).join(' · ')}</p>
+          <p className="text-[13px] text-muted-foreground">Collect it from the gate, or ask someone to collect it for you.</p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -171,8 +298,14 @@ function MyVisitCard({ visit: v, focus, children }: { visit: Visit; focus: boole
           </div>
           <p className="text-[13px] text-muted-foreground">{[v.company, v.purpose, v.people > 1 ? `${v.people} people` : null, v.mobile].filter(Boolean).join(' · ')}</p>
           <p className="text-[13px] text-muted-foreground">
-            {clock(v.check_in_at ?? v.created_at)}
-            {v.check_out_at ? ` – ${clock(v.check_out_at)}` : ''} · {formatMinutes(v.minutes_inside)}
+            {v.status === 'no_show' || v.status === 'cancelled' ? (
+              v.window
+            ) : (
+              <>
+                {clock(v.check_in_at ?? v.created_at)}
+                {v.check_out_at ? ` – ${clock(v.check_out_at)}` : ''} · {formatMinutes(v.minutes_inside)}
+              </>
+            )}
           </p>
           {children && <div className="flex flex-wrap gap-2 pt-1 max-sm:[&>button]:flex-1">{children}</div>}
         </div>
@@ -287,7 +420,10 @@ function VisitDialog({ visit: v, onClose }: { visit: Visit | null; onClose: () =
                   ['Vehicle', v.vehicle_no],
                   ['Items', v.items],
                   ['Notes', v.notes],
-                  ['Came by', v.source === 'open_link' ? 'QR self sign-in' : 'At the gate'],
+                  ['Came by', v.source === 'open_link' ? 'QR self sign-in' : v.source === 'invite' ? `Invited by ${v.invited_by || '—'}` : 'At the gate'],
+                  ['Expected', v.window],
+                  ['Email', v.email],
+                  ['Pass', v.source === 'invite' || v.pass_sent_at ? passSentNote(v) : ''],
                 ]
                   .filter(([, x]) => x)
                   .map(([k, x]) => (
@@ -298,6 +434,7 @@ function VisitDialog({ visit: v, onClose }: { visit: Visit | null; onClose: () =
                   ))}
               </dl>
             </div>
+            <WatchNote note={v.watch_note} />
             {!!log.data?.results.length && (
               <div className="space-y-1 border-t pt-3 text-[13px]">
                 <p className="font-semibold">History</p>
@@ -327,6 +464,9 @@ const ACTIONS: Array<[string, string]> = [
   ['vehicle_out', 'Vehicle out'],
   ['vehicle_edit', 'Vehicle record changed'],
   ['host_allow,host_deny', 'Host answers'],
+  ['invite,invite_cancel,pass_sent', 'Invites and passes'],
+  ['delivery_in,delivery_out,delivery_return', 'Parcels'],
+  ['watch_alert,watch_add,watch_remove', 'Watchlist'],
   ['settings,link', 'Settings and QR'],
 ];
 

@@ -7,8 +7,8 @@
 export interface TasksBadgesResponse {
   tasks?: { my_tasks?: number; to_accept?: number; requests?: number };
   hr?: { leave?: number; corrections?: number; approvals?: number };
-  /** Visitors (PLAN.md §22): QR sign-ins waiting at the gate (gate only), my visitors waiting for my Allow. */
-  visitors?: { waiting?: number; approvals?: number };
+  /** Visitors (PLAN.md §22): QR sign-ins waiting at the gate (gate only), my visitors waiting for my Allow, my parcels at the gate. */
+  visitors?: { waiting?: number; approvals?: number; parcels?: number };
 }
 
 /** GET /assets/api/badges */
@@ -26,8 +26,8 @@ export interface Badges {
   attendance: { leave: number; corrections: number; approvals: number; total: number };
   /** Requests = approve + fulfil; tickets assigned to me or unassigned; exits with assets to collect. */
   assets: { approve: number; fulfil: number; requests: number; tickets: number; exits: number; total: number };
-  /** Waiting at the gate (guards) + my visitors waiting for my answer (hosts). */
-  visitors: { waiting: number; approvals: number; total: number };
+  /** Waiting at the gate (guards) + my visitors waiting for my answer (hosts) + my parcels at the gate. */
+  visitors: { waiting: number; approvals: number; parcels: number; total: number };
   total: number;
 }
 
@@ -49,7 +49,8 @@ export function toBadges(t: TasksBadgesResponse | null | undefined, a: AssetsBad
   const assets = { approve, fulfil, requests: approve + fulfil, tickets, exits, total: approve + fulfil + tickets + exits };
   const waiting = n(t?.visitors?.waiting);
   const visitorApprovals = n(t?.visitors?.approvals);
-  const visitors = { waiting, approvals: visitorApprovals, total: waiting + visitorApprovals };
+  const parcels = n(t?.visitors?.parcels);
+  const visitors = { waiting, approvals: visitorApprovals, parcels, total: waiting + visitorApprovals + parcels };
   return { tasks, attendance, assets, visitors, total: tasks.total + attendance.total + assets.total + visitors.total };
 }
 

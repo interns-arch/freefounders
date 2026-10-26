@@ -4,11 +4,13 @@ import { useVisitorConfig } from '@freefounders/core/visitors';
 import { Navigate, useParams } from 'react-router';
 import { ErrorState, PageLoader } from '@/components/common/page';
 import { NotFound } from '@/app/pages/errors';
+import { DeliveriesPage } from './deliveries';
 import { GatePage } from './gate';
 import { ActivityPage, InsidePage, MyVisitorsPage, RegisterPage } from './lists';
 import { VISITOR_SCREENS } from './nav';
 import { VisitorSettingsPage } from './settings';
 import { VehiclesPage } from './vehicles';
+import { WatchlistPage } from './watchlist';
 
 export function VisitorsPage() {
   const { tab } = useParams();
@@ -27,7 +29,11 @@ export function VisitorsPage() {
     case 'inside':
       return c.can.gate || c.can.view_all ? <InsidePage /> : <NotFound />;
     case 'my':
-      return c.can.invite ? <MyVisitorsPage /> : <NotFound />;
+      return c.can.invite ? <MyVisitorsPage config={c} /> : <NotFound />;
+    case 'deliveries':
+      return c.can.gate || c.can.view_all ? <DeliveriesPage config={c} /> : <NotFound />;
+    case 'watchlist':
+      return c.can.settings || c.can.view_all ? <WatchlistPage config={c} /> : <NotFound />;
     case 'register':
       return c.can.view_all ? <RegisterPage config={c} /> : <NotFound />;
     case 'activity':

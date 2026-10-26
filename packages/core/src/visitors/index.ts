@@ -1,18 +1,22 @@
-// @freefounders/core/visitors: the gate register (PLAN.md §22): visitors, vehicles, the open QR sign-in, guard activity.
+// @freefounders/core/visitors: the gate register (PLAN.md §22): visitors, vehicles, the open QR sign-in, guard activity;
+// V2 (§22.9): pre-invites with a pass link, the visitor's own pass page, deliveries, the watchlist.
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ExportTarget } from '../export';
 import { type DrfPage, tasksApi } from '../http';
 
-export type VisitStatus = 'waiting' | 'waiting_host' | 'inside' | 'out' | 'denied' | 'rejected';
+export type VisitStatus = 'expected' | 'waiting' | 'waiting_host' | 'inside' | 'out' | 'denied' | 'rejected' | 'cancelled' | 'no_show';
 export type PhotoRule = 'off' | 'optional' | 'required';
 
 export const VISIT_STATUS_LABELS: Record<VisitStatus, string> = {
+  expected: 'Expected',
   waiting: 'Waiting at the gate',
   waiting_host: 'Waiting for the host',
   inside: 'Inside',
   out: 'Checked out',
   denied: 'Denied by the host',
   rejected: 'Turned away',
+  cancelled: 'Invite cancelled',
+  no_show: 'Did not come',
 };
 
 export interface PersonBrief {
@@ -36,7 +40,15 @@ export interface VisitorConfig {
   overstay_hours: number;
   locations: Place[];
   vehicle_types: Array<{ value: string; label: string }>;
+  send_pass: boolean;
+  watch_action: WatchAction;
+  badge_format: BadgeFormat;
 }
+
+/** A watchlist match at the gate: "stop" refuses check-in (an admin may override), "warn" asks the guard. */
+export type WatchAction = 'stop' | 'warn';
+/** The printed visitor badge: an A6 card on any printer, or a 62 mm label printer. */
+export type BadgeFormat = 'card' | 'label';
 
 export interface Visit {
   id: number;
@@ -51,7 +63,7 @@ export interface Visit {
   people: number;
   status: VisitStatus;
   status_display: string;
-  source: 'gate' | 'open_link';
+  source: 'gate' | 'open_link' | 'invite';
   pass_no: string;
   pass_token: string;
   short_code: string;
@@ -71,6 +83,20 @@ export interface Visit {
   overstay: boolean;
   host_decision_at: string | null;
   returning: boolean;
+  // V2
+  email: string;
+  expected_at: string | null;
+  expected_until: string | null;
+  /** "Tue 28 Oct, 10:00–12:00" (invites). */
+  window: string;
+  invited_by: string;
+  group: string;
+  /** Set when the visitor matched the watchlist (the gate shows it). */
+  watch_note: string;
+  pass_sent_at: string | null;
+  pass_channels: Array<{ channel: 'whatsapp' | 'email'; status: string; detail?: string }>;
+  /** "/v/<company code>/p/<token>": the visitor's own pass page (put the site's origin in front). */
+  pass_path: string;
 }
 
 export interface VehicleEntry {
@@ -107,6 +133,7 @@ export interface GateLogRow {
   changes: Record<string, [unknown, unknown]>;
   visit: number | null;
   vehicle: number | null;
+  delivery: number | null;
 }
 
 export interface VisitorSettings {
@@ -120,6 +147,10 @@ export interface VisitorSettings {
   retention_days: number;
   open_link: boolean;
   consent_text: string;
+  send_pass: boolean;
+  watch_action: WatchAction;
+  badge_format: BadgeFormat;
+  delivery_reminder_hours: number;
 }
 
 export interface VisitorLink {
@@ -145,6 +176,8 @@ export interface ReturningVisitor {
   last_host?: PersonBrief | null;
   last_host_label?: string;
   last_visit_at?: string;
+  /** On the watchlist: why, and whether the gate must stop them. */
+  watch?: { reason: string; stop: boolean } | null;
 }
 
 export interface InsideNow {
@@ -153,7 +186,7 @@ export interface InsideNow {
   employees: Array<{ id: number; name: string; department: string; check_in: string }>;
 }
 
-export type VisitScope = 'today' | 'inside' | 'waiting' | 'mine' | '';
+export type VisitScope = 'today' | 'inside' | 'waiting' | 'expected' | 'mine' | 'upcoming' | '';
 export interface VisitFilters {
   scope?: VisitScope;
   status?: string;
@@ -235,6 +268,8 @@ export interface CheckInInput {
   vehicle_no?: string;
   items?: string;
   notes?: string;
+  /** The guard (or an admin) confirmed a watchlist warning. */
+  watch_ok?: boolean;
 }
 
 /** POST /visitors/visits/ — the guard checks a walk-in visitor in. */
@@ -248,6 +283,119 @@ export const useCheckOutPass = () => useVisitorsMutation((code: string) => tasks
 /** The host's answer when the company asks hosts first. */
 export const useDecideVisit = () => useVisitorsMutation(({ id, decision }: { id: number; decision: 'allow' | 'deny' }) => tasksApi.post<Visit>(`/visitors/visits/${id}/decide/`, { decision }));
 export const useEditVisit = () => useVisitorsMutation(({ id, ...body }: Partial<CheckInInput> & { id: number }) => tasksApi.patch<Visit>(`/visitors/visits/${id}/`, body));
+/** The gate scans a pass QR (or types a pass number / code): which visit it is. */
+export const useFindPass = () => useMutation({ mutationFn: (code: string) => tasksApi.get<Visit>('/visitors/visits/find/', { code }) });
+
+// ─── pre-invites (V2) ─────────────────────────────────────────────────────────
+
+export interface InviteVisitorRow {
+  name: string;
+  mobile?: string;
+  email?: string;
+  company?: string;
+}
+export interface InviteInput {
+  visitors: InviteVisitorRow[];
+  /** YYYY-MM-DD */
+  date: string;
+  /** HH:MM, optional (no time = the whole day). */
+  time_from?: string;
+  time_to?: string;
+  purpose?: string;
+  /** Someone else (gate / admin only); default: me. */
+  host?: number | null;
+  location?: number | null;
+  people?: number;
+  notes?: string;
+  /** Send the pass by WhatsApp / email (default true). */
+  send?: boolean;
+}
+/** POST /visitors/invites/ — one visitor or a group; each gets a pass. */
+export const useInviteVisitors = () => useVisitorsMutation((body: InviteInput) => tasksApi.post<Visit[]>('/visitors/invites/', body));
+export const useCancelInvite = () => useVisitorsMutation((id: number) => tasksApi.post<Visit>(`/visitors/visits/${id}/cancel/`));
+/** Send (again) the pass link by WhatsApp / email. */
+export const useSendPass = () => useVisitorsMutation((id: number) => tasksApi.post<Visit>(`/visitors/visits/${id}/send_pass/`));
+
+// ─── deliveries (V2) ──────────────────────────────────────────────────────────
+
+export type DeliveryStatus = 'at_gate' | 'collected' | 'returned';
+export const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = { at_gate: 'Waiting at the gate', collected: 'Collected', returned: 'Returned' };
+export interface Delivery {
+  id: number;
+  courier: string;
+  tracking_no: string;
+  recipient: PersonBrief | null;
+  recipient_label: string;
+  parcels: number;
+  description: string;
+  has_photo: boolean;
+  location: Place | null;
+  status: DeliveryStatus;
+  status_display: string;
+  received_at: string;
+  received_by: string;
+  collected_by_name: string;
+  closed_at: string | null;
+  closed_by: string;
+  notes: string;
+  reminded: boolean;
+}
+export interface DeliveryFilters {
+  scope?: 'at_gate' | 'mine' | 'today' | '';
+  status?: string;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+}
+export interface DeliveryInput {
+  courier?: string;
+  tracking_no?: string;
+  recipient?: number | null;
+  recipient_label?: string;
+  parcels?: number;
+  description?: string;
+  location?: number | null;
+  photo?: string | null;
+  notes?: string;
+}
+export function useDeliveries(filters: DeliveryFilters, opts: { page?: number; pageSize?: number; live?: boolean; enabled?: boolean } = {}) {
+  const query = { ...clean(filters), page: opts.page ?? 1, page_size: opts.pageSize ?? 50 };
+  return useQuery({
+    queryKey: [...KEY, 'deliveries', query],
+    queryFn: () => tasksApi.get<DrfPage<Delivery>>('/visitors/deliveries/', query),
+    placeholderData: keepPreviousData,
+    refetchInterval: opts.live ? 15_000 : false,
+    enabled: opts.enabled ?? true,
+  });
+}
+export const useReceiveDelivery = () => useVisitorsMutation((body: DeliveryInput) => tasksApi.post<Delivery>('/visitors/deliveries/', body));
+/** Handed over (to the person, or someone collecting for them). */
+export const useCollectDelivery = () =>
+  useVisitorsMutation(({ id, ...body }: { id: number; collected_by_name?: string; notes?: string }) => tasksApi.post<Delivery>(`/visitors/deliveries/${id}/collect/`, body));
+export const useReturnDelivery = () =>
+  useVisitorsMutation(({ id, ...body }: { id: number; notes?: string }) => tasksApi.post<Delivery>(`/visitors/deliveries/${id}/return/`, body));
+export function useDeliveryPhoto(id: number | null | undefined) {
+  return useQuery({ queryKey: [...KEY, 'photo', 'delivery', id], queryFn: () => tasksApi.blob(`/visitors/deliveries/${id}/photo/`), enabled: id != null, staleTime: 10 * 60_000, retry: false });
+}
+
+// ─── watchlist (V2) ───────────────────────────────────────────────────────────
+
+export interface WatchEntry {
+  id: number;
+  mobile: string;
+  name: string;
+  reason: string;
+  active: boolean;
+  added_by: string;
+  added_at: string;
+  removed_by: string;
+  removed_at: string | null;
+}
+export function useWatchlist(all = false, enabled = true) {
+  return useQuery({ queryKey: [...KEY, 'watchlist', all], queryFn: () => tasksApi.get<WatchEntry[]>('/visitors/watchlist/', all ? { all: 1 } : {}), enabled });
+}
+export const useAddWatch = () => useVisitorsMutation((body: { mobile?: string; name?: string; reason: string }) => tasksApi.post<WatchEntry>('/visitors/watchlist/', body));
+export const useRemoveWatch = () => useVisitorsMutation((id: number) => tasksApi.del<WatchEntry>(`/visitors/watchlist/${id}/`));
 
 export function useVehicles(filters: VehicleFilters, opts: { page?: number; pageSize?: number; live?: boolean } = {}) {
   const query = { ...clean(filters), page: opts.page ?? 1, page_size: opts.pageSize ?? 50 };
@@ -375,6 +523,36 @@ export function useSubmitPublicVisitor(code: string, token: string) {
   });
 }
 
+// ─── the visitor's own pass page (no sign-in, V2) ─────────────────────────────
+
+export interface PublicPass {
+  company: string;
+  logo_url: string | null;
+  name: string;
+  visitor_company: string;
+  pass_no: string;
+  /** The QR content: "KPV:<token>". */
+  qr: string;
+  status: VisitStatus;
+  status_display: string;
+  host: string;
+  purpose: string;
+  people: number;
+  location: string;
+  window: string;
+  check_in_at: string | null;
+  check_out_at: string | null;
+}
+/** /v/<code>/p/<token>: refreshes so the page shows "Inside" once the gate checks them in. */
+export function usePublicPass(code: string, token: string) {
+  return useQuery({
+    queryKey: ['public-pass', code, token],
+    queryFn: () => tasksApi.get<PublicPass>(`/visitors/pass/${encodeURIComponent(code)}/${encodeURIComponent(token)}/`),
+    retry: false,
+    refetchInterval: (q) => (q.state.data && ['expected', 'waiting_host', 'inside'].includes(q.state.data.status) ? 30_000 : false),
+  });
+}
+
 // ─── downloads (PLAN.md §19.31) ───────────────────────────────────────────────
 
 export const visitorExports = {
@@ -382,6 +560,7 @@ export const visitorExports = {
   vehicles: (f: VehicleFilters): ExportTarget => ({ api: 'tasks', path: '/visitors/vehicles/', query: clean(f) }),
   activity: (f: ActivityFilters): ExportTarget => ({ api: 'tasks', path: '/visitors/activity/', query: clean(f) }),
   inside: (): ExportTarget => ({ api: 'tasks', path: '/visitors/inside/' }),
+  deliveries: (f: DeliveryFilters): ExportTarget => ({ api: 'tasks', path: '/visitors/deliveries/', query: clean(f) }),
 };
 
 /** "1 h 25 min", "40 min". */

@@ -1,6 +1,7 @@
 /**
- * The gate (PLAN.md §22, visitors.gate): QR sign-ins waiting at the gate, visitors waiting for their host, who is
- * inside (check out with one tap or by scanning the pass), who left today, and the check-in form.
+ * The gate (PLAN.md §22, visitors.gate): QR sign-ins waiting at the gate, invited visitors expected today (V2: scan their
+ * pass, take the photo, in), visitors waiting for their host, who is inside (check out with one tap or by scanning the
+ * pass), who left today, and the check-in form (with the watchlist check).
  */
 import { ApiError, errorMessage } from '@freefounders/core';
 import {
@@ -10,8 +11,8 @@ import {
   type VisitorConfig,
   useAcceptVisit,
   useCheckInVisitor,
-  useCheckOutPass,
   useCheckOutVisit,
+  useFindPass,
   useRejectVisit,
   useVisitorLookup,
   useVisitorPhoto,
@@ -20,7 +21,8 @@ import {
 } from '@freefounders/core/visitors';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { LogOut, Plus, QrCode, UserCheck, UserRoundX } from '@/components/icons';
+import { useNavigate } from 'react-router';
+import { CalendarClock, LogOut, Package, Plus, QrCode, ShieldAlert, UserCheck, UserRoundX } from '@/components/icons';
 import { useConfirm } from '@/components/common/confirm';
 import { FormSheet } from '@/components/common/form-sheet';
 import { Field } from '@/components/common/form';
@@ -32,7 +34,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Badge, Card, CardContent } from '@/components/ui/primitives';
 import { CameraScanner } from '@/features/assets/inventory/scan-page';
 import { cn } from '@/lib/utils';
-import { HostPicker, PassDialog, PhotoField, PrivatePhoto, StatusBadge, alertGuard, clock, formatMinutes, hostName, useBlobUrl } from './parts';
+import { HostPicker, PassDialog, PhotoField, PrivatePhoto, StatusBadge, WatchNote, alertGuard, clock, formatMinutes, hostName, useBlobUrl } from './parts';
 
 const GATE_KEY = 'ff-visitors-gate';
 function lastGate(): number | null {
@@ -60,12 +62,14 @@ export function GatePage({ config }: { config: VisitorConfig }) {
   const checkOut = useCheckOutVisit();
   const reject = useRejectVisit();
   const confirm = useConfirm();
+  const navigate = useNavigate();
 
   const rows = list.data?.results ?? [];
   const term = q.trim().toLowerCase();
   const match = (v: Visit) =>
     !term || [v.name, v.mobile, v.company, v.pass_no, v.short_code, v.vehicle_no, hostName(v)].some((x) => x?.toLowerCase().includes(term));
   const waiting = rows.filter((v) => v.status === 'waiting' && match(v));
+  const expected = rows.filter((v) => v.status === 'expected' && match(v));
   const waitingHost = rows.filter((v) => v.status === 'waiting_host' && match(v));
   const inside = rows.filter((v) => v.status === 'inside' && match(v));
   const done = rows.filter((v) => ['out', 'denied', 'rejected'].includes(v.status) && match(v));
@@ -104,11 +108,14 @@ export function GatePage({ config }: { config: VisitorConfig }) {
     <div className="space-y-5">
       <PageHeader
         title="Gate"
-        description={`${inside.length} inside · ${waiting.length + waitingHost.length} waiting · ${done.length} left today`}
+        description={`${inside.length} inside · ${waiting.length + waitingHost.length} waiting · ${expected.length} expected · ${done.length} left today`}
         actions={
           <>
+            <Button variant="outline" size="lg" onClick={() => navigate('/visitors/deliveries?new=1')}>
+              <Package /> Parcel
+            </Button>
             <Button variant="outline" size="lg" onClick={() => setScan(true)}>
-              <QrCode /> Check out by pass
+              <QrCode /> Scan pass
             </Button>
             <Button variant="cta" size="lg" onClick={() => setForm({})}>
               <Plus /> Check in visitor
@@ -121,6 +128,21 @@ export function GatePage({ config }: { config: VisitorConfig }) {
       {waiting.length > 0 && (
         <Section title="Waiting at the gate" note="Signed in from the visitor QR. Check their details, then let them in.">
           {waiting.map((v) => (
+            <VisitCard key={v.id} visit={v}>
+              <Button size="lg" variant="success" onClick={() => setForm({ accept: v })}>
+                <UserCheck /> Check in
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => void turnAway(v)}>
+                <UserRoundX /> Turn away
+              </Button>
+            </VisitCard>
+          ))}
+        </Section>
+      )}
+
+      {expected.length > 0 && (
+        <Section title={`Expected today (${expected.length})`} note="Invited in advance. Scan their pass (or tap Check in), take the photo, and they are in.">
+          {expected.map((v) => (
             <VisitCard key={v.id} visit={v}>
               <Button size="lg" variant="success" onClick={() => setForm({ accept: v })}>
                 <UserCheck /> Check in
@@ -178,8 +200,15 @@ export function GatePage({ config }: { config: VisitorConfig }) {
           }}
         />
       )}
-      <PassDialog visit={pass} onClose={() => setPass(null)} />
-      <ScanOutDialog open={scan} onClose={() => setScan(false)} />
+      <PassDialog visit={pass} onClose={() => setPass(null)} badgeFormat={config.badge_format} />
+      <ScanPassDialog
+        open={scan}
+        onClose={() => setScan(false)}
+        onCheckIn={(v) => {
+          setScan(false);
+          setForm({ accept: v });
+        }}
+      />
     </div>
   );
 }
@@ -214,7 +243,12 @@ function VisitCard({ visit: v, children, onOpen, compact }: { visit: Visit; chil
             {[v.company, v.purpose, `to meet ${hostName(v)}`, v.people > 1 ? `${v.people} people` : null, v.vehicle_no || null].filter(Boolean).join(' · ')}
           </p>
           <p className="text-[13px] text-muted-foreground">
-            {v.status === 'waiting' ? (
+            {v.status === 'expected' ? (
+              <span className="inline-flex items-center gap-1">
+                <CalendarClock className="size-3.5" aria-hidden /> {v.window} · <span className="font-mono">{v.pass_no}</span>
+                {v.invited_by ? ` · invited by ${v.invited_by}` : ''}
+              </span>
+            ) : v.status === 'waiting' ? (
               <>
                 Code <span className="font-mono font-semibold text-foreground">{v.short_code}</span> · {v.mobile} · {clock(v.created_at)}
               </>
@@ -225,6 +259,7 @@ function VisitCard({ visit: v, children, onOpen, compact }: { visit: Visit; chil
               </>
             )}
           </p>
+          {!compact && <WatchNote note={v.watch_note} />}
           {children && <div className="flex flex-wrap gap-2 pt-1 max-sm:[&>button]:flex-1">{children}</div>}
         </div>
       </CardContent>
@@ -260,6 +295,9 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
   const acceptVisit = useAcceptVisit();
   const lookup = useVisitorLookup(accept ? '' : f.mobile);
   const found = lookup.data?.found ? lookup.data : null;
+  const watch = lookup.data?.watch ?? null;
+  const [blocked, setBlocked] = useState('');
+  const confirm = useConfirm();
   const onFile = useVisitorPhoto(found?.has_photo ? found.id : null);
   const onFileSrc = useBlobUrl(onFile.data);
   const visitPhoto = useVisitPhoto(accept?.has_photo ? accept.id : null);
@@ -300,14 +338,30 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
     if (Object.keys(local).length) return;
     const { hostBrief: _h, ...body } = f;
     rememberGate(f.location ?? null);
-    try {
-      const v = accept ? await acceptVisit.mutateAsync({ id: accept.id, ...body }) : await checkIn.mutateAsync(body);
-      toast.success(v.status === 'waiting_host' ? `${v.name}: waiting for ${hostName(v)} to allow` : `${v.name} checked in · pass ${v.pass_no}`);
-      onDone(v);
-    } catch (err) {
-      if (err instanceof ApiError && err.errors) setErrors(err.errors);
-      toast.error(errorMessage(err));
-    }
+    setBlocked('');
+    const send = async (watchOk: boolean): Promise<void> => {
+      try {
+        const input = { ...body, ...(watchOk ? { watch_ok: true } : {}) };
+        const v = accept ? await acceptVisit.mutateAsync({ id: accept.id, ...input }) : await checkIn.mutateAsync(input);
+        toast.success(v.status === 'waiting_host' ? `${v.name}: waiting for ${hostName(v)} to allow` : `${v.name} checked in · pass ${v.pass_no}`);
+        onDone(v);
+      } catch (err) {
+        const errs = err instanceof ApiError ? err.errors : undefined;
+        // The watchlist: a hard stop is shown in the form; a warning asks the guard to confirm, then sends again.
+        if (errs?.watchlist) {
+          setBlocked(errs.watchlist);
+          return;
+        }
+        if (errs?.watchlist_warn && !watchOk) {
+          const r = await confirm({ title: 'Watchlist', description: errs.watchlist_warn, confirmText: 'Let them in', destructive: true });
+          if (r.confirmed) await send(true);
+          return;
+        }
+        if (errs) setErrors(errs);
+        toast.error(errorMessage(err));
+      }
+    };
+    await send(false);
   };
 
   return (
@@ -315,13 +369,25 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
       open
       onOpenChange={(o) => !o && onClose()}
       title={accept ? `Check in ${accept.name}` : 'Check in visitor'}
-      description={accept ? `QR sign-in, code ${accept.short_code}. Check the details and their photo.` : undefined}
+      description={
+        accept?.status === 'expected'
+          ? `Invited${accept.invited_by ? ` by ${accept.invited_by}` : ''} · ${accept.window} · pass ${accept.pass_no}. Check the details and take the photo.`
+          : accept
+            ? `QR sign-in, code ${accept.short_code}. Check the details and their photo.`
+            : undefined
+      }
       onSubmit={submit}
       submitting={checkIn.isPending || acceptVisit.isPending}
       submitLabel="Check in"
       errors={errors}
     >
       <div className="space-y-4">
+        {blocked && (
+          <p role="alert" className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive" data-testid="watch-blocked">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden /> {blocked}
+          </p>
+        )}
+        {accept?.watch_note && <WatchNote note={accept.watch_note} />}
         <Field label="Mobile number" required error={errors.mobile}>
           <Input
             type="tel"
@@ -334,6 +400,14 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
             name="mobile"
           />
         </Field>
+        {watch && (
+          <p role="alert" className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px] font-semibold text-destructive" data-testid="watch-warning">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {watch.stop && !config.can.settings
+              ? `On the watchlist: ${watch.reason}. Do not let them in; call your security head.`
+              : `On the watchlist: ${watch.reason}. Check with your security head before letting them in.`}
+          </p>
+        )}
         {found && (
           <p role="status" className="rounded-md border border-success/30 bg-success/8 px-3 py-2 text-[13px] text-success">
             Returning visitor · {found.visits} visit{found.visits === 1 ? '' : 's'} · details filled in
@@ -432,29 +506,57 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
   );
 }
 
-/** Check out by scanning the pass QR (camera) or typing the pass number / sign-in code. */
-function ScanOutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/**
+ * Scan a pass (camera) or type the pass number / sign-in code. Inside → checked out at once. Expected (invited) or
+ * waiting at the gate → the check-in form opens. Anything else → what happened to that pass.
+ */
+function ScanPassDialog({ open, onClose, onCheckIn }: { open: boolean; onClose: () => void; onCheckIn: (v: Visit) => void }) {
   const [code, setCode] = useState('');
-  const out = useCheckOutPass();
+  const [note, setNote] = useState('');
+  const find = useFindPass();
+  const out = useCheckOutVisit();
+  const busy = find.isPending || out.isPending;
   const go = async (value: string) => {
-    if (!value.trim() || out.isPending) return;
+    if (!value.trim() || busy) return;
+    setNote('');
     try {
-      const v = await out.mutateAsync(value.trim());
-      toast.success(`${v.name} checked out · ${formatMinutes(v.minutes_inside)}`);
-      setCode('');
-      onClose();
+      const v = await find.mutateAsync(value.trim());
+      if (v.status === 'inside') {
+        const done = await out.mutateAsync(v.id);
+        toast.success(`${done.name} checked out · ${formatMinutes(done.minutes_inside)}`);
+        setCode('');
+        onClose();
+      } else if (v.status === 'expected' || v.status === 'waiting') {
+        setCode('');
+        onCheckIn(v);
+      } else {
+        setNote(`${v.name} · ${v.pass_no || v.short_code}: ${v.status_display}${v.window ? ` (${v.window})` : ''}.`);
+      }
     } catch (e) {
       toast.error(errorMessage(e));
     }
   };
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          setNote('');
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Check out by pass</DialogTitle>
-          <DialogDescription>Scan the QR on the visitor pass, or type the pass number.</DialogDescription>
+          <DialogTitle>Scan pass</DialogTitle>
+          <DialogDescription>Scan the QR on the visitor's pass or phone, or type the pass number. Coming in: the check-in opens. Leaving: checked out.</DialogDescription>
         </DialogHeader>
         {open && <CameraScanner onCode={(c) => void go(c)} />}
+        {note && (
+          <p role="status" className="rounded-md border bg-muted px-3 py-2 text-sm">
+            {note}
+          </p>
+        )}
         <form
           className="flex gap-2"
           onSubmit={(e) => {
@@ -463,8 +565,8 @@ function ScanOutDialog({ open, onClose }: { open: boolean; onClose: () => void }
           }}
         >
           <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="V00012" className="h-11 font-mono" aria-label="Pass number" autoCapitalize="characters" />
-          <Button type="submit" size="lg" loading={out.isPending}>
-            Check out
+          <Button type="submit" size="lg" loading={busy}>
+            Go
           </Button>
         </form>
       </DialogContent>

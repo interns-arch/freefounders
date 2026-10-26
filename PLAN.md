@@ -3373,7 +3373,7 @@ per period, cancel any time to stop the next period, no partial refunds; duplica
 on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
 top of `legal.tsx`.
 
-## 22. Visitor management (V1 built 2026-10-26, §22.8)
+## 22. Visitor management (V1 + V2 built 2026-10-26, §22.8, §22.9)
 
 Founder (2026-10-26): "one more option: visitor management software, to keep the record of every visitor and all the
 company's security records." This is a plan only; nothing is built until the founder answers §22.7.
@@ -3513,4 +3513,52 @@ until Admin/Owner taps "Make a new QR"), no QR per gate; the guard picks the gat
 
 **Founder decisions taken here**: host approval default OFF; ID proof optional (last 4); visitor photo required at the
 gate, selfie optional on the QR; vehicle photo required; overstay 4 h; keep 180 days; the module is included (no
-add-on price yet); one QR per company. **Next (V2)**: pre-invites, deliveries, blacklist, printed badges, WhatsApp pass.
+add-on price yet); one QR per company. V2 followed the same day (§22.9).
+
+### 22.9 V2 built (2026-10-26)
+Founder (2026-10-26): "do it, make it perfect" (V2 of §22.7). Tasks `visitors` migration 0003; web `features/visitors`
+(`invites.tsx`, `deliveries.tsx`, `watchlist.tsx`, `pass.tsx`), `core/visitors`.
+- **Pre-invites** (`POST /visitors/invites/`, My visitors → **Invite visitor**): one visitor or a group (≤ 25, one shared
+  `group` id), a day (today … 90 days) and an optional time window, purpose, gate, note. Each gets status **Expected**, a
+  pass number at once and a **pass link** by WhatsApp (mobile) and email (when given). Anyone with `visitors.invite`
+  invites for themselves; gate / register people may invite for someone else. The host sees **Expected** (copy link,
+  send again, cancel: the visitor is told if the pass was sent); the gate sees **Expected today** and checks them in by
+  scanning the pass or tapping Check in (photo as usual, host told). Not checked in by the end of the day → **Did not
+  come** (worker). A future invite is never in the gate's "today".
+- **The visitor's pass page** `/v/<company code>/p/<pass token>` (no sign-in; `GET /tasks/api/visitors/pass/<code>/<token>/`,
+  company from the code like the QR sign-in, `/api/visitors/pass/` added to Tasks' no-company paths; throttle
+  `THROTTLE_VISITOR_PASS`, 120/hour). Shows only that visit: name, host's first name + initial, window, gate, pass
+  number, QR, status (refreshes: Expected → Inside → Left). Never the mobile, email, ID or notes. A QR sign-in still
+  waiting at the gate, a turned-away or denied visit has no pass page.
+- **Pass on WhatsApp for walk-ins too** (setting **Send the visitor pass**, on): at check-in the pass link goes to the
+  visitor's mobile. Sent after the response on a thread in the same company (a slow WhatsApp never holds up the gate);
+  what each channel answered is kept on the visit (`pass_channels`) and shown ("Pass link ready (WhatsApp / email not
+  set up: copy the link)" until WhatsApp is configured). **Scan pass** (one button) checks out someone inside, or
+  opens the check-in for an expected / waiting visitor; it also reads the pass page link.
+- **Printed badge** (pass dialog → **Print badge**): photo, name, company, host, time, gate, QR and pass number, black
+  on white; setting **Printed badge**: A6 card (any printer) or 62 mm label printer. The phone app prints through the
+  bridge; a browser opens a print window.
+- **Parcels** (`/visitors/deliveries`, gate + register): **Receive parcel** (for a person or a department / Reception,
+  courier with common names, tracking no., count, what, optional photo, gate). The person is told at once ("A parcel is
+  waiting for you at the gate"), sees it under My visitors, and it counts in their badge (`visitors.parcels`). The gate
+  **hands it over** (collected by: the person or whoever collects for them; the person is told if someone else took it)
+  or **returns** it to the courier. A parcel still at the gate after N hours (setting, 24; 0 = off) → one reminder.
+  Lists: At the gate / Today / History (register), Download.
+- **Watchlist** (`/visitors/watchlist`, Manage): a mobile number and / or name with a reason; only `visitors.settings`
+  adds or removes (removing keeps the row: who, when); the register people can read it. At the gate the warning shows
+  as soon as the mobile is typed. Setting **Watchlist number at the gate**: **Stop** (default: a guard cannot check them
+  in; an admin can, after confirming) or **Warn** (the guard confirms). A name-only entry always only warns (names are
+  shared). An employee cannot invite a stopped number (not told why). A QR sign-in that matches is marked on the gate
+  card. Every override is in Guard activity ("Watchlist match let in").
+- **Guard activity** has the new actions (invites, passes sent, parcels, watchlist); the register's visit detail shows
+  the window, inviter, email, pass status and any watchlist note. Retention also clears email / watchlist note / pass
+  results of old visits and photos / names of old parcels (open parcels are kept until closed).
+- Tests: `visitors/tests_v2.py` (invite, group, dates, on-behalf rules, gate scan + check-in, today scope, no-show,
+  cancel, pass by WhatsApp + email, nothing set up = skipped, resend, public pass shows nothing private / 404s, watchlist
+  stop / warn / admin override / names / invites / QR flag / removal, parcels receive / notify / badge / hand over /
+  return / reminder / retention), `visitors/tests.py` (pass page only with its own company, Postgres), e2e
+  `e2e/web-visitors-v2.spec.ts`.
+
+**Next (V3, §22.7)**: contractors' multi-day passes, material gate pass linked to Assets, ID card scan (OCR), patrol
+rounds / incident log, analytics. WhatsApp passes need the company's WhatsApp values set (`WHATSAPP_*`, per company via `company_setting`); a Meta
+template for the pass (outside the 24 h window) is still to be approved.

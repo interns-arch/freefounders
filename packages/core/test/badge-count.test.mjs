@@ -18,7 +18,8 @@ test('totals per area and overall', () => {
   assert.deepEqual(b.attendance, { leave: 3, corrections: 1, approvals: 4, total: 4 });
   assert.deepEqual(b.assets, { approve: 1, fulfil: 2, requests: 3, tickets: 4, exits: 1, total: 8 });
   assert.equal(b.total, 20);
-  assert.deepEqual(toBadges({ visitors: { waiting: 2, approvals: 1 } }, null).visitors, { waiting: 2, approvals: 1, total: 3 });
+  assert.deepEqual(toBadges({ visitors: { waiting: 2, approvals: 1 } }, null).visitors, { waiting: 2, approvals: 1, parcels: 0, total: 3 });
+  assert.equal(toBadges({ visitors: { waiting: 1, approvals: 1, parcels: 2 } }, null).visitors.total, 4, "my parcels at the gate count too");
 });
 
 test('counter text: hidden at 0, 1–99, then 99+', () => {
