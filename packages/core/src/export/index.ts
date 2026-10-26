@@ -1,6 +1,6 @@
 /**
  * Downloads everywhere (PLAN.md §19.31). A screen describes WHAT to download with an `ExportTarget` made by its area
- * (e.g. `assetsExports.assets(filters)` in @freefounders/core/assets): the API, the list path and the screen's own
+ * (e.g. `assetsExports.assets(filters)` in @kaampilot/core/assets): the API, the list path and the screen's own
  * filters. The API then answers `?export=xlsx|csv` with every matching row (≤ 50 000), filtered, sorted and
  * permission-checked by the same code as the list itself. Client-side files (`toXlsx`/`toCsv`) are only for screens
  * that already hold all their rows.

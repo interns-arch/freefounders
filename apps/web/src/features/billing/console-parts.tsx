@@ -1,6 +1,6 @@
 /** Small pieces shared by the Kaampilot console screens (PLAN.md §21.9). */
-import { useAccess } from '@freefounders/core';
-import type { LogLevel } from '@freefounders/core/billing';
+import { useAccess } from '@kaampilot/core';
+import type { LogLevel } from '@kaampilot/core/billing';
 import type { ReactNode } from 'react';
 import { Badge, type BadgeTone, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';

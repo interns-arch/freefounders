@@ -42,8 +42,8 @@ function sign(claims: Record<string, unknown>, opts: { sub: string; aud?: string
   return new SignJWT(claims)
     .setProtectedHeader({ alg: 'EdDSA', kid: 'k1' })
     .setSubject(opts.sub)
-    .setIssuer(opts.iss ?? 'freefounders-platform')
-    .setAudience(opts.aud ?? 'freefounders')
+    .setIssuer(opts.iss ?? 'kaampilot-platform')
+    .setAudience(opts.aud ?? 'kaampilot')
     .setIssuedAt(now)
     .setExpirationTime(now + (opts.ttl ?? 900))
     .sign((opts.signer ?? key).privateKey);

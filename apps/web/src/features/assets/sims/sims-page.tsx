@@ -1,7 +1,7 @@
 import { CardSim } from '@/components/icons';
 import { Navigate } from 'react-router';
 import { EmptyState, PageLoader } from '@/components/common/page';
-import { useAssetTypes } from '@freefounders/core/assets';
+import { useAssetTypes } from '@kaampilot/core/assets';
 import { useModules } from '@/features/assets/lib/auth';
 
 /**

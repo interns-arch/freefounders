@@ -1,4 +1,4 @@
-import type { WorkTask } from '@freefounders/core/tasks';
+import type { WorkTask } from '@kaampilot/core/tasks';
 import { AlarmClock, Bell, BellOff, CalendarClock, CheckCircle2, Clock, FileText, Pencil, Repeat, Timer, Users } from '@/components/icons';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';

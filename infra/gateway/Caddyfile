@@ -30,7 +30,7 @@
 	}
 }
 
-{$FF_DOMAIN:app.freefounders.local} {
+{$FF_DOMAIN:app.kaampilot.local} {
 	encode gzip
 	import security_headers
 

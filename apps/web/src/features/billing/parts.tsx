@@ -1,6 +1,6 @@
 /** Small pieces shared by the billing screens. */
-import type { SubscriptionState } from '@freefounders/core';
-import { STATE_LABELS } from '@freefounders/core/billing';
+import type { SubscriptionState } from '@kaampilot/core';
+import { STATE_LABELS } from '@kaampilot/core/billing';
 import { Minus, Plus } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

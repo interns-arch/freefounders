@@ -1,5 +1,5 @@
-import { type Access, useAccess } from '@freefounders/core';
-import { GRANT_APP_NAMES, type SyncResult } from '@freefounders/core/admin';
+import { type Access, useAccess } from '@kaampilot/core';
+import { GRANT_APP_NAMES, type SyncResult } from '@kaampilot/core/admin';
 import { AlertCircle } from '@/components/icons';
 import type { ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router';

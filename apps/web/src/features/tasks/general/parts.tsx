@@ -1,6 +1,6 @@
 /** Small presentational pieces shared by the general Tasks screens and HR (no data, theme colours only). */
-import { useAccess } from '@freefounders/core';
-import type { TaskPriority, TaskStatus } from '@freefounders/core/tasks';
+import { useAccess } from '@kaampilot/core';
+import type { TaskPriority, TaskStatus } from '@kaampilot/core/tasks';
 import { ShieldAlert } from '@/components/icons';
 import type { ComponentType, ReactNode } from 'react';
 import { Link } from 'react-router';

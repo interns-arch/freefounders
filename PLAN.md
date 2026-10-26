@@ -1,4 +1,4 @@
-# FreeFounders: Master Plan
+# Kaampilot: Master Plan
 
 > One subscription product. One login. Two apps: **Tasks** (task automation + HR) and **Assets** (asset management).
 > Web + Android app (React Native). Sold in India, priced per user per month.
@@ -11,10 +11,10 @@
 
 | Topic | Decision |
 |---|---|
-| Product name | **FreeFounders** (apps: *FreeFounders Tasks*, *FreeFounders Assets*) |
-| Domain | freefounders (TLD to confirm: .com / .in) → `app.`, `api.`, `admin.` subdomains |
+| Product name | **Kaampilot** (apps: *Kaampilot Tasks*, *Kaampilot Assets*) |
+| Domain | kaampilot (TLD to confirm: .com / .in) → `app.`, `api.`, `admin.` subdomains |
 | Backends | **Keep both**: Django (Tasks + HR), NestJS (Assets). Add a new Platform layer |
-| Originals | **FreeFounders is a completely new application.** Code is *copied* from the two existing apps, which stay standalone and are **never modified** (decided 2026-10-07) |
+| Originals | **Kaampilot is a completely new application.** Code is *copied* from the two existing apps, which stay standalone and are **never modified** (decided 2026-10-07) |
 | Mobile | **React Native (Expo)**, Play Store first, iOS later |
 | Market | **India only**: INR, GST invoices, Razorpay, data hosted in AWS Mumbai |
 | Launch scope | **Tasks + HR (attendance, leave) + Assets**. Everything else stays in the code but is switched off |
@@ -52,9 +52,9 @@
 | Live users | Unknown / Render | **CarTrends, live on EC2** (Docker, Postgres 18) |
 
 ### Known problems to fix
-- ~~`wt-delegated`: unpushed commits; worktree link broken~~ → `freefounders/` held stale *copies*; the real repos are still on the Desktop. All 55 local-only commits are now on GitHub as new branches (Tasks: `feature/delegated-dashboard-whatsapp`, `wip/overdue-email`; Assets: `backup/original-history-20261007`, same code as GitHub `main` with the original history). Bundles in `backups/`.
+- ~~`wt-delegated`: unpushed commits; worktree link broken~~ → `kaampilot/` held stale *copies*; the real repos are still on the Desktop. All 55 local-only commits are now on GitHub as new branches (Tasks: `feature/delegated-dashboard-whatsapp`, `wip/overdue-email`; Assets: `backup/original-history-20261007`, same code as GitHub `main` with the original history). Bundles in `backups/`.
 - ~~Main Tasks folder: uncommitted WIP~~ → saved as branch `wip/overdue-email`; it is an older draft of the overdue email already finished in `e17c047`. The original folder was left exactly as it was.
-- ~~`CT_EC2_key (1).pem` in the project folder~~ → copied to `~/.ssh/cartrends-ec2.pem` (owner-only), removed from `freefounders/`. The Desktop original stays because `switch-domain-to-automation-task.sh` uses it by relative path.
+- ~~`CT_EC2_key (1).pem` in the project folder~~ → copied to `~/.ssh/cartrends-ec2.pem` (owner-only), removed from `kaampilot/`. The Desktop original stays because `switch-domain-to-automation-task.sh` uses it by relative path.
 - ~~`backend/.env.example` broken AI block~~ → fixed in `services/tasks` (duplicate block removed, placeholder `AI_PROVIDER`/`AI_MODEL` values blanked).
 - Assets stores passwords reversibly (admin can view them). **Must be removed** before selling.
 - Tasks scheduler is a thread inside the web process, which limits it to 1 worker.
@@ -70,7 +70,7 @@
          packages/core  ── API clients, hooks, permissions, validation (NO UI)
          packages/theme ── colours, fonts, spacing tokens
                   │
-         https://api.freefounders.*   (gateway / reverse proxy)
+         https://api.kaampilot.*   (gateway / reverse proxy)
      ┌────────────┼─────────────────┬──────────────────┐
   Platform     Tasks API          Assets API        Workers
   (NestJS)     (Django)           (NestJS)          (worker process)
@@ -134,7 +134,7 @@ Today: Assets has `users` + `employees`; Tasks has `User`. They become **one `pe
 ### Levels
 | Level | Who | Powers |
 |---|---|---|
-| Platform owner | FreeFounders (us) | All companies, plans, pricing, suspend, support login (logged) |
+| Platform owner | Kaampilot (us) | All companies, plans, pricing, suspend, support login (logged) |
 | Company Super Admin | Customer's owner | Everything in their company incl. billing; cannot be locked out |
 | Admin | Customer admins | Users, roles, settings, both apps; no billing |
 | Custom roles | Created by admins | Exactly what is ticked |
@@ -231,7 +231,7 @@ Rules (enforced in code review):
 ## 8. One codebase, everyone always on the latest code
 
 ```
-freefounders/                     (one GitHub repo, pnpm + Turborepo)
+kaampilot/                     (one GitHub repo, pnpm + Turborepo)
   apps/web          React 19 + Vite
   apps/mobile       Expo
   apps/admin        Platform-owner console
@@ -296,18 +296,18 @@ Each phase ends with: all tests green, deployed to staging, founder sign-off.
 
 ### Founder's checklist (things only you can do)
 - [ ] Confirm the domain TLD and DNS access
-- [ ] GitHub organization `freefounders` (or similar); add the existing repos
+- [ ] GitHub organization `kaampilot` (or similar); add the existing repos
 - [ ] AWS account in company name (Mumbai region)
 - [ ] Razorpay business account + KYC (needs company PAN, GST, bank, website with policies)
 - [ ] Google Play **Organization** developer account (D-U-N-S number, ₹ one-time fee)
-- [ ] Meta WhatsApp Business verification for the FreeFounders sender number
+- [ ] Meta WhatsApp Business verification for the Kaampilot sender number
 - [ ] Decide what CarTrends pays (free as launch partner?)
 - [ ] Logo + brand colours (or ask Claude to propose)
 
 ---
 
 ## 12. Open questions
-1. Domain: `freefounders.com` or `.in`? Already owned?
+1. Domain: `kaampilot.com` or `.in`? Already owned?
 2. Does CarTrends keep using the current EC2 app until Phase 2 is done? (Recommended: yes, no disruption.)
 3. Where is Assets used live today, and by whom? (Render? same CarTrends staff?)
 4. Payroll: switched on for CarTrends only, or hidden for everyone at launch?
@@ -354,8 +354,8 @@ calls relative `/api/...`:
 
 ### 13.4 Tokens
 - **Access token**: JWT, **EdDSA (Ed25519)**, 15 min. Claims: `sub` = person_id, `cid` = company_id,
-  `apps` = {tasks: local_user_id, assets: local_user_id}, `kid`, `iss` = freefounders-platform,
-  `aud` = freefounders.
+  `apps` = {tasks: local_user_id, assets: local_user_id}, `kid`, `iss` = kaampilot-platform,
+  `aud` = kaampilot.
 - **Refresh token**: random 32 bytes; only its hash is stored. Rotated on each use. Reusing an old one
   revokes the whole session. Web: httpOnly `ff_refresh` cookie (path `/api/platform/auth`, SameSite=Lax,
   Secure). Mobile (Phase 7): returned in the body, kept in secure storage.
@@ -406,7 +406,7 @@ Lockout 5 / 15 min, timing-safe unknown-user check, `X-Requested-With` CSRF head
   (☐ remember my choice, per device).
 - Header switcher `[Tasks ⇄ Assets]`: a small component added to both apps' headers, shown when
   the token lists both apps. Switching is a plain link; no second login.
-- Branding: "FreeFounders" placeholder until logo/colours are chosen.
+- Branding: "Kaampilot" placeholder until logo/colours are chosen.
 
 ### 13.9 Tests (Phase 1 is done when all are green in CI)
 - Platform: integration tests for login (all 3 identifiers), lockout, refresh rotation + reuse
@@ -502,7 +502,7 @@ Platform token (cid = company id)  →  app looks up cid in its registry  →  s
   each company runs the same reminder/digest routine the thread runs today, plus the Gmail poll where
   enabled. A failure in one company is logged and the next company still runs.
 - The in-process thread stays for standalone mode (`NOTIF_SCHEDULER`), so the web server can run many
-  workers in FreeFounders mode.
+  workers in Kaampilot mode.
 - Assets has no background jobs today, so nothing to move.
 
 ### 14.5 Platform
@@ -515,7 +515,7 @@ Platform token (cid = company id)  →  app looks up cid in its registry  →  s
 ### 14.6 CarTrends migration (dry run first)
 1. Founder takes a `pg_dump` of the live Tasks DB (and Assets DB, if in use). Claude never touches EC2.
 2. `scripts/import-company`: restores each dump into a scratch DB, renames `public` → `co_cartrends`,
-   copies it into FreeFounders' Postgres, registers it and runs the newer migrations.
+   copies it into Kaampilot' Postgres, registers it and runs the newer migrations.
 3. People matching across Tasks and Assets: by employee code, then email, then mobile. Creates Platform
    people + logins (Tasks password hash kept) + app links. Anything unclear goes on a review list (CSV) for the founder.
 4. `--dry-run` (default) changes nothing and prints counts, matches and the review list. `--apply` does it.
@@ -558,7 +558,7 @@ Differences from the design above (deliberate):
 
 For the founder (the real CarTrends move):
 1. Take `pg_dump -Fc` of the live Tasks database (and Assets, if it holds real data: open question 3), on the server.
-2. Restore each into a scratch database next to FreeFounders (staging), then run the importer **without** `--apply`
+2. Restore each into a scratch database next to Kaampilot (staging), then run the importer **without** `--apply`
    and go through `review.csv` together.
 3. Run with `--apply`; CarTrends keeps using EC2 until you have checked the result and signed off.
 
@@ -714,7 +714,7 @@ The portal's Settings page shows the company-wide part and links to each app's s
 - With no profile (standalone), both apps look exactly as today.
 
 ### 16.4 Attendance photo (founder, 2026-10-08)
-- Setting `ATTENDANCE_PHOTO` = off · optional · **required** (FreeFounders default: required; standalone default: off).
+- Setting `ATTENDANCE_PHOTO` = off · optional · **required** (Kaampilot default: required; standalone default: off).
 - Check-in and check-out send a JPEG (resized in the browser to ≤ 640 px, ≤ 300 KB); stored under the company's file path
   (`c/<schema>/attendance/…`), linked from `Attendance.check_in_photo` / `check_out_photo`.
 - Shown in "Team today", the monthly view and the corrections review, to the person themself, `hr.approve` (their department) and
@@ -757,7 +757,7 @@ Approval chains (they need departments and reports-to in the Platform's People d
 Notes and differences from the design above:
 - **Punch photos are private**: stored under `private/`, which the `/media/` route refuses; served only by
   `GET /api/attendance/<id>/photo/in|out/` to the person, their managers (same rule as their attendance) and HR.
-- New FreeFounders companies get `ATTENDANCE_PHOTO=required`; standalone and imported companies keep it off until HR turns it on.
+- New Kaampilot companies get `ATTENDANCE_PHOTO=required`; standalone and imported companies keep it off until HR turns it on.
 - Per-company settings (`company_env`) now also work in a standalone install, so the HR settings screen works there too;
   with nothing saved it reads the environment exactly as before.
 - `/api/leads/assignees/` stays available with Leads off: Groups, templates and settings use it as the team list.
@@ -862,7 +862,7 @@ Notes and differences from the design above:
   built-in Assets roles ("The Employee role is missing").
 
 Not done in Phase 5 (noted for later): Tasks' own "My Team" screen still lets an admin edit department / reports-to locally; the
-next directory push overwrites it, so in FreeFounders mode those fields should be edited in the portal (to be locked in Phase 6).
+next directory push overwrites it, so in Kaampilot mode those fields should be edited in the portal (to be locked in Phase 6).
 
 ---
 
@@ -873,7 +873,7 @@ of JSX + one CSS file; Assets web ≈ 13.8k lines of TSX on React 19 / Tailwind 
 
 ### 18.1 What gets built
 ```
-apps/web/            the one FreeFounders web app (React 19, Vite, TypeScript, Tailwind 4, Radix, TanStack Query, React Router 7)
+apps/web/            the one Kaampilot web app (React 19, Vite, TypeScript, Tailwind 4, Radix, TanStack Query, React Router 7)
   src/app/           shell: sign-in, workspace chooser, sidebar, top bar, routing, notifications bell
   src/ui/            presentational kit only (buttons, inputs, dialogs, tables, badges…): no data, no API
   src/features/      screens per area: admin/ tasks/ hr/ assets/ (screens call hooks from @core, never fetch)
@@ -1106,7 +1106,7 @@ fixes, listed in each module's e2e spec header):
 Removed: `ClassicRedirect`, the `classic` menu flag and markers, the `/classic/*` gateway routes (dev gateway and Caddyfile),
 and the two old Vite servers from `npm run dev` (`EAM_API_ONLY=1` makes the Assets dev script start its API only). An unknown
 `/tasks/…` or `/assets/…` path now shows "Page not found" inside the shell. The old web apps stay in the repo (standalone
-installs, CarTrends until it moves) and are not served by FreeFounders.
+installs, CarTrends until it moves) and are not served by Kaampilot.
 Backend: in multi-company mode the public form page names its company (`/f/<token>?c=<id>`; `tenancy/middleware.py` accepts
 `?company=`/`X-FF-Company` for `/api/public/*` only). (Removed with Web forms on 2026-10-13, §19.23.)
 
@@ -1318,11 +1318,11 @@ test updated for `employeeCode`. e2e `web-attendance-team.spec.ts` (3: Live/Dail
   and `app.json` `extra.apiUrl`; no `.env` is committed).
 
 **Choices**
-- **Expo SDK 57** (the SDK of the current Expo Go), Expo Router, TypeScript; `com.freefounders.app`, "FreeFounders".
+- **Expo SDK 57** (the SDK of the current Expo Go), Expo Router, TypeScript; `com.kaampilot.app`, "Kaampilot".
   Routes in `apps/mobile/src/app` (Expo's default layout).
 - **Monorepo:** `apps/mobile` is **outside** the root npm workspace with its own `node_modules`/lockfile, because Expo pins
   React 19.2.3 and the web uses React 19.3 (a shared workspace would give two Reacts). Metro reads `packages/core` and
-  `packages/theme` from source (`watchFolders`; `@freefounders/*` mapped through their `exports`) and resolves every bare
+  `packages/theme` from source (`watchFolders`; `@kaampilot/*` mapped through their `exports`) and resolves every bare
   import made inside `packages/*` from the app's `node_modules` → one React, one React Query (verified on the export's
   source map: 0 files from the root `node_modules`). TypeScript does the same with `paths`; Expo's tsconfig-paths in Metro
   is off (`experiments.tsconfigPaths: false`) and Metro resolves `@/` itself. The root `npm ci` and the web are unchanged;
@@ -1331,7 +1331,7 @@ test updated for `employeeCode`. e2e `web-attendance-team.spec.ts` (3: Live/Dail
   core changes, no web behaviour change: the JWT payload is decoded without the legacy `escape()` (same result, verified
   with non-ASCII names), and sign-out sends the stored refresh token when there is a `refreshStore` (mobile), so the
   Platform revokes that phone's session (the web still uses the cookie). The refresh token lives in `expo-secure-store`
-  (`src/lib/refresh-store.ts`); at start the app renews it; offline with a stored token → "Cannot reach FreeFounders" + Try
+  (`src/lib/refresh-store.ts`); at start the app renews it; offline with a stored token → "Cannot reach Kaampilot" + Try
   again (stays signed in).
 - **Theme:** `packages/theme/src/tokens.native.ts` = hex copy of `tokens.ts`, generated by
   `packages/theme/scripts/build-native.mjs` (OKLab → sRGB, no dependency); `scripts/check-web-rules.mjs` fails when it is
@@ -1371,7 +1371,7 @@ testers, then Play Store; `usesCleartextTraffic` only for local http) → iPhone
 
 ### 19.17 Phone app = the web app in a native shell (2026-10-12)
 **Founder's decision** (after trying §19.16 on the phone): "it appears to be a completely different product, I want the
-previous one as it is." → The Android app shows **the FreeFounders web app itself** (same screens, look and features:
+previous one as it is." → The Android app shows **the Kaampilot web app itself** (same screens, look and features:
 Home with attendance first, Attendance / Tasks / Assets / Admin, the phone bottom bar) in a full-screen
 `react-native-webview`. One product, one code base for screens; every web change reaches the phone at once. The decisions
 of §19.16 stand: Android first, **no face matching in the app** (selfie stored + GPS geofence only), local testing over the
@@ -1381,7 +1381,7 @@ laptop's hotspot (`http://192.168.137.1:8080`) or the office Wi-Fi.
 - **Punch location + selfie** through a small bridge (`postMessage` both ways, request ids; protocol in
   `apps/mobile/README.md`). Needed because Android's WebView allows the browser camera and GPS only on https/localhost,
   and the native camera/GPS are better anyway. Web side: `apps/web/src/lib/native-bridge.ts`; `features/hr/face.ts`
-  `currentPosition()` and `features/hr/punch.tsx` use it only when `window.FreeFoundersApp` is set. In the app: face check
+  `currentPosition()` and `features/hr/punch.tsx` use it only when `window.KaampilotApp` is set. In the app: face check
   on → the message "Face check is on for your company; the app punches with a selfie only — ask your admin to switch face
   check off in Attendance → HR settings", no punch (face enrolment also refuses in the app); photo optional/required →
   native front camera (Retake / Use photo, "Punch without a photo" when optional); location only with a geofence, with the
@@ -1390,7 +1390,7 @@ laptop's hotspot (`http://192.168.137.1:8080`) or the office Wi-Fi.
   now uses `downloadBlob` too) and `<a download>` links (Assets photos) go to the app → saved in its cache → Android share
   sheet. **Print** (ID cards, labels) → Android print dialog via expo-print.
 - Back button (web history, else leave), pull-to-refresh (only when the page is at the top), splash until the first page,
-  "Can't reach FreeFounders" with Try again and a **server address field** (kept on the phone), status bar light/dark from
+  "Can't reach Kaampilot" with Try again and a **server address field** (kept on the phone), status bar light/dark from
   the phone, other sites / `tel:` / `mailto:` / WhatsApp open outside, photo pickers offer the camera (permission asked on
   first use), `navigator.geolocation` answered by the app (HR settings "use my location").
 - Removed (git history keeps them): the separate RN sign-in, tabs (attendance, leave, holidays, more), leave-apply, UI kit,
@@ -2021,7 +2021,7 @@ Android app = this web app in a WebView, §19.17, so phones 320–412 px are the
 
 ### 19.30 Tasks updates ported from the original app (2026-10-20)
 Founder: bring the original app's changes since the copy (`bc785fe`, branch `feature/delegated-dashboard-whatsapp`, up
-to `2bc1425`) into FreeFounders, adapted to its design, and "remove the previous features that are being replaced by
+to `2bc1425`) into Kaampilot, adapted to its design, and "remove the previous features that are being replaced by
 them". The original stays read-only. "Super Admin" there = the **Owner** here (`accounts.access.is_owner`, i.e. holds
 `tasks.delete_admin_work`, the hidden Owner role §19.28); "admin" = `tasks.view_all` at company scope. **No new
 permission keys** (CATALOGUE_VERSION stays 2).
@@ -2038,11 +2038,11 @@ permission keys** (CATALOGUE_VERSION stays 2).
 | `3ff22ba` A task someone gave you is changed through them | `edits_need_giver` (on every task): a task someone else (still active) gave me → any change but the status is a request to the giver, admins and Owners included (direct PATCH 403 with the giver's name; `request_change` allowed for admins then). Web: "Request change" / "Change" instead of "Edit" on such tasks; the dialog says "given to you by …". Tasks an admin gave out still edit directly. |
 | `d0a1bdf` Voice draft replaces AI draft; red tab counts | **Voice draft**: `voice_draft` takes `{transcript}` (words from the browser/phone; no AI key) or an audio clip (Gemini key); without AI, `speech_rules` reads the person, deadline ("kal 5 baje", "in 2 hours", weekdays, Hindi/Hinglish), effort ("30 minute") and tidies the title. Web `voice-note.tsx`: language English/हिंदी, browser speech recognition on https/localhost, else the keyboard-mic box. **Removed**: the "AI draft" button/box, `POST /tasks/ai_draft/`, `useAiTaskDraft`, the browser audio recording (MediaRecorder) path of the old "Speak the task" (the server still accepts audio). Red round counts (1–9, 9+, 99+) on **My Tasks** (open + in progress), **To accept**, **Requests** (and "More" on phones); `countLabel` in core. |
 | `ed023cf` Voice draft asks for the microphone | Browser: asks for the microphone first; blocked → steps for this browser (Chrome on Android, Safari on iPhone, desktop), "Try again", "Use the keyboard mic instead"; keyboard-mic help. The partsexpressonline link was not ported (a note says the http:// address never gets the microphone). |
-| `ba5c94e` App v3: native voice with the mic pop-up | Phone app **1.1.0** (versionCode 2): bridge request **`voice` {lang}** → `{text}` and **`voice-stop`** (Done), `apps/mobile/src/lib/voice.ts` with **expo-speech-recognition** 57.1 (the phone's speech recogniser; Android's "Allow FreeFounders to record audio?" pop-up; blocked twice → `code: permission, permission: microphone, settings: true` → web shows "Open settings" + "Try again"; no speech service / Expo Go → `code: unavailable` → keyboard-mic box). `app.json`: `RECORD_AUDIO` moved from `blockedPermissions` to `permissions`, plugin config (Google speech service package visibility), iOS usage texts. Nothing is recorded or kept. **Needs a new APK build** (`eas build -p android --profile preview`). |
+| `ba5c94e` App v3: native voice with the mic pop-up | Phone app **1.1.0** (versionCode 2): bridge request **`voice` {lang}** → `{text}` and **`voice-stop`** (Done), `apps/mobile/src/lib/voice.ts` with **expo-speech-recognition** 57.1 (the phone's speech recogniser; Android's "Allow Kaampilot to record audio?" pop-up; blocked twice → `code: permission, permission: microphone, settings: true` → web shows "Open settings" + "Try again"; no speech service / Expo Go → `code: unavailable` → keyboard-mic box). `app.json`: `RECORD_AUDIO` moved from `blockedPermissions` to `permissions`, plugin config (Google speech service package visibility), iOS usage texts. Nothing is recorded or kept. **Needs a new APK build** (`eas build -p android --profile preview`). |
 | `0980b4d` Startup prompt to update older apps | Platform `GET /api/platform/app-version` (public) → `{minVersion, apkUrl}` from `MOBILE_MIN_VERSION` (default `1.1.0`; empty = off) and `MOBILE_APK_URL` (default `/download/kaampilot.apk` = `apps/web/public/download/kaampilot.apk`, git-ignored; or a full https:// address). Inside the app, an older version gets "Update the app — one time" (Later = this session); "Update now" opens the APK in a new window, which the shell always hands to the phone's browser (works in 1.0.0 too). The Voice draft in an old app offers the same link. |
 | `748b527` Remove a wrong or outdated file | `POST /tasks/{id}/remove_file/ {id}`: the uploader while the task is open, the giver, or an admin (after Done only the giver/admin); logged "Removed file: …". Web: an × on each attachment in the task panel (with a confirmation). |
 | `2bc1425` Team Performance: who asks most to change a due date | `GET /tasks/change_request_leaders/?range=` (Team performance permission, same audience as `team_report`): people ranked by requests that move a due date (counted on the day raised), approved / rejected / waiting, tasks, approval rate, latest 20 requests each. Web: a panel on Team performance under the ranking; open a person for their requests. |
-| `13fd6e2` WIP weekly overdue email | Skipped (FreeFounders already has the Monday overdue email, `send_weekly_overdue_email`). |
+| `13fd6e2` WIP weekly overdue email | Skipped (Kaampilot already has the Monday overdue email, `send_weekly_overdue_email`). |
 | Older ones (before the copy) | Checked in the new web app, all present: proof files in To accept (`2387ca3`), bulk accept (`009f6f0`), "Tasks I've delegated" on Home + WhatsApp reminders for requests (`8a7b0cb`), Tasks given & received (admins everyone, others their own, click a person; `f6d9cf4`/`287e5b2`/`06b659c`), Delegated per-agent counts (`cb8ffd6`), My team Delete confirmation (`6d7d102`), dashboard insights (`f63f1e0`). Not ported: anything about the old frontend serving / APK hosting on the old server. |
 
 Docs: `docs/UI-FUNCTIONALITY.md` (Voice draft), `services/tasks/README.md` (endpoints), `.env.example` (Tasks
@@ -2072,7 +2072,7 @@ Founder: "I want all the payslips and everything downloadable in each and every 
   header; disabled with the tooltip "Nothing to download for these filters" when 0 rows match; still works in a read-only
   company (it is not a CTA); 40–44 px on phones. `DownloadButton` = one file (a payslip / invoice PDF). In the phone app
   the file goes through the native bridge (`saveFile`).
-- **All matching rows, not the page**: the screen passes an `ExportTarget` (`@freefounders/core/export`: API, list path,
+- **All matching rows, not the page**: the screen passes an `ExportTarget` (`@kaampilot/core/export`: API, list path,
   the screen's own filters/search/sort/tab/date range; page size dropped). The API answers `?export=xlsx|csv` with every
   matching row (≤ 50 000) from the list's own query and permission checks:
   Tasks `config/exports.py` `ExportMixin` (DRF lists; `export_columns`), `export_file` for function views;
@@ -2141,7 +2141,7 @@ they ring or vibrate even when the app is closed.
 | Native module | **expo-notifications** 57.0.23 (`npx expo install`, SDK 57). Plugin: notification icon `assets/images/notification-icon.png` (white, from the monochrome icon), colour `#4f46e5`. Lazy-loaded like voice. |
 | Android channels | `punch-reminders` "Punch-in reminders" (sound + vibration), `punch-reminders-ring` (sound only), `punch-reminders-vibrate` (vibration only): high importance (heads-up), shown on the lock screen, vibration pattern 0-600-300-600-300-900. A channel's sound/vibration cannot change after creation, so each alert type has its own. |
 | Permissions | `POST_NOTIFICATIONS` (Android 13+; Android's pop-up when the person switches the reminder on or sends a test; blocked → `code: permission, permission: notifications, settings: true` → web "Open settings"), `RECEIVE_BOOT_COMPLETED` (added by the library), `SCHEDULE_EXACT_ALARM` declared (no pop-up; see accuracy). Not `USE_EXACT_ALARM`. |
-| Bridge (`protocol.ts`) | `reminder-set {settings: {enabled, time 'HH:MM', days [1–7, 1 = Mon], mode 'vibrate' \| 'ring' \| 'ring-vibrate', followUpMinutes (default 10, 0 = off, max 120)}}`, `reminder-get`, `reminder-skip-today`, `reminder-off` → `{settings, permission, next, skipped}`; `reminder-test {mode}` → one reminder in 5 s. The shell reports `capabilities` (`…, 'reminders'`) in `window.FreeFoundersApp`; the web shows the reminder only when listed. |
+| Bridge (`protocol.ts`) | `reminder-set {settings: {enabled, time 'HH:MM', days [1–7, 1 = Mon], mode 'vibrate' \| 'ring' \| 'ring-vibrate', followUpMinutes (default 10, 0 = off, max 120)}}`, `reminder-get`, `reminder-skip-today`, `reminder-off` → `{settings, permission, next, skipped}`; `reminder-test {mode}` → one reminder in 5 s. The shell reports `capabilities` (`…, 'reminders'`) in `window.KaampilotApp`; the web shows the reminder only when listed. |
 | Plan (`reminder-plan.ts`, pure, tested) | One **weekly** notification per chosen day at the time, plus the follow-up (a follow-up past midnight rings the next weekday). **Skip today** (a weekly repeat cannot skip one week): the reminders of the skipped day — and a follow-up of the day before that rings after midnight on it — become one-off notifications for the next 4 weeks; the plan is rebuilt at every app start, so after that day it is weekly again. A skip whose reminders already rang changes nothing. |
 | Storage | Settings + skipped date on the phone (expo-secure-store `ff.punchReminder`), per person per phone. **Not saved on the server** (a new phone starts from the company defaults): the defaults already come from the server, and a per-user setting in Platform/Tasks plus sync was not worth it now. |
 | Tap | Opens the app on `/attendance` (Today): cold start via `getLastNotificationResponse`, running app via the response listener. A reminder that arrives while the app is open still pops up and rings. |
@@ -2497,7 +2497,7 @@ The items left open in the feature-list review, each small and tested.
   `GET /api/platform/app-version` → `{minVersion, apkUrl}`. Inside an app older than it, the web app shows a
   **non-blocking banner** under the header, "A new version of Kaampilot is available (you have x)" + "Download the
   update" (https://kaampilot.com/download/kaampilot.apk, opened in the phone's browser), hidden for the session with ×
-  (the old one-time dialog is gone). The web app reads the shell version from `window.FreeFoundersApp.version`
+  (the old one-time dialog is gone). The web app reads the shell version from `window.KaampilotApp.version`
   (native-bridge `appInfo()`). Voice keeps its own 1.1.0 check. The e2e answers `/app-version` itself (on / off). Docs:
   infra/deploy/README.md (Settings), docker-compose (`MOBILE_MIN_VERSION`, `MOBILE_APK_URL`), services/platform/.env.example.
 - **Backups**: `infra/deploy/backup.sh` — `pg_dumpall` of the stack's Postgres container (every database and company
@@ -2529,7 +2529,7 @@ already ported in §19.30 and is extended here. `5206167` (notice WhatsApp title
   one go). A part: due no later than its task, its effort comes **out of** what that task has left, never repeats, never
   to the holder, not of a finished task; parts of parts up to **5 levels** below the main task ("A chain can go 5 levels
   deep…"). The old rule "sub-tasks are one level deep" is replaced.
-- **Who may give parts** (FreeFounders decision, not in the original, which had no assign permission): with Assign tasks
+- **Who may give parts** (Kaampilot decision, not in the original, which had no assign permission): with Assign tasks
   as for any task; **without it (a Member) only for a task someone else gave them** — any active colleague, the Owner
   only from an Owner (3fbf6e7). A task you made yourself is split only with Assign tasks, so it is no way around it
   (`TaskViewSet._may_pass_part_on`; `GET /tasks/assignees/?part_of=` lists who may get a part).
@@ -2655,7 +2655,7 @@ What we take, fitted to what we already have (one schema per company):
 
 ### 20.3 Architecture (AWS Mumbai `ap-south-1`, backups to Hyderabad `ap-south-2`)
 ```
- Phones (FreeFounders app)   Browsers                      Payment: Razorpay  ─webhooks─┐
+ Phones (Kaampilot app)   Browsers                      Payment: Razorpay  ─webhooks─┐
             │                    │                                                          │
      Route 53 → CloudFront + AWS WAF (rate limits, bot rules) ── web app (S3, cached)       │
             │                                                                               │
@@ -2721,12 +2721,12 @@ What we take, fitted to what we already have (one schema per company):
   Razorpay to catch anything missed.
 - **What a plan unlocks** (entitlements: apps, modules, seat limit, later features such as SSO) is pushed to the apps
   through the module switches that already exist (`PUT /internal/company`, §16). The apps never deal with money.
-- **GST**: 18 %; CGST + SGST when the customer is in FreeFounders' own state, IGST otherwise; the customer's GSTIN
+- **GST**: 18 %; CGST + SGST when the customer is in Kaampilot' own state, IGST otherwise; the customer's GSTIN
   (optional, for input credit) on the invoice; one invoice number series per financial year; PDF emailed and kept in
   **Billing** (owner only: plan, seats, next charge, payment method, invoices, cancel). Monthly accounting export
   (Tally / Zoho Books).
 - **New Platform tables**: `plans`, `prices`, `subscriptions`, `seat_snapshots`, `invoices`, `invoice_lines`,
-  `payments`, `billing_events`, `coupons`, `tax_profiles`. **Owner console** (FreeFounders staff only): companies, MRR,
+  `payments`, `billing_events`, `coupons`, `tax_profiles`. **Owner console** (Kaampilot staff only): companies, MRR,
   trials, failed payments, plan overrides, coupons, support access to a company only with the owner's consent, logged.
 
 ### 20.7 Data, files and background work at scale
@@ -2821,7 +2821,7 @@ decisions are not taken yet, so the recommended answers are used and everything 
 - **Dev tools** (only with `BILLING_DEV_TOOLS=1`, on in `npm run dev`): on the Billing page, *advance the billing clock*
   N days (per company) and *simulate the next renewal* succeeding or failing, so a month or a failed payment can be
   tested in a minute.
-- **Owner console** `/console` (FreeFounders staff accounts only): totals (MRR, trials, past due, companies), companies
+- **Owner console** `/console` (Kaampilot staff accounts only): totals (MRR, trials, past due, companies), companies
   with plan, state, seats, MRR; extend a trial, change plan/seats (complimentary), suspend/reactivate.
 - Existing companies (demo/CarTrends, test companies) get the plan **Complimentary** (active, no billing) so nothing
   changes for them.
@@ -2878,7 +2878,7 @@ created (the resend throttle answered "Wait a few seconds…", easy to miss), an
   expired code, "Ask for a new code" when it is used up); after "Password changed" the person is signed in at once with the
   new password (choose-company step for several companies; a plain "Sign in" button if that fails). A username / employee
   ID is told its admin resets it; the email of an admin-made login is told (after the code) to ask its admin; an unknown
-  email gets the same answer until the code, then "no FreeFounders account… sign up instead".
+  email gets the same answer until the code, then "no Kaampilot account… sign up instead".
 - Resend: the server returns `retryAfterSeconds` with every "too soon / too many" 429 and says the time in its message;
   sign-up, forgot and join show a live "You can ask for a new code in 24 s" instead of the vague line, and the resend
   link counts down from what the server said. Going Back and Continue with the same email / mobile reuses the code
@@ -3008,7 +3008,7 @@ already exists, like that?" Accounts now have a **username** next to their email
   `accounts_username_uq` on `lower(username)`. Existing accounts get none (they add one on /account); nothing else changed.
 - **Rules** (`services/platform/src/accounts/username.ts`): 3–30 characters, letters / digits / `.` / `_` / `-`, starts
   with a letter (never all digits, no `@`); reserved words refused (admin, owner, support, staff, root, system,
-  freefounders, api, …; the existing admin-made login `owner` keeps working). **One namespace**: free only if no account,
+  kaampilot, api, …; the existing admin-made login `owner` keeps working). **One namespace**: free only if no account,
   no admin-made login (`logins.username`) and no employee ID uses it (case-insensitive), checked in the transaction under
   an advisory lock per name + the unique index. Admin-made login creation / rename refuses an account's username (409, same
   message); an employee ID equal to one is refused (400).
@@ -3256,8 +3256,8 @@ too ("Viewed company"…). No password, hash, token or code is ever read by thes
   Platform's own `APP_VERSION`, the worker's last heartbeat (down after 15 minutes without one) and errors in 24 h.
   `APP_VERSION` is the deployed commit (`ff.sh` sets it from the app folder's current commit; `dev` in `npm run dev`).
 
-**Dev staff login**: `staff@freefounders.test` / `Demo@1234`, shown as "Kaampilot Staff (dev)" (an older dev database
-that still says "FreeFounders Staff (dev)" is renamed by the seed on the next start). On a server the staff account
+**Dev staff login**: `staff@kaampilot.test` / `Demo@1234`, shown as "Kaampilot Staff (dev)" (an older dev database
+that still says "Kaampilot Staff (dev)" is renamed by the seed on the next start). On a server the staff account
 comes from `FF_STAFF_EMAIL` / `FF_STAFF_PASSWORD` (`bootstrap.sh`) or `company -- staff --email` (infra/deploy/README.md
 "Kaampilot console").
 
@@ -3603,3 +3603,16 @@ Founder (2026-10-26): "yes start V3". Tasks `visitors` migration 0004 (`services
   `platform.test.ts` (gate movement in history), Platform `integration.test.ts` (flow), e2e `e2e/web-visitors-v3.spec.ts`.
 
 **Still open**: WhatsApp pass template approval (Meta); analytics beyond the reports page if the founder wants more.
+
+## 23. Internal names renamed to Kaampilot (2026-10-26)
+Founder: "make the project name everywhere Kaampilot, not FreeFounders". This finishes §19.x's visible rename:
+- **Renamed**: npm names `@kaampilot/*` (root package `kaampilot`); token issuer / audience `kaampilot-platform` /
+  `kaampilot` (refresh sessions live in the database, so a deploy costs each signed-in person one silent token refresh,
+  no sign-out); the bridge object `window.KaampilotApp` (the web still reads `window.FreeFoundersApp` from installed
+  older apps); Expo `scheme` `kaampilot`; Android / iOS id **`com.kaampilot.app`** (a new id: phones with the old APK
+  get the new one as a separate app and should uninstall the old one; done now, before the first Play Store release);
+  Docker image names; test / demo e-mails (`@kaampilot.test`, `@kaampilot.demo`); comments and docs.
+- **Kept on purpose**: `/opt/freefounders`, Compose project `freefounders` and database names on the live server
+  (renaming moves live data); Expo `slug` `freefounders` (the expo.dev project is registered under it; rename it there
+  first); `ff-*` storage keys and `FF_*` env vars; `freefounders` stays a reserved username and weak password word;
+  the GitHub repo `interns-arch/freefounders` and the local folder (renamed by the founder if wanted).

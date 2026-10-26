@@ -2,8 +2,8 @@
  * Contractors, vendors and daily workers (PLAN.md §22.10): a pass valid for several days with a work permit, in and
  * out at the gate each day (scan the pass or tap In / Out). The supervisor is told when the crew comes in each day.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { fileSlug } from '@freefounders/core/export';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { fileSlug } from '@kaampilot/core/export';
 import {
   type ContractorInput,
   type ContractorPass,
@@ -21,7 +21,7 @@ import {
   useSendContractorPass,
   useTaskOptions,
   visitorExportsV3,
-} from '@freefounders/core/visitors';
+} from '@kaampilot/core/visitors';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { CalendarRange, Copy, HardHat, LogIn, LogOut, Plus, Printer, Send, ShieldOff } from '@/components/icons';

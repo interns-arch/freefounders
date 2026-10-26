@@ -12,15 +12,15 @@ import { EntityPicker } from '@/features/assets/components/pickers';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Avatar, Badge, Card, Switch } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
-import { useAssetsCache, useAssetsUsers, useRoles, useSaveAssetsUser } from '@freefounders/core/assets';
-import type { UserRow } from '@freefounders/core/assets';
+import { useAssetsCache, useAssetsUsers, useRoles, useSaveAssetsUser } from '@kaampilot/core/assets';
+import type { UserRow } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { relativeTime } from '@/lib/utils';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 export default function UsersPage() {
   const { values: f, set } = useUrlFilters({ page: '1', pageSize: '25' });

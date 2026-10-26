@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Progress } from '@/components/ui/primitives';
 import { QueueCard } from '@/features/assets/queue/queue-page';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { type OrgDashboard, type PersonalDashboard, useAssetsDashboard } from '@freefounders/core/assets';
+import { type OrgDashboard, type PersonalDashboard, useAssetsDashboard } from '@kaampilot/core/assets';
 import { useAuth } from '@/features/assets/lib/auth';
 import { QRCode, useQrLinks } from '@/components/common/codes';
 import { AssetIcon, COLORS } from '@/lib/icons';

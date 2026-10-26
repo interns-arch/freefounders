@@ -1,5 +1,5 @@
 // The phone app = this web app inside a native shell (PLAN.md §19.17). These tests play the shell: before the page loads
-// they set `window.FreeFoundersApp` and a fake `window.ReactNativeWebView.postMessage` that answers the bridge requests
+// they set `window.KaampilotApp` and a fake `window.ReactNativeWebView.postMessage` that answers the bridge requests
 // the way apps/mobile does (replies dispatched on `document`, like Android's WebView). They prove that inside the app the
 // punch uses the app's camera (no browser camera dialog) and stores the photo, that face check can no longer be switched
 // on (PLAN.md §19.18), and that downloads go to the app instead of the browser. Settings are restored afterwards.
@@ -39,7 +39,7 @@ async function newPerson(request: APIRequestContext, owner: string) {
   const name = `E2E Shell ${stamp}`;
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+    data: { fullName: name, email: `${login}@kaampilot.test`, login: { username: login, password: temp } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id as string;
@@ -79,7 +79,7 @@ async function shellContext(browser: Browser, opts: { locationBlocked?: boolean;
     const w = window as unknown as Record<string, unknown>;
     const log: unknown[] = [];
     w.__shellLog = log;
-    w.FreeFoundersApp = { platform: 'android', version, camera: 'granted', ...(capabilities ? { capabilities } : {}) };
+    w.KaampilotApp = { platform: 'android', version, camera: 'granted', ...(capabilities ? { capabilities } : {}) };
     // The punch-in reminder kept "on the phone" (PLAN.md §19.32): survives reloads like the app's storage.
     const stored = () => {
       try {

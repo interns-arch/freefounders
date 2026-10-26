@@ -2,7 +2,7 @@
  * /tasks/links — shared company bookmarks in collections (old pages/Links.jsx). Everyone adds links and stars
  * favourites; links.manage creates collections and removes any link (others remove only their own).
  */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
 import {
   type Link as SharedLink,
@@ -15,8 +15,8 @@ import {
   useLinks,
   useToggleLinkFavorite,
   tasksExports,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { ExternalLink, FolderPlus, Link2, Plus, Star, Trash2 } from '@/components/icons';
 import { useEffect, useState } from 'react';

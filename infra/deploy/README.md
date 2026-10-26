@@ -133,7 +133,7 @@ nobody came back from). Our GST invoice (Billing → Invoices) is the tax invoic
    - *Developers → Whitelisting → Add New → Website URL*: `https://kaampilot.com` (production only: Cashfree blocks
      checkout on a domain that is not approved). The site needs reachable Contact Us and Terms and Conditions pages for
      the approval: they are `https://kaampilot.com/contact`, `/terms`, `/privacy` and `/refunds` (PLAN.md §21.11); it takes a few minutes to a day. The Android app opens checkout from kaampilot.com inside its WebView,
-     so the domain approval covers it (add the app package `com.freefounders.app` too if Cashfree asks for it).
+     so the domain approval covers it (add the app package `com.kaampilot.app` too if Cashfree asks for it).
    - Account activation / KYC must be complete for production payments.
 2. **On the server** (as the user that owns `/opt/freefounders`):
    ```

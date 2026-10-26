@@ -1,4 +1,4 @@
-import { createQueryClient, onPaymentRequired } from '@freefounders/core';
+import { createQueryClient, onPaymentRequired } from '@kaampilot/core';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useSyncExternalStore } from 'react';
 import { RouterProvider } from 'react-router';

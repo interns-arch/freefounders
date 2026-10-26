@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import QRCodeLib from 'qrcode';
 import { useEffect, useRef, useState } from 'react';
-import { useAssetsConfig } from '@freefounders/core';
+import { useAssetsConfig } from '@kaampilot/core';
 import { cn } from '@/lib/utils';
 
 /**

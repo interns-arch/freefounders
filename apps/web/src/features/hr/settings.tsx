@@ -1,5 +1,5 @@
 /** HR → HR Settings (hr.manage): attendance rules (PLAN.md §16.1/§16.4/§17.2), office locations, leave types. Punch = location + selfie, no face check (§19.18). */
-import { ApiError, errorMessage } from '@freefounders/core';
+import { ApiError, errorMessage } from '@kaampilot/core';
 import {
   type HrSettingValues,
   REGULARIZATION_PERIOD_WORDS,
@@ -15,7 +15,7 @@ import {
   useOfficeLocations,
   useRegularizablePeople,
   useSaveHrSettings,
-} from '@freefounders/core/hr';
+} from '@kaampilot/core/hr';
 import { AlarmClock, CalendarHeart, ClipboardCheck, LocateFixed, MapPin, Settings2, Shirt, X } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { ErrorState } from '@/components/common/page';

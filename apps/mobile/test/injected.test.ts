@@ -30,7 +30,7 @@ function fakePage(camera: 'ask' | 'granted' | 'denied' = 'granted', opts: { orig
 
 test('the page learns it is inside the app', () => {
   const page = fakePage();
-  assert.deepEqual(JSON.parse(JSON.stringify(page.window.FreeFoundersApp)), { platform: 'android', version: '0.1.0', camera: 'granted' });
+  assert.deepEqual(JSON.parse(JSON.stringify(page.window.KaampilotApp)), { platform: 'android', version: '0.1.0', camera: 'granted' });
 });
 
 test('pull-to-refresh: reports whether the touched content is at the top, only on change', () => {
@@ -90,9 +90,9 @@ test('file picker: asks for the camera first, then opens', () => {
 
 test('security: the app powers go to pages of the server only', () => {
   const ours = fakePage('granted', { origin: 'http://192.168.137.1:8080', location: { protocol: 'http:', host: '192.168.137.1:8080' } });
-  assert.ok(ours.window.FreeFoundersApp, 'the server page is told it runs in the app');
+  assert.ok(ours.window.KaampilotApp, 'the server page is told it runs in the app');
   const other = fakePage('granted', { origin: 'http://192.168.137.1:8080', location: { protocol: 'https:', host: 'evil.test' } });
-  assert.equal(other.window.FreeFoundersApp, undefined, 'another site learns nothing');
+  assert.equal(other.window.KaampilotApp, undefined, 'another site learns nothing');
   assert.throws(() => other.geolocation.getCurrentPosition(), /must not be used/, 'and its geolocation is not answered by the app');
   other.fire('touchstart', { target: other.root });
   assert.deepEqual(other.posted, [], 'and it sends nothing to the app');

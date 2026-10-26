@@ -1,7 +1,7 @@
 /** /tasks/groups — team workspaces (old pages/Groups.jsx). ?group=<id> opens one group. */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { type Group, tasksExports, useAddGroupMembers, useArchiveGroup, useGroupDashboard, useGroups, useRemoveGroupMember, useSaveGroup, useSetTaskStatus, useTaskList, useTaskRoleOptions, useTeamPeople } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { type Group, tasksExports, useAddGroupMembers, useArchiveGroup, useGroupDashboard, useGroups, useRemoveGroupMember, useSaveGroup, useSetTaskStatus, useTaskList, useTaskRoleOptions, useTeamPeople } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { ArrowLeft, ArrowRight, Boxes, Link2, Plus } from '@/components/icons';
 import { useState } from 'react';

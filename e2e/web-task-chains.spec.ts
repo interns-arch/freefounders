@@ -33,7 +33,7 @@ async function member(request: APIRequestContext, owner: string, tag: string) {
   const name = `E2E Chain ${tag}`;
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login, password } },
+    data: { fullName: name, email: `${login}@kaampilot.test`, login: { username: login, password } },
   });
   expect(created.status(), await created.text()).toBe(201);
   const personId = (await created.json()).person.id as string;
@@ -236,7 +236,7 @@ async function shell(browser: Browser) {
     const w = window as unknown as Record<string, unknown>;
     const log: Array<{ type: string; filename?: string; mime?: string }> = [];
     w.__shellLog = log;
-    w.FreeFoundersApp = { platform: 'android', version: 'e2e', camera: 'granted' };
+    w.KaampilotApp = { platform: 'android', version: 'e2e', camera: 'granted' };
     const reply = (r: unknown) => setTimeout(() => document.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(r) })), 30);
     w.ReactNativeWebView = {
       postMessage(raw: string) {

@@ -1,6 +1,6 @@
 /** HR → My attendance: the month as a calendar, a day's punches (with photos) and regularization requests (PLAN.md §19.38). */
-import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, type AttendanceStatus, hrExports, useAttendanceMonth, useMyRegularizations } from '@freefounders/core/hr';
-import { fileSlug } from '@freefounders/core/export';
+import { ATTENDANCE_STATUS_LABELS, type AttendanceDay, type AttendanceStatus, hrExports, useAttendanceMonth, useMyRegularizations } from '@kaampilot/core/hr';
+import { fileSlug } from '@kaampilot/core/export';
 import { AlertCircle, CalendarCheck, ClipboardCheck, CalendarX, Clock3, ChevronLeft, ChevronRight, Palmtree, Sun, Timer } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';

@@ -2,8 +2,8 @@
  * /attendance/reports (PLAN.md §19.15): pick a report, a period, a department and XLSX or CSV, and download it now.
  * "Recent downloads" are remembered on this device only (last 10) with "Download again".
  */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { ATTENDANCE_REPORT_TYPES, type AttendanceReportInput, type AttendanceReportType, type ReportFormat, useDownloadAttendanceReport, useTeamDay } from '@freefounders/core/hr';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { ATTENDANCE_REPORT_TYPES, type AttendanceReportInput, type AttendanceReportType, type ReportFormat, useDownloadAttendanceReport, useTeamDay } from '@kaampilot/core/hr';
 import { Download, FileSpreadsheet, History, Upload } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
 import { useSearchParams } from 'react-router';

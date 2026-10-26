@@ -14,9 +14,9 @@ import {
   useMarkNotificationsRead,
   useNotificationCounts,
   useNotifications,
-} from '@freefounders/core';
-import { tasksExports, useClearTaskNotifications, useDeleteTaskNotification } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core';
+import { tasksExports, useClearTaskNotifications, useDeleteTaskNotification } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { useSearchParams } from 'react-router';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { NotificationTabs, NotificationText } from '@/components/common/notifications';

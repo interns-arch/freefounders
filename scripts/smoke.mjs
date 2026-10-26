@@ -192,7 +192,7 @@ await step('owner adds a member with a login and gives them a Tasks-only role', 
   const t = await owner.token();
   const created = await owner.fetch('POST', '/api/platform/people', {
     token: t,
-    body: { fullName: `Smoke Member ${run}`, email: `smoke-${run}@freefounders.test`, login: { username: `smoke-${run}` } },
+    body: { fullName: `Smoke Member ${run}`, email: `smoke-${run}@kaampilot.test`, login: { username: `smoke-${run}` } },
   });
   assert.equal(created.status, 201, JSON.stringify(created.body));
   memberId = created.body.person.id;

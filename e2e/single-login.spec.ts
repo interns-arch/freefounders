@@ -176,7 +176,7 @@ test('admins build a role and give it to someone; it reaches Tasks', async ({ pa
   const owner = await (await request.post('/api/platform/auth/login', { data: { login: OWNER.login, password: OWNER.password, client: 'mobile' }, headers })).json();
   const created = await request.post('/api/platform/people', {
     headers: { ...headers, authorization: `Bearer ${owner.accessToken}` },
-    data: { fullName: `E2E Person ${stamp}`, email: `e2e-${stamp}@freefounders.test`, login: { username: `e2e-${stamp}`, password: 'E2e@123456' } },
+    data: { fullName: `E2E Person ${stamp}`, email: `e2e-${stamp}@kaampilot.test`, login: { username: `e2e-${stamp}`, password: 'E2e@123456' } },
   });
   expect(created.status()).toBe(201);
 

@@ -6,7 +6,7 @@ import {
   useNotificationCounts,
   useNotifications,
   useSignOut,
-} from '@freefounders/core';
+} from '@kaampilot/core';
 import { NotificationTabs, NotificationText, notificationRowClass } from '@/components/common/notifications';
 import { AlarmClock, Bell, CheckCheck, ChevronDown, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
 import { CompanyMenuItems } from '@/features/account/switcher';

@@ -3,7 +3,7 @@
  * Payroll has three parts: monthly runs (draft → recalculate → finalise → Excel/CSV, payslip PDFs), salary structures and
  * advances. Every list has a Download and each payslip downloads as a PDF (PLAN.md §19.31).
  */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   type Advance,
   type PayrollRun,
@@ -20,9 +20,9 @@ import {
   usePayrollRuns,
   useRunPayslips,
   useSalaryStructures,
-} from '@freefounders/core/hr';
-import { useTeamDirectory } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/hr';
+import { useTeamDirectory } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { Banknote, FileText, Play, Trash2 } from '@/components/icons';
 import { useState } from 'react';
 import { useConfirm } from '@/components/common/confirm';

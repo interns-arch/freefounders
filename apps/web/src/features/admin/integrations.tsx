@@ -2,8 +2,8 @@
  * Settings → Integrations (PLAN.md §19.40), Owner / Admin: the company's WhatsApp, Gmail and AI values. Secrets are
  * write-only: shown masked with Replace / Remove, never sent back in full. Every change is recorded (who, when).
  */
-import { errorMessage } from '@freefounders/core';
-import { type IntegrationField, type IntegrationGroup, useIntegrations, useSaveIntegrations } from '@freefounders/core/admin';
+import { errorMessage } from '@kaampilot/core';
+import { type IntegrationField, type IntegrationGroup, useIntegrations, useSaveIntegrations } from '@kaampilot/core/admin';
 import { useState } from 'react';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';

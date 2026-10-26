@@ -20,12 +20,12 @@ const ACME = { companyId: randomUUID(), code: 'acme_t', schema: 'co_acme_t', nam
 const BETA = { companyId: randomUUID(), code: 'beta_t', schema: 'co_beta_t', name: 'Beta Test Pvt Ltd' };
 const people: Record<string, { person: string; userId: string; company: typeof ACME }> = {};
 
-function sign(claims: Record<string, unknown>, sub: string, aud = 'freefounders', ttl = 900) {
+function sign(claims: Record<string, unknown>, sub: string, aud = 'kaampilot', ttl = 900) {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT(claims)
     .setProtectedHeader({ alg: 'EdDSA', kid: 'k1' })
     .setSubject(sub)
-    .setIssuer('freefounders-platform')
+    .setIssuer('kaampilot-platform')
     .setAudience(aud)
     .setIssuedAt(now)
     .setExpirationTime(now + ttl)

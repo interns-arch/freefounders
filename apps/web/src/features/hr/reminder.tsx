@@ -12,7 +12,7 @@
  * delay, again every gap, count in all; the person switches it on, as before). Apps 1.2.0/1.2.1 ring the first reminder
  * and one follow-up only. On leave / a holiday / the weekly off, punch.tsx skips today on the phone.
  */
-import { type PunchReminderRule, useAttendanceToday, useHrConfig } from '@freefounders/core/hr';
+import { type PunchReminderRule, useAttendanceToday, useHrConfig } from '@kaampilot/core/hr';
 import { useEffect, useState } from 'react';
 import { AlarmClock, Bell, BellOff, Smartphone } from '@/components/icons';
 import { Segmented } from '@/components/common/controls';

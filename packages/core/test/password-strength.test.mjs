@@ -1,4 +1,4 @@
-// `npm test --workspace @freefounders/core` (Node 22.18+ / 24 reads the .ts directly). Weak-password warning, R3.
+// `npm test --workspace @kaampilot/core` (Node 22.18+ / 24 reads the .ts directly). Weak-password warning, R3.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { passwordWeakness, weakPasswordWarning } from '../src/admin/password-strength.ts';

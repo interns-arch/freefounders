@@ -290,7 +290,7 @@ export function Shell() {
               allowsBackForwardNavigationGestures
               overScrollMode="never"
               textZoom={TEXT_ZOOM}
-              applicationNameForUserAgent={`FreeFoundersApp/${VERSION}`}
+              applicationNameForUserAgent={`KaampilotApp/${VERSION}`}
               webviewDebuggingEnabled={__DEV__}
               onNavigationStateChange={(nav) => {
                 canGoBack.current = nav.canGoBack;

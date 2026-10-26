@@ -1,4 +1,4 @@
-import { type PasswordAbout, PLATFORM_PASSWORD_MIN, weakPasswordWarning } from '@freefounders/core/admin';
+import { type PasswordAbout, PLATFORM_PASSWORD_MIN, weakPasswordWarning } from '@kaampilot/core/admin';
 import { AlertTriangle } from '@/components/icons';
 import { cn } from '@/lib/utils';
 

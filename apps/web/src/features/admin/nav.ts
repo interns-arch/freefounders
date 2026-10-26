@@ -1,5 +1,5 @@
-import type { Access } from '@freefounders/core';
-import { PEOPLE_SCREEN } from '@freefounders/core/admin';
+import type { Access } from '@kaampilot/core';
+import { PEOPLE_SCREEN } from '@kaampilot/core/admin';
 import { CreditCard, Settings2, ShieldCheck, Users } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 

@@ -6,7 +6,7 @@
  * browser and in the Android app's WebView, and Cashfree sends the person back to our return URL, where the page asks
  * the server what Cashfree says (never trusting the redirect itself).
  */
-import type { CashfreeCheckoutOptions } from '@freefounders/core/billing';
+import type { CashfreeCheckoutOptions } from '@kaampilot/core/billing';
 
 const SCRIPT = 'https://sdk.cashfree.com/js/v3/cashfree.js';
 

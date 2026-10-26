@@ -1,6 +1,6 @@
 /** Vehicles (PLAN.md §22): in with a photo of the vehicle / number plate, out (photo optional), time inside, history. */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { fileSlug } from '@freefounders/core/export';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { fileSlug } from '@kaampilot/core/export';
 import {
   type VehicleEntry,
   type VehicleFilters,
@@ -13,7 +13,7 @@ import {
   useVehicles,
   useVisits,
   visitorExports,
-} from '@freefounders/core/visitors';
+} from '@kaampilot/core/visitors';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { Car, LogOut, Plus } from '@/components/icons';

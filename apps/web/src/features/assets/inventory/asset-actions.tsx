@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Switch } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
-import { postAssetAction, useAssetsCache } from '@freefounders/core/assets';
-import type { Allocation } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { postAssetAction, useAssetsCache } from '@kaampilot/core/assets';
+import type { Allocation } from '@kaampilot/core/assets';
 import { formatDate } from '@/lib/utils';
 
 export interface ActionAsset {

@@ -1,5 +1,5 @@
 {
-  "name": "@freefounders/core",
+  "name": "@kaampilot/core",
   "version": "0.1.0",
   "private": true,
   "description": "Kaampilot shared logic for the web and mobile apps: HTTP client, sign-in session, typed APIs, data hooks, permissions. No DOM, no UI.",

@@ -1,5 +1,5 @@
 /** HR building blocks: status chips, punch photo thumbnails, formatting. */
-import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, usePunchPhoto } from '@freefounders/core/hr';
+import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, usePunchPhoto } from '@kaampilot/core/hr';
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Chip, type Tone } from '../tasks/general/parts';

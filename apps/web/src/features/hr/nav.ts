@@ -1,5 +1,5 @@
 import { Banknote, CalendarCheck, CalendarDays, CalendarHeart, CalendarRange, ClipboardCheck, Clock, FileSpreadsheet, LayoutGrid, Radio, Settings2, Wallet } from '@/components/icons';
-import type { Access } from '@freefounders/core';
+import type { Access } from '@kaampilot/core';
 import type { NavItem } from '@/app/nav';
 
 /**

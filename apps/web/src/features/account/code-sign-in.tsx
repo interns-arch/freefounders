@@ -3,8 +3,8 @@
  * → a 6-digit code (SMS / email, 10 minutes, 5 tries) → signed in, or the choice of company for an account in several.
  * Usernames and employee IDs (admin-made logins) have nowhere to send a code: they sign in with their password.
  */
-import { type ChooseCompany } from '@freefounders/core';
-import { identifierKind, type OtpSent, useLoginCodeStart, useLoginWithCode } from '@freefounders/core/account';
+import { type ChooseCompany } from '@kaampilot/core';
+import { identifierKind, type OtpSent, useLoginCodeStart, useLoginWithCode } from '@kaampilot/core/account';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { BackButton, CodeField, channelOff, codeError, CodeWait, DevCodeNote, FormError, ResendCode, sentTo, StepTitle, TextField, useCodeTimer } from './parts';

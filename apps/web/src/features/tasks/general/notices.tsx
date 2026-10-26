@@ -1,5 +1,5 @@
 /** /tasks/notices — the notice board, and managing notices for notices.publish (old pages/Notices.jsx). */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
 import {
   NOTICE_AUDIENCE_LABELS,
@@ -19,8 +19,8 @@ import {
   useTaskRoleOptions,
   useTeamDirectory,
   tasksExports,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { Megaphone, Paperclip, Pin, Plus, Send, TriangleAlert } from '@/components/icons';
 import { useEffect, useRef, useState } from 'react';

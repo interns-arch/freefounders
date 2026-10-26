@@ -1,6 +1,6 @@
-import { useAccess } from '@freefounders/core';
+import { useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
-import { type DashboardCounts, type TaskDashboard, useTaskCategoryNames, useTaskDashboard } from '@freefounders/core/tasks';
+import { type DashboardCounts, type TaskDashboard, useTaskCategoryNames, useTaskDashboard } from '@kaampilot/core/tasks';
 import { BarElement, CategoryScale, Chart as ChartJS, LinearScale, Tooltip } from 'chart.js';
 import { AlarmClock, CheckCircle2, CircleDashed, Hourglass, Loader, Timer } from '@/components/icons';
 import { type ComponentType, useEffect, useState } from 'react';

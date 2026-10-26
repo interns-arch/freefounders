@@ -1,7 +1,7 @@
 /** HR → Approvals: Leave and Regularization tabs (PLAN.md §19.38). Who is in today lives in live.tsx / daily.tsx (PLAN.md §19.15). */
-import { errorMessage } from '@freefounders/core';
-import { ATTENDANCE_STATUS_LABELS, type Regularization, hrExports, useHrConfig, useBulkReviewRegularizations, usePendingCorrections, usePendingLeaves, useReviewHrRequest } from '@freefounders/core/hr';
-import { todayStamp } from '@freefounders/core/export';
+import { errorMessage } from '@kaampilot/core';
+import { ATTENDANCE_STATUS_LABELS, type Regularization, hrExports, useHrConfig, useBulkReviewRegularizations, usePendingCorrections, usePendingLeaves, useReviewHrRequest } from '@kaampilot/core/hr';
+import { todayStamp } from '@kaampilot/core/export';
 import { Check, CheckCheck, ClipboardCheck, Inbox, MapPin, Palmtree, Paperclip, X } from '@/components/icons';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';

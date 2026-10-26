@@ -1,4 +1,4 @@
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   type TaskCompletion,
   type TaskFile,
@@ -10,8 +10,8 @@ import {
   useReviewCompletion,
   useWorkTaskList,
   tasksExports,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { ArrowUp, CheckCircle2, ClipboardCheck, Clock, Paperclip, RotateCcw, Trash2 } from '@/components/icons';
 import { useEffect, useMemo, useState } from 'react';

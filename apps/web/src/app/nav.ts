@@ -1,4 +1,4 @@
-import type { Access, Badges } from '@freefounders/core';
+import type { Access, Badges } from '@kaampilot/core';
 import type { IconComponent } from '@/components/icons';
 
 /** One menu entry. Each area exports its own list (features/<area>/nav.ts); the shell shows what `show` allows. */

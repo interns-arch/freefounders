@@ -4,7 +4,7 @@
  * phone it is tap the day, Regularize, Send. The server checks the company's policy (reasons, monthly limit, how far
  * back, today only after the shift) and answers with a message the person can act on.
  */
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import {
   type AttendanceDay,
   REGULARIZATION_PERIOD_WORDS,
@@ -16,7 +16,7 @@ import {
   useRegularizablePeople,
   useRegularizationPolicy,
   useRequestRegularization,
-} from '@freefounders/core/hr';
+} from '@kaampilot/core/hr';
 import { Paperclip, UserCheck } from '@/components/icons';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';

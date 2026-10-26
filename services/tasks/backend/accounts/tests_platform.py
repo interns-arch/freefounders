@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Role, User
 
-ISS, AUD = "freefounders-platform", "freefounders"
+ISS, AUD = "kaampilot-platform", "kaampilot"
 
 
 def make_key(kid):

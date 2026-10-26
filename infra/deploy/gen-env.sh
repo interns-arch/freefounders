@@ -38,9 +38,9 @@ CASHFREE_ENV=sandbox
 FF_COMPANY_CODE=DEMO
 FF_COMPANY_NAME="Kaampilot Demo"
 FF_OWNER_LOGIN=owner
-FF_OWNER_EMAIL=owner@freefounders.demo
+FF_OWNER_EMAIL=owner@kaampilot.demo
 FF_OWNER_PASSWORD=Ff-$(rnd 9)
-FF_STAFF_EMAIL=staff@freefounders.demo
+FF_STAFF_EMAIL=staff@kaampilot.demo
 FF_STAFF_PASSWORD=Ff-$(rnd 12)
 VARS
 chmod 600 "$ENV"

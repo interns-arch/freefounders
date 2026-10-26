@@ -2,8 +2,8 @@
  * Visitors → Settings (visitors.settings, PLAN.md §22): the rules, and the company's one visitor QR (founder,
  * 2026-10-26: one fixed QR per company, printed once; "Make a new QR" replaces it and the old one stops working).
  */
-import { errorMessage } from '@freefounders/core';
-import { type BadgeFormat, type PhotoRule, type VisitorSettings, type WatchAction, useChangeVisitorLink, useSaveVisitorSettings, useVisitorLink, useVisitorSettings } from '@freefounders/core/visitors';
+import { errorMessage } from '@kaampilot/core';
+import { type BadgeFormat, type PhotoRule, type VisitorSettings, type WatchAction, useChangeVisitorLink, useSaveVisitorSettings, useVisitorLink, useVisitorSettings } from '@kaampilot/core/visitors';
 import QRCodeLib from 'qrcode';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';

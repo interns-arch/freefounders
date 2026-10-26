@@ -3,9 +3,9 @@
  * location, invite the team, first attendance, the phone app, a plan. Each step is ticked from live data (the phone
  * app by hand). Hidden per company on this device, and by itself once everything is done.
  */
-import type { Access } from '@freefounders/core';
-import { usePeople } from '@freefounders/core/admin';
-import { useAttendanceToday, useOfficeLocations } from '@freefounders/core/hr';
+import type { Access } from '@kaampilot/core';
+import { usePeople } from '@kaampilot/core/admin';
+import { useAttendanceToday, useOfficeLocations } from '@kaampilot/core/hr';
 import { ArrowRight, Check, ChevronDown, X } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';

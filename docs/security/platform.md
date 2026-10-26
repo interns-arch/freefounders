@@ -95,7 +95,7 @@ out of the Platform immediately rather than at the next refresh.
 ## 5. Test results (2026-10-12)
 
 - Platform: `npm run typecheck && npm test` → **77 / 77** (63 earlier tests, 2 of them updated for #6; 14 new).
-- Web: `npm run typecheck --workspace @freefounders/web` (incl. web rules) → clean.
+- Web: `npm run typecheck --workspace @kaampilot/web` (incl. web rules) → clean.
 - E2E against the running suite: `single-login.spec.ts` + `web-admin.spec.ts` → 14 / 15 on the last run; the one failure is a new
   Assets-cookie assertion added in `single-login.spec.ts` by the Assets/web reviewer (not Platform code). `npm run smoke` → 10 / 10.
 - Live checks against http://localhost:8080 with a throwaway person: parallel lockout (5 checked / 15 refused), sign-out and
@@ -116,7 +116,7 @@ that names what is not allowed:
   level (removing roles is not limited; Super Admin stays owner-only; members still act on members only, §19.21);
 - choosing an app role (`PUT /people/:id/apps/:app` with `appRole`): the same rule through the role builder's copy of that app
   role (`tasks` code / `assets:<name>`); one the role builder does not know: owner only.
-`GET /auth/me` now returns `held: { level, grants }`; the web role editor (`roleLimits` in `@freefounders/core/admin`) shows what
+`GET /auth/me` now returns `held: { level, grants }`; the web role editor (`roleLimits` in `@kaampilot/core/admin`) shows what
 they cannot give disabled with "You don't have this yourself" (or "Only the owner can give this"), disables wider scopes and
 higher levels, filters "Copy from", opens roles beyond them read-only ("View"), and disables their Duplicate/Archive; the roles
 dialog on People disables roles they cannot give. Tests: Platform `Manage roles gives only what you have: permissions, scopes,
@@ -134,7 +134,7 @@ unless owner. Tests: Platform `extra access and responsibilities for one person�
 made of, with digits/years/symbols stripped and look-alike letters undone; only digits, repeated characters, sequences, keyboard
 walks and two such parts joined; the person's name, username, email local part or the company name, case-insensitive). Shown
 under every set-password field (reset password / create login, add person with a login, change own password) as "Weak password:
-easy to guess (…). You can still save it." Tests: `npm test --workspace @freefounders/core` (5 tests); Platform `at least 6
+easy to guess (…). You can still save it." Tests: `npm test --workspace @kaampilot/core` (5 tests); Platform `at least 6
 characters; weak ones are accepted; never a forced change (R3, R7)`; e2e `web-admin.spec.ts` reset-password test checks the
 three warnings and that Save stays enabled.
 

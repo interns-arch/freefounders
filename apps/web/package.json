@@ -1,5 +1,5 @@
 {
-  "name": "@freefounders/web",
+  "name": "@kaampilot/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,8 +16,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
-    "@freefounders/core": "*",
-    "@freefounders/theme": "*",
+    "@kaampilot/core": "*",
+    "@kaampilot/theme": "*",
     "@hookform/resolvers": "^5.2.0",
     "@hugeicons/core-free-icons": "4.3.5",
     "@hugeicons/react": "1.1.10",

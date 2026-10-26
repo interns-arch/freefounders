@@ -1,4 +1,4 @@
-import type { Access } from '@freefounders/core';
+import type { Access } from '@kaampilot/core';
 import { Activity, Boxes, Briefcase, CardSim, ClipboardList, GitCompareArrows, LayoutDashboard, LifeBuoy, LineChart, ListOrdered, LogOut, QrCode, ScanLine, Shapes, Truck, UserPlus, Users, UsersRound, Wrench } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 

@@ -61,7 +61,7 @@ test('People & access: list, search, add with department / manager / join date, 
     await page.getByRole('button', { name: 'Add person' }).click();
     const sheet = page.getByRole('dialog', { name: 'Add person' });
     await sheet.getByLabel('Full name').fill(name);
-    await sheet.getByLabel('Email').fill(`e2e-web-${s}@freefounders.test`);
+    await sheet.getByLabel('Email').fill(`e2e-web-${s}@kaampilot.test`);
     await sheet.getByLabel('Department').selectOption({ label: deptName });
     await sheet.getByLabel('Reports to').selectOption({ label: me.person.fullName });
     await sheet.getByLabel('Joining date').fill('2026-09-01');
@@ -266,7 +266,7 @@ test('people who are not admins cannot open the admin screens', async ({ page, r
   const password = 'E2e@654321';
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: `E2E Web Member ${s}`, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+    data: { fullName: `E2E Web Member ${s}`, email: `${login}@kaampilot.test`, login: { username: login, password: temp } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id;
@@ -292,7 +292,7 @@ test('People: reset with a typed password (shown once), they sign in with it, th
   const chosen = `pw${s}`.slice(0, 10); // 6+ characters, the new minimum
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login } },
+    data: { fullName: name, email: `${login}@kaampilot.test`, login: { username: login } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id as string;
@@ -404,7 +404,7 @@ test('People: delete with the defaults hands their open task to their manager', 
   const login = `e2e-web-ho-${s}`;
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, reportsTo: me.person.id, login: { username: login, password: 'Hand@123' } },
+    data: { fullName: name, email: `${login}@kaampilot.test`, reportsTo: me.person.id, login: { username: login, password: 'Hand@123' } },
   });
   expect(created.status(), await created.text()).toBe(201);
   const personId = (await created.json()).person.id as string;
@@ -472,7 +472,7 @@ async function personWithRoles(request: APIRequestContext, owner: string, s: str
   const password = 'E2e@654321';
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: `E2E Perm ${s}`, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+    data: { fullName: `E2E Perm ${s}`, email: `${login}@kaampilot.test`, login: { username: login, password: temp } },
   });
   expect(created.status(), await created.text()).toBe(201);
   const personId = (await created.json()).person.id as string;

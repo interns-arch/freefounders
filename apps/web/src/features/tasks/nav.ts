@@ -1,4 +1,4 @@
-import type { Access } from '@freefounders/core';
+import type { Access } from '@kaampilot/core';
 import { BarChart3, Bell, Bot, Boxes, CheckSquare, Home, Link2, Megaphone, Settings2, Target, TriangleAlert, UsersRound } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 

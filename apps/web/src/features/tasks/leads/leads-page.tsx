@@ -1,5 +1,5 @@
 /** /tasks/leads — the pipeline board with filters, tiles, add-lead and the lead drawer (old pages/Leads.jsx). */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
 import { ShowMore, useShowMore } from '@/components/common/show-more';
 import {
@@ -17,8 +17,8 @@ import {
   useTeamPeople,
   useUpdateLead,
   tasksExports,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { AlarmClock, Clock, IndianRupee, Plus, RefreshCw, Target, Trophy } from '@/components/icons';
 import { type Dispatch, type SetStateAction, useMemo, useState } from 'react';

@@ -1,6 +1,6 @@
 import type { Permission } from '@eam/shared';
-import { useAccess } from '@freefounders/core';
-import type { Me } from '@freefounders/core/assets';
+import { useAccess } from '@kaampilot/core';
+import type { Me } from '@kaampilot/core/assets';
 
 /**
  * The Assets screens' view of who is signed in (was lib/auth.tsx in the Assets app): the Assets /me and its

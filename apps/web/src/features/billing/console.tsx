@@ -4,7 +4,7 @@
  * Recent actions), Users (every account and admin-made login), Billing (subscriptions, invoices, payments, revenue) and
  * Logs (the production log of every service). Everything but the existing company actions is read-only.
  */
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import {
   type ConsoleAuditAction,
   type ConsoleAuditRow,
@@ -18,7 +18,7 @@ import {
   useConsoleAudit,
   useDashboardCompanies,
   usePlans,
-} from '@freefounders/core/billing';
+} from '@kaampilot/core/billing';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -27,7 +27,7 @@ import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { PageHeader } from '@/components/common/page';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { SearchField } from '@/components/common/search-field';
 import { Button } from '@/components/ui/button';
 import { Label, NativeSelect } from '@/components/ui/input';

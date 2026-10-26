@@ -3,7 +3,7 @@
  * their unread counts, and one row per notification. Unread = bold title on a light tint with a bar in the theme colour
  * on the left (no dots, no capsules, CLAUDE.md). Data comes from the screens (core hooks); this file only draws.
  */
-import { NOTIFICATION_TABS, type NotificationArea, type NotificationTab, type UnifiedNotification } from '@freefounders/core';
+import { NOTIFICATION_TABS, type NotificationArea, type NotificationTab, type UnifiedNotification } from '@kaampilot/core';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 

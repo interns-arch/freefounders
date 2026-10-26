@@ -28,7 +28,7 @@ services:
       -c effective_cache_size=192MB -c wal_buffers=4MB -c max_wal_size=256MB
     volumes:
       - ${FF_HOME:?}/data/postgres:/var/lib/postgresql/data
-      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-freefounders.sh:ro
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-kaampilot.sh:ro
     networks: [internal]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
@@ -46,7 +46,7 @@ services:
     build:
       context: ../../services/platform
       dockerfile: ../../infra/deploy/platform.Dockerfile
-    image: freefounders-platform:latest
+    image: kaampilot-platform:latest
     restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
@@ -111,7 +111,7 @@ services:
     build:
       context: ../../services/tasks
       dockerfile: Dockerfile
-    image: freefounders-tasks:latest
+    image: kaampilot-tasks:latest
     restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
@@ -146,7 +146,7 @@ services:
     logging: *logging
 
   tasks-worker:
-    image: freefounders-tasks:latest
+    image: kaampilot-tasks:latest
     restart: unless-stopped
     depends_on:
       tasks: { condition: service_healthy }
@@ -166,7 +166,7 @@ services:
     build:
       context: ../../services/assets
       dockerfile: ../../infra/deploy/assets.Dockerfile
-    image: freefounders-assets:latest
+    image: kaampilot-assets:latest
     restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }

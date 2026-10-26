@@ -1,4 +1,4 @@
-import { ApiError, type AppKey, errorMessage, usePlatformMe } from '@freefounders/core';
+import { ApiError, type AppKey, errorMessage, usePlatformMe } from '@kaampilot/core';
 import {
   APP_NAMES,
   ADMIN_ROLE,
@@ -26,7 +26,7 @@ import {
   useSetPersonRoles,
   useStartExit,
   useUpdatePerson,
-} from '@freefounders/core/admin';
+} from '@kaampilot/core/admin';
 import { Check, Copy, Eye, EyeOff, Share2 } from '@/components/icons';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';

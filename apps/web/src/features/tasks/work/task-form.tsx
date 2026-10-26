@@ -1,4 +1,4 @@
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   PartialCreateError,
   TASK_FREQUENCY_LABELS,
@@ -15,7 +15,7 @@ import {
   useTaskDepartments,
   useTaskFormCategories,
   useWorkloads,
-} from '@freefounders/core/tasks';
+} from '@kaampilot/core/tasks';
 import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Pencil, Plus, X } from '@/components/icons';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';

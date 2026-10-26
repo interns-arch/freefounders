@@ -2,9 +2,9 @@
  * "Create your company" (PLAN.md §20.5 step 2): name, team size, industry, state (GST), apps. Used by sign-up and by
  * "New company" in the account menu. Then the "Setting up your company…" screen while the server provisions it.
  */
-import { type CompanyInput, INDUSTRIES, TEAM_SIZES, type TeamSize, useCompanyNameCheck } from '@freefounders/core/account';
-import { INDIAN_STATES } from '@freefounders/core/billing';
-import type { AppKey } from '@freefounders/core';
+import { type CompanyInput, INDUSTRIES, TEAM_SIZES, type TeamSize, useCompanyNameCheck } from '@kaampilot/core/account';
+import { INDIAN_STATES } from '@kaampilot/core/billing';
+import type { AppKey } from '@kaampilot/core';
 import { CheckCircle2, ClipboardList, Loader2, Package } from '@/components/icons';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';

@@ -1,5 +1,5 @@
-import { ApiError, errorMessage, type MeAccount, useChangePassword, usePlatformMe } from '@freefounders/core';
-import { usernameErrorOf, useSetUsername, useUsernameCheck } from '@freefounders/core/account';
+import { ApiError, errorMessage, type MeAccount, useChangePassword, usePlatformMe } from '@kaampilot/core';
+import { usernameErrorOf, useSetUsername, useUsernameCheck } from '@kaampilot/core/account';
 import { UsernameField } from '@/features/account/parts';
 import { Loader2 } from '@/components/icons';
 import { type FormEvent, useState } from 'react';

@@ -10,7 +10,7 @@
       "@/assets/*": [
         "./assets/*"
       ],
-      "@freefounders/theme/native": [
+      "@kaampilot/theme/native": [
         "../../packages/theme/src/tokens.native.ts"
       ]
     }

@@ -2,7 +2,7 @@
  * The visitor's own pass (PLAN.md §22.9): /v/<company code>/p/<pass token>, sent by WhatsApp / email. No sign-in, any
  * phone browser. A big QR for the guard to scan coming in and going out; it refreshes so it shows "Inside" / "Left".
  */
-import { usePublicPass } from '@freefounders/core/visitors';
+import { usePublicPass } from '@kaampilot/core/visitors';
 import { useEffect } from 'react';
 import { useParams } from 'react-router';
 import { CalendarClock, MapPin, ShieldCheck, UserRound } from '@/components/icons';

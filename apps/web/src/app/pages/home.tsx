@@ -5,10 +5,10 @@
  * Same URL as the old chooser (/ and /?choose); on phones a person with Attendance lands on /attendance instead unless
  * the URL says ?home=1 (the bottom bar's Home tab).
  */
-import { type Access, useAccess, useBadges } from '@freefounders/core';
-import { useAssetsDashboard } from '@freefounders/core/assets';
-import { nearestOffice, useHrConfig, useLeaveBalances, useOfficeLocations, usePendingCorrections, usePendingLeaves } from '@freefounders/core/hr';
-import { useMyTaskTiles, useWaitingCounts } from '@freefounders/core/tasks';
+import { type Access, useAccess, useBadges } from '@kaampilot/core';
+import { useAssetsDashboard } from '@kaampilot/core/assets';
+import { nearestOffice, useHrConfig, useLeaveBalances, useOfficeLocations, usePendingCorrections, usePendingLeaves } from '@kaampilot/core/hr';
+import { useMyTaskTiles, useWaitingCounts } from '@kaampilot/core/tasks';
 import { ADMIN_SCREENS } from '@/features/admin/nav';
 import { GettingStarted, showsChecklist } from '@/features/account/checklist';
 import { ArrowRight, Camera, CreditCard, Fingerprint, LogIn, LogOut, MapPin, ScanLine, Settings2, ShieldCheck, Users } from '@/components/icons';

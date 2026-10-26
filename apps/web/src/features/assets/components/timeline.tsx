@@ -19,7 +19,7 @@ import {
 } from '@/components/icons';
 import { Link } from 'react-router';
 import { Skeleton } from '@/components/ui/primitives';
-import type { HistoryEvent } from '@freefounders/core/assets';
+import type { HistoryEvent } from '@kaampilot/core/assets';
 import { cn, formatDateTime, relativeTime } from '@/lib/utils';
 import { EmptyState } from '@/components/common/page';
 

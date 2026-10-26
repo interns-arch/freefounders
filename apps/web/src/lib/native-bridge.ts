@@ -1,6 +1,6 @@
 /**
  * The bridge to the Kaampilot phone app (PLAN.md §19.17). On Android the app is this web app inside a native shell
- * (apps/mobile, react-native-webview). The shell sets `window.FreeFoundersApp = { platform, version }` before the page
+ * (apps/mobile, react-native-webview). The shell sets `window.KaampilotApp = { platform, version }` before the page
  * loads and answers requests sent with `window.ReactNativeWebView.postMessage`:
  *
  *   web → app   {"id": "r1", "type": "location" | "photo" | "download", ...payload}
@@ -49,6 +49,8 @@ interface Reply {
 
 declare global {
   interface Window {
+    KaampilotApp?: AppInfo;
+    /** The same object under its old name, set by app builds before the Kaampilot rename (com.freefounders.app). */
     FreeFoundersApp?: AppInfo;
     ReactNativeWebView?: { postMessage: (message: string) => void };
   }
@@ -56,8 +58,8 @@ declare global {
 
 /** Inside the phone app: the shell's info; in a browser: null. */
 export function appInfo(): AppInfo | null {
-  if (typeof window === 'undefined' || !window.FreeFoundersApp || !window.ReactNativeWebView) return null;
-  return window.FreeFoundersApp;
+  if (typeof window === 'undefined' || !window.ReactNativeWebView) return null;
+  return window.KaampilotApp ?? window.FreeFoundersApp ?? null;
 }
 
 export const isInApp = () => appInfo() !== null;

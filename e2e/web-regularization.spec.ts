@@ -32,7 +32,7 @@ async function newPerson(request: APIRequestContext, owner: string, label: strin
   const name = `E2E ${label} ${stamp}`;
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login, password: temp }, ...(reportsTo ? { reportsTo } : {}) },
+    data: { fullName: name, email: `${login}@kaampilot.test`, login: { username: login, password: temp }, ...(reportsTo ? { reportsTo } : {}) },
   });
   expect(created.status(), await created.text()).toBe(201);
   const personId = (await created.json()).person.id as string;

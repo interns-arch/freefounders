@@ -3,9 +3,9 @@
  * something is wrong). A checkpoint not checked for N hours in the patrol hours alerts the security head. Admins add
  * checkpoints and print the stickers; the register sees every round and downloads it.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { fileSlug } from '@freefounders/core/export';
-import { type Checkpoint, type VisitorConfig, useCheckpoints, useGuards, usePatrolScan, usePatrolScans, useSaveCheckpoint, visitorExportsV3 } from '@freefounders/core/visitors';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { fileSlug } from '@kaampilot/core/export';
+import { type Checkpoint, type VisitorConfig, useCheckpoints, useGuards, usePatrolScan, usePatrolScans, useSaveCheckpoint, visitorExportsV3 } from '@kaampilot/core/visitors';
 import QRCodeLib from 'qrcode';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';

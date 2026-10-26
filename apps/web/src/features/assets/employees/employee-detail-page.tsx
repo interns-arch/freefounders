@@ -43,12 +43,12 @@ import {
 import { Avatar, Badge, Card, CardContent, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives';
 import { AssetActionDialog, type AssetDialog } from '@/features/assets/inventory/asset-actions';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { fetchAsset, useAssetsCache, useDisableLogin, useEmployee, useEmployeeHistory, useGrantEmployeeAccess, useVerifyEmployeeAssets } from '@freefounders/core/assets';
+import { fetchAsset, useAssetsCache, useDisableLogin, useEmployee, useEmployeeHistory, useGrantEmployeeAccess, useVerifyEmployeeAssets } from '@kaampilot/core/assets';
 import { EXIT_CASE_TONE } from '@/lib/status';
-import type { Allocation, AssetDetail, EmployeeDetail, HeldAsset } from '@freefounders/core/assets';
+import type { Allocation, AssetDetail, EmployeeDetail, HeldAsset } from '@kaampilot/core/assets';
 import { cn, daysUntil, formatDate, formatDateTime, relativeTime } from '@/lib/utils';
 import { AccessDialog, type Credentials, CredentialsDialog } from './access';
 import { StatusDialog } from './status-dialog';

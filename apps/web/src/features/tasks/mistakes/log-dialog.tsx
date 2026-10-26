@@ -1,6 +1,6 @@
 /** "Log a mistake": for yourself, or for someone else (mistakes.log). mistakes.settings can add a category on the spot. */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { MISTAKE_SEVERITIES, type Mistake, type MistakeSeverity, useAddMistakeCategory, useLogMistake, useMistakeCategories, useSops, useTaskAssignees } from '@freefounders/core/tasks';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { MISTAKE_SEVERITIES, type Mistake, type MistakeSeverity, useAddMistakeCategory, useLogMistake, useMistakeCategories, useSops, useTaskAssignees } from '@kaampilot/core/tasks';
 import { Plus } from '@/components/icons';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';

@@ -3,7 +3,7 @@
  * email / mobile → code → name + username + password (an existing account gives just its password), or "I already have an
  * account" (sign in, then back here). Then Home of that company.
  */
-import { errorMessage, session, useClaims } from '@freefounders/core';
+import { errorMessage, session, useClaims } from '@kaampilot/core';
 import {
   type AcceptAsNew,
   identifierKind,
@@ -16,8 +16,8 @@ import {
   useSignupVerify,
   usernameErrorOf,
   useUsernameCheck,
-} from '@freefounders/core/account';
-import { APP_NAMES, PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
+} from '@kaampilot/core/account';
+import { APP_NAMES, PLATFORM_PASSWORD_MIN } from '@kaampilot/core/admin';
 import { Building2, Link2 } from '@/components/icons';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';

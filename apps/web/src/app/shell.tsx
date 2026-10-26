@@ -1,5 +1,5 @@
-import { useAccess, useBadges } from '@freefounders/core';
-import { ensureAssetsCookie } from '@freefounders/core/assets';
+import { useAccess, useBadges } from '@kaampilot/core';
+import { ensureAssetsCookie } from '@kaampilot/core/assets';
 import { ChevronDown, Home, LayoutGrid } from '@/components/icons';
 import { type RefObject, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';

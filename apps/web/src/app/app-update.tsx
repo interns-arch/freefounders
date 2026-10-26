@@ -1,4 +1,4 @@
-import { isOlderVersion, useAppVersionInfo } from '@freefounders/core';
+import { isOlderVersion, useAppVersionInfo } from '@kaampilot/core';
 import { Download, X } from '@/components/icons';
 import { useState } from 'react';
 import { appInfo, isInApp } from '@/lib/native-bridge';

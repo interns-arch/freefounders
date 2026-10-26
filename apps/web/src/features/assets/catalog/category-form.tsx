@@ -4,9 +4,9 @@ import { toast } from 'sonner';
 import { applyServerErrors, errorOf, Field, useZodForm } from '@/components/common/form';
 import { FormSheet } from '@/components/common/form-sheet';
 import { Input, Textarea } from '@/components/ui/input';
-import { errorMessage } from '@freefounders/core';
-import { useAssetsCache, useSaveCategory } from '@freefounders/core/assets';
-import type { Category } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { useAssetsCache, useSaveCategory } from '@kaampilot/core/assets';
+import type { Category } from '@kaampilot/core/assets';
 import type { FormProps } from '../quick-add/quick-add';
 import { ColorPicker, IconPicker } from './pickers';
 

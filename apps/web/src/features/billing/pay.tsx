@@ -7,7 +7,7 @@
  * - FakePay · test mode (dev, open demo): looks like a hosted payment page but is clearly a test: no real brand, no card
  *   numbers asked. Pay / Simulate failure / Cancel → POST billing/fake/:id/complete, a signed webhook like Cashfree's.
  */
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import {
   type CheckoutSession,
   type FakeOutcome,
@@ -16,7 +16,7 @@ import {
   useCashfreeCheck,
   useCheckoutSession,
   useFakeComplete,
-} from '@freefounders/core/billing';
+} from '@kaampilot/core/billing';
 import { AlertTriangle, CheckCircle2, CreditCard, Landmark, Lock, Smartphone, XCircle } from '@/components/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';

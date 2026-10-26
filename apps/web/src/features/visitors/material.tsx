@@ -3,9 +3,9 @@
  * head) approves; the guard checks the items at the gate. Returnable goods are expected back by a date; assets picked
  * from the Assets app get the movement in their history there.
  */
-import { ApiError, errorMessage, useAccess } from '@freefounders/core';
-import { usePickerAssets } from '@freefounders/core/assets';
-import { fileSlug } from '@freefounders/core/export';
+import { ApiError, errorMessage, useAccess } from '@kaampilot/core';
+import { usePickerAssets } from '@kaampilot/core/assets';
+import { fileSlug } from '@kaampilot/core/export';
 import {
   type MaterialInput,
   type MaterialItemInput,
@@ -21,7 +21,7 @@ import {
   useMaterialPasses,
   useReturnMaterial,
   visitorExportsV3,
-} from '@freefounders/core/visitors';
+} from '@kaampilot/core/visitors';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';

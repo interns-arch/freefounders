@@ -3,8 +3,8 @@
  * lines with SAC, CGST + SGST (same state) or IGST, total in words. Download PDF (made by the Platform, PLAN.md §19.31) or
  * print; in the phone app through the native bridge.
  */
-import { billingExports, formatInr, inrInWords, type Invoice, type Party, useInvoice } from '@freefounders/core/billing';
-import { fileSlug } from '@freefounders/core/export';
+import { billingExports, formatInr, inrInWords, type Invoice, type Party, useInvoice } from '@kaampilot/core/billing';
+import { fileSlug } from '@kaampilot/core/export';
 import { DownloadButton } from '@/components/common/download-menu';
 import { ArrowLeft, Printer } from '@/components/icons';
 import { Link, useParams } from 'react-router';

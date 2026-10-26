@@ -43,7 +43,7 @@ async function makeDoer(request: APIRequestContext, owner: string, stamp: string
   const login = `e2e-doer-${stamp}`;
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login, password: 'E2e@123456' } },
+    data: { fullName: name, email: `${login}@kaampilot.test`, login: { username: login, password: 'E2e@123456' } },
   });
   expect(created.status(), await created.text()).toBe(201);
   const personId = (await created.json()).person.id as string;

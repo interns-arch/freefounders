@@ -2,9 +2,9 @@
  * /attendance/dashboard (PLAN.md §19.15): one row per person for a month: present, absent, half days, late marks, leave,
  * week-offs/holidays and hours. Sort any column, open a person's month calendar, download the month or import attendance.
  */
-import { useAccess } from '@freefounders/core';
-import { type TeamMonthRow, hrExports, useTeamMonth } from '@freefounders/core/hr';
-import { fileSlug } from '@freefounders/core/export';
+import { useAccess } from '@kaampilot/core';
+import { type TeamMonthRow, hrExports, useTeamMonth } from '@kaampilot/core/hr';
+import { fileSlug } from '@kaampilot/core/export';
 import { ChevronLeft, ChevronRight, Upload } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { type Column, DataTable } from '@/components/common/data-table';

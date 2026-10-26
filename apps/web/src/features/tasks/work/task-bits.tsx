@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskStatus } from '@freefounders/core/tasks';
+import type { TaskPriority, TaskStatus } from '@kaampilot/core/tasks';
 import type { ReactNode } from 'react';
 import { Badge, type BadgeTone } from '@/components/ui/primitives';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';

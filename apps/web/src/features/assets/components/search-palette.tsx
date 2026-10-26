@@ -6,8 +6,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { DialogTitle } from '@/components/ui/overlays';
 import { Kbd } from '@/components/ui/input';
 import { useQuickAdd, useQuickAddItems } from '@/features/assets/quick-add/quick-add';
-import { useAccess } from '@freefounders/core';
-import { useAssetsSearch } from '@freefounders/core/assets';
+import { useAccess } from '@kaampilot/core';
+import { useAssetsSearch } from '@kaampilot/core/assets';
 import { AssetIcon } from '@/lib/icons';
 import { useDebounced } from '@/lib/url-state';
 import { Avatar } from '@/components/ui/primitives';

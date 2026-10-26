@@ -5,7 +5,7 @@
  * Cancel stops the punch. The dialog is fully closed before the next step (location, browser camera, or the phone
  * app's native camera) starts.
  */
-import { UNIFORM_MESSAGE_DEFAULT, UNIFORM_NOT_WORN, type UniformCheck } from '@freefounders/core/hr';
+import { UNIFORM_MESSAGE_DEFAULT, UNIFORM_NOT_WORN, type UniformCheck } from '@kaampilot/core/hr';
 import { useEffect, useRef, useState } from 'react';
 import { Shirt } from '@/components/icons';
 import { Button } from '@/components/ui/button';

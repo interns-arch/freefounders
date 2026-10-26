@@ -1,9 +1,9 @@
-import { errorMessage, usePlatformMe } from '@freefounders/core';
-import { GUARD_ROLE_PRESET, LEVEL_LABELS, type Role, roleApps, roleLimits, rolesMatrixSheet, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles, useSaveRole } from '@freefounders/core/admin';
+import { errorMessage, usePlatformMe } from '@kaampilot/core';
+import { GUARD_ROLE_PRESET, LEVEL_LABELS, type Role, roleApps, roleLimits, rolesMatrixSheet, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles, useSaveRole } from '@kaampilot/core/admin';
 import { Lock, Plus, ShieldCheck } from '@/components/icons';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { useConfirm } from '@/components/common/confirm';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { type Column, DataTable } from '@/components/common/data-table';

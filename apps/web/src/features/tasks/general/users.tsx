@@ -3,7 +3,7 @@
  * list for users.manage. Kaampilot: people, departments and "reports to" belong to the Platform's People directory
  * (PLAN.md §17.1), so they are shown read-only here with a link to People & access.
  */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
 import {
   type ManagedUser,
@@ -16,7 +16,7 @@ import {
   useTaskRoleOptions,
   useTeamDirectory,
   useUpdateManagedUser,
-} from '@freefounders/core/tasks';
+} from '@kaampilot/core/tasks';
 import { BarChart3, ExternalLink, UserPlus, UsersRound } from '@/components/icons';
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router';

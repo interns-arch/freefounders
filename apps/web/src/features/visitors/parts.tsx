@@ -3,8 +3,8 @@
  * with the camera elsewhere), private photos, status labels, the host picker, the visitor pass (V2: link on the visitor's
  * phone, printed badge) and the watchlist mark.
  */
-import { errorMessage } from '@freefounders/core';
-import { type BadgeFormat, type PersonBrief, type Visit, type VisitStatus, formatMinutes, useHostSearch, useSendPass, useVisitPhoto } from '@freefounders/core/visitors';
+import { errorMessage } from '@kaampilot/core';
+import { type BadgeFormat, type PersonBrief, type Visit, type VisitStatus, formatMinutes, useHostSearch, useSendPass, useVisitPhoto } from '@kaampilot/core/visitors';
 import QRCodeLib from 'qrcode';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, useState } from 'react';

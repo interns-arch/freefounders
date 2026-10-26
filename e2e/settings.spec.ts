@@ -83,7 +83,7 @@ test('photo optional: "Skip photo" checks in without one; required: no skip', as
   expect((await request.put('/tasks/api/hr/settings/', { headers: auth(owner), data: { photo: 'required', geofence_enabled: false } })).ok()).toBeTruthy();
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: `E2E Skip ${stamp}`, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+    data: { fullName: `E2E Skip ${stamp}`, email: `${login}@kaampilot.test`, login: { username: login, password: temp } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id;
@@ -147,7 +147,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
   // A new person with a Tasks role; they set their own password.
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: `E2E Photo ${stamp}`, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+    data: { fullName: `E2E Photo ${stamp}`, email: `${login}@kaampilot.test`, login: { username: login, password: temp } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id;

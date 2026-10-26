@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Switch } from '@/components/ui/primitives';
-import { ApiError, errorMessage } from '@freefounders/core';
-import { saveField, useAssetsCache } from '@freefounders/core/assets';
-import type { FieldDefinition } from '@freefounders/core/assets';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { saveField, useAssetsCache } from '@kaampilot/core/assets';
+import type { FieldDefinition } from '@kaampilot/core/assets';
 
 interface Props {
   open: boolean;

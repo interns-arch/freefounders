@@ -2,9 +2,9 @@
  * People & access → "Invite link" (PLAN.md §20.5 step 4, §21.1): a link with the role(s) and apps chosen, an expiry and
  * an optional use limit; copy it or share it on WhatsApp; the company's open links, each can be switched off.
  */
-import { errorMessage, type AppKey } from '@freefounders/core';
-import { inviteRoleName, type Invite, useCreateInvite, useInvites, useRevokeInvite } from '@freefounders/core/account';
-import { APP_NAMES, MEMBER_ROLE, usePlatformApps, useRoles } from '@freefounders/core/admin';
+import { errorMessage, type AppKey } from '@kaampilot/core';
+import { inviteRoleName, type Invite, useCreateInvite, useInvites, useRevokeInvite } from '@kaampilot/core/account';
+import { APP_NAMES, MEMBER_ROLE, usePlatformApps, useRoles } from '@kaampilot/core/admin';
 import { Copy, Link2, MessageCircle, Trash2 } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';

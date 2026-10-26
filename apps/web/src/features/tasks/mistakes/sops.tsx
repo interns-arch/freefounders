@@ -2,10 +2,10 @@
  * Processes (SOP): the written processes a mistake gets judged against. Everyone in the module reads them; sops.manage writes.
  * Old versions are kept (retired), so an old mistake is still judged against the process that existed then.
  */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
-import { type Sop, useRetireSop, useSaveSop, useSops, useTaskDepartments } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { type Sop, useRetireSop, useSaveSop, useSops, useTaskDepartments } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { BookOpen, Plus } from '@/components/icons';
 import { useState } from 'react';

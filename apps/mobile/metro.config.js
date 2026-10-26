@@ -1,6 +1,6 @@
 // Metro for the Kaampilot phone app (the web app in a native shell, PLAN.md §19.17). apps/mobile is NOT in the root
 // npm workspace: it keeps its own node_modules (Expo pins its own React). The only shared code it reads is the theme's
-// hex colours, straight from source:  @freefounders/theme/native  →  ../../packages/theme  (through its "exports").
+// hex colours, straight from source:  @kaampilot/theme/native  →  ../../packages/theme  (through its "exports").
 // Any bare import made inside packages/* would be taken from THIS app's node_modules (one React). See README.md.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -9,11 +9,11 @@ const { getDefaultConfig } = require('expo/metro-config');
 const projectRoot = __dirname;
 const repoRoot = path.resolve(projectRoot, '../..');
 const SHARED = {
-  '@freefounders/theme': path.join(repoRoot, 'packages/theme'),
+  '@kaampilot/theme': path.join(repoRoot, 'packages/theme'),
 };
 const sharedDirs = Object.values(SHARED);
 
-/** '@freefounders/theme/native' → the file its package.json "exports" names for './native'. */
+/** '@kaampilot/theme/native' → the file its package.json "exports" names for './native'. */
 function sharedFile(moduleName) {
   for (const [name, dir] of Object.entries(SHARED)) {
     if (moduleName !== name && !moduleName.startsWith(`${name}/`)) continue;

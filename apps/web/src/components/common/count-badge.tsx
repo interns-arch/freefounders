@@ -1,4 +1,4 @@
-import { countLabel } from '@freefounders/core';
+import { countLabel } from '@kaampilot/core';
 import { cn } from '@/lib/utils';
 
 /**

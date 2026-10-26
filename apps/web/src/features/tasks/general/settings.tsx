@@ -3,7 +3,7 @@
  * (read-only: the Platform owns them now, PLAN.md §17.1), task categories with pending approvals, lead assignment
  * rules (module leads) and the notification rules matrix (PLAN.md §16.5).
  */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   type AssignmentRule,
   type ManagedCategory,
@@ -22,7 +22,7 @@ import {
   useTaskSettings,
   useTeamPeople,
   useWhatsappHours,
-} from '@freefounders/core/tasks';
+} from '@kaampilot/core/tasks';
 import { ArrowDown, ArrowUp, ExternalLink, X } from '@/components/icons';
 import { useState } from 'react';
 import { Link } from 'react-router';

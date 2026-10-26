@@ -2,8 +2,8 @@
 // Off unless PLATFORM_JWKS_URL (or PLATFORM_JWKS, the key set inline as JSON) is set.
 import { createLocalJWKSet, createRemoteJWKSet, decodeProtectedHeader, type JWTPayload, jwtVerify } from 'jose';
 
-export const PLATFORM_ISSUER = 'freefounders-platform';
-export const ACCESS_AUDIENCE = 'freefounders';
+export const PLATFORM_ISSUER = 'kaampilot-platform';
+export const ACCESS_AUDIENCE = 'kaampilot';
 export const SERVICE_AUDIENCE = 'assets-internal';
 
 type KeySet = ReturnType<typeof createLocalJWKSet> | ReturnType<typeof createRemoteJWKSet>;

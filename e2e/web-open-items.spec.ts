@@ -41,13 +41,13 @@ function nextYearMonday(): string {
 test('import people from a CSV: preview with per-row errors, then import; HR marks a half-day leave for one of them', async ({ page, request }) => {
   const owner = await token(request);
   const stamp = Date.now().toString(36);
-  const lead = { name: `E2E Lead ${stamp}`, email: `e2e-imp-lead-${stamp}@freefounders.test`, code: `E2E-L-${stamp}` };
-  const exec = { name: `E2E Exec ${stamp}`, email: `e2e-imp-exec-${stamp}@freefounders.test`, code: `E2E-X-${stamp}` };
+  const lead = { name: `E2E Lead ${stamp}`, email: `e2e-imp-lead-${stamp}@kaampilot.test`, code: `E2E-L-${stamp}` };
+  const exec = { name: `E2E Exec ${stamp}`, email: `e2e-imp-exec-${stamp}@kaampilot.test`, code: `E2E-X-${stamp}` };
   const csv = [
     'Name,Email,Mobile,Employee ID,Department,Designation,Reports to,Join date,Role',
     `${lead.name},${lead.email},,${lead.code},,Team lead,,01-10-2026,Member`,
     `${exec.name},${exec.email},98111 22333,${exec.code},,Executive,${lead.code},2026-10-02,`,
-    `,nobody-${stamp}@freefounders.test,,,,,,,`,
+    `,nobody-${stamp}@kaampilot.test,,,,,,,`,
   ].join('\n');
   try {
     await signIn(page);

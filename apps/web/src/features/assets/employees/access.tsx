@@ -6,12 +6,12 @@ import { Field } from '@/components/common/form';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
-import { ApiError, errorMessage } from '@freefounders/core';
+import { ApiError, errorMessage } from '@kaampilot/core';
 import { useCompanyName } from '@/features/assets/lib/auth';
-import { useRoles } from '@freefounders/core/assets';
-import type { EmployeeDetail } from '@freefounders/core/assets';
+import { useRoles } from '@kaampilot/core/assets';
+import type { EmployeeDetail } from '@kaampilot/core/assets';
 
-import type { AccessInput, Credentials } from '@freefounders/core/assets';
+import type { AccessInput, Credentials } from '@kaampilot/core/assets';
 
 export type { AccessInput, Credentials };
 

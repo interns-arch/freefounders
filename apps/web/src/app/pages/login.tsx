@@ -1,4 +1,4 @@
-import { ApiError, type ChooseCompany, errorMessage, session, useSignIn } from '@freefounders/core';
+import { ApiError, type ChooseCompany, errorMessage, session, useSignIn } from '@kaampilot/core';
 import { Eye, EyeOff } from '@/components/icons';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';

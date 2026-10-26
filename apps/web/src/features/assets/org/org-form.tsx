@@ -7,8 +7,8 @@ import { FormSheet } from '@/components/common/form-sheet';
 import { EntityPicker } from '@/features/assets/components/pickers';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Switch } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
-import { type OrgPath, useAssetsCache, useSaveOrg } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { type OrgPath, useAssetsCache, useSaveOrg } from '@kaampilot/core/assets';
 import type { FormProps } from '../quick-add/quick-add';
 
 export type OrgKind = 'company' | 'department' | 'location' | 'vendor';

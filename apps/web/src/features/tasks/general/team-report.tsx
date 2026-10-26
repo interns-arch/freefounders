@@ -2,9 +2,9 @@
  * /tasks/team — Team Performance (old pages/TeamReport.jsx). Every employee over a date range, ranked by the same
  * score the Employees report uses, with attendance % and leave days next to it (PLAN.md §17.5).
  */
-import { errorMessage } from '@freefounders/core';
-import { type ChangeRequestLeader, type TeamReportRow, useChangeRequestLeaders, useSendOverdueEmail, useTeamReport } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { errorMessage } from '@kaampilot/core';
+import { type ChangeRequestLeader, type TeamReportRow, useChangeRequestLeaders, useSendOverdueEmail, useTeamReport } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { ChevronDown, ChevronRight, Mail, TriangleAlert } from '@/components/icons';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { Fragment, useState } from 'react';

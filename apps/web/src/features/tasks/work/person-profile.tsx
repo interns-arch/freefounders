@@ -1,6 +1,6 @@
-import { useAccess } from '@freefounders/core';
-import { tasksExports, useEmployeesReport, useWorkTaskList } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { useAccess } from '@kaampilot/core';
+import { tasksExports, useEmployeesReport, useWorkTaskList } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadButton } from '@/components/common/download-menu';
 import { AlarmClock, ClipboardList, Lightbulb, Repeat } from '@/components/icons';
 import { useState } from 'react';

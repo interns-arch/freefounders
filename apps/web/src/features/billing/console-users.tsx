@@ -2,8 +2,8 @@
  * Kaampilot console → Users (PLAN.md §21.9): every account and admin-made login across companies, emails and mobiles
  * partly hidden; a click opens the person (their companies and recent sign-ins; the view is in the staff audit log).
  */
-import { type ConsoleUser, consoleExports, useConsoleUser, useConsoleUsers } from '@freefounders/core/billing';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { type ConsoleUser, consoleExports, useConsoleUser, useConsoleUsers } from '@kaampilot/core/billing';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { ChevronLeft, ChevronRight } from '@/components/icons';

@@ -14,17 +14,17 @@ import { Input, Textarea } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
 import { Card } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
-import { useAssetsCache, useMaintenanceList, useUpdateMaintenance } from '@freefounders/core/assets';
+import { useAssetsCache, useMaintenanceList, useUpdateMaintenance } from '@kaampilot/core/assets';
 import { MAINTENANCE_TONE } from '@/lib/status';
-import type { MaintenanceRecord } from '@freefounders/core/assets';
+import type { MaintenanceRecord } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, formatMoney } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 const TABS = [
   { value: 'IN_PROGRESS,SCHEDULED', label: 'Active' },

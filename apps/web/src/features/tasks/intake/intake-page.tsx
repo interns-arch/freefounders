@@ -1,7 +1,7 @@
 /** /tasks/intake — the AI inbox: inbound WhatsApp / Gmail messages, how the AI read them, and the lead each became (old pages/Intake.jsx). */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { INTAKE_CHANNELS, INTAKE_STATUSES, type InboundMessage, type IntakeChannel, type IntakeStatus, tasksExports, useIntakeMessages, useSimulateIntake } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { INTAKE_CHANNELS, INTAKE_STATUSES, type InboundMessage, type IntakeChannel, type IntakeStatus, tasksExports, useIntakeMessages, useSimulateIntake } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { Bot, Mail, MessageCircle, Send } from '@/components/icons';
 import { useState } from 'react';

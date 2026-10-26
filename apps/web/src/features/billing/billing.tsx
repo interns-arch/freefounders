@@ -3,7 +3,7 @@
  * an order summary with GST, checkout through the payment page, GST details, invoices, change seats, cancel / resume,
  * and the dev tools (billing clock) while BILLING_DEV_TOOLS is on. Owner, or a role with "Manage billing".
  */
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import {
   type BillingInterval,
   type BillingProfile,
@@ -32,8 +32,8 @@ import {
   useSetSeats,
   useStartCheckout,
   useSwitchToFree,
-} from '@freefounders/core/billing';
-import { APP_NAMES } from '@freefounders/core/admin';
+} from '@kaampilot/core/billing';
+import { APP_NAMES } from '@kaampilot/core/admin';
 import { Check, CreditCard, FileText, Timer, Wrench } from '@/components/icons';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -42,7 +42,7 @@ import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
 import { ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { DownloadButton, DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Card } from '@/components/ui/primitives';

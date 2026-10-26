@@ -14,15 +14,15 @@ import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { AssetIcon } from '@/lib/icons';
-import { useAssetsCache, useAssetType, useAssetTypes, useCategories, useCategoryFields, useDeleteAssetType, useDeleteCategory, useDeleteField, useReorderFields } from '@freefounders/core/assets';
-import type { AssetType, Category, FieldDefinition } from '@freefounders/core/assets';
+import { useAssetsCache, useAssetType, useAssetTypes, useCategories, useCategoryFields, useDeleteAssetType, useDeleteCategory, useDeleteField, useReorderFields } from '@kaampilot/core/assets';
+import type { AssetType, Category, FieldDefinition } from '@kaampilot/core/assets';
 import { useUrlFilters } from '@/lib/url-state';
 import { cn } from '@/lib/utils';
 import { FieldDialog } from './field-dialog';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp, type SheetData } from '@freefounders/core/export';
+import { fileSlug, todayStamp, type SheetData } from '@kaampilot/core/export';
 
 function useInvalidateCatalog() {
   const cache = useAssetsCache();

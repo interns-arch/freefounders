@@ -1,11 +1,11 @@
 // Kaampilot console dashboard + production log (PLAN.md §21.9). Needs `npm run dev` (dev staff account
-// staff@freefounders.test / Demo@1234, OTP_DEV_ECHO=1, PLATFORM_LOG_URL wired to the Platform). A new company owner made
+// staff@kaampilot.test / Demo@1234, OTP_DEV_ECHO=1, PLATFORM_LOG_URL wired to the Platform). A new company owner made
 // here gets 403 from the console API and is sent Home by the screen; the staff account sees Overview, Companies (with a
 // company's detail), Users, Billing and Logs.
 import { expect, type Page, test } from '@playwright/test';
 
 const stamp = Date.now().toString(36);
-const EMAIL = `console-${stamp}@freefounders.test`;
+const EMAIL = `console-${stamp}@kaampilot.test`;
 const PASSWORD = `Console-Hill-${stamp}-42`;
 const COMPANY = `Console Co ${stamp}`;
 const H = { 'x-requested-with': 'XMLHttpRequest' };
@@ -46,7 +46,7 @@ test('a company owner gets 403 from the console API and never sees the console',
 });
 
 test('staff: overview with health, companies → company detail, users, billing, logs', async ({ page }) => {
-  await signIn(page, 'staff@freefounders.test', 'Demo@1234');
+  await signIn(page, 'staff@kaampilot.test', 'Demo@1234');
   await page.goto('/console');
   await expect(page.getByRole('heading', { name: 'Kaampilot console', level: 1 })).toBeVisible();
 
@@ -75,7 +75,7 @@ test('staff: overview with health, companies → company detail, users, billing,
   await page.goto('/console/users');
   await page.getByLabel('Search users').fill(`console-${stamp}`);
   const row = page.getByRole('row', { name: /Console Owner/ }).first();
-  await expect(row).toContainText('co***@freefounders.test');
+  await expect(row).toContainText('co***@kaampilot.test');
   await expect(row).not.toContainText(EMAIL);
   await row.click();
   await expect(page.getByRole('heading', { name: 'Console Owner', level: 1 })).toBeVisible();
@@ -106,7 +106,7 @@ for (const width of [390, 320]) {
   test(`console fits a ${width} px phone (no sideways scroll)`, async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width, height: 760 } });
     const page = await ctx.newPage();
-    await signIn(page, 'staff@freefounders.test', 'Demo@1234');
+    await signIn(page, 'staff@kaampilot.test', 'Demo@1234');
     for (const path of ['/console', '/console/companies', '/console/users', '/console/billing', '/console/logs']) {
       await page.goto(path);
       await page.getByRole('heading', { name: 'Kaampilot console', level: 1 }).waitFor();

@@ -9,14 +9,14 @@ import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Badge, Card } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { errorMessage } from '@freefounders/core';
-import { useAssetsCache, useDeleteOrg, useOrgList } from '@freefounders/core/assets';
-import type { OrgEntity } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { useAssetsCache, useDeleteOrg, useOrgList } from '@kaampilot/core/assets';
+import type { OrgEntity } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { ORG_META, type OrgKind } from './org-form';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 const TITLES: Record<OrgKind, { title: string; description: string }> = {
   company: { title: 'Companies', description: 'Legal entities that own or hold assets.' },

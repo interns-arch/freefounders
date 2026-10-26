@@ -2,9 +2,9 @@
  * Incident log (PLAN.md §22.10): theft, damage, trespass, fire, medical… reported at the gate with photos. Medium and
  * high ones alert the security head at once; the head writes what was done and closes it.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { fileSlug } from '@freefounders/core/export';
-import { type Incident, type IncidentFilters, type IncidentInput, type IncidentSeverity, type VisitorConfig, useCloseIncident, useIncidentPhoto, useIncidents, useReportIncident, visitorExportsV3 } from '@freefounders/core/visitors';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { fileSlug } from '@kaampilot/core/export';
+import { type Incident, type IncidentFilters, type IncidentInput, type IncidentSeverity, type VisitorConfig, useCloseIncident, useIncidentPhoto, useIncidents, useReportIncident, visitorExportsV3 } from '@kaampilot/core/visitors';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';

@@ -5,8 +5,8 @@ import type { Caller } from '../common/http';
 import type { AppKey, PlatformRole } from '../db/schema';
 import { KeysService } from './keys.service';
 
-export const ISSUER = 'freefounders-platform';
-export const AUDIENCE = 'freefounders';
+export const ISSUER = 'kaampilot-platform';
+export const AUDIENCE = 'kaampilot';
 export const ACCESS_TTL_SECONDS = 15 * 60;
 const SERVICE_TTL_SECONDS = 60;
 /** An unknown `kid` makes us re-read the keys at most this often (a key made by another Platform process). */

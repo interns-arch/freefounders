@@ -3,8 +3,8 @@
  * updated, the person notified); beyond the person's balance only with "Beyond balance", which is logged on the leave.
  * Shown to people with Approve leave; the list holds only whom they approve for (themself only as the Owner).
  */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { type LeaveBalance, type LeaveType, useApplyLeave, useLeaveBalances, useLeaveTypes, useMarkablePeople } from '@freefounders/core/hr';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { type LeaveBalance, type LeaveType, useApplyLeave, useLeaveBalances, useLeaveTypes, useMarkablePeople } from '@kaampilot/core/hr';
 import { CalendarCheck } from '@/components/icons';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';

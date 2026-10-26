@@ -3,9 +3,9 @@
  * just its password) → the company → "Setting up your company…" → Home with the Getting started checklist.
  * One question per screen, a progress bar and a back button; nothing typed is lost going back.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { companyNameErrorOf, type CompanyInput, identifierKind, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@freefounders/core/account';
-import { PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { companyNameErrorOf, type CompanyInput, identifierKind, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@kaampilot/core/account';
+import { PLATFORM_PASSWORD_MIN } from '@kaampilot/core/admin';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';

@@ -4,9 +4,9 @@
  * password when they have an email or employee ID, and the Admin or Member role. The passwords are shown once, with a
  * sign-in sheet to download.
  */
-import { errorMessage } from '@freefounders/core';
-import { type PeopleImportPreview, type PeopleImportResult, type PeopleImportRow, useImportPeople, usePeopleImportPreview, usePeopleImportTemplate } from '@freefounders/core/admin';
-import { toCsv } from '@freefounders/core/export';
+import { errorMessage } from '@kaampilot/core';
+import { type PeopleImportPreview, type PeopleImportResult, type PeopleImportRow, useImportPeople, usePeopleImportPreview, usePeopleImportTemplate } from '@kaampilot/core/admin';
+import { toCsv } from '@kaampilot/core/export';
 import { CheckCircle2, Download, FileUp } from '@/components/icons';
 import { type FormEvent, useId, useState } from 'react';
 import { type Column, DataTable } from '@/components/common/data-table';

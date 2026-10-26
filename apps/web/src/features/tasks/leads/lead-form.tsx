@@ -1,5 +1,5 @@
 /** Add / edit lead dialog body (old LeadModal, now also used to change a lead's details). */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   LEAD_PRIORITIES,
   LEAD_SOURCES,
@@ -11,7 +11,7 @@ import {
   useTaskDepartments,
   useTeamPeople,
   useUpdateLead,
-} from '@freefounders/core/tasks';
+} from '@kaampilot/core/tasks';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';

@@ -138,8 +138,8 @@ class PersonExportTests(PersonExportBase):
         self.assertEqual(rows[0][0], "Nothing in this range.")
 
 
-class PersonExportFreeFoundersTests(PersonExportBase):
-    """FreeFounders checks on top of the original's (PLAN.md §19.41): every sheet filterable, the Summary equal
+class PersonExportKaampilotTests(PersonExportBase):
+    """Kaampilot checks on top of the original's (PLAN.md §19.41): every sheet filterable, the Summary equal
     to /tasks/employees_report/?user= (the API behind the person's profile on screen) field by field."""
 
     def test_every_sheet_has_filter_arrows(self):

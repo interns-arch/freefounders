@@ -3,10 +3,10 @@ import { Check, ChevronsUpDown, Loader2, Plus, X } from '@/components/icons';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlays';
 import { toast } from 'sonner';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { quickCreateOrg, type QuickOrgPath, useAssetsCache, useCompanies, useDepartments, useLocations, usePickerAssets, usePickerEmployees, useVendors } from '@freefounders/core/assets';
+import { quickCreateOrg, type QuickOrgPath, useAssetsCache, useCompanies, useDepartments, useLocations, usePickerAssets, usePickerEmployees, useVendors } from '@kaampilot/core/assets';
 
 import { useDebounced } from '@/lib/url-state';
 import { cn } from '@/lib/utils';

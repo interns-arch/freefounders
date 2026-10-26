@@ -1,5 +1,5 @@
 /** Kaampilot console → Overview (PLAN.md §21.9): totals, sign-ups per day, health of every service. */
-import { type ConsoleHealthService, type ConsoleOverview, formatInr, useConsoleHealth, useConsoleOverview } from '@freefounders/core/billing';
+import { type ConsoleHealthService, type ConsoleOverview, formatInr, useConsoleHealth, useConsoleOverview } from '@kaampilot/core/billing';
 import { ErrorState } from '@/components/common/page';
 import { Badge } from '@/components/ui/primitives';
 import { cn, formatDateTime, formatNumber } from '@/lib/utils';

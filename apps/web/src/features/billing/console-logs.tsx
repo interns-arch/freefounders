@@ -4,8 +4,8 @@
  * Entries are redacted on the server (no secrets, tokens, codes or request bodies) and kept 30 days. Filters, search,
  * auto-refresh, a detail drawer and Download.
  */
-import { type ConsoleLogFilters, type ConsoleLogRow, consoleExports, type LogLevel, useConsoleLogs } from '@freefounders/core/billing';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { type ConsoleLogFilters, type ConsoleLogRow, consoleExports, type LogLevel, useConsoleLogs } from '@kaampilot/core/billing';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft, ChevronRight } from '@/components/icons';

@@ -3,8 +3,8 @@
  * Each gets a pass with a QR by WhatsApp / email; at the gate the guard scans it, takes the photo and they are in.
  * Gate and admin people can invite on someone else's behalf.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { type InviteVisitorRow, type PersonBrief, type Visit, type VisitorConfig, useInviteVisitors } from '@freefounders/core/visitors';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { type InviteVisitorRow, type PersonBrief, type Visit, type VisitorConfig, useInviteVisitors } from '@kaampilot/core/visitors';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { Copy, Plus, Trash2 } from '@/components/icons';

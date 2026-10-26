@@ -98,7 +98,7 @@ before(async () => {
     for await (const chunk of req) raw += chunk;
     try {
       const jwks = createRemoteJWKSet(new URL(`${base}/.well-known/jwks.json`));
-      const { payload } = await jwtVerify(String(req.headers.authorization).slice(7), jwks, { audience: 'tasks-internal', issuer: 'freefounders-platform' });
+      const { payload } = await jwtVerify(String(req.headers.authorization).slice(7), jwks, { audience: 'tasks-internal', issuer: 'kaampilot-platform' });
       if (req.method === 'GET' && req.url?.endsWith('/roles')) {
         provisionCalls.push({ body: {}, aud: payload.aud, cid: payload.cid, url: req.url });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{ value: 'warehouse', label: 'Warehouse Team' }]));
@@ -245,7 +245,7 @@ describe('login', () => {
       const claims = decodeJwt(token);
       assert.equal(claims.sub, ids.owner);
       assert.equal(claims.cid, ids.acme);
-      assert.equal(claims.aud, 'freefounders');
+      assert.equal(claims.aud, 'kaampilot');
       assert.equal(claims.role, 'owner');
       assert.ok((claims.exp as number) - (claims.iat as number) <= 15 * 60);
     }

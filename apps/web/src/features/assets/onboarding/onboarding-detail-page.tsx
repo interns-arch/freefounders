@@ -15,12 +15,12 @@ import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/overlays';
 import { Avatar, Badge, Card, CardContent, CardHeader, CardTitle, Progress } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { addOnboardingItems, issueOnboardingItem, saveOnboardingKit, useAddOnboardingItems, useAssetsCache, useAssetTypes, useAssignAllOnboarding, useOnboardingAction, useOnboardingCase, useOnboardingHistory, useOnboardingKits, useSetJoinDate } from '@freefounders/core/assets';
+import { addOnboardingItems, issueOnboardingItem, saveOnboardingKit, useAddOnboardingItems, useAssetsCache, useAssetTypes, useAssignAllOnboarding, useOnboardingAction, useOnboardingCase, useOnboardingHistory, useOnboardingKits, useSetJoinDate } from '@kaampilot/core/assets';
 import { ONBOARDING_ITEM_TONE, ONBOARDING_TONE } from '@/lib/status';
-import type { OnboardingItem, OnboardingKit } from '@freefounders/core/assets';
+import type { OnboardingItem, OnboardingKit } from '@kaampilot/core/assets';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 import { JoinsIn } from './onboarding-page';
 

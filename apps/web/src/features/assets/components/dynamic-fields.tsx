@@ -2,7 +2,7 @@ import { type Attributes, formatAttributeValue } from '@eam/shared';
 import { Controller, type UseFormReturn } from 'react-hook-form';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Switch } from '@/components/ui/primitives';
-import type { FieldDefinition } from '@freefounders/core/assets';
+import type { FieldDefinition } from '@kaampilot/core/assets';
 import { cn, formatDate } from '@/lib/utils';
 import { errorOf, Field } from '@/components/common/form';
 import { safeHref } from '@/lib/safe-url';

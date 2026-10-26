@@ -3,8 +3,8 @@
  * purposes, hosts, companies, how visitors came, parcels, vehicles, contractors, material passes, incidents, patrol.
  * One series per chart (one theme colour); ranked lists are plain labelled bars; Download gives the same numbers.
  */
-import { fileSlug } from '@freefounders/core/export';
-import { type VisitorReport, formatMinutes, useVisitorReport, visitorExportsV3 } from '@freefounders/core/visitors';
+import { fileSlug } from '@kaampilot/core/export';
+import { type VisitorReport, formatMinutes, useVisitorReport, visitorExportsV3 } from '@kaampilot/core/visitors';
 import { useEffect, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { BarChart3 } from '@/components/icons';

@@ -1,4 +1,4 @@
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   type DirectoryIndustry,
   type DirectoryTemplate,
@@ -17,8 +17,8 @@ import {
   tasksExports,
   useTaskTemplates,
   useTeamPeople,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { ArrowLeft, LayoutTemplate, ListChecks, Plus, Repeat, Search, Trash2 } from '@/components/icons';
 import { useId, useMemo, useState } from 'react';

@@ -1,4 +1,4 @@
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import {
   type AppCatalogue,
   type CataloguePermission,
@@ -18,7 +18,7 @@ import {
   useSaveRole,
   useSetPersonalAccess,
   WEEKDAYS,
-} from '@freefounders/core/admin';
+} from '@kaampilot/core/admin';
 import { ChevronDown, Plus, Trash2 } from '@/components/icons';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { Field } from '@/components/common/form';

@@ -1,5 +1,5 @@
 /** One lead, in a side sheet (old LeadDrawer): details, pipeline status, timeline + notes, documents, quotations. */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   LEAD_OPEN_STAGES,
   LEAD_PRIORITIES,
@@ -21,7 +21,7 @@ import {
   useUpdateLead,
   useUpdateQuotation,
   useUploadLeadDocument,
-} from '@freefounders/core/tasks';
+} from '@kaampilot/core/tasks';
 import { FileText, Mail, Paperclip, Pencil, Phone, Trash2 } from '@/components/icons';
 import { useState } from 'react';
 import { toast } from 'sonner';

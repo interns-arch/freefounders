@@ -1,5 +1,5 @@
-import { type PersonOption, tasksExports, useTaskActivities, useTaskPeople } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { type PersonOption, tasksExports, useTaskActivities, useTaskPeople } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { SearchField } from '@/components/common/search-field';
 import { ShowMore, useShowMore } from '@/components/common/show-more';

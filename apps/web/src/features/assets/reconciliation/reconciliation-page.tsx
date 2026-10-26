@@ -7,13 +7,13 @@ import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@/components/ui/primitives';
 import { useAuth, useModules } from '@/features/assets/lib/auth';
-import { errorMessage } from '@freefounders/core';
-import { useInvalidateReconciliation, useReconciliations, useRunReconciliation } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { useInvalidateReconciliation, useReconciliations, useRunReconciliation } from '@kaampilot/core/assets';
 import { cn, formatDateTime, relativeTime } from '@/lib/utils';
 import { parseDumpFile, type ParsedDump } from './parse';
 import { SummaryChips } from './summary';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 
 const SOURCES: { source: ReconSource; icon: typeof CardSim; perm: 'asset:assign' | 'employee:manage'; hint: string }[] = [
   { source: 'AIRTEL', icon: CardSim, perm: 'asset:assign', hint: 'Connections export from the Airtel business portal. Checked against the SIM register.' },

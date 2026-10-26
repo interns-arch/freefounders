@@ -24,7 +24,7 @@ async function newMember(request: APIRequestContext, owner: string) {
   const password = 'E2e@654321';
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: `E2E Geo ${stamp}`, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+    data: { fullName: `E2E Geo ${stamp}`, email: `${login}@kaampilot.test`, login: { username: login, password: temp } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id as string;

@@ -6,15 +6,15 @@ import { type Column, DataTable, Pagination } from '@/components/common/data-tab
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { StatTile } from '@/features/assets/components/stat-tile';
 import { Avatar, Badge, Card, Progress } from '@/components/ui/primitives';
-import { useExitCases, useOpenExitCases } from '@freefounders/core/assets';
+import { useExitCases, useOpenExitCases } from '@kaampilot/core/assets';
 import { EXIT_CASE_TONE } from '@/lib/status';
-import type { ExitCaseListItem } from '@freefounders/core/assets';
+import type { ExitCaseListItem } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 const TABS = [
   { value: 'OPEN', label: 'In progress' },

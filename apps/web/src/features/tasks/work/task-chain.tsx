@@ -4,7 +4,7 @@
  * completion goes to whoever gave it, and the task above can't be completed until every part is done and accepted.
  * Admins and the Owner see the whole chain (tree) and every chain (Tasks → Chains).
  */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   type ChainNode,
   type ChainResult,
@@ -16,8 +16,8 @@ import {
   usePartAssignees,
   useTaskChain,
   useTaskChains,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';

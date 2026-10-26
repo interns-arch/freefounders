@@ -2,7 +2,7 @@
  * Subscription banners at the top of the app frame (PLAN.md §21.1): trial days left (owner / billing managers),
  * failed payment and read-only (everyone). Compact; the trial one can be hidden for the day.
  */
-import type { Access } from '@freefounders/core';
+import type { Access } from '@kaampilot/core';
 import { AlertTriangle, Clock, Lock, X } from '@/components/icons';
 import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router';

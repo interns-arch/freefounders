@@ -6,9 +6,9 @@ import { HolderPicker } from '@/features/assets/components/pickers';
 import { Button } from '@/components/ui/button';
 import { NativeSelect, Textarea } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
-import { useAssetsCache, useBulkAssets } from '@freefounders/core/assets';
+import { useAssetsCache, useBulkAssets } from '@kaampilot/core/assets';
 import { plural } from '@/lib/utils';
 
 export type BulkKind = 'assign' | 'lifecycle';

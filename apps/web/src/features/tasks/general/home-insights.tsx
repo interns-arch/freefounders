@@ -3,8 +3,8 @@
  * mistakes, notices, and — for anyone with a team — where overdue work sits, how late it is, who does best and who
  * needs a look. Numbers come from /tasks/home/ (same scoring as Team Performance).
  */
-import { useAccess } from '@freefounders/core';
-import { HOME_RANGES, type HomeFilters, type HomeSummary, type Task, useNotices, useTaskDepartments, useTaskList, useWaitingCounts } from '@freefounders/core/tasks';
+import { useAccess } from '@kaampilot/core';
+import { HOME_RANGES, type HomeFilters, type HomeSummary, type Task, useNotices, useTaskDepartments, useTaskList, useWaitingCounts } from '@kaampilot/core/tasks';
 import { AlertCircle, AlertTriangle, Bell, CalendarClock, CheckCheck, CircleDashed, Coffee, Gauge, Hourglass, Inbox, Megaphone, PartyPopper, ThumbsUp, Timer, Trophy, UserRoundSearch, Users } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';

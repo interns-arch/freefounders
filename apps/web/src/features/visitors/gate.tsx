@@ -3,7 +3,7 @@
  * pass, take the photo, in), visitors waiting for their host, who is inside (check out with one tap or by scanning the
  * pass), who left today, and the check-in form (with the watchlist check).
  */
-import { ApiError, errorMessage } from '@freefounders/core';
+import { ApiError, errorMessage } from '@kaampilot/core';
 import {
   type CheckInInput,
   type PersonBrief,
@@ -21,7 +21,7 @@ import {
   useVisitorPhoto,
   useVisitPhoto,
   useVisits,
-} from '@freefounders/core/visitors';
+} from '@kaampilot/core/visitors';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';

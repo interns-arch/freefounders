@@ -2,8 +2,8 @@
  * Kaampilot console → Billing (PLAN.md §21.9): every subscription, invoice and payment (FakePay and Cashfree), failures
  * and revenue by month, each with a Download of every row (xlsx / csv, PLAN.md §19.31). Read-only.
  */
-import { type ConsoleBilling, consoleExports, formatInr, useConsoleBilling } from '@freefounders/core/billing';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { type ConsoleBilling, consoleExports, formatInr, useConsoleBilling } from '@kaampilot/core/billing';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { DataTable } from '@/components/common/data-table';

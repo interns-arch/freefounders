@@ -90,7 +90,7 @@ test('sign up → checklist → invite + join → Suite via FakePay → GST invo
   const password = `Kite-River-${s}-77`;
 
   // 1. Sign up: Home opens with the Getting started checklist and the trial banner.
-  await signUp(page, `e2e-owner-${s}@freefounders.test`, ownerName, password, company);
+  await signUp(page, `e2e-owner-${s}@kaampilot.test`, ownerName, password, company);
   await expect(page.getByRole('heading', { name: 'Getting started' })).toBeVisible();
   await expect(page.getByText(/\d+ of \d+ done/)).toBeVisible();
   await expect(page.getByText(/^Trial: /)).toBeVisible();
@@ -104,7 +104,7 @@ test('sign up → checklist → invite + join → Suite via FakePay → GST invo
   const url = await dialog.getByLabel('Invite link').inputValue();
   expect(url).toContain('/join/');
   await page.keyboard.press('Escape');
-  await joinWithNewAccount(browser, url, `e2e-joiner-${s}@freefounders.test`, `Joiner ${s}`, `Lamp-Stone-${s}-42`, company);
+  await joinWithNewAccount(browser, url, `e2e-joiner-${s}@kaampilot.test`, `Joiner ${s}`, `Lamp-Stone-${s}-42`, company);
 
   // 3. Buy Suite monthly, 5 users: active, and a GST invoice (company in the seller's state → CGST + SGST, else IGST).
   await buySuite(page);

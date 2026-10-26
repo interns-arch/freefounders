@@ -13,7 +13,7 @@ export const DEMO = {
   companyName: 'Demo Company',
   companyCode: 'DEMO',
   ownerName: 'Demo Owner',
-  ownerEmail: 'owner@freefounders.test',
+  ownerEmail: 'owner@kaampilot.test',
   ownerLogin: 'owner',
   ownerPassword: 'Demo@1234',
 };
@@ -23,7 +23,7 @@ export const DEMO = {
  * a member of the demo company without apps, so it can sign in and open the owner console (/console).
  * Never on a real install; there, sign up and run `npm run company -- staff --email <e>`.
  */
-export const DEV_STAFF = { email: 'staff@freefounders.test', password: 'Demo@1234', fullName: 'Kaampilot Staff (dev)' };
+export const DEV_STAFF = { email: 'staff@kaampilot.test', password: 'Demo@1234', fullName: 'Kaampilot Staff (dev)' };
 
 export async function seedStaff(staff = DEV_STAFF, companyCode = DEMO.companyCode, bootstrap = false): Promise<boolean> {
   // The dev staff password is public (it is in this file): a real install passes its own (--bootstrap, STAFF_*).

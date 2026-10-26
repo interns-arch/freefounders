@@ -6,14 +6,14 @@ import { EmptyState, ErrorState, PageHeader } from '@/components/common/page';
 import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@/components/ui/primitives';
-import { useQueue } from '@freefounders/core/assets';
+import { useQueue } from '@kaampilot/core/assets';
 import { PRIORITY_TONE } from '@/lib/status';
-import type { QueueItem } from '@freefounders/core/assets';
+import type { QueueItem } from '@kaampilot/core/assets';
 import { useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, relativeTime } from '@/lib/utils';
 import { Segmented } from '@/components/common/controls';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 
 const ORDER: Priority[] = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
 const LABEL: Record<Priority, string> = { URGENT: 'Urgent', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };

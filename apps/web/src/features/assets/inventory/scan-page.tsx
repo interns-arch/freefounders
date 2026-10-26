@@ -6,8 +6,8 @@ import { PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
-import { resolveCode } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { resolveCode } from '@kaampilot/core/assets';
 import { cn } from '@/lib/utils';
 
 /** Camera-based QR / barcode reader. Returns a stop function. */

@@ -5,8 +5,8 @@
  * (PLAN.md §19.19, ATTENDANCE_SCREENS in nav.ts). /attendance/history?user=<id>&name= opens someone else's month (the API
  * checks they may).
  */
-import { useAccess, useBadges } from '@freefounders/core';
-import { useHrConfig } from '@freefounders/core/hr';
+import { useAccess, useBadges } from '@kaampilot/core';
+import { useHrConfig } from '@kaampilot/core/hr';
 import { ArrowLeft } from '@/components/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageHeader, PageLoader } from '@/components/common/page';

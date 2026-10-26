@@ -1,4 +1,4 @@
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   APP_NAMES,
   APP_SETTINGS_LINKS,
@@ -14,8 +14,8 @@ import {
   useUpdateCompany,
   useUpdateDepartment,
   useUploadLogo,
-} from '@freefounders/core/admin';
-import { companyNameErrorOf, useCompanyNameCheck } from '@freefounders/core/account';
+} from '@kaampilot/core/admin';
+import { companyNameErrorOf, useCompanyNameCheck } from '@kaampilot/core/account';
 import { ChevronRight, ImageIcon, Palette } from '@/components/icons';
 import { type ChangeEvent, type FormEvent, useRef, useState } from 'react';
 import { Link } from 'react-router';

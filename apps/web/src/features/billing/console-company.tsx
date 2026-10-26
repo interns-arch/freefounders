@@ -3,7 +3,7 @@
  * sign-in), subscription, invoices, payments, plan changes and staff actions. Read-only; opening it writes a
  * `view.company` row in the staff audit log. The existing staff actions stay on the Companies tab.
  */
-import { formatInr, planLabel, STATE_LABELS, useDashboardCompany, usePlans } from '@freefounders/core/billing';
+import { formatInr, planLabel, STATE_LABELS, useDashboardCompany, usePlans } from '@kaampilot/core/billing';
 import { Link, Navigate, useParams } from 'react-router';
 import { ChevronLeft } from '@/components/icons';
 import { DataTable } from '@/components/common/data-table';

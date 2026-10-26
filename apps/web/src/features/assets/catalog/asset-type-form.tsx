@@ -6,9 +6,9 @@ import { applyServerErrors, errorOf, Field, useZodForm } from '@/components/comm
 import { FormSheet } from '@/components/common/form-sheet';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Switch } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
-import { useAssetsCache, useCategories, useSaveAssetType } from '@freefounders/core/assets';
-import type { AssetType } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { useAssetsCache, useCategories, useSaveAssetType } from '@kaampilot/core/assets';
+import type { AssetType } from '@kaampilot/core/assets';
 import { cn } from '@/lib/utils';
 import type { FormProps } from '../quick-add/quick-add';
 import { IconPicker } from './pickers';

@@ -1,6 +1,6 @@
 /** /new-company (account menu → New company, PLAN.md §21.1): the company step of sign-up, then the setup screen, then Home of the new company. */
-import { errorMessage } from '@freefounders/core';
-import { companyNameErrorOf, type CompanyInput, useCreateCompany } from '@freefounders/core/account';
+import { errorMessage } from '@kaampilot/core';
+import { companyNameErrorOf, type CompanyInput, useCreateCompany } from '@kaampilot/core/account';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';

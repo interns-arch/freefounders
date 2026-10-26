@@ -1,4 +1,4 @@
-// @freefounders/core/visitors: the gate register (PLAN.md §22): visitors, vehicles, the open QR sign-in, guard activity;
+// @kaampilot/core/visitors: the gate register (PLAN.md §22): visitors, vehicles, the open QR sign-in, guard activity;
 // V2 (§22.9): pre-invites with a pass link, the visitor's own pass page, deliveries, the watchlist.
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ExportTarget } from '../export';

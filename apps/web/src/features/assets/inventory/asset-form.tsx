@@ -21,10 +21,10 @@ import { Combobox, EntityPicker, HolderPicker } from '@/features/assets/componen
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Separator, Skeleton, Switch } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { type AssetDetail, useAssetPhotos, useAssetsCache, useAssetType, useAssetTypes, useCompanies, useSaveAsset } from '@freefounders/core/assets';
+import { type AssetDetail, useAssetPhotos, useAssetsCache, useAssetType, useAssetTypes, useCompanies, useSaveAsset } from '@kaampilot/core/assets';
 import { todayISO } from '@/lib/utils';
 import type { FormProps } from '../quick-add/quick-add';
 

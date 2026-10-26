@@ -1,6 +1,6 @@
-import { useAccess } from '@freefounders/core';
-import { type ReportRow, useEffortDisputes, useEmployeesReport, useTaskDashboard, useTimeReport } from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { useAccess } from '@kaampilot/core';
+import { type ReportRow, useEffortDisputes, useEmployeesReport, useTaskDashboard, useTimeReport } from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { BarChart3, Lightbulb, Scale, Timer } from '@/components/icons';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { type ReactNode, useState } from 'react';

@@ -3,8 +3,8 @@
  * works in any phone browser. The visitor fills a short form; the guard sees them at once and checks them in. Nothing
  * comes back but a short code to show the guard. The company's people list is never shown: the visitor types a name.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { type PublicVisitorInput, usePublicVisitorForm, useSubmitPublicVisitor } from '@freefounders/core/visitors';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { type PublicVisitorInput, usePublicVisitorForm, useSubmitPublicVisitor } from '@kaampilot/core/visitors';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { CheckCircle2, ShieldCheck } from '@/components/icons';

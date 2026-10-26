@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlays';
-import { useFilterableFields } from '@freefounders/core/assets';
+import { useFilterableFields } from '@kaampilot/core/assets';
 
 /** Filters on custom fields (RAM ≥ 16, Fuel type = Diesel…) for the chosen category / type. */
 export function AttributeFilters({

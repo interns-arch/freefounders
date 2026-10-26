@@ -1,5 +1,5 @@
-import { useAccess, useBadges } from '@freefounders/core';
-import { type TaskTemplate, useTaskPeople } from '@freefounders/core/tasks';
+import { useAccess, useBadges } from '@kaampilot/core';
+import { type TaskTemplate, useTaskPeople } from '@kaampilot/core/tasks';
 import { ChevronDown } from '@/components/icons';
 import { useCallback, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';

@@ -4,7 +4,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 const stamp = Date.now().toString(36);
-const EMAIL = `code-${stamp}@freefounders.test`;
+const EMAIL = `code-${stamp}@kaampilot.test`;
 const PASSWORD = `Code-Hill-${stamp}-42`;
 const H = { 'x-requested-with': 'XMLHttpRequest' };
 

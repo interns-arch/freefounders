@@ -1,4 +1,4 @@
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
 import { ShowMore, useShowMore } from '@/components/common/show-more';
 import {
@@ -14,8 +14,8 @@ import {
   useTaskPeople,
   useToggleTaskFollow,
   useWorkTaskList,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { AlarmClock, ClipboardList, Plus, Repeat, UserRound, X } from '@/components/icons';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { useMemo, useState } from 'react';

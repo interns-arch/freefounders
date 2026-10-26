@@ -2,9 +2,9 @@
  * Everyone's attendance for one day (PLAN.md §19.15): the list behind "Live team" (today, refreshed every minute) and
  * "Daily attendance" (any date). Tiles count and filter, search finds a name / phone / employee ID, HR marks a day by hand.
  */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { type ManualMarkStatus, type TeamDayRow, hrExports, useHrConfig, useManualMark, useTeamDay } from '@freefounders/core/hr';
-import { fileSlug } from '@freefounders/core/export';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { type ManualMarkStatus, type TeamDayRow, hrExports, useHrConfig, useManualMark, useTeamDay } from '@kaampilot/core/hr';
+import { fileSlug } from '@kaampilot/core/export';
 import { CalendarCheck, CalendarOff, ChevronLeft, ChevronRight, Clock3, LogOut, Palmtree, Radio, RefreshCw, UserRoundX } from '@/components/icons';
 import { type ComponentType, type FormEvent, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';

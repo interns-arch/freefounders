@@ -11,7 +11,7 @@ Every finding was checked by reading the code and then by a test, a request to t
 
 | Area | Result |
 |---|---|
-| **Sign-in: Platform token** (`accounts/platform_auth.py`) | Algorithm fixed to EdDSA. Audience `freefounders` is required; issuer, `exp`, `iat`, `sub` are required. The local user must belong to the token's `sub`, and an inactive user is refused. JWKS is cached and an unknown `kid` causes one refetch. OK. |
+| **Sign-in: Platform token** (`accounts/platform_auth.py`) | Algorithm fixed to EdDSA. Audience `kaampilot` is required; issuer, `exp`, `iat`, `sub` are required. The local user must belong to the token's `sub`, and an inactive user is refused. JWKS is cached and an unknown `kid` causes one refetch. OK. |
 | **Sign-in: internal endpoints** (`/api/internal/*`) | Need a service token with audience `tasks-internal` and `sub=platform`. In multi-company mode they also need `cid`. An access token is refused there, and a service token is refused on the app API (test). OK. |
 | **Sign-in: old app login** | In multi-company mode the middleware already refused a request without a Platform token. **Fixed:** an old SimpleJWT token is now also ignored on `/api/public/*` (`LegacyJWTAuthentication`). |
 | **Sign-in: anonymous endpoints** | `/health`, public forms (unguessable token, 16 random bytes) and the WhatsApp webhook. **Fixed:** the webhook refused unsigned posts only when a secret was set; now it refuses them in production too. Throttling added on public forms. Public forms were removed on 2026-10-13 (PLAN.md §19.23): the anonymous endpoints are now `/health` and the webhook. |

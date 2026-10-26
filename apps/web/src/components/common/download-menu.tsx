@@ -7,8 +7,8 @@
  * Disabled with a tooltip when there is nothing to export. Downloads still work in a read-only company. In the phone
  * app the file goes through the native bridge (saveFile).
  */
-import { errorMessage } from '@freefounders/core';
-import { fetchExport, toCsv, toXlsx, type ExportFormat, type ExportTarget, type SheetData } from '@freefounders/core/export';
+import { errorMessage } from '@kaampilot/core';
+import { fetchExport, toCsv, toXlsx, type ExportFormat, type ExportTarget, type SheetData } from '@kaampilot/core/export';
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { ChevronDown, Download, FileCsv, FilePdf, FileSpreadsheet, FileZip } from '@/components/icons';

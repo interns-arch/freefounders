@@ -1,15 +1,15 @@
 {
   "expo": {
     "name": "Kaampilot",
-    "slug": "kaampilot",
+    "slug": "freefounders",
     "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "freefounders",
+    "scheme": "kaampilot",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#f6f7fb",
     "ios": {
-      "bundleIdentifier": "com.freefounders.app",
+      "bundleIdentifier": "com.kaampilot.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Kaampilot takes a selfie when you punch in or out, and lets you take photos for attachments.",
         "NSLocationWhenInUseUsageDescription": "Kaampilot checks that you are at your office when you punch in or out.",
@@ -18,7 +18,7 @@
       }
     },
     "android": {
-      "package": "com.freefounders.app",
+      "package": "com.kaampilot.app",
       "adaptiveIcon": {
         "backgroundColor": "#4f46e5",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

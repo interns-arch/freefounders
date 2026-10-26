@@ -4,10 +4,10 @@ import { applyServerErrors, errorOf, Field, useZodForm } from '@/components/comm
 import { FormSheet } from '@/components/common/form-sheet';
 import { Combobox, EntityPicker } from '@/features/assets/components/pickers';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { useAssetsCache, useAssetTypes, useCreateRequest } from '@freefounders/core/assets';
+import { useAssetsCache, useAssetTypes, useCreateRequest } from '@kaampilot/core/assets';
 import type { FormProps } from '../quick-add/quick-add';
 
 export default function RequestForm({ open, onOpenChange, defaults }: FormProps) {

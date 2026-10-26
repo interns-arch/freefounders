@@ -1,4 +1,4 @@
-import type { Access } from '@freefounders/core';
+import type { Access } from '@kaampilot/core';
 import { BarChart3, Boxes, Car, ClipboardList, Footprints, HardHat, History, LogIn, MessageSquareWarning, Package, Settings2, ShieldAlert, UserCheck, Users } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 

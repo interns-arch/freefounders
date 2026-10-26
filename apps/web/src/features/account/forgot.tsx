@@ -2,9 +2,9 @@
  * /forgot (PLAN.md §21.1): email or mobile → code (checked on its own step) → new password → signed in (or the choice
  * of company for an account in several). For accounts; admin-made logins (username / employee ID) ask their admin.
  */
-import { type ChooseCompany, errorMessage, session } from '@freefounders/core';
-import { identifierKind, type OtpSent, useForgotPassword, useResetPassword, useResetVerify } from '@freefounders/core/account';
-import { PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
+import { type ChooseCompany, errorMessage, session } from '@kaampilot/core';
+import { identifierKind, type OtpSent, useForgotPassword, useResetPassword, useResetVerify } from '@kaampilot/core/account';
+import { PLATFORM_PASSWORD_MIN } from '@kaampilot/core/admin';
 import { CheckCircle2, Loader2 } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router';

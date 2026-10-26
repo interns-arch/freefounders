@@ -7,8 +7,8 @@ import { FormSheet } from '@/components/common/form-sheet';
 import { EntityPicker } from '@/features/assets/components/pickers';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Checkbox, Separator } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
-import { useAssetsCache, useAssetTypes, useCreateOnboarding, useOnboardingKits } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { useAssetsCache, useAssetTypes, useCreateOnboarding, useOnboardingKits } from '@kaampilot/core/assets';
 import type { FormProps } from '../quick-add/quick-add';
 
 /** HR adds a new joiner: creates their employee record (status Joining) and the onboarding plan. */

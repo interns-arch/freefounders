@@ -6,8 +6,8 @@ import { FormSheet } from '@/components/common/form-sheet';
 import { EntityPicker } from '@/features/assets/components/pickers';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Switch } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
-import { useAssetsCache, useCreateMaintenance } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { useAssetsCache, useCreateMaintenance } from '@kaampilot/core/assets';
 import type { FormProps } from '../quick-add/quick-add';
 
 export default function MaintenanceForm({ open, onOpenChange, defaults }: FormProps) {

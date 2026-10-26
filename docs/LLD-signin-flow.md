@@ -109,7 +109,7 @@ screen and by the server with "sign in with your password". Server side: `Accoun
     `{personId, companyId, name, role, apps:{tasks: localUserId, assets: localUserId} (only apps the company has on),
     sessionFamily, readOnly}`.
 25. **Access token:** `TokensService.signAccess(caller)` → JWT, header `{alg:'EdDSA', kid, typ:'JWT'}`, claims
-    `sub, cid, name, role, apps, fam, ro?`, `iss 'freefounders-platform'`, `aud 'freefounders'`, `iat`, `exp = +15 min`,
+    `sub, cid, name, role, apps, fam, ro?`, `iss 'kaampilot-platform'`, `aud 'kaampilot'`, `iat`, `exp = +15 min`,
     `jti`. Signed with the active Ed25519 private key (stored encrypted with `PLATFORM_SECRET`, decrypted in memory).
 
 ## Phase 8 — Response and what the client keeps

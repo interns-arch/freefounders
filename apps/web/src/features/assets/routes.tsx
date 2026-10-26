@@ -1,4 +1,4 @@
-import { useAccess } from '@freefounders/core';
+import { useAccess } from '@kaampilot/core';
 import { lazy } from 'react';
 import { Navigate, type RouteObject } from 'react-router';
 import { PageLoader } from '@/components/common/page';

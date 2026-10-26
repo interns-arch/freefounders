@@ -106,7 +106,7 @@ test('origins and typed server addresses', () => {
   assert.equal(originOf('ftp://x'), null);
   assert.equal(normalizeServerUrl(' 192.168.137.1:8080 '), 'http://192.168.137.1:8080');
   assert.equal(normalizeServerUrl('http://192.168.2.72:8080/attendance?x=1'), 'http://192.168.2.72:8080');
-  assert.equal(normalizeServerUrl('https://app.freefounders.example/'), 'https://app.freefounders.example');
+  assert.equal(normalizeServerUrl('https://app.kaampilot.example/'), 'https://app.kaampilot.example');
   assert.equal(normalizeServerUrl(''), null);
   assert.equal(normalizeServerUrl('ftp://host'), null);
   assert.equal(normalizeServerUrl('not a host'), null);
@@ -141,8 +141,8 @@ test('security: plain http only for the office network; anything else needs http
   for (const local of ['http://192.168.1.5:8080', 'http://10.0.0.2', 'http://172.20.1.1:8080', 'http://127.0.0.1:8080', 'http://localhost:8080', 'http://mypc:8080', 'http://office.local'])
     assert.equal(isLocalHost(local), true, local);
   for (const remote of ['http://8.8.8.8', 'http://172.32.0.1', 'http://app.example.com', 'http://192.169.1.1']) assert.equal(isLocalHost(remote), false, remote);
-  assert.equal(normalizeServerUrl('app.freefounders.example'), 'https://app.freefounders.example');
-  assert.equal(normalizeServerUrl('http://app.freefounders.example'), null);
+  assert.equal(normalizeServerUrl('app.kaampilot.example'), 'https://app.kaampilot.example');
+  assert.equal(normalizeServerUrl('http://app.kaampilot.example'), null);
   assert.equal(normalizeServerUrl('http://203.0.113.9:8080'), null);
   assert.equal(normalizeServerUrl('https://203.0.113.9:8443/'), 'https://203.0.113.9:8443');
   assert.equal(normalizeServerUrl('10.1.2.3:8080'), 'http://10.1.2.3:8080');

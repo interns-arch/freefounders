@@ -34,11 +34,11 @@ import {
 import { Badge, Card, CardContent, CardHeader, CardTitle, Progress, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { useAsset, useAssetAllocations, useAssetHistory, useAssetMaintenance, useAssetOwnership } from '@freefounders/core/assets';
+import { useAsset, useAssetAllocations, useAssetHistory, useAssetMaintenance, useAssetOwnership } from '@kaampilot/core/assets';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
 import { MAINTENANCE_TONE } from '@/lib/status';
-import type { Allocation } from '@freefounders/core/assets';
+import type { Allocation } from '@kaampilot/core/assets';
 import { cn, daysUntil, formatDate, formatDateTime, formatMoney, relativeTime } from '@/lib/utils';
 import { AssetActionDialog, type AssetDialog } from './asset-actions';
 

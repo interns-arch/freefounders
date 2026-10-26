@@ -92,7 +92,7 @@ web clients get it as an `HttpOnly`, `SameSite=Lax` cookie (`Secure` when `COOKI
 
 **Access token (JWT, EdDSA, 15 min):** `sub` = person id, `cid` = company id, `name`, `role` (platform role), `apps`
 (`{tasks: localUserId, assets: localUserId}`), `fam` (refresh family), `ro: true` while the company is read-only, `iss`
-`freefounders-platform`, `aud` `freefounders`, `kid` header.
+`kaampilot-platform`, `aud` `kaampilot`, `kid` header.
 
 ## 4. Flows
 
@@ -179,7 +179,7 @@ with the reason.
 - **Shape:** 3–30 characters, `^[a-z][a-z0-9._-]{2,29}$` after lower-casing: starts with a letter (so never all digits: no
   clash with a mobile number or a numeric employee ID), no `@` (never an email). Stored lower-case.
 - **Reserved:** admin, administrator, owner, support, help, staff, root, system, sysadmin, superuser, moderator,
-  freefounders (and anything starting with `freefounders` or `admin`), api, www, mail, security, billing, login, signup,
+  kaampilot (and anything starting with `kaampilot` or `admin`), api, www, mail, security, billing, login, signup,
   console, settings, tasks, assets, attendance, me, null, … (`RESERVED_USERNAMES`). Only account usernames are checked
   against the list: the existing admin-made login `owner` keeps working.
 - **One namespace:** a name is free only if no account (`accounts.username`), no admin-made login (`logins.username`) and

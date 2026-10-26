@@ -131,7 +131,7 @@ before(async () => {
   process.env.FAKE_GATEWAY_SECRET = SECRET;
   process.env.OTP_IP_LIMIT = '0';
   process.env.SELLER_STATE = 'Maharashtra';
-  process.env.PUBLIC_WEB_URL = 'https://app.freefounders.test';
+  process.env.PUBLIC_WEB_URL = 'https://app.kaampilot.test';
 
   app = await createApp();
   await app.listen(0, '127.0.0.1');
@@ -376,7 +376,7 @@ describe('invites (PLAN.md §21.2)', () => {
     assert.equal(bad.status, 400, 'not in the plan');
     const res = await call('POST', '/invites', { token: owner, body: { apps: ['tasks'], expiresInDays: 7, maxUses: 2 } });
     assert.equal(res.status, 201, JSON.stringify(res.body));
-    assert.match(res.body.url, /^https:\/\/app\.freefounders\.test\/join\/[A-Za-z0-9_-]{43}$/);
+    assert.match(res.body.url, /^https:\/\/app\.kaampilot\.test\/join\/[A-Za-z0-9_-]{43}$/);
     ids.token = res.body.token;
     ids.invite = res.body.id;
     const [row] = await dbs.db.select().from(invites).where(eq(invites.id, res.body.id));

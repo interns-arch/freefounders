@@ -3,7 +3,7 @@ import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/com
 import { StatTile } from '@/features/assets/components/stat-tile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { useLeadership } from '@freefounders/core/assets';
+import { useLeadership } from '@kaampilot/core/assets';
 import { useUrlFilters } from '@/lib/url-state';
 import { cn, formatNumber, relativeTime } from '@/lib/utils';
 import { Segmented } from '@/components/common/controls';

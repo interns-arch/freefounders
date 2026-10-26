@@ -1,8 +1,8 @@
-# FreeFounders: notes for Claude
+# Kaampilot: notes for Claude
 
 Read `PLAN.md` first. It is the source of truth for decisions and the phase roadmap.
 
-**Brand**: people see **Kaampilot** (kaampilot.com; logo in `apps/web/public/brand/`, `src/components/brand.tsx`); code identifiers stay `freefounders` (`@freefounders/*`, token audience, `window.FreeFoundersApp`, `com.freefounders.app`, `ff-*` keys). Never show "FreeFounders" to a person (PLAN.md §19.35).
+**Brand**: people see **Kaampilot** (kaampilot.com; logo in `apps/web/public/brand/`, `src/components/brand.tsx`); code identifiers stay `kaampilot` (`@kaampilot/*`, token audience, `window.KaampilotApp`, `com.kaampilot.app`, `ff-*` keys). Never show "Kaampilot" to a person (PLAN.md §19.35).
 
 ## What this repo is
 A **new application** built from copies of two existing apps. The originals keep
@@ -30,11 +30,11 @@ infra/gateway/      dev-gateway.mjs (one address, routed by path) + Caddyfile (p
 scripts/            setup / dev / smoke / check-web-rules      e2e/  Playwright browser tests
 ```
 The repo root is an npm workspace for `apps/web` + `packages/*` (one `npm ci` at the root); the services keep their own installs.
-`apps/mobile` is NOT in the workspace (own `node_modules`: Expo pins another React); it reads only `@freefounders/theme/native`
+`apps/mobile` is NOT in the workspace (own `node_modules`: Expo pins another React); it reads only `@kaampilot/theme/native`
 from source. Its web side is `apps/web/src/lib/native-bridge.ts` (used only inside the app; apps/mobile/README.md). After changing theme tokens run `node packages/theme/scripts/build-native.mjs`.
 
 **Web app rules** (checked before every typecheck/build by `scripts/check-web-rules.mjs`): screens under `apps/web/src/app` and
-`src/features` get data only from `@freefounders/core` hooks (no fetch, no HTTP client) and use theme colours only (no
+`src/features` get data only from `@kaampilot/core` hooks (no fetch, no HTTP client) and use theme colours only (no
 hex/rgb/oklch). Each area owns `src/features/<area>/` and `packages/core/src/<area>/`. Same URLs as the old apps
 (`/tasks/…`, `/assets/…`). **Every module is in the new app** (PLAN.md §19.10); the old web apps, the Capacitor shell and
 `apps/portal` were deleted in §19.13 (git history has them). The services are APIs only.
@@ -64,7 +64,7 @@ npm run mobile       # phone app: QR for Expo Go (same Wi-Fi; API = EXPO_PUBLIC_
 npm run mobile:check # phone app typecheck + unit tests (also: cd apps/mobile && npx expo export --platform android)
 ```
 Routes on :8080: `/api/platform/*` Platform (:4000) · `/tasks/api/*` Django (:8000) · `/assets/api/*` NestJS (:3000) ·
-`/media/*` Django · everything else the new web app (:5176). Web app alone: `npm run typecheck --workspace @freefounders/web`, `npm run web:build`.
+`/media/*` Django · everything else the new web app (:5176). Web app alone: `npm run typecheck --workspace @kaampilot/web`, `npm run web:build`.
 Single login is an env switch on the APIs, off by default so each API still runs standalone:
 - APIs: `PLATFORM_JWKS_URL` (Tasks, Assets); Platform: `TASKS_INTERNAL_URL`, `ASSETS_INTERNAL_URL`, `PLATFORM_SECRET`
 How it fits: PLAN.md §13. Tasks uses the Platform token directly (Bearer); Assets exchanges it for

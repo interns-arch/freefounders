@@ -16,8 +16,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import User
 
-ISSUER = "freefounders-platform"
-ACCESS_AUDIENCE = "freefounders"
+ISSUER = "kaampilot-platform"
+ACCESS_AUDIENCE = "kaampilot"
 APP = "tasks"
 LEEWAY_SECONDS = 30
 

@@ -1,5 +1,5 @@
-import { errorMessage, useAccess, usePlatformMe } from '@freefounders/core';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+import { errorMessage, useAccess, usePlatformMe } from '@kaampilot/core';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { SearchField } from '@/components/common/search-field';
 import { DownloadMenu } from '@/components/common/download-menu';
 import {
@@ -10,7 +10,7 @@ import {
   usePlatformApps,
   useRoles,
   useUpdatePerson,
-} from '@freefounders/core/admin';
+} from '@kaampilot/core/admin';
 import { FileUp, Link2, MoreHorizontal, Plus, Users } from '@/components/icons';
 import { useSearchParams } from 'react-router';
 import { InvitesDialog } from '@/features/account/invites-dialog';

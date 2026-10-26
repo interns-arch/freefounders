@@ -1,4 +1,4 @@
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   type DayLogDay,
   type TaskDetail,
@@ -14,7 +14,7 @@ import {
   useTaskFiles,
   useTaskStep,
   useUploadTaskFiles,
-} from '@freefounders/core/tasks';
+} from '@kaampilot/core/tasks';
 import { AlarmClock, ArrowUpRight, BookOpen, CheckCircle2, CornerLeftUp, FileText, MessageSquare, Paperclip, Pencil, Plus, Send, Sparkles, Trash2, X } from '@/components/icons';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';

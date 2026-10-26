@@ -7,10 +7,10 @@ import { FormSheet } from '@/components/common/form-sheet';
 import { EntityPicker } from '@/features/assets/components/pickers';
 import { Input, Textarea } from '@/components/ui/input';
 import { Separator, Switch } from '@/components/ui/primitives';
-import { ApiError, errorMessage } from '@freefounders/core';
+import { ApiError, errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
-import { useAssetsCache, useCompanies, useSaveEmployee } from '@freefounders/core/assets';
-import type { EmployeeDetail } from '@freefounders/core/assets';
+import { useAssetsCache, useCompanies, useSaveEmployee } from '@kaampilot/core/assets';
+import type { EmployeeDetail } from '@kaampilot/core/assets';
 import type { FormProps } from '../quick-add/quick-add';
 import { type AccessInput, type Credentials, CredentialsDialog, PasswordInput, RoleSelect } from './access';
 

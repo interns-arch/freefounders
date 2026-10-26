@@ -5,7 +5,7 @@ import { Barcode, LocalQrWarning, QRCode, useQrLinks } from '@/components/common
 import { EmptyState, ErrorState, PageHeader, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
-import { useAssetsByIds } from '@freefounders/core/assets';
+import { useAssetsByIds } from '@kaampilot/core/assets';
 import { cn } from '@/lib/utils';
 import { printPage } from '@/lib/native-bridge';
 

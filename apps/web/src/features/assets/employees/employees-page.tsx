@@ -10,16 +10,16 @@ import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
 import { Avatar, Card } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { useEmployees } from '@freefounders/core/assets';
+import { useEmployees } from '@kaampilot/core/assets';
 import { useAuth } from '@/features/assets/lib/auth';
-import { useDepartments } from '@freefounders/core/assets';
-import type { Employee } from '@freefounders/core/assets';
+import { useDepartments } from '@kaampilot/core/assets';
+import type { Employee } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate, formatNumber } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass, Segmented } from '@/components/common/controls';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 const TABS: { value: string; label: string }[] = [
   { value: '', label: 'Current' },

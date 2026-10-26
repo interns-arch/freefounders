@@ -33,7 +33,7 @@ async function newMember(request: APIRequestContext, owner: string, tag: string)
   const password = 'E2e@654321';
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login, password: temp } },
+    data: { fullName: name, email: `${login}@kaampilot.test`, login: { username: login, password: temp } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id as string;
@@ -58,7 +58,7 @@ async function appContext(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await ctx.addInitScript(() => {
     const w = window as unknown as Record<string, unknown>;
-    w.FreeFoundersApp = { platform: 'android', version: 'e2e', camera: 'granted' };
+    w.KaampilotApp = { platform: 'android', version: 'e2e', camera: 'granted' };
     const reply = (r: unknown) => setTimeout(() => document.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(r) })), 30);
     w.ReactNativeWebView = {
       postMessage(raw: string) {

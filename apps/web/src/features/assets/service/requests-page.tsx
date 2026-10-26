@@ -20,17 +20,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Avatar, Card } from '@/components/ui/primitives';
 import { OnboardingDownload, OnboardingTable } from '@/features/assets/onboarding/onboarding-page';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
-import { fulfilRequest, useAssetsCache, useOnboardingWaitingCount, useRequest, useRequestAction, useRequests } from '@freefounders/core/assets';
+import { fulfilRequest, useAssetsCache, useOnboardingWaitingCount, useRequest, useRequestAction, useRequests } from '@kaampilot/core/assets';
 import { PRIORITY_TONE, REQUEST_TONE } from '@/lib/status';
-import type { AssetRequest } from '@freefounders/core/assets';
+import type { AssetRequest } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDate, relativeTime } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 const TABS = [
   { value: 'PENDING,APPROVED', label: 'Open' },

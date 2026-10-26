@@ -3,8 +3,8 @@
  * cannot be checked in by a guard; a name match only warns (names are shared). Only admins with visitor settings edit
  * it; removing keeps the entry in the record.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { type VisitorConfig, type WatchEntry, useAddWatch, useRemoveWatch, useWatchlist } from '@freefounders/core/visitors';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { type VisitorConfig, type WatchEntry, useAddWatch, useRemoveWatch, useWatchlist } from '@kaampilot/core/visitors';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus, ShieldAlert, Trash2 } from '@/components/icons';

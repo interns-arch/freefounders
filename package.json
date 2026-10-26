@@ -1,5 +1,5 @@
 {
-  "name": "freefounders",
+  "name": "kaampilot",
   "private": true,
   "description": "Kaampilot: one login for Tasks and Assets (web app + Android app)",
   "scripts": {
@@ -9,8 +9,8 @@
     "e2e": "npm --prefix e2e test",
     "import-company": "node scripts/import-company.mjs",
     "rehearse-import": "node scripts/rehearse-import.mjs",
-    "web:build": "npm --workspace @freefounders/web run build",
-    "web:typecheck": "npm --workspace @freefounders/web run typecheck",
+    "web:build": "npm --workspace @kaampilot/web run build",
+    "web:typecheck": "npm --workspace @kaampilot/web run typecheck",
     "mobile": "npm --prefix apps/mobile start",
     "mobile:check": "npm --prefix apps/mobile run typecheck && npm --prefix apps/mobile test",
     "quick-check": "node scripts/quick-check.mjs"

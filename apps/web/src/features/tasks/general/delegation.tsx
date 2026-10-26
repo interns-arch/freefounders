@@ -2,8 +2,8 @@
  * Tasks given and received — day / week / month / overall, plain counts (old Delegation.jsx).
  * Admins see everyone (dashboard and Team Performance); everybody else sees their own numbers.
  */
-import { DELEGATION_WINDOWS, type DelegationReport, type DelegationWindow, useDelegationReport, usePersonDelegation } from '@freefounders/core/tasks';
-import { errorMessage } from '@freefounders/core';
+import { DELEGATION_WINDOWS, type DelegationReport, type DelegationWindow, useDelegationReport, usePersonDelegation } from '@kaampilot/core/tasks';
+import { errorMessage } from '@kaampilot/core';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

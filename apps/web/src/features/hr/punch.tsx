@@ -7,8 +7,8 @@
  * before location and camera start. Check-out never asks. A check-in always reads today's rules fresh from the server
  * first (§19.36: a screen left open, or the saved copy of §19.18, must never miss a uniform rule switched on since).
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { type AttendanceToday, type PunchRefusal, type UniformCheck, useAttendanceToday, useMarkAttendance } from '@freefounders/core/hr';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { type AttendanceToday, type PunchRefusal, type UniformCheck, useAttendanceToday, useMarkAttendance } from '@kaampilot/core/hr';
 import { useEffect, useRef, useState } from 'react';
 import { AppRequestError, appRequest, isInApp, openAppSettings, skipTodaysReminder } from '@/lib/native-bridge';
 import { LocationBlockedError, currentPosition } from './device';

@@ -1,5 +1,5 @@
-import { errorMessage, isOlderVersion, useAppVersionInfo } from '@freefounders/core';
-import { type VoiceDraft, useVoiceTaskDraft } from '@freefounders/core/tasks';
+import { errorMessage, isOlderVersion, useAppVersionInfo } from '@kaampilot/core';
+import { type VoiceDraft, useVoiceTaskDraft } from '@kaampilot/core/tasks';
 import { Cog, Keyboard, Mic, RotateCcw, Square } from '@/components/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';

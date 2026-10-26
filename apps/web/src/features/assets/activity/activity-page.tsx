@@ -6,11 +6,11 @@ import { ErrorState, PageHeader } from '@/components/common/page';
 import { Timeline } from '@/features/assets/components/timeline';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/primitives';
-import { useActivity } from '@freefounders/core/assets';
+import { useActivity } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 /** Organisation-wide, append-only activity log. */
 export default function ActivityPage() {

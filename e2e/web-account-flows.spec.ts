@@ -250,7 +250,7 @@ test('forgot password: the code is checked on its own step, then you are signed 
 });
 
 test('forgot password: an unknown email looks the same until the code, then says there is no account; resend wait is shown live', async ({ page }) => {
-  const email = `nobody-${stamp}@freefounders.test`;
+  const email = `nobody-${stamp}@kaampilot.test`;
   // A sign-up code was just sent to this email: forgot right after must wait, with a live countdown.
   await page.request.post('/api/platform/signup/start', { headers: H, data: { identifier: email } });
   await page.goto('/forgot');
@@ -310,7 +310,7 @@ test('invite links: switched off and used up say so; an existing account joins w
   // An existing account (the e2e owner of another run is not needed: a fresh account joins, then the link is used up).
   const j = await open(browser, once.url);
   await j.page.getByRole('button', { name: 'Create my account' }).click();
-  await j.page.getByLabel('Email or mobile number').fill(`joiner-${stamp}@freefounders.test`);
+  await j.page.getByLabel('Email or mobile number').fill(`joiner-${stamp}@kaampilot.test`);
   await j.page.getByRole('button', { name: 'Continue' }).click();
   await j.page.getByLabel('Code', { exact: true }).fill(await devCode(j.page));
   await j.page.getByRole('button', { name: 'Continue' }).click();
@@ -390,7 +390,7 @@ test('billing: FakePay failure and cancel change nothing; Suite yearly; more use
 
 test('owner console (staff): totals, extend a trial, suspend → the owner is sent to Billing → reactivate', async ({ page, request }) => {
   await page.goto('/login');
-  await page.getByLabel('Email, mobile, username or employee ID').fill('staff@freefounders.test');
+  await page.getByLabel('Email, mobile, username or employee ID').fill('staff@kaampilot.test');
   await page.getByLabel('Password', { exact: true }).fill('Demo@1234');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => u.pathname !== '/login');
@@ -426,7 +426,7 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   await expect(rows.nth(1)).toContainText('Reactivated');
   await expect(rows.nth(2)).toContainText('Suspended');
   await expect(rows.nth(3)).toContainText('Extended trial');
-  await expect(rows.nth(1)).toContainText('staff@freefounders.test');
+  await expect(rows.nth(1)).toContainText('staff@kaampilot.test');
   await log.getByLabel('Action').selectOption({ label: 'Suspended' });
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(1)).toContainText(/suspended/);

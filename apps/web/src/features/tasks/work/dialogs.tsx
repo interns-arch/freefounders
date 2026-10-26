@@ -1,4 +1,4 @@
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   type DayLogDay,
   type TaskChangeRequest,
@@ -16,7 +16,7 @@ import {
   useTaskStep,
   useTaskWorkSettings,
   useTeamPeople,
-} from '@freefounders/core/tasks';
+} from '@kaampilot/core/tasks';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { Field } from '@/components/common/form';

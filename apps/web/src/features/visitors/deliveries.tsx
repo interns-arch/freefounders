@@ -2,8 +2,8 @@
  * Deliveries (PLAN.md §22.9): parcels and couriers received at the gate. The person it is for is told at once (and
  * reminded if it waits too long); the gate hands it over to them or to someone collecting for them, or returns it.
  */
-import { ApiError, errorMessage } from '@freefounders/core';
-import { fileSlug } from '@freefounders/core/export';
+import { ApiError, errorMessage } from '@kaampilot/core';
+import { fileSlug } from '@kaampilot/core/export';
 import {
   type Delivery,
   type DeliveryFilters,
@@ -17,7 +17,7 @@ import {
   useReceiveDelivery,
   useReturnDelivery,
   visitorExports,
-} from '@freefounders/core/visitors';
+} from '@kaampilot/core/visitors';
 import { type FormEvent, useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';

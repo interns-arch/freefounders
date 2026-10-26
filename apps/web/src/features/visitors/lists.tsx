@@ -1,6 +1,6 @@
 /** Inside now (roll call), My visitors (hosts: invites, answers, parcels), the Register and Guard activity — PLAN.md §22. */
-import { errorMessage } from '@freefounders/core';
-import { fileSlug } from '@freefounders/core/export';
+import { errorMessage } from '@kaampilot/core';
+import { fileSlug } from '@kaampilot/core/export';
 import {
   type ActivityFilters,
   type Delivery,
@@ -19,7 +19,7 @@ import {
   useVisitPhoto,
   useVisits,
   visitorExports,
-} from '@freefounders/core/visitors';
+} from '@kaampilot/core/visitors';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';

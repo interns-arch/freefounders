@@ -9,14 +9,14 @@ import { EmptyState, ErrorState, PageHeader, PageLoader, BACK_LINK } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge, Card } from '@/components/ui/primitives';
 import { useAuth } from '@/features/assets/lib/auth';
-import { errorMessage } from '@freefounders/core';
-import { type ReconItem, useAddReconSims, useInvalidateReconciliation, useReconciliation } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { type ReconItem, useAddReconSims, useInvalidateReconciliation, useReconciliation } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, formatDateTime } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { STATUS_META } from './summary';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug } from '@freefounders/core/export';
+import { fileSlug } from '@kaampilot/core/export';
 
 const TABS: { value: string; label: string; match: (i: ReconItem) => boolean; whenEmpty?: boolean }[] = [
   { value: '', label: 'Needs attention', match: (i) => i.status !== 'MATCHED' },

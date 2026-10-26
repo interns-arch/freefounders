@@ -9,16 +9,16 @@ import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Avatar, Card, Progress } from '@/components/ui/primitives';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
-import { useOnboardingList } from '@freefounders/core/assets';
+import { useOnboardingList } from '@kaampilot/core/assets';
 import { useAuth } from '@/features/assets/lib/auth';
 import { ONBOARDING_TONE } from '@/lib/status';
-import type { OnboardingListItem } from '@freefounders/core/assets';
+import type { OnboardingListItem } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
 import { cn, daysUntil, formatDate } from '@/lib/utils';
 import { chipActiveClass, chipClass, chipIdleClass } from '@/components/common/controls';
 import { DownloadMenu } from '@/components/common/download-menu';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
-import { assetsExports } from '@freefounders/core/assets';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
+import { assetsExports } from '@kaampilot/core/assets';
 
 export function JoinsIn({ date, className }: { date: string; className?: string }) {
   const d = daysUntil(date) ?? 0;

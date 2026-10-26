@@ -30,7 +30,7 @@ async function makePerson(request: APIRequestContext, owner: string, stamp: stri
   expect(role.status(), await role.text()).toBe(201);
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: `E2E Leaver ${stamp}`, email: `e2e-leaver-${stamp}@freefounders.test`, reportsTo: me.person.id, login: { username: `e2e-leaver-${stamp}`, password: 'E2e@123456' } },
+    data: { fullName: `E2E Leaver ${stamp}`, email: `e2e-leaver-${stamp}@kaampilot.test`, reportsTo: me.person.id, login: { username: `e2e-leaver-${stamp}`, password: 'E2e@123456' } },
   });
   expect(created.status(), await created.text()).toBe(201);
   const personId = (await created.json()).person.id as string;

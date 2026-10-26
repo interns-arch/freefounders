@@ -1,6 +1,6 @@
 /** The Visitors area (PLAN.md §22): /visitors/<tab>; each tab is its own permission (features/visitors/nav.ts). */
-import { useAccess } from '@freefounders/core';
-import { useVisitorConfig } from '@freefounders/core/visitors';
+import { useAccess } from '@kaampilot/core';
+import { useVisitorConfig } from '@kaampilot/core/visitors';
 import { Navigate, useParams } from 'react-router';
 import { ErrorState, PageLoader } from '@/components/common/page';
 import { NotFound } from '@/app/pages/errors';

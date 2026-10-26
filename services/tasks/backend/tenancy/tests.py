@@ -25,7 +25,7 @@ from .management.commands.run_worker import run_pass
 from .models import CompanySetting
 from .storage import CompanyFileSystemStorage
 
-ISS, AUD = "freefounders-platform", "freefounders"
+ISS, AUD = "kaampilot-platform", "kaampilot"
 ACME_ID, BETA_ID = str(uuid.uuid4()), str(uuid.uuid4())
 ACME, BETA = "co_acme_t", "co_beta_t"
 

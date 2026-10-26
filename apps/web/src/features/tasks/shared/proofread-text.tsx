@@ -1,4 +1,4 @@
-import { useProofread } from '@freefounders/core/tasks';
+import { useProofread } from '@kaampilot/core/tasks';
 import { SpellCheck } from '@/components/icons';
 import { useId, useState } from 'react';
 import { Button } from '@/components/ui/button';

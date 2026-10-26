@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { LocalQrWarning, QRCode, useQrLinks } from '@/components/common/codes';
 import { EmptyState, ErrorState, PageHeader, PageLoader, BACK_LINK } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { useEmployeesByIds } from '@freefounders/core/assets';
+import { useEmployeesByIds } from '@kaampilot/core/assets';
 import { printPage } from '@/lib/native-bridge';
 
 /** Printable ID cards: one QR per person. Scanning a card opens that person and their assets. */

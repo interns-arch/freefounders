@@ -1,5 +1,5 @@
 {
-  "name": "@freefounders/e2e",
+  "name": "@kaampilot/e2e",
   "private": true,
   "description": "Browser tests against the running suite (npm run dev at the repo root first)",
   "scripts": {

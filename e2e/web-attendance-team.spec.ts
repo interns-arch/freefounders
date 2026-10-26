@@ -122,7 +122,7 @@ test('Import attendance: preview with one bad row, import one, it shows on Daily
   const name = `E2E Import ${stamp}`;
   const created = await request.post('/api/platform/people', {
     headers: auth(owner),
-    data: { fullName: name, email: `${login}@freefounders.test`, login: { username: login, password: 'E2e@123456' } },
+    data: { fullName: name, email: `${login}@kaampilot.test`, login: { username: login, password: 'E2e@123456' } },
   });
   expect(created.status()).toBe(201);
   const personId = (await created.json()).person.id as string;

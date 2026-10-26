@@ -1,6 +1,6 @@
 /** "Choose a company" (PLAN.md §21.2): an account in several companies picks one after its password (sign-in, password reset). */
-import { type ChooseCompany, errorMessage } from '@freefounders/core';
-import { useSignInWithTicket } from '@freefounders/core/account';
+import { type ChooseCompany, errorMessage } from '@kaampilot/core';
+import { useSignInWithTicket } from '@kaampilot/core/account';
 import { ArrowRight, Building2 } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 

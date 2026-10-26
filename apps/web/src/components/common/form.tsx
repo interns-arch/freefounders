@@ -5,7 +5,7 @@ import { type FieldErrors, type FieldValues, type Path, useForm, type UseFormRet
 import { toast } from 'sonner';
 import type { ZodType } from 'zod';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
-import { ApiError } from '@freefounders/core';
+import { ApiError } from '@kaampilot/core';
 import { cn } from '@/lib/utils';
 
 /**

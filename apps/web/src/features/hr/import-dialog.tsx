@@ -2,8 +2,8 @@
  * Import attendance (hr.import, PLAN.md §19.15, §19.19): download the template, upload an XLSX/CSV, check every row (dry run), then
  * "Import N rows". This is how a company brings its old attendance across (e.g. from SalaryBox).
  */
-import { errorMessage } from '@freefounders/core';
-import { type ImportResult, type ImportRow, useImportAttendance, useImportTemplate } from '@freefounders/core/hr';
+import { errorMessage } from '@kaampilot/core';
+import { type ImportResult, type ImportRow, useImportAttendance, useImportTemplate } from '@kaampilot/core/hr';
 import { CheckCircle2, Download, FileUp } from '@/components/icons';
 import { type FormEvent, useId, useState } from 'react';
 import { type Column, DataTable } from '@/components/common/data-table';

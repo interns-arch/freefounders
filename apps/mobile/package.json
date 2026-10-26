@@ -1,5 +1,5 @@
 {
-  "name": "@freefounders/mobile",
+  "name": "@kaampilot/mobile",
   "main": "expo-router/entry",
   "version": "1.2.0",
   "dependencies": {

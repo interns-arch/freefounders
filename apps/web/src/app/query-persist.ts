@@ -7,7 +7,7 @@
  * same person after their session was renewed; it is dropped on sign-out, when someone else signs in, after 24 hours
  * and with every new build (buster = build id). Only the queries in SAFE are written, never mutations.
  */
-import { type Claims, session } from '@freefounders/core';
+import { type Claims, session } from '@kaampilot/core';
 import { type Persister, persistQueryClientRestore, persistQueryClientSubscribe } from '@tanstack/query-persist-client-core';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 

@@ -3,9 +3,9 @@
  * frame like Notion's, one question per screen, a progress bar, a back button, the one-time-code field and its
  * "Test mode" note.
  */
-import { ApiError, errorMessage, retryAfterSeconds } from '@freefounders/core';
-import { type PasswordAbout, PLATFORM_PASSWORD_MIN } from '@freefounders/core/admin';
-import { type CompanyNameCheckState, type UsernameCheckState } from '@freefounders/core/account';
+import { ApiError, errorMessage, retryAfterSeconds } from '@kaampilot/core';
+import { type PasswordAbout, PLATFORM_PASSWORD_MIN } from '@kaampilot/core/admin';
+import { type CompanyNameCheckState, type UsernameCheckState } from '@kaampilot/core/account';
 import { AlertCircle, ArrowLeft, Eye, EyeOff, Info } from '@/components/icons';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';

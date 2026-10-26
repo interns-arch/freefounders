@@ -4,7 +4,7 @@
 @import '@fontsource/ibm-plex-mono/500.css';
 @import '@fontsource/ibm-plex-mono/600.css';
 /* Every colour, radius and font comes from the theme package (PLAN.md §6 rule 2). */
-@import '@freefounders/theme/tokens.css';
+@import '@kaampilot/theme/tokens.css';
 
 /* Packages outside src that hold class names. */
 @source '../../../packages';

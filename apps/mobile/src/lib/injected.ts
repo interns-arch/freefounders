@@ -1,6 +1,6 @@
 /**
  * The script the shell puts into every page before it loads (react-native-webview `injectedJavaScriptBeforeContentLoaded`).
- * It tells the web app it runs inside the Kaampilot app (`window.FreeFoundersApp`, read by
+ * It tells the web app it runs inside the Kaampilot app (`window.KaampilotApp`, read by
  * apps/web/src/lib/native-bridge.ts) and fills three gaps of Android's WebView:
  *   1. pull-to-refresh: reports whether the touched content is scrolled to the top (the shell only refreshes then);
  *   2. `navigator.geolocation.getCurrentPosition` answered by the app's GPS (a WebView refuses it on plain http);
@@ -23,7 +23,7 @@ export interface AppInfo {
  */
 export function injectedScript(info: AppInfo, serverOrigin?: string | null): string {
   return `(function () {
-  if (window.FreeFoundersApp) return;
+  if (window.KaampilotApp) return;
   var only = ${JSON.stringify(serverOrigin ?? null)};
   if (only) {
     var here = '';
@@ -31,7 +31,7 @@ export function injectedScript(info: AppInfo, serverOrigin?: string | null): str
     if (here !== only) return;
   }
   var info = ${JSON.stringify(info)};
-  window.FreeFoundersApp = info;
+  window.KaampilotApp = info;
   function post(m) { try { window.ReactNativeWebView.postMessage(JSON.stringify(m)); } catch (e) {} }
 
   function atTop(el) {

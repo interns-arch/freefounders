@@ -1,5 +1,5 @@
 /** The register tab: filters, the insights panel, one expandable row per mistake, and the "Log mistake" dialog. */
-import { errorMessage, useAccess } from '@freefounders/core';
+import { errorMessage, useAccess } from '@kaampilot/core';
 import {
   MISTAKE_CLASSIFICATIONS,
   MISTAKE_LEVEL3_ACTIONS,
@@ -22,8 +22,8 @@ import {
   useReviewMistake,
   useSops,
   tasksExports,
-} from '@freefounders/core/tasks';
-import { fileSlug, todayStamp } from '@freefounders/core/export';
+} from '@kaampilot/core/tasks';
+import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { Flag, PartyPopper, Plus, Sparkles, TriangleAlert } from '@/components/icons';
 import { useEffect, useId, useState } from 'react';

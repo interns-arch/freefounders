@@ -3,9 +3,9 @@
  * "New company". Switching shows "Opening <company>…" over everything, signs in to that company (the cache is
  * emptied: nothing of the other company can show) and opens its Home.
  */
-import type { Access } from '@freefounders/core';
-import { useMyCompanies, useSwitchCompany } from '@freefounders/core/account';
-import { errorMessage } from '@freefounders/core';
+import type { Access } from '@kaampilot/core';
+import { useMyCompanies, useSwitchCompany } from '@kaampilot/core/account';
+import { errorMessage } from '@kaampilot/core';
 import { Building2, Check, Loader2, Plus } from '@/components/icons';
 import { useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router';

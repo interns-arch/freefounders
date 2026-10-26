@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/primitives';
-import { errorMessage } from '@freefounders/core';
+import { errorMessage } from '@kaampilot/core';
 import { cn } from '@/lib/utils';
 
 /** "← Employees": the link back to a list above a detail page (same size and tap area everywhere). */

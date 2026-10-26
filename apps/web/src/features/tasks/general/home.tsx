@@ -1,6 +1,6 @@
 /** /tasks — the Tasks home dashboard (old pages/Home.jsx). */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { type HomeFilters, type Task, useDelegatedOpen, useHomeSummary, useLeadsDashboard, useMyTaskTiles } from '@freefounders/core/tasks';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { type HomeFilters, type Task, useDelegatedOpen, useHomeSummary, useLeadsDashboard, useMyTaskTiles } from '@kaampilot/core/tasks';
 import {
   CheckCircle2,
   Clock,

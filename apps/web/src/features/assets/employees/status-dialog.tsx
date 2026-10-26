@@ -7,9 +7,9 @@ import { Field } from '@/components/common/form';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
-import { errorMessage } from '@freefounders/core';
-import { useAssetsCache, useSetEmployeeStatus } from '@freefounders/core/assets';
-import type { EmployeeDetail } from '@freefounders/core/assets';
+import { errorMessage } from '@kaampilot/core';
+import { useAssetsCache, useSetEmployeeStatus } from '@kaampilot/core/assets';
+import type { EmployeeDetail } from '@kaampilot/core/assets';
 import { cn, todayISO } from '@/lib/utils';
 
 const OPTIONS: { value: EmployeeStatus; label: string; text: string }[] = [

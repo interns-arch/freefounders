@@ -1,4 +1,4 @@
-import { session, useClaims } from '@freefounders/core';
+import { session, useClaims } from '@kaampilot/core';
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { PageLoader } from '@/components/common/page';

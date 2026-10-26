@@ -1,5 +1,5 @@
 {
-  "name": "@freefounders/theme",
+  "name": "@kaampilot/theme",
   "version": "0.1.0",
   "private": true,
   "description": "Kaampilot design tokens: one source for the web app (CSS variables) and the mobile app (hex copy, src/tokens.native.ts)",

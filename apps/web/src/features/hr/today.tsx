@@ -1,5 +1,5 @@
 /** Attendance → Today: check in / check out (GPS and/or punch photo, per company setting). Built for phones. */
-import { useAccess } from '@freefounders/core';
+import { useAccess } from '@kaampilot/core';
 import { Activity, Camera, ClipboardCheck, Clock, LogIn, LogOut, MapPin, Timer } from '@/components/icons';
 import { useState } from 'react';
 import { ErrorState } from '@/components/common/page';

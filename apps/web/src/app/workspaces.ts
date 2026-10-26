@@ -1,4 +1,4 @@
-import type { Access } from '@freefounders/core';
+import type { Access } from '@kaampilot/core';
 import { CalendarClock, CheckSquare, type IconComponent, Package, ShieldCheck, UserCheck } from '@/components/icons';
 import type { Workspace } from './nav';
 

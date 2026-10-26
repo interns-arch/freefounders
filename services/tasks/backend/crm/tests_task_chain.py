@@ -3,7 +3,7 @@ others (who can pass parts on, up to MAX_DEPTH levels); a part's completion
 goes to the person who gave it; the task above can't be completed until
 every part is done and accepted; effort is split, never earned twice; and
 admins see the whole chain. Ported from the original app (1dabd35) with the
-FreeFounders additions at the end (PLAN.md §19.41): passing on a part needs no
+Kaampilot additions at the end (PLAN.md §19.41): passing on a part needs no
 Assign permission, a self-made task does; categories of the new notifications;
 change requests keep the old due date for the ranking and the Excel report."""
 from datetime import timedelta
@@ -237,8 +237,8 @@ class ChainTests(ChainBase):
         self.assertEqual(rows[1][head.index("Main task")], self.main.code)
 
 
-class ChainFreeFoundersTests(ChainBase):
-    """What FreeFounders adds around the original rules (PLAN.md §19.41)."""
+class ChainKaampilotTests(ChainBase):
+    """What Kaampilot adds around the original rules (PLAN.md §19.41)."""
 
     def test_a_self_made_task_is_split_only_with_the_assign_permission(self):
         mine = Task.objects.create(title="My own", assigned_to=self.rahul, created_by=self.rahul,

@@ -1,9 +1,9 @@
 /** HR → My leave (balances, requests, apply / cancel) and Holidays. */
-import { errorMessage, useAccess } from '@freefounders/core';
-import { type LeaveBalance, type LeaveRequest, type LeaveType, hrExports, useAddHoliday, useApplyLeave, useCancelLeave, useDeleteHoliday, useHolidays, useLeaveBalances, useLeaveTypes, useMyLeaves } from '@freefounders/core/hr';
+import { errorMessage, useAccess } from '@kaampilot/core';
+import { type LeaveBalance, type LeaveRequest, type LeaveType, hrExports, useAddHoliday, useApplyLeave, useCancelLeave, useDeleteHoliday, useHolidays, useLeaveBalances, useLeaveTypes, useMyLeaves } from '@kaampilot/core/hr';
 import { CalendarDays, CalendarHeart, Plus } from '@/components/icons';
 import { useState } from 'react';
-import { todayStamp } from '@freefounders/core/export';
+import { todayStamp } from '@kaampilot/core/export';
 import { DownloadMenu } from '@/components/common/download-menu';
 import { EmptyState, ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
