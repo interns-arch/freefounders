@@ -13,6 +13,7 @@ export const AREA_LABEL: Record<NotificationArea, string> = {
   assets: 'Assets',
   approvals: 'Approvals',
   company: 'Company',
+  visitors: 'Visitors',
 };
 
 /** The area tabs; arrow keys move between them (ARIA tabs). */

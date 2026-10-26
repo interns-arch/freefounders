@@ -271,10 +271,10 @@ class RoleWiringTests(TestCase):
                          f"roles with no default department: {missing}")
 
     def test_the_new_staff_roles_see_only_their_own_work(self):
-        from .access import EVERYONE, catalogue
+        from .access import catalogue
         from .permissions import ROLE_CAPABILITIES
         # Their own work, plus what every role has had since §19.19 (punch in, my leave, notices...).
-        everyone = {p["key"] for p in catalogue() if p.get("upgrade") == EVERYONE}
+        everyone = {p["key"] for p in catalogue() if any(r.get("everyone") for r in p.get("upgrade", []))}
         for role in (Role.HOUSEKEEPING, Role.SECURITY, Role.LEGAL, Role.HR_EXECUTIVE):
             caps = ROLE_CAPABILITIES[role]
             self.assertEqual(caps, {"tasks.view_own"} | everyone,

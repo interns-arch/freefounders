@@ -41,7 +41,20 @@ def hr_badges(user) -> dict:
     return {"leave": leave, "corrections": corrections, "approvals": leave + corrections}
 
 
+def visitor_badges(user) -> dict:
+    """Visitors (PLAN.md §22): QR sign-ins waiting at the gate (for the gate) and my visitors waiting for my Allow."""
+    from tenancy.profile import module_on
+    if not module_on("visitors"):
+        return {"waiting": 0, "approvals": 0}
+    from visitors.models import Visit, VisitStatus
+    from visitors.services import can_gate
+    waiting = Visit.objects.filter(status=VisitStatus.WAITING).count() if can_gate(user) else 0
+    approvals = Visit.objects.filter(status=VisitStatus.WAITING_HOST, host=user).count()
+    return {"waiting": waiting, "approvals": approvals}
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def badges(request):
-    return Response({"tasks": task_badges(request.user), "hr": hr_badges(request.user)})
+    return Response({"tasks": task_badges(request.user), "hr": hr_badges(request.user),
+                     "visitors": visitor_badges(request.user)})

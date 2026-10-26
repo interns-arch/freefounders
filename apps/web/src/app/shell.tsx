@@ -18,11 +18,12 @@ import { BillingBanners } from '@/features/billing/banners';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
 import { TASKS_NAV } from '@/features/tasks/nav';
+import { VISITORS_NAV } from '@/features/visitors/nav';
 import { isWorkspace, type NavItem, type Workspace, WORKSPACE_BADGE, WORKSPACE_HOME, WORKSPACE_NAMES, workspaceOf } from './nav';
 import { Logo, NotificationsBell, ThemeToggle, UserMenu } from './shell-parts';
 import { WORKSPACE_LOOK, workspacesFor } from './workspaces';
 
-const MENUS: Record<Workspace, NavItem[]> = { attendance: ATTENDANCE_NAV, tasks: TASKS_NAV, assets: ASSETS_NAV, admin: ADMIN_NAV };
+const MENUS: Record<Workspace, NavItem[]> = { attendance: ATTENDANCE_NAV, tasks: TASKS_NAV, assets: ASSETS_NAV, visitors: VISITORS_NAV, admin: ADMIN_NAV };
 
 /**
  * Which groups are open in the sidebar. On an area's page only that group is open (the others show just their header);
@@ -156,7 +157,7 @@ export function AppShell() {
     document.title = short ? `${short} · ${title}` : `Kaampilot · ${title}`;
   }, [access.brand?.shortName, title]);
 
-  const workspaces = useMemo(() => workspacesFor(access.apps, access.admin.any), [access.apps, access.admin.any]);
+  const workspaces = useMemo(() => workspacesFor(access), [access]);
 
   // Suspended company (PLAN.md §21.1): only the owner gets in, straight to Billing.
   const suspended = access.billing?.state === 'suspended';
@@ -288,6 +289,9 @@ export function AppShell() {
     ...(workspaces.includes('tasks') ? [{ to: '/tasks', label: 'Tasks', icon: WORKSPACE_LOOK.tasks.icon, active: here === 'tasks', count: WORKSPACE_BADGE.tasks(badges) }] : []),
     ...(workspaces.includes('assets') ? [{ to: '/assets', label: 'Assets', icon: WORKSPACE_LOOK.assets.icon, active: here === 'assets', count: WORKSPACE_BADGE.assets(badges) }] : []),
   ];
+  // The gate (PLAN.md §22): Visitors gets its own tab when there is room (a guard: Attendance, Home, Visitors, More).
+  if (workspaces.includes('visitors') && access.tasks.can('visitors.gate') && tabs.length < 4)
+    tabs.push({ to: '/visitors', label: 'Visitors', icon: WORKSPACE_LOOK.visitors.icon, active: here === 'visitors', count: WORKSPACE_BADGE.visitors(badges) });
   // Labels stay 11 px here (the one exception, like iOS/Material tab bars): "Attendance" must fit a fifth of a 360 px phone.
   const tabClass = 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 pt-1.5 pb-2 text-[11px] font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
 

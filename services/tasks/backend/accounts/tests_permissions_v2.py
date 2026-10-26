@@ -25,7 +25,8 @@ COVERED = {
     "hr.approve": {"hr.live_department", "hr.daily_department", "hr.dashboard_department", "hr.reports_department"},
 }
 EVERYONE = {"attendance.punch", "attendance.self", "leave.self", "holidays.view", "payroll.self", "notices.view",
-            "links.view", "mistakes.view", "directory.view", "notifications.view"}
+            "links.view", "mistakes.view", "directory.view", "notifications.view",
+            "visitors.invite"}  # catalogue version 3 (PLAN.md §22)
 
 
 def covers(caps, cap) -> bool:
@@ -77,7 +78,7 @@ class CatalogueTests(TestCase):
             api.credentials(HTTP_AUTHORIZATION=f"Bearer {token('platform', {}, aud='tasks-internal')}")
             res = api.get("/api/internal/permissions")
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["version"], 2)
+        self.assertEqual(res.data["version"], 3)
         self.assertEqual(res.data["retired"], ["hr.manage"])
         live = next(p for p in res.data["permissions"] if p["key"] == "hr.live")
         self.assertEqual(live["scopes"], ["team", "department", "company"])

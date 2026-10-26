@@ -5,7 +5,7 @@
  * Same URL as the old chooser (/ and /?choose); on phones a person with Attendance lands on /attendance instead unless
  * the URL says ?home=1 (the bottom bar's Home tab).
  */
-import { type Access, useAccess } from '@freefounders/core';
+import { type Access, useAccess, useBadges } from '@freefounders/core';
 import { useAssetsDashboard } from '@freefounders/core/assets';
 import { nearestOffice, useHrConfig, useLeaveBalances, useOfficeLocations, usePendingCorrections, usePendingLeaves } from '@freefounders/core/hr';
 import { useMyTaskTiles, useWaitingCounts } from '@freefounders/core/tasks';
@@ -66,7 +66,7 @@ function useKnownPosition(wanted: boolean) {
   return pos;
 }
 
-const TITLES: Record<Exclude<Workspace, 'admin'>, string> = { attendance: 'Attendance & Shifts', tasks: 'Tasks & Automations', assets: 'Assets & Inventory' };
+const TITLES: Record<Exclude<Workspace, 'admin'>, string> = { attendance: 'Attendance & Shifts', tasks: 'Tasks & Automations', assets: 'Assets & Inventory', visitors: 'Visitors & Gate' };
 
 export function HomePage() {
   const access = useAccess();
@@ -79,7 +79,7 @@ export function HomePage() {
     if (access.platform && next) navigate(next, { replace: true });
   }, [access.platform, next, navigate]);
 
-  const workspaces = access.platform ? workspacesFor(access.apps, access.admin.any) : [];
+  const workspaces = access.platform ? workspacesFor(access) : [];
   const cards = workspaces.filter((w): w is Exclude<Workspace, 'admin'> => w !== 'admin');
 
   // Keys 1, 2, 3 open the cards in the order shown (not while typing in a field).
@@ -136,6 +136,8 @@ export function HomePage() {
               <TasksCard key={w} index={i + 1} onOpen={(to = '/tasks') => open(to)} />
             ) : w === 'assets' ? (
               <AssetsCard key={w} index={i + 1} access={access} onOpen={(to = '/assets') => open(to)} />
+            ) : w === 'visitors' ? (
+              <VisitorsCard key={w} index={i + 1} onOpen={(to = '/visitors') => open(to)} />
             ) : null,
           )}
         </div>
@@ -224,6 +226,28 @@ function WorkspaceCard({ w, index, badge, children, action }: { w: Exclude<Works
         <div className="relative z-10 space-y-2">{action}</div>
       </div>
     </section>
+  );
+}
+
+/** Visitors (PLAN.md §22): what waits at the gate and for me. */
+function VisitorsCard({ index, onOpen }: { index: number; onOpen: (to?: string) => void }) {
+  const b = useBadges();
+  return (
+    <WorkspaceCard
+      w="visitors"
+      index={index}
+      action={
+        <Button variant="outline" className="w-full" onClick={() => onOpen()}>
+          Open Visitors
+        </Button>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        {b.visitors.waiting > 0 && <Pill tone="warn">{b.visitors.waiting} waiting at the gate</Pill>}
+        {b.visitors.approvals > 0 && <Pill tone="info">{b.visitors.approvals} waiting for your answer</Pill>}
+        {!b.visitors.total && <p className="text-sm text-muted-foreground">Nobody is waiting at the gate.</p>}
+      </div>
+    </WorkspaceCard>
   );
 }
 

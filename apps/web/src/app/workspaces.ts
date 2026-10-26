@@ -1,4 +1,5 @@
-import { CalendarClock, CheckSquare, type IconComponent, Package, ShieldCheck } from '@/components/icons';
+import type { Access } from '@freefounders/core';
+import { CalendarClock, CheckSquare, type IconComponent, Package, ShieldCheck, UserCheck } from '@/components/icons';
 import type { Workspace } from './nav';
 
 /**
@@ -15,14 +16,34 @@ export const WORKSPACE_LOOK: Record<Workspace, { icon: IconComponent; text: stri
   },
   tasks: { icon: CheckSquare, text: 'text-app-tasks', soft: 'bg-app-tasks/10 text-app-tasks', solid: 'bg-app-tasks text-white dark:text-background' },
   assets: { icon: Package, text: 'text-app-assets', soft: 'bg-app-assets/10 text-app-assets', solid: 'bg-app-assets text-white dark:text-background' },
+  visitors: { icon: UserCheck, text: 'text-app-visitors', soft: 'bg-app-visitors/10 text-app-visitors', solid: 'bg-app-visitors text-white dark:text-background' },
   admin: { icon: ShieldCheck, text: 'text-app-admin', soft: 'bg-app-admin/10 text-app-admin', solid: 'bg-app-admin text-white dark:text-background' },
 };
 
-/** The workspaces this person can open, in portal order. Attendance comes with Tasks (PLAN.md §19.4, option A). */
-export function workspacesFor(apps: string[], hasAdmin: boolean): Workspace[] {
+/** Tasks capabilities that are not Tasks work: someone with only these (a guard) gets no Tasks menu (PLAN.md §22). */
+const NOT_TASKS = ['attendance.', 'leave.', 'holidays.', 'payroll.', 'hr.', 'visitors.', 'notifications.'];
+
+/** Has any Tasks work at all (still loading counts as yes, so the menu does not flicker). */
+export function hasTasksWork(access: Access): boolean {
+  const caps = access.tasks.me?.capabilities;
+  return !caps || caps.some((c) => !NOT_TASKS.some((p) => c.startsWith(p)));
+}
+
+/** Visitors (PLAN.md §22): the module is on and the person has any Visitors permission. */
+export function hasVisitors(access: Access): boolean {
+  return access.tasks.on && access.tasks.module('visitors') && access.tasks.canAny('visitors.');
+}
+
+/**
+ * The workspaces this person can open, in portal order. Attendance comes with Tasks (PLAN.md §19.4, option A); the
+ * Tasks menu only when they have Tasks work (a guard: Attendance + Visitors only).
+ */
+export function workspacesFor(access: Access): Workspace[] {
   const list: Workspace[] = [];
-  if (apps.includes('tasks')) list.push('attendance', 'tasks');
-  if (apps.includes('assets')) list.push('assets');
-  if (hasAdmin) list.push('admin'); // any Admin permission (PLAN.md §19.19)
+  if (access.apps.includes('tasks')) list.push('attendance');
+  if (access.apps.includes('tasks') && hasTasksWork(access)) list.push('tasks');
+  if (access.apps.includes('assets')) list.push('assets');
+  if (hasVisitors(access)) list.push('visitors');
+  if (access.admin.any) list.push('admin'); // any Admin permission (PLAN.md §19.19)
   return list;
 }

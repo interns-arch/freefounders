@@ -29,7 +29,12 @@ MODULES = [
     ("mistakes", "Mistake register", "Mistakes, SOPs, escalations and digests", False,
      ("mistakes", "mistake-categories", "sops", "mistake-settings")),
     ("links", "Links", "Shared link collections", False, ("links", "link-collections")),
+    ("visitors", "Visitors", "Gate register: visitors and vehicles in and out, open QR sign-in, guard activity", False,
+     ("visitors",)),
 ]
+# Modules added after companies already existed: a company that never chose is OFF (not on, as for the first ones), so
+# a new module never appears by itself. A standalone install (no profile at all) still has everything on.
+OPT_IN = {"visitors"}
 _OWNER = {segment: key for key, _l, _d, _on, segments in MODULES for segment in segments}
 # Paths under a module's prefix that other, always-on screens use: the team list for Groups, templates, settings.
 _SHARED = ("/api/leads/assignees/",)
@@ -72,12 +77,18 @@ def forget() -> None:
 
 def catalogue() -> list[dict]:
     """What the Platform's Settings Center can switch on or off."""
-    return [{"key": k, "label": label, "description": d, "default": on} for k, label, d, on, _s in MODULES]
+    return [{"key": k, "label": label, "description": d, "default": on, **({"optIn": True} if k in OPT_IN else {})}
+            for k, label, d, on, _s in MODULES]
 
 
 def module_on(key: str) -> bool:
-    """A module is on unless the company switched it off (no profile = everything on)."""
-    return (profile().get("modules") or {}).get(key, True) is not False
+    """A module is on unless the company switched it off (no profile = everything on; an opt-in module is off until the
+    company switches it on)."""
+    p = profile()
+    switches = p.get("modules") or {}
+    if key in switches:
+        return switches[key] is not False
+    return not (key in OPT_IN and p.get("name"))
 
 
 def modules() -> dict[str, bool]:

@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "payroll",
     "mistakes",
     "tenancy",
+    "visitors",
 ]
 
 MIDDLEWARE = [
@@ -148,6 +149,8 @@ REST_FRAMEWORK = {
     # behind the gateway set NUM_PROXIES=1 so a client address is the visitor's, not the gateway's.
     "DEFAULT_THROTTLE_RATES": {
         "ai": env("THROTTLE_AI", "30/min"),  # per person: AI drafting, proofreading, voice notes, summaries
+        # per address: the open QR visitor sign-in (no login, PLAN.md section 22.8); each company also limits per address + link
+        "visitor_public": env("THROTTLE_VISITOR_PUBLIC", "30/hour"),
     },
     "NUM_PROXIES": int(env("NUM_PROXIES", "0")) or None,
 }

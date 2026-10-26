@@ -47,6 +47,7 @@
   --color-app-tasks: var(--app-tasks);
   --color-app-assets: var(--app-assets);
   --color-app-admin: var(--app-admin);
+  --color-app-visitors: var(--app-visitors);
   /*
    * One radius scale (PLAN.md §19.22): 6 px for tiny things (checkboxes, chips, xs buttons), 8 px for controls
    * (buttons, fields, menus, tabs), 12 px for every card, dialog and panel (rounded-lg = rounded-xl = rounded-2xl).

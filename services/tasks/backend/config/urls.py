@@ -47,6 +47,7 @@ urlpatterns = [
     path("api/", include("directory.urls")),
     path("api/", include("payroll.urls")),
     path("api/", include("mistakes.urls")),
+    path("api/", include("visitors.urls")),
     # uploaded files (works in dev and on Render; Render's disk is ephemeral)
     re_path(r"^media/(?P<path>.*)$", media),
     # everything else that isn't API/admin/static -> the React app

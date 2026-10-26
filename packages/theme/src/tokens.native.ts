@@ -37,6 +37,7 @@ export const light = {
   appTasks: '#2361e9',
   appAssets: '#0f766e',
   appAdmin: '#4b5068',
+  appVisitors: '#a64b00',
 } as const;
 
 export const dark: Record<keyof typeof light, string> = {
@@ -73,6 +74,7 @@ export const dark: Record<keyof typeof light, string> = {
   appTasks: '#60a5fa',
   appAssets: '#2cd4bf',
   appAdmin: '#a1a1aa',
+  appVisitors: '#f4a859',
 };
 
 export type ColorToken = keyof typeof light;

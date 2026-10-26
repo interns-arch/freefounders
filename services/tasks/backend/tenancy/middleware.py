@@ -15,7 +15,8 @@ from accounts import platform_auth
 from . import schemas
 
 # Paths that never touch a company's data.
-NO_COMPANY_PATHS = ("/health", "/api/internal/companies")
+# The open QR visitor sign-in finds its company from the code in its URL (visitors/views.py public_view).
+NO_COMPANY_PATHS = ("/health", "/api/internal/companies", "/api/visitors/public/")
 
 
 def _company_id(request) -> str | None:

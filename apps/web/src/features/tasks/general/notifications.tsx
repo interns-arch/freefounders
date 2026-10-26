@@ -37,6 +37,7 @@ const EMPTY: Record<NotificationTab, string> = {
   assets: 'Assets given to you, tickets, requests and exits show up here.',
   approvals: 'Leave, corrections, task changes, finished work and asset requests waiting for you show up here.',
   company: 'Notices from your company show up here.',
+  visitors: 'Visitors at the gate for you and overstay alerts show up here.',
 };
 
 export function NotificationsPage() {

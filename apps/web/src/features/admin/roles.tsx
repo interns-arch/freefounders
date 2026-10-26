@@ -1,7 +1,8 @@
 import { errorMessage, usePlatformMe } from '@freefounders/core';
-import { LEVEL_LABELS, type Role, roleApps, roleLimits, rolesMatrixSheet, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles } from '@freefounders/core/admin';
+import { GUARD_ROLE_PRESET, LEVEL_LABELS, type Role, roleApps, roleLimits, rolesMatrixSheet, useArchiveRole, useDuplicateRole, useRoleCatalogue, useRoles, useSaveRole } from '@freefounders/core/admin';
 import { Lock, Plus, ShieldCheck } from '@/components/icons';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { fileSlug, todayStamp } from '@freefounders/core/export';
 import { useConfirm } from '@/components/common/confirm';
 import { DownloadMenu } from '@/components/common/download-menu';
@@ -19,6 +20,7 @@ export function RolesPage() {
   const catalogue = useRoleCatalogue();
   const duplicate = useDuplicateRole();
   const archive = useArchiveRole();
+  const saveRole = useSaveRole();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
   const [error, setError] = useState('');
@@ -26,6 +28,14 @@ export function RolesPage() {
   // Without being the owner: only roles within my own permissions and level can be changed or copied (R1).
   const limits = roleLimits(usePlatformMe().data, catalogue.data);
   const editingRole = editing && editing !== 'new' ? editing : null;
+  // Visitors (PLAN.md §22): a ready Guard role, offered while the company has none and Tasks offers the gate permission.
+  const canGuard =
+    !!catalogue.data?.some((a) => a.app === 'tasks' && a.permissions.some((p) => p.key === 'visitors.gate')) &&
+    !(roles.data ?? []).some((r) => r.name.trim().toLowerCase() === 'guard');
+  const addGuard = () => {
+    setError('');
+    saveRole.mutate(GUARD_ROLE_PRESET, { onError, onSuccess: () => toast.success('Guard role added. Give it to your guards under People & access.') });
+  };
 
   const columns: Column<Role>[] = [
     {
@@ -131,6 +141,11 @@ export function RolesPage() {
               loading={!roles.data || !catalogue.data}
               size="default"
             />
+            {canGuard && (
+              <Button variant="outline" onClick={addGuard} loading={saveRole.isPending}>
+                <ShieldCheck /> Add Guard role
+              </Button>
+            )}
             <Button variant="cta" onClick={() => setEditing('new')} disabled={!catalogue.data}>
               <Plus /> New role
             </Button>

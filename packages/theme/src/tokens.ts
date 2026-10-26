@@ -39,6 +39,7 @@ export const light = {
   appTasks: 'oklch(0.54 0.215 262.9)',
   appAssets: 'oklch(0.511 0.086 186.4)',
   appAdmin: 'oklch(0.436 0.04 275.5)',
+  appVisitors: 'oklch(0.52 0.14 50)',
 } as const;
 
 export const dark: Record<keyof typeof light, string> = {
@@ -75,6 +76,7 @@ export const dark: Record<keyof typeof light, string> = {
   appTasks: 'oklch(0.714 0.143 254.6)',
   appAssets: 'oklch(0.785 0.133 181.9)',
   appAdmin: 'oklch(0.712 0.013 286.1)',
+  appVisitors: 'oklch(0.79 0.13 65)',
 };
 
 export type ColorToken = keyof typeof light;

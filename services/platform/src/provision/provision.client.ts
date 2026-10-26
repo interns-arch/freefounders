@@ -22,6 +22,8 @@ export interface AppModule {
   description: string;
   /** On for a new company unless switched off. */
   default: boolean;
+  /** Added after companies existed: off for a company that never chose (PLAN.md §22). */
+  optIn?: boolean;
 }
 
 export interface AppModules {
@@ -247,6 +249,8 @@ export interface UpgradeRule {
   fromScopes?: string[];
   minLevel?: number;
   scope?: string;
+  /** The catalogue version that added the rule: it applies only to roles saved under an older one (missing = 2). */
+  since?: number;
 }
 export interface CataloguePermission {
   key: string;

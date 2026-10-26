@@ -19,7 +19,9 @@ SCOPES = ("own", "team", "department", "company")
 # before it are upgraded once with the `upgrade` rules below: by the data migration here, by the Platform for
 # its own copy (it reads these rules from GET /internal/permissions), and on a push from a Platform that has not
 # upgraded yet (`catalogueVersions.tasks` < 2). The rules are frozen: a later change adds version 3 with its own.
-CATALOGUE_VERSION = 2
+CATALOGUE_VERSION = 3
+# 3 = the Visitors module (2026-10-26, PLAN.md §22). Its rules carry "since": 3, so upgrading a role saved under
+# version 2 applies only them (the version-2 rules have no "since" and apply only to roles from before version 2).
 
 _TEAM_UP = ("team", "department", "company")
 EVERYONE = [{"everyone": True}]
@@ -146,6 +148,19 @@ CATALOGUE = [
        "Create, generate, finalise and export payroll; see everyone's payslips.", upgrade=[{"from": "hr.manage"}]),
     _p("payroll.salaries", "Salaries and advances", "HR administration",
        "Set people's salary structures and record advances.", upgrade=[{"from": "hr.manage"}]),
+    # ── Visitors (PLAN.md §22) ──
+    _p("visitors.gate", "Gate: visitors and vehicles", "Visitors",
+       "Check visitors and vehicles in and out, take their photo, see who is inside, accept or turn away QR sign-ins.",
+       upgrade=[{"minLevel": 3, "since": 3}]),
+    _p("visitors.invite", "My visitors", "Visitors",
+       "See the visitors who came to meet them, and Allow or Deny one waiting at the gate.",
+       upgrade=[{"everyone": True, "since": 3}]),
+    _p("visitors.view_all", "Visitor register and guard activity", "Visitors",
+       "The full visitor and vehicle register, every guard's actions, reports and downloads.",
+       upgrade=[{"minLevel": 3, "since": 3}]),
+    _p("visitors.settings", "Visitor settings", "Visitors",
+       "Purposes, photo and ID rules, host approval, overstay, how long records are kept, and the visitor QR.",
+       upgrade=[{"minLevel": 3, "since": 3}]),
     # ── Administration ──
     _p("users.manage", "Manage users", "Administration",
        "Tasks user accounts: add, edit and switch off (with the Platform, people are managed in Admin → People)."),
@@ -262,7 +277,7 @@ def upgrade_grants(grants: dict, level: int = 1, from_version: int = 1) -> dict:
     out = {k: v for k, v in had.items() if k not in RETIRED}
     for p in CATALOGUE:
         for rule in p["upgrade"]:
-            if not _rule_matches(rule, had, level):
+            if from_version >= rule.get("since", 2) or not _rule_matches(rule, had, level):
                 continue
             scope = rule.get("scope", "") if p["scopes"] else ""
             out[p["key"]] = _wider(out.get(p["key"]), scope) if p["scopes"] else ""

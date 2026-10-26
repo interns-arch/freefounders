@@ -82,7 +82,7 @@ export class CompanyService {
       if (!internalUrl(app)) continue;
       try {
         const cat = await this.provisioner.modules(app, companyId);
-        out.push({ app, modules: cat.modules.map((m) => ({ ...m, on: switches[app]?.[m.key] ?? true })) });
+        out.push({ app, modules: cat.modules.map((m) => ({ ...m, on: switches[app]?.[m.key] ?? !m.optIn })) });
       } catch (err) {
         this.log.warn(`Module list from ${app}: ${(err as Error).message}`);
       }

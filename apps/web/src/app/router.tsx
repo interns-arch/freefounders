@@ -3,6 +3,7 @@ import { adminRoutes } from '@/features/admin/routes';
 import { assetsRoutes } from '@/features/assets/routes';
 import { attendanceRoutes, hrRoutes } from '@/features/hr/routes';
 import { tasksRoutes } from '@/features/tasks/routes';
+import { oldVisitorRoutes, visitorsRoutes } from '@/features/visitors/routes';
 import { AccountPage } from './pages/account';
 import { HomePage } from './pages/home';
 import { LoginPage } from './pages/login';
@@ -31,6 +32,8 @@ export const router = createBrowserRouter([
   { path: '/terms', lazy: async () => ({ Component: (await import('@/features/account/legal')).TermsPage }), errorElement: <RouteError /> },
   { path: '/privacy', lazy: async () => ({ Component: (await import('@/features/account/legal')).PrivacyPage }), errorElement: <RouteError /> },
   { path: '/refunds', lazy: async () => ({ Component: (await import('@/features/account/legal')).RefundsPage }), errorElement: <RouteError /> },
+  // The open visitor sign-in from the QR at the gate (PLAN.md §22): no sign-in, any phone browser.
+  { path: '/v/:code/:token', lazy: async () => ({ Component: (await import('@/features/visitors/public')).PublicVisitorPage }), errorElement: <RouteError /> },
   {
     element: <RequireSession />,
     errorElement: <RouteError />,
@@ -54,7 +57,8 @@ export const router = createBrowserRouter([
           // Every notification of every app, grouped by area (PLAN.md §19.37); the bell's "All notifications".
           { path: 'notifications', lazy: async () => ({ Component: (await import('@/features/tasks/general/notifications')).NotificationsPage }) },
           { path: 'attendance', children: attendanceRoutes },
-          { path: 'tasks', children: area([...tasksRoutes, ...hrRoutes]) },
+          { path: 'tasks', children: area([...tasksRoutes, ...hrRoutes, ...oldVisitorRoutes]) },
+          { path: 'visitors', children: area(visitorsRoutes) },
           { path: 'assets', children: area(assetsRoutes) },
           { path: '*', element: <NotFound /> },
         ],

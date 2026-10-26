@@ -125,6 +125,7 @@ const TASKS_CAP_MODULE: Array<[string, string]> = [
   ['sops.', 'mistakes'],
   ['links.', 'links'],
   ['payroll.', 'payroll'],
+  ['visitors.', 'visitors'],
 ];
 
 export interface Access {

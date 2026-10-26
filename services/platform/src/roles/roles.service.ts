@@ -50,6 +50,7 @@ export const MEMBER_DEFAULTS: Record<string, Array<[string, string]>> = {
     ['payroll.self', ''],
     ['notices.view', ''],
     ['links.view', ''],
+    ['visitors.invite', ''],
   ],
   assets: [
     ['request:create', ''],
@@ -151,7 +152,7 @@ const ruleMatches = (rule: UpgradeRule, had: Map<string, string>, level: number)
  * One role's grants in one app, saved under an older catalogue -> the same powers in this one (PLAN.md §19.19). Generic:
  * the app publishes the rules. Roles with no permission in the app stay empty there; retired permissions are replaced.
  */
-export function upgradeGrants(grants: Map<string, string>, level: number, cat: AppCatalogue): Map<string, string> {
+export function upgradeGrants(grants: Map<string, string>, level: number, cat: AppCatalogue, fromVersion = 1): Map<string, string> {
   if (!grants.size) return new Map(grants);
   const byKey = new Map(cat.permissions.map((p) => [p.key, p]));
   const had = new Map(
@@ -165,7 +166,7 @@ export function upgradeGrants(grants: Map<string, string>, level: number, cat: A
   const rank = (s: string) => cat.scopes.indexOf(s);
   for (const p of cat.permissions) {
     for (const rule of p.upgrade ?? []) {
-      if (!ruleMatches(rule, had, level)) continue;
+      if (fromVersion >= (rule.since ?? 2) || !ruleMatches(rule, had, level)) continue;
       if (!p.scopes) {
         out.set(p.key, '');
         continue;
@@ -248,7 +249,7 @@ export class RolesService {
           for (const role of roleRows) {
             for (const app of todo) {
               const mine = new Map(all.filter((g) => g.roleId === role.id && g.app === app.app).map((g) => [g.permission, g.scope]));
-              const next = upgradeGrants(mine, role.level, app);
+              const next = upgradeGrants(mine, role.level, app, applied[app.app] ?? 1);
               if (next.size === mine.size && [...next].every(([k, v]) => mine.get(k) === v)) continue;
               await tx.delete(roleGrants).where(and(eq(roleGrants.roleId, role.id), eq(roleGrants.app, app.app)));
               if (next.size) await tx.insert(roleGrants).values([...next].map(([permission, scope]) => ({ roleId: role.id, app: app.app, permission, scope })));

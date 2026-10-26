@@ -278,3 +278,20 @@ export const LOGO_MAX_BYTES = 512 * 1024;
 
 /** What the colour picker shows when the company keeps the Kaampilot colours. */
 export const DEFAULT_BRAND_COLOUR = '#2457f5';
+
+/**
+ * The Guard role in one click (PLAN.md §22): punch in/out and their own attendance, notifications (overstay alerts),
+ * and the gate (visitors + vehicles). Nothing else: no Tasks or Assets menus.
+ */
+export const GUARD_ROLE_PRESET: RoleInput = {
+  name: 'Guard',
+  description: 'Security / reception at the gate: visitors and vehicles in and out, and their own attendance.',
+  level: 1,
+  grants: [
+    { app: 'tasks', permission: 'attendance.punch', scope: '' },
+    { app: 'tasks', permission: 'attendance.self', scope: '' },
+    { app: 'tasks', permission: 'notifications.view', scope: '' },
+    { app: 'tasks', permission: 'visitors.gate', scope: '' },
+  ],
+  duties: [],
+};

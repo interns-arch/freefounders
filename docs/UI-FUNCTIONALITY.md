@@ -58,6 +58,7 @@ Generated from the code on 2026-10-08. Source of truth if anything here disagree
 4. Tasks: general screens (home, team performance, groups, notices, notifications, my team, task settings) and HR (check in/out, attendance, leave, holidays, team, approvals, HR settings)
 5. Assets: dashboard, assets, scan, labels, employees, ID cards, joiners, exits, requests, tickets, maintenance, activity, catalogue, departments & vendors, users & roles
 6. Kaampilot console (staff only): overview + health, companies + detail, users + detail, billing, production log
+7. Visitors: gate, vehicles, inside now, my visitors, register, guard activity, settings + visitor QR, open sign-in page
 
 ---
 
@@ -3665,3 +3666,67 @@ Exit case statuses: OPEN ("In progress"), COMPLETED, CANCELLED.
   A row opens the "Log entry" drawer: When, Level, Service, Version, Kind, Event, Request, Status, Company (→ detail),
   User id (in that service), Times; "Stack (redacted, shortened)".
 - Phone (320–390 px): tabs scroll sideways, tables become cards, no sideways page scroll.
+
+---
+
+## 7. Visitors (gate register, PLAN.md §22)
+
+Module "Visitors" (Admin → Settings → Modules, "Tasks: Visitors"; off until a company switches it on). Sidebar group
+"Visitors" (`features/visitors/nav.ts`); on phones it is in "More", and a person with the gate permission gets a
+"Visitors" tab in the bottom bar when there is room (a guard: Attendance · Home · Visitors · More). Permissions (role
+builder, group "Visitors"): `visitors.gate` (Gate, Vehicles, Inside now), `visitors.invite` (My visitors; every role
+gets it), `visitors.view_all` (Register, Guard activity, vehicle History), `visitors.settings` (Settings, Visitor QR).
+Admin and Owner have all four. Admin → Roles has **"Add Guard role"** (shown while no role is called Guard): punch in/out,
+own attendance, notifications, gate; a guard sees Attendance + Visitors only (no Tasks / Assets menus).
+
+### 7.1 Gate `/visitors/today` (visitors.gate)
+- Header "Gate" with "N inside · N waiting · N left today"; actions "Check out by pass" (outline) and the cta
+  **"Check in visitor"**. "Search name, mobile, pass or vehicle". The list refreshes every 8 s; a new QR sign-in beeps,
+  vibrates and shows a toast.
+- Sections (cards with the photo, name, status label, "Returning", from · purpose · to meet · people · vehicle):
+  "Waiting at the gate" (QR sign-ins: code, mobile, time; buttons "Check in", "Turn away" with an optional reason),
+  "Waiting for the host" (host approval on; "Turn away"), "Inside (N)" (pass, in time, time inside, "Overstay"; "Check
+  out"; the name opens the pass), "Left today (N)".
+- **Check in visitor** (side panel; on a phone a full-screen sheet with the button at the bottom): "Mobile number"
+  (10 digits fill in a returning visitor: "Returning visitor · N visits · details filled in", their last photo is kept
+  unless retaken), "Name", "Company / coming from", "Purpose" (the company's list), "Whom to meet" (type a name → people
+  buttons, or "Reception"/any text), "People", "Gate / site" (office locations; remembered on the device), "Visitor
+  photo" ("Take photo": the phone app's camera, else the browser camera / file), "ID type" + "Last 4 digits" (never the
+  full number), "Vehicle number", "+ Items carried, notes". Submit "Check in" → "Visitor pass V00012" dialog (QR, pass
+  number, name, host, time; "Print", "Done"). Accepting a QR sign-in opens the same panel titled "Check in {name}".
+- **Check out by pass**: camera scanner for the pass QR, or type the pass number / sign-in code → "Check out".
+
+### 7.2 Vehicles `/visitors/vehicles` (gate or view_all)
+- "Inside now" · "Today" · "History" (view_all: date range); search by number / driver; "Download"; cta **"Vehicle in"**.
+- Table: Vehicle, Type, Driver, Purpose / from, In, Out ("Inside"), Time inside, "Out".
+- "Vehicle in" panel: "Vehicle number", "Type" (car / bike / truck / tempo / other), "Photo of the vehicle / number
+  plate" (required by default), "Driver name", "Driver mobile", "Purpose", "Company / from", "Visitor in this vehicle",
+  "Parking slot", "Gate / site", "Items / material". A row opens the vehicle (in / out photos, details); "Vehicle out"
+  with an optional photo and note.
+
+### 7.3 Inside now `/visitors/inside` (gate or view_all)
+Emergency roll call: tiles Visitors / Vehicles / Employees punched in; three lists; "Download" (one sheet).
+
+### 7.4 My visitors `/visitors/my` (visitors.invite)
+The person's own visitors (photo, status, times). With host approval on: "Allow" / "Deny" on a visitor waiting for
+them (the guard sees the answer). Notifications "X is at the gate for you" / "… waiting at the gate for you" open here
+(`?visit=` highlights it). Badge: visitors waiting for my answer.
+
+### 7.5 Register `/visitors/register` and Guard activity `/visitors/activity` (visitors.view_all)
+- Register: search, From / To, status, purpose; table Visitor, From, To meet, Purpose, In, Out, Inside, Status, Checked
+  in by; "Download"; a row opens the visit (photo, all details, its history of gate actions).
+- Guard activity: "Guard" (everyone who has the gate permission or did a gate action), "Action", From / To; table
+  When, Who, Action, Details (with "field: before → after" for edits); "{guard}'s attendance" link; "Download".
+
+### 7.6 Settings `/visitors/settings` (visitors.settings)
+- **Visitor QR**: the company's one QR + its address, "Poster (PNG)" (A4 with the company name and steps), "Print /
+  PDF", "Copy link", "Make a new QR" (confirm; the old QR stops working at once).
+- **Rules**: "Host approves first" (default off), "Visitor QR sign-in" (on), "Vehicle photo required" (on), "Visitor
+  photo (guard)" (required), "Selfie on the QR sign-in" (optional), "ID proof (last 4 digits only)" (optional),
+  "Overstay alert after (hours)" (4; 0 = off), "Keep records for (days)" (180), "Purposes of visit", "Consent text".
+
+### 7.7 Open visitor sign-in `/v/<company code>/<token>` (public, no sign-in)
+Header with the company name; form "Your name", "Mobile number", "Company / coming from", "Purpose of visit", "Whom have
+you come to meet?", "Number of people", "Vehicle number", "Selfie" (per setting), the consent checkbox ("I agree"),
+**"Send to the guard"** → "Thank you, {name} · Please show this screen to the guard" with a 6-character code. A wrong,
+old or switched-off link shows "This link is not valid · Please ask the guard at the gate to sign you in".

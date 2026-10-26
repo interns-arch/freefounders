@@ -378,7 +378,9 @@ def send_followup_reminders(force=False) -> int:
     """
     now = timezone.now()
     from hr.services import purge_attendance_photos
+    from visitors.services import run_jobs as visitor_jobs
 
+    visitor_jobs()                       # overstay alerts + retention clean-up: every day, the gate works Sundays too
     if not force and not is_working_day(timezone.localtime(now).date()):
         purge_expired_attachments()      # housekeeping bothers nobody
         purge_attendance_photos()

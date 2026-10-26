@@ -273,7 +273,7 @@ class NotificationAreaTests(ChannelsDisabledMixin, TestCase):
         self.as_(self.a)
         counts = self.client.get("/api/notifications/unread_count/").data
         self.assertEqual(counts["count"], 4)
-        self.assertEqual(counts["by_category"], {"attendance": 1, "tasks": 1, "approvals": 1, "company": 1})
+        self.assertEqual(counts["by_category"], {"attendance": 1, "tasks": 1, "approvals": 1, "company": 1, "visitors": 0})
         rows = self.client.get("/api/notifications/?category=approvals").data["results"]
         self.assertEqual([(r["title"], r["category"]) for r in rows], [("Leave from X", "approvals")])
         two = self.client.get("/api/notifications/?category=attendance,company").data["results"]

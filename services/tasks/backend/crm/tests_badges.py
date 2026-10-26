@@ -42,6 +42,7 @@ class BadgeTests(TestCase):
         self.assertEqual(self.get(self.amit), {
             "tasks": {"my_tasks": 0, "to_accept": 0, "requests": 0, "total": 0},
             "hr": {"leave": 0, "corrections": 0, "approvals": 0},
+            "visitors": {"waiting": 0, "approvals": 0},
         })
 
     def test_needs_sign_in(self):

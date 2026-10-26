@@ -8,7 +8,7 @@ import { useClaims } from './access';
 import { assetsApi, type DrfPage, resultsOf, tasksApi } from './http';
 import type { AppKey } from './session';
 
-export type NotificationArea = 'attendance' | 'tasks' | 'assets' | 'approvals' | 'company';
+export type NotificationArea = 'attendance' | 'tasks' | 'assets' | 'approvals' | 'company' | 'visitors';
 export type NotificationTab = 'all' | NotificationArea;
 
 /** The tabs of the bell and the Notifications screen, in this order. */
@@ -19,6 +19,7 @@ export const NOTIFICATION_TABS: ReadonlyArray<{ key: NotificationTab; label: str
   { key: 'assets', label: 'Assets' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'company', label: 'Company' },
+  { key: 'visitors', label: 'Visitors' },
 ];
 
 export interface UnifiedNotification {
@@ -66,9 +67,9 @@ interface AssetsList {
   unreadByCategory?: { assets: number; approvals: number };
 }
 
-const TASKS_AREAS: readonly NotificationArea[] = ['attendance', 'tasks', 'approvals', 'company'];
+const TASKS_AREAS: readonly NotificationArea[] = ['attendance', 'tasks', 'approvals', 'company', 'visitors'];
 const ASSETS_AREAS: readonly NotificationArea[] = ['assets', 'approvals'];
-const ZERO: Record<NotificationArea, number> = { attendance: 0, tasks: 0, assets: 0, approvals: 0, company: 0 };
+const ZERO: Record<NotificationArea, number> = { attendance: 0, tasks: 0, assets: 0, approvals: 0, company: 0, visitors: 0 };
 
 /** "/tasks/42" (Tasks) → "/tasks/tasks/42"; "/requests?open=x" (Assets) → "/assets/requests?open=x"; full URLs stay. */
 export const notificationHref = (app: AppKey, link: string | null | undefined) =>

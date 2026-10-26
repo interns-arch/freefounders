@@ -148,6 +148,14 @@ RELATIONS = {
     "mistakes.Mistake.manager": NULL,
     "mistakes.Mistake.reported_by": DELETE,
     "mistakes.MistakeEvent.actor": DELETE,
+    # visitors (PLAN.md §22): the gate register is the company's security record; it stays, without the person
+    "visitors.Visit.host": NULL,
+    "visitors.Visit.host_decision_by": NULL,
+    "visitors.Visit.check_in_by": NULL,
+    "visitors.Visit.check_out_by": NULL,
+    "visitors.VehicleEntry.in_by": NULL,
+    "visitors.VehicleEntry.out_by": NULL,
+    "visitors.GateLog.actor": NULL,
 }
 
 

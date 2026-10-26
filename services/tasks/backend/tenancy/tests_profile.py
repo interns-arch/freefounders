@@ -47,7 +47,7 @@ class ProfileTests(TestCase):
         self.assertEqual(cat["app"], "tasks")
         keys = {m["key"]: m["default"] for m in cat["modules"]}
         self.assertEqual(keys, {"leads": False, "intake": False, "payroll": False, "mistakes": False,
-                                "links": False})
+                                "links": False, "visitors": False})
 
     def test_switched_off_modules_answer_404_and_leave_me(self):
         self.assertTrue(self.push(modules={"leads": False, "payroll": False, "rockets": False}).json()["applied"])

@@ -11,6 +11,7 @@
     "./assets": "./src/assets/index.ts",
     "./account": "./src/account/index.ts",
     "./billing": "./src/billing/index.ts",
+    "./visitors": "./src/visitors/index.ts",
     "./export": "./src/export/index.ts"
   },
   "scripts": {

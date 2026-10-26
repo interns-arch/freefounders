@@ -3373,7 +3373,7 @@ per period, cancel any time to stop the next period, no partial refunds; duplica
 on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
 top of `legal.tsx`.
 
-## 22. Visitor management (draft 2026-10-26, for the founder's approval)
+## 22. Visitor management (V1 built 2026-10-26, §22.8)
 
 Founder (2026-10-26): "one more option: visitor management software, to keep the record of every visitor and all the
 company's security records." This is a plan only; nothing is built until the founder answers §22.7.
@@ -3455,3 +3455,62 @@ Decisions needed before building:
 6. Is it included in every plan, or a paid add-on (e.g. per site per month)?
 7. "Security records": besides visitors, vehicles and deliveries, should guards also log patrol rounds / incidents
    (V3 candidate)?
+
+### 22.8 V1 built (2026-10-26)
+Founder (2026-10-26): "Go ahead with the Visitors mode … the guard gets a login, marks his own attendance and maintains
+the visitor record … vehicle check-in and check-out … an open link so any visitor can fill the form after scanning a QR
+… the guard can check out the visitor by himself." Later the same day: **one fixed QR per company** (made once, works
+until Admin/Owner taps "Make a new QR"), no QR per gate; the guard picks the gate at check-in.
+
+**Built** (Tasks app `visitors`, one set of tables per company schema; web `features/visitors`, `core/visitors`):
+- **Module + permissions.** Module "Visitors" in the Platform company profile (Tasks module catalogue; `optIn`: a company
+  that never chose has it OFF, existing and new; a standalone install has it on). Tasks permission catalogue version 3:
+  `visitors.gate`, `visitors.invite`, `visitors.view_all`, `visitors.settings` (rules carry `since: 3`, so upgrading a
+  version-2 role adds only these: Admin-level roles get all four, every role with Tasks permissions gets `invite`; the
+  Platform's `upgradeGrants` and Tasks' `upgrade_grants` honour `since`). Member starts with `visitors.invite`; the
+  Owner's hidden role has everything. Admin → Roles → **"Add Guard role"**: punch in/out, own attendance,
+  notifications, gate. Someone whose Tasks permissions are only attendance / leave / notifications / visitors (a guard)
+  gets no Tasks menu: Attendance + Visitors only.
+- **Gate** (`/visitors/today`): check-in form (mobile → returning visitor filled in, last photo reused unless retaken:
+  a returning visitor is in with "Check in visitor" → type mobile → "Check in"), name, company, purpose (settings
+  list), whom to meet (people search or Reception / free text), people, gate (office locations), photo (phone app camera
+  via the bridge, browser camera / file elsewhere; required by default), ID type + last 4 only (anything longer is
+  refused), vehicle number, items, notes. Pass number `V00012` + QR (`KPV:<token>`); the guard checks out with one tap
+  or by scanning / typing the pass. Time inside computed. Host informed ("X is at the gate for you"); with **host
+  approval** on (default **OFF**: the guard maintains the record), the host taps Allow / Deny on My visitors and the gate
+  screen shows the answer (8 s refresh).
+- **Vehicles** (`/visitors/vehicles`): number (normalised `MH12AB1234`), type, driver + mobile, purpose / company, linked
+  visitor, photo of the vehicle / plate (required by default), items, parking slot, gate; out with optional photo +
+  note; time inside; inside now / today / history (view_all) with search and Download. A number already inside is refused.
+- **Open QR sign-in** `https://kaampilot.com/v/<company code>/<token>` (web public route) → `POST
+  /tasks/api/visitors/public/<code>/<token>/` (no gateway change: `/v/*` is the web app, `/tasks/api/*` already goes to
+  Tasks). The company comes from the code: its schema is looked up in the registry and the token is checked inside that
+  schema only (Tasks' company middleware leaves this path to the view). Every refusal is the same 404 (unknown company,
+  wrong / old token, QR sign-in or module off). Limits: 30 per hour per address (all companies, DRF throttle
+  `THROTTLE_VISITOR_PUBLIC`), 10 per hour per address and 120 per hour per QR inside the company (counted on the
+  company's own rows; the address is kept only as a daily HMAC); honeypot field (answered "thank you", nothing saved);
+  selfie ≤ 600 KB, re-encoded; consent required. The answer carries only a 6-character code. The visit waits "at the
+  gate" for the guard (count badge "Waiting at the gate", a beep + vibration on the gate screen); the guard checks the
+  details, takes or keeps the photo, picks the host and checks them in, or turns them away. Whom to meet is typed by
+  the visitor; the server links a person only when exactly one active person matches (no directory is exposed).
+- **Guard activity** (`/visitors/activity`, view_all): every gate action (visitor in / out, waiting for host, QR accept /
+  turn away, host allow / deny, vehicle in / out, edits with before → after, settings and QR changes), filters guard /
+  action / dates, link to the guard's attendance, Download. The register's visit detail shows its own history.
+- **Lists**: Inside now (visitors + vehicles + employees punched in and not out: roll call, Download), Register (dates,
+  status, purpose, search, Download), My visitors (hosts). Count badges: guards → waiting at the gate; hosts → their
+  visitors waiting for an answer. Notifications area "Visitors" (an Allow / Deny request is an Approval).
+- **Settings** (`/visitors/settings`): purposes, visitor photo off / optional / required, selfie on the QR, vehicle photo,
+  ID proof off / optional / required (last 4 only), host approval, overstay hours (4), retention days (180), QR sign-in
+  on / off, consent text; the **Visitor QR** card (QR, Poster PNG, Print / PDF, Copy link, Make a new QR).
+- **Worker**: overstay alert once per visit to the host and every gate person; retention clean-up (photos and ID digits
+  deleted, names / numbers anonymised, gate-log text cleared; counts stay). Runs every pass, every day.
+- **Privacy**: photos under `private/`, served only by permission-checked endpoints with the sign-in token (like punch
+  photos); never a full ID number; consent on the QR form; per-company schema only. Deleting a person keeps the register
+  (their name is cleared from it).
+- Tests: `visitors/tests.py` (permissions, gate in / out + time, host approval, edit audit, vehicles, open link: valid /
+  wrong / regenerated / module off / switched off / rate limit / honeypot / consent / photo size / nothing leaked, overstay,
+  retention, roll call); e2e `e2e/web-visitors.spec.ts`.
+
+**Founder decisions taken here**: host approval default OFF; ID proof optional (last 4); visitor photo required at the
+gate, selfie optional on the QR; vehicle photo required; overstay 4 h; keep 180 days; the module is included (no
+add-on price yet); one QR per company. **Next (V2)**: pre-invites, deliveries, blacklist, printed badges, WhatsApp pass.
