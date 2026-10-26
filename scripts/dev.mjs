@@ -117,12 +117,15 @@ if (ready.every(Boolean)) {
   let synced = false;
   for (let attempt = 1; attempt <= 3 && !synced && !stopping; attempt++) {
     if (attempt > 1) await new Promise((r) => setTimeout(r, 5000));
-    try {
-      execFileSync(process.execPath, ['dist/companies.js', 'sync'], { cwd: at('services/platform'), env: { ...process.env, ...INTERNAL }, stdio: 'inherit' });
-      synced = true;
-    } catch {
-      if (attempt < 3) console.log('• Sync did not finish; retrying…');
-    }
+    // Not execFileSync: a blocked event loop freezes the gateway and stops draining the services' output pipes
+    // (Tasks then stalls on a full stdout and every sync call times out).
+    const code = await new Promise((resolve) => {
+      const sync = spawn(process.execPath, ['dist/companies.js', 'sync'], { cwd: at('services/platform'), env: { ...process.env, ...INTERNAL }, stdio: 'inherit' });
+      sync.on('exit', resolve);
+      sync.on('error', () => resolve(1));
+    });
+    if (code === 0) synced = true;
+    else if (attempt < 3) console.log('• Sync did not finish; retrying…');
   }
   if (!synced) console.error('✖ Could not set up the companies in Tasks/Assets (see above). Retry: npm --prefix services/platform run company -- sync');
 } else if (!stopping) {

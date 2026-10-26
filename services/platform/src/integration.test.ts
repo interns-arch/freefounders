@@ -726,10 +726,17 @@ describe('role builder (Phase 3)', () => {
 
   test('archiving a role takes it from everyone and closes apps it alone gave', async () => {
     const admin = await login('olivia');
+    const copyName = (await call('GET', '/roles', { token: admin.token })).body.find((r: { id: string }) => r.id === roleIds.copy).name;
     const res = await call('DELETE', `/roles/${roleIds.copy}`, { token: admin.token });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     const list = await call('GET', '/roles', { token: admin.token });
     assert.ok(!list.body.some((r: { id: string }) => r.id === roleIds.copy));
+    // The archived role's name is free again (e.g. "Add Guard role" after the Guard role was archived).
+    const again = await call('POST', '/roles', { token: admin.token, body: { name: copyName.toUpperCase(), level: 1, grants: [], duties: [] } });
+    assert.ok(again.status < 300, JSON.stringify(again.body));
+    assert.notEqual(again.body.id, roleIds.copy);
+    assert.equal((await call('POST', '/roles', { token: admin.token, body: { name: copyName, level: 1, grants: [], duties: [] } })).status, 409, 'a live name is still taken');
+    assert.equal((await call('DELETE', `/roles/${again.body.id}`, { token: admin.token })).status, 200);
     const peopleList = await call('GET', '/people', { token: admin.token });
     const rita = peopleList.body.find((p: { id: string }) => p.id === ids.rita);
     assert.deepEqual(rita.roleIds, []);

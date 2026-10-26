@@ -252,7 +252,8 @@ export const roles = platform.table(
   },
   (t) => [
     uniqueIndex('roles_company_code_uq').on(t.companyId, t.code),
-    uniqueIndex('roles_company_name_uq').on(t.companyId, sql`lower(${t.name})`),
+    // Only live roles: an archived role keeps its name for history, and the name can be used again.
+    uniqueIndex('roles_company_name_uq').on(t.companyId, sql`lower(${t.name})`).where(sql`not archived`),
     uniqueIndex('roles_person_uq').on(t.personId).where(sql`person_id is not null`),
   ],
 );

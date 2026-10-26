@@ -536,7 +536,7 @@ export class RolesService {
     const [taken] = await this.dbs.db
       .select({ id: roles.id })
       .from(roles)
-      .where(and(eq(roles.companyId, companyId), sql`lower(${roles.name}) = lower(${name})`, exceptId ? sql`${roles.id} <> ${exceptId}` : sql`true`))
+      .where(and(eq(roles.companyId, companyId), eq(roles.archived, false), sql`lower(${roles.name}) = lower(${name})`, exceptId ? sql`${roles.id} <> ${exceptId}` : sql`true`))
       .limit(1);
     if (taken) throw new ConflictException(`There is already a role called "${name}"`);
   }
