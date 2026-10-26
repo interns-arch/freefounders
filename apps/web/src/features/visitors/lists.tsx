@@ -23,7 +23,7 @@ import {
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { CalendarClock, Car, Check, Copy, Package, Send, UserCheck, UserPlus, Users, X } from '@/components/icons';
+import { CalendarClock, Car, Check, Copy, HardHat, Package, Send, UserCheck, UserPlus, Users, X } from '@/components/icons';
 import { useConfirm } from '@/components/common/confirm';
 import { DataTable } from '@/components/common/data-table';
 import { DownloadMenu } from '@/components/common/download-menu';
@@ -44,6 +44,7 @@ export function InsidePage() {
   const d = q.data;
   const tiles = [
     { label: 'Visitors', n: d?.visitors.reduce((s, v) => s + v.people, 0) ?? 0, icon: UserCheck },
+    { label: 'Contractors', n: d?.contractors?.reduce((s, c) => s + c.people, 0) ?? 0, icon: HardHat },
     { label: 'Vehicles', n: d?.vehicles.length ?? 0, icon: Car },
     { label: 'Employees punched in', n: d?.employees.length ?? 0, icon: Users },
   ];
@@ -54,7 +55,7 @@ export function InsidePage() {
         description="Emergency roll call: visitors, vehicles and employees punched in today and not out."
         actions={<DownloadMenu filename={fileSlug('visitors-inside', todayISO())} target={visitorExports.inside()} loading={q.isLoading} />}
       />
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {tiles.map((t) => (
           <Card key={t.label}>
             <CardContent className="pt-4">
@@ -83,6 +84,21 @@ export function InsidePage() {
             )}
           </CardContent>
         </Card>
+        {!!d?.contractors?.length && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Contractors</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {d.contractors.map((c) => (
+                <p key={c.id} className="text-sm">
+                  <span className="font-medium">{c.name}</span>
+                  {c.people > 1 ? ` +${c.people - 1}` : ''} · {c.work} · since {clock(c.since)}
+                </p>
+              ))}
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader>
             <CardTitle>Vehicles</CardTitle>
@@ -467,6 +483,10 @@ const ACTIONS: Array<[string, string]> = [
   ['invite,invite_cancel,pass_sent', 'Invites and passes'],
   ['delivery_in,delivery_out,delivery_return', 'Parcels'],
   ['watch_alert,watch_add,watch_remove', 'Watchlist'],
+  ['contractor_pass,contractor_in,contractor_out,contractor_revoke', 'Contractors'],
+  ['material_request,material_decide,material_gate,material_return', 'Material passes'],
+  ['patrol,checkpoint', 'Patrol'],
+  ['incident,incident_close', 'Incidents'],
   ['settings,link', 'Settings and QR'],
 ];
 

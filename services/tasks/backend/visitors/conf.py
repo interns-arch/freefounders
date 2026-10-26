@@ -35,6 +35,12 @@ DEFAULTS = {
     "watch_action": "stop",          # a mobile number on the watchlist: "stop" refuses check-in, "warn" asks the guard
     "badge_format": "card",
     "delivery_reminder_hours": 24,   # a parcel still at the gate after N hours: one reminder (0 = none)
+    # V3
+    "id_scan": False,                # read name + ID type + last 4 from a photo of the ID card with the company's AI
+    "patrol_every_hours": 2,         # a checkpoint not scanned for N hours (in the patrol hours) alerts (0 = no alert)
+    "patrol_from": 0,                # patrol hours, 0-23; from == to = all day; 20 -> 6 wraps past midnight
+    "patrol_to": 0,
+    "contractor_max_days": 90,
 }
 
 
@@ -75,7 +81,7 @@ def clean(data: dict) -> tuple[dict, dict]:
                 if not purposes:
                     raise ValueError("Add at least one purpose")
                 cur[key] = purposes[:30]
-            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass"):
+            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan"):
                 if not isinstance(value, bool):
                     raise ValueError("On or off")
                 cur[key] = value
@@ -95,6 +101,12 @@ def clean(data: dict) -> tuple[dict, dict]:
                 if value not in BADGE_FORMATS:
                     raise ValueError(f"One of: {', '.join(BADGE_FORMATS)}")
                 cur[key] = value
+            elif key == "patrol_every_hours":
+                cur[key] = _bounded_int(value, 0, 24, "Patrol alert")
+            elif key in ("patrol_from", "patrol_to"):
+                cur[key] = _bounded_int(value, 0, 23, "Patrol hours")
+            elif key == "contractor_max_days":
+                cur[key] = _bounded_int(value, 1, 366, "Contractor pass days")
             elif key == "delivery_reminder_hours":
                 cur[key] = _bounded_int(value, 0, 168, "Parcel reminder")
             elif key == "overstay_hours":

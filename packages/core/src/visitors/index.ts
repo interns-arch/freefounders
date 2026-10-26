@@ -43,6 +43,9 @@ export interface VisitorConfig {
   send_pass: boolean;
   watch_action: WatchAction;
   badge_format: BadgeFormat;
+  id_scan: boolean;
+  contractor_max_days: number;
+  incident_kinds: Array<{ value: string; label: string }>;
 }
 
 /** A watchlist match at the gate: "stop" refuses check-in (an admin may override), "warn" asks the guard. */
@@ -151,6 +154,11 @@ export interface VisitorSettings {
   watch_action: WatchAction;
   badge_format: BadgeFormat;
   delivery_reminder_hours: number;
+  id_scan: boolean;
+  patrol_every_hours: number;
+  patrol_from: number;
+  patrol_to: number;
+  contractor_max_days: number;
 }
 
 export interface VisitorLink {
@@ -184,6 +192,7 @@ export interface InsideNow {
   visitors: Visit[];
   vehicles: VehicleEntry[];
   employees: Array<{ id: number; name: string; department: string; check_in: string }>;
+  contractors: ContractorPass[];
 }
 
 export type VisitScope = 'today' | 'inside' | 'waiting' | 'expected' | 'mine' | 'upcoming' | '';
@@ -542,6 +551,10 @@ export interface PublicPass {
   window: string;
   check_in_at: string | null;
   check_out_at: string | null;
+  /** V3: a contractor's pass (several days). */
+  kind?: 'contractor';
+  permit_no?: string;
+  safety_note?: string;
 }
 /** /v/<code>/p/<token>: refreshes so the page shows "Inside" once the gate checks them in. */
 export function usePublicPass(code: string, token: string) {
@@ -570,3 +583,344 @@ export function formatMinutes(m: number | null | undefined): string {
   const r = m % 60;
   return h ? `${h} h ${r} min` : `${r} min`;
 }
+
+// ═══ V3 (PLAN.md §22.10): contractors, material gate passes, patrol, incidents, one scan, ID card, reports ═══════
+
+export type ContractorState = 'valid' | 'upcoming' | 'expired' | 'revoked';
+export interface ContractorPass {
+  id: number;
+  name: string;
+  mobile: string;
+  company: string;
+  people: number;
+  work: string;
+  permit_no: string;
+  safety_note: string;
+  supervisor: PersonBrief | null;
+  location: Place | null;
+  task: { id: number; code: string; title: string } | null;
+  valid_from: string;
+  valid_to: string;
+  state: ContractorState;
+  days_left: number;
+  inside: boolean;
+  since: string | null;
+  has_photo: boolean;
+  id_type: string;
+  id_last4: string;
+  pass_no: string;
+  pass_token: string;
+  pass_path: string;
+  pass_sent_at: string | null;
+  pass_channels: Array<{ channel: 'whatsapp' | 'email'; status: string; detail?: string }>;
+  revoked_at: string | null;
+  revoked_by: string;
+  created_by: string;
+  created_at: string;
+  entries_today: number;
+}
+export interface ContractorEntryRow {
+  id: number;
+  in_at: string;
+  in_by: string;
+  out_at: string | null;
+  out_by: string;
+  people: number;
+  minutes_inside: number;
+}
+export interface ContractorInput {
+  name: string;
+  mobile: string;
+  company?: string;
+  people?: number;
+  work: string;
+  permit_no?: string;
+  safety_note?: string;
+  supervisor?: number | null;
+  location?: number | null;
+  task?: number | null;
+  valid_from: string;
+  valid_to: string;
+  photo?: string | null;
+  id_type?: string;
+  id_last4?: string;
+  send?: boolean;
+}
+export type ContractorScope = 'today' | 'inside' | 'upcoming' | 'mine' | '';
+
+export function useContractors(filters: { scope?: ContractorScope; q?: string }, opts: { live?: boolean; enabled?: boolean } = {}) {
+  const query = { ...clean(filters), page_size: 200 };
+  return useQuery({
+    queryKey: [...KEY, 'contractors', query],
+    queryFn: () => tasksApi.get<DrfPage<ContractorPass>>('/visitors/contractors/', query),
+    placeholderData: keepPreviousData,
+    refetchInterval: opts.live ? 15_000 : false,
+    enabled: opts.enabled ?? true,
+  });
+}
+export function useContractorEntries(id: number | null | undefined) {
+  return useQuery({ queryKey: [...KEY, 'contractor-entries', id], queryFn: () => tasksApi.get<ContractorEntryRow[]>(`/visitors/contractors/${id}/entries/`), enabled: id != null });
+}
+export function useContractorPhoto(id: number | null | undefined) {
+  return useQuery({ queryKey: [...KEY, 'photo', 'contractor', id], queryFn: () => tasksApi.blob(`/visitors/contractors/${id}/photo/`), enabled: id != null, staleTime: 10 * 60_000, retry: false });
+}
+export const useCreateContractor = () => useVisitorsMutation((body: ContractorInput) => tasksApi.post<ContractorPass>('/visitors/contractors/', body));
+export const useContractorIn = () =>
+  useVisitorsMutation(({ id, ...body }: { id: number; photo?: string | null; people?: number; location?: number | null; watch_ok?: boolean }) =>
+    tasksApi.post<ContractorPass>(`/visitors/contractors/${id}/in/`, body),
+  );
+export const useContractorOut = () => useVisitorsMutation((id: number) => tasksApi.post<ContractorPass>(`/visitors/contractors/${id}/out/`));
+export const useRevokeContractor = () => useVisitorsMutation(({ id, reason }: { id: number; reason?: string }) => tasksApi.post<ContractorPass>(`/visitors/contractors/${id}/revoke/`, { reason }));
+export const useSendContractorPass = () => useVisitorsMutation((id: number) => tasksApi.post<ContractorPass>(`/visitors/contractors/${id}/send_pass/`));
+/** Tasks a contractor pass can be linked to (my own; all for the register). */
+export function useTaskOptions(q: string, enabled = true) {
+  return useQuery({ queryKey: [...KEY, 'task-options', q], queryFn: () => tasksApi.get<Array<{ id: number; code: string; title: string }>>('/visitors/task-options/', { q }), enabled, staleTime: 30_000 });
+}
+
+export type MaterialStatus = 'pending' | 'approved' | 'rejected' | 'passed' | 'returned' | 'cancelled';
+export const MATERIAL_STATUS_LABELS: Record<MaterialStatus, string> = {
+  pending: 'Waiting for approval',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  passed: 'Passed the gate',
+  returned: 'Returned',
+  cancelled: 'Cancelled',
+};
+export interface MaterialItem {
+  id: number;
+  description: string;
+  quantity: string;
+  unit: string;
+  asset_id: string;
+  asset_tag: string;
+  returned_qty: string;
+}
+export interface MaterialPass {
+  id: number;
+  pass_no: string;
+  pass_token: string;
+  direction: 'out' | 'in';
+  direction_display: string;
+  purpose: string;
+  carrier_name: string;
+  carrier_company: string;
+  vehicle_no: string;
+  returnable: boolean;
+  expected_return: string | null;
+  location: Place | null;
+  status: MaterialStatus;
+  status_display: string;
+  requested_by: PersonBrief | null;
+  requested_at: string;
+  decided_by: string;
+  decided_at: string | null;
+  decision_note: string;
+  gate_by: string;
+  gate_at: string | null;
+  gate_note: string;
+  returned_by: string;
+  returned_at: string | null;
+  notes: string;
+  overdue: boolean;
+  items: MaterialItem[];
+  summary: string;
+  can_decide: boolean;
+}
+export interface MaterialItemInput {
+  description: string;
+  quantity: number | string;
+  unit?: string;
+  asset_id?: string;
+  asset_tag?: string;
+}
+export interface MaterialInput {
+  direction: 'out' | 'in';
+  purpose: string;
+  items: MaterialItemInput[];
+  returnable?: boolean;
+  expected_return?: string | null;
+  carrier_name?: string;
+  carrier_company?: string;
+  vehicle_no?: string;
+  location?: number | null;
+  notes?: string;
+}
+export type MaterialScope = 'mine' | 'approvals' | 'gate' | 'out' | '';
+export interface MaterialFilters {
+  scope?: MaterialScope;
+  status?: string;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+}
+export function useMaterialPasses(filters: MaterialFilters, opts: { live?: boolean; enabled?: boolean } = {}) {
+  const query = { ...clean(filters), page_size: 200 };
+  return useQuery({
+    queryKey: [...KEY, 'material', query],
+    queryFn: () => tasksApi.get<DrfPage<MaterialPass>>('/visitors/material/', query),
+    placeholderData: keepPreviousData,
+    refetchInterval: opts.live ? 15_000 : false,
+    enabled: opts.enabled ?? true,
+  });
+}
+export function useMaterialPass(id: number | null | undefined) {
+  return useQuery({ queryKey: [...KEY, 'material-one', id], queryFn: () => tasksApi.get<MaterialPass>(`/visitors/material/${id}/`), enabled: id != null });
+}
+export const useCreateMaterial = () => useVisitorsMutation((body: MaterialInput) => tasksApi.post<MaterialPass>('/visitors/material/', body));
+export const useDecideMaterial = () =>
+  useVisitorsMutation(({ id, ...body }: { id: number; decision: 'approve' | 'reject'; note?: string }) => tasksApi.post<MaterialPass>(`/visitors/material/${id}/decide/`, body));
+export const useGateMaterial = () => useVisitorsMutation(({ id, note }: { id: number; note?: string }) => tasksApi.post<MaterialPass>(`/visitors/material/${id}/gate/`, { note }));
+/** Returnable goods back: everything (no items) or {item id: quantity back now}. */
+export const useReturnMaterial = () =>
+  useVisitorsMutation(({ id, items }: { id: number; items?: Record<string, number | string> }) => tasksApi.post<MaterialPass>(`/visitors/material/${id}/return/`, items ? { items } : {}));
+export const useCancelMaterial = () => useVisitorsMutation((id: number) => tasksApi.post<MaterialPass>(`/visitors/material/${id}/cancel/`));
+
+export interface Checkpoint {
+  id: number;
+  name: string;
+  location: Place | null;
+  order: number;
+  active: boolean;
+  last_scan_at: string | null;
+  overdue: boolean;
+  /** "KPP:<token>": only for people who manage checkpoints (to print the sticker). */
+  code?: string;
+}
+export interface CheckpointList {
+  checkpoints: Checkpoint[];
+  every_hours: number;
+  patrol_from: number;
+  patrol_to: number;
+  in_hours: boolean;
+}
+export interface PatrolScanRow {
+  id: number;
+  at: string;
+  checkpoint: { id: number; name: string };
+  guard: PersonBrief | null;
+  note: string;
+  all_ok: boolean;
+  has_location: boolean;
+}
+export function useCheckpoints(all = false) {
+  return useQuery({ queryKey: [...KEY, 'checkpoints', all], queryFn: () => tasksApi.get<CheckpointList>('/visitors/checkpoints/', all ? { all: 1 } : {}), refetchInterval: 60_000 });
+}
+export const useSaveCheckpoint = () =>
+  useVisitorsMutation(({ id, ...body }: { id?: number; name?: string; location?: number | null; order?: number; active?: boolean; regenerate?: boolean }) =>
+    id ? tasksApi.patch<Checkpoint>(`/visitors/checkpoints/${id}/`, body) : tasksApi.post<Checkpoint>('/visitors/checkpoints/', body),
+  );
+export const usePatrolScan = () =>
+  useVisitorsMutation((body: { code: string; note?: string; all_ok?: boolean; latitude?: number | null; longitude?: number | null }) =>
+    tasksApi.post<PatrolScanRow>('/visitors/checkpoints/scan/', body),
+  );
+export function usePatrolScans(filters: { date_from?: string; date_to?: string; guard?: number | '' }, enabled = true) {
+  const query = clean(filters);
+  return useQuery({ queryKey: [...KEY, 'patrol-scans', query], queryFn: () => tasksApi.get<PatrolScanRow[]>('/visitors/checkpoints/scans/', query), placeholderData: keepPreviousData, enabled });
+}
+
+export type IncidentSeverity = 'low' | 'medium' | 'high';
+export interface Incident {
+  id: number;
+  kind: string;
+  kind_display: string;
+  severity: IncidentSeverity;
+  severity_display: string;
+  title: string;
+  description: string;
+  place: string;
+  location: Place | null;
+  occurred_at: string;
+  reported_by: PersonBrief | null;
+  reported_at: string;
+  status: 'open' | 'closed';
+  action_taken: string;
+  closed_by: string;
+  closed_at: string | null;
+  photos: number[];
+  visit: { id: number; name: string } | null;
+}
+export interface IncidentInput {
+  kind: string;
+  severity: IncidentSeverity;
+  title: string;
+  description?: string;
+  place?: string;
+  location?: number | null;
+  occurred_at?: string;
+  photos?: string[];
+  visit?: number | null;
+}
+export interface IncidentFilters {
+  status?: 'open' | 'closed' | '';
+  severity?: string;
+  kind?: string;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+}
+export function useIncidents(filters: IncidentFilters) {
+  const query = { ...clean(filters), page_size: 200 };
+  return useQuery({ queryKey: [...KEY, 'incidents', query], queryFn: () => tasksApi.get<DrfPage<Incident>>('/visitors/incidents/', query), placeholderData: keepPreviousData, refetchInterval: 30_000 });
+}
+export const useReportIncident = () => useVisitorsMutation((body: IncidentInput) => tasksApi.post<Incident>('/visitors/incidents/', body));
+export const useCloseIncident = () => useVisitorsMutation(({ id, action_taken }: { id: number; action_taken: string }) => tasksApi.post<Incident>(`/visitors/incidents/${id}/close/`, { action_taken }));
+export function useIncidentPhoto(id: number | null | undefined, photoId: number | null | undefined) {
+  return useQuery({
+    queryKey: [...KEY, 'photo', 'incident', id, photoId],
+    queryFn: () => tasksApi.blob(`/visitors/incidents/${id}/photo/${photoId}/`),
+    enabled: id != null && photoId != null,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+}
+
+/** One scan at the gate for every pass: a visitor's, a contractor's or a material pass. */
+export type ScanResult = { kind: 'visit'; data: Visit } | { kind: 'contractor'; data: ContractorPass } | { kind: 'material'; data: MaterialPass };
+export const useScanPass = () => useMutation({ mutationFn: (code: string) => tasksApi.get<ScanResult>('/visitors/scan/', { code }) });
+
+/** Read an ID card photo with the company's AI (only name, type and last 4 come back; the photo is not kept). */
+export const useReadIdCard = () =>
+  useMutation({ mutationFn: (photo: string) => tasksApi.post<{ name: string; id_type: string; id_last4: string; found: boolean }>('/visitors/id-scan/', { photo }) });
+
+export interface VisitorReport {
+  date_from: string;
+  date_to: string;
+  totals: {
+    visits: number;
+    people: number;
+    unique_visitors: number;
+    returning: number;
+    avg_minutes: number;
+    overstays: number;
+    turned_away: number;
+    invited: number;
+    no_shows: number;
+    qr_sign_ins: number;
+    parcels: number;
+    vehicles: number;
+    contractor_entries: number;
+    material_passes: number;
+    incidents: number;
+    incidents_open: number;
+    patrol_scans: number;
+    patrol_problems: number;
+  };
+  per_day: Array<{ date: string; visits: number }>;
+  per_hour: Array<{ hour: number; visits: number }>;
+  purposes: Array<{ name: string; count: number }>;
+  companies: Array<{ name: string; count: number }>;
+  hosts: Array<{ name: string; count: number }>;
+  sources: Array<{ name: string; count: number }>;
+  incidents_by_kind: Array<{ name: string; count: number }>;
+}
+export function useVisitorReport(range: { date_from: string; date_to: string }) {
+  return useQuery({ queryKey: [...KEY, 'report', range], queryFn: () => tasksApi.get<VisitorReport>('/visitors/reports/', range), placeholderData: keepPreviousData });
+}
+
+export const visitorExportsV3 = {
+  contractors: (f: { scope?: ContractorScope; q?: string }): ExportTarget => ({ api: 'tasks', path: '/visitors/contractors/', query: clean(f) }),
+  material: (f: MaterialFilters): ExportTarget => ({ api: 'tasks', path: '/visitors/material/', query: clean(f) }),
+  incidents: (f: IncidentFilters): ExportTarget => ({ api: 'tasks', path: '/visitors/incidents/', query: clean(f) }),
+  patrol: (f: { date_from?: string; date_to?: string; guard?: number | '' }): ExportTarget => ({ api: 'tasks', path: '/visitors/checkpoints/scans/', query: clean(f) }),
+  report: (range: { date_from: string; date_to: string }): ExportTarget => ({ api: 'tasks', path: '/visitors/reports/', query: range }),
+};

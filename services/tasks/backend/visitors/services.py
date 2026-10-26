@@ -155,9 +155,11 @@ def new_short_code() -> str:
 
 # ---------------------------------------------------------------- audit + notices
 
-def log(actor, action, summary="", visit=None, vehicle=None, changes=None, delivery=None):
+def log(actor, action, summary="", visit=None, vehicle=None, changes=None, delivery=None, contractor=None,
+        material=None, incident=None):
     return GateLog.objects.create(actor=actor, action=action, summary=summary[:300], visit=visit, vehicle=vehicle,
-                                  delivery=delivery, changes=changes or {})
+                                  delivery=delivery, contractor=contractor, material=material, incident=incident,
+                                  changes=changes or {})
 
 
 def _notify(user, type_, title, body, link):
@@ -574,6 +576,17 @@ def retention_cleanup(now=None) -> int:
             d.photo.delete(save=False)
         d.collected_by_name, d.notes, d.anonymised = "", "", True
         d.save()
+    # V3: a contractor's personal details go the same way once the pass ended long enough ago; the incident log and
+    # patrol rounds are the company's security record and stay (their photos go).
+    from .models import ContractorPass, IncidentPhoto
+    for c in ContractorPass.objects.filter(anonymised=False, valid_to__lt=cutoff.date()):
+        if c.photo:
+            c.photo.delete(save=False)
+        c.name, c.mobile, c.id_type, c.id_last4, c.pass_channels, c.anonymised = "Contractor (removed)", "", "", "", [], True
+        c.save()
+    for ph in IncidentPhoto.objects.filter(incident__occurred_at__lt=cutoff):
+        ph.photo.delete(save=False)
+        ph.delete()
     GateLog.objects.filter(at__lt=cutoff).exclude(summary="").update(summary="", changes={})
     return n
 
@@ -582,9 +595,11 @@ def run_jobs() -> None:
     from tenancy.profile import module_on
     if not module_on("visitors"):
         return
+    from . import services_v3
     overstay_alerts()
     mark_no_shows()
     delivery_reminders()
+    services_v3.run_jobs()
     retention_cleanup()
 
 

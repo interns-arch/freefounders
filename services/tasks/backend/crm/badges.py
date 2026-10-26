@@ -46,13 +46,20 @@ def visitor_badges(user) -> dict:
     my parcels waiting at the gate (V2)."""
     from tenancy.profile import module_on
     if not module_on("visitors"):
-        return {"waiting": 0, "approvals": 0, "parcels": 0}
+        return {"waiting": 0, "approvals": 0, "parcels": 0, "material": 0, "incidents": 0}
     from visitors.models import Delivery, DeliveryStatus, Visit, VisitStatus
     from visitors.services import can_gate
     waiting = Visit.objects.filter(status=VisitStatus.WAITING).count() if can_gate(user) else 0
     approvals = Visit.objects.filter(status=VisitStatus.WAITING_HOST, host=user).count()
     parcels = Delivery.objects.filter(status=DeliveryStatus.AT_GATE, recipient=user).count()
-    return {"waiting": waiting, "approvals": approvals, "parcels": parcels}
+    # V3: material passes waiting for my yes (my reports', or all for the security head); open incidents (head).
+    from visitors.models import Incident, MaterialPass, MaterialStatus
+    from visitors.services import can_view_all
+    head = can_view_all(user)
+    pending = MaterialPass.objects.filter(status=MaterialStatus.PENDING)
+    material = (pending.exclude(requested_by=user) if head else pending.filter(requested_by__reporting_manager=user)).count()
+    incidents = Incident.objects.filter(status="open").count() if head else 0
+    return {"waiting": waiting, "approvals": approvals, "parcels": parcels, "material": material, "incidents": incidents}
 
 
 @api_view(["GET"])

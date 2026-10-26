@@ -9,10 +9,13 @@ import {
   type PersonBrief,
   type Visit,
   type VisitorConfig,
+  type ContractorPass,
+  type MaterialPass,
   useAcceptVisit,
   useCheckInVisitor,
   useCheckOutVisit,
-  useFindPass,
+  useReadIdCard,
+  useScanPass,
   useRejectVisit,
   useVisitorLookup,
   useVisitorPhoto,
@@ -22,7 +25,9 @@ import {
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
-import { CalendarClock, LogOut, Package, Plus, QrCode, ShieldAlert, UserCheck, UserRoundX } from '@/components/icons';
+import { CalendarClock, IdCard, LogOut, Package, Plus, QrCode, ShieldAlert, UserCheck, UserRoundX } from '@/components/icons';
+import { ContractorCard } from './contractors';
+import { MaterialDialog } from './material';
 import { useConfirm } from '@/components/common/confirm';
 import { FormSheet } from '@/components/common/form-sheet';
 import { Field } from '@/components/common/form';
@@ -59,6 +64,7 @@ export function GatePage({ config }: { config: VisitorConfig }) {
   const [form, setForm] = useState<{ accept?: Visit } | null>(null);
   const [pass, setPass] = useState<Visit | null>(null);
   const [scan, setScan] = useState(false);
+  const [scanned, setScanned] = useState<{ contractor?: ContractorPass; material?: MaterialPass } | null>(null);
   const checkOut = useCheckOutVisit();
   const reject = useRejectVisit();
   const confirm = useConfirm();
@@ -208,7 +214,23 @@ export function GatePage({ config }: { config: VisitorConfig }) {
           setScan(false);
           setForm({ accept: v });
         }}
+        onOther={(x) => {
+          setScan(false);
+          setScanned(x);
+        }}
       />
+      {scanned?.material && <MaterialDialog id={scanned.material.id} config={config} onClose={() => setScanned(null)} />}
+      {scanned?.contractor && (
+        <Dialog open onOpenChange={(o) => !o && setScanned(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Contractor pass {scanned.contractor.pass_no}</DialogTitle>
+              <DialogDescription>{scanned.contractor.inside ? 'Inside now: tap Out when they leave.' : 'Tap In to let them in.'}</DialogDescription>
+            </DialogHeader>
+            <ContractorCard c={scanned.contractor} gate />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -298,6 +320,23 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
   const watch = lookup.data?.watch ?? null;
   const [blocked, setBlocked] = useState('');
   const confirm = useConfirm();
+  const readId = useReadIdCard();
+  const [idPhoto, setIdPhoto] = useState<string | null>(null);
+  useEffect(() => {
+    if (!idPhoto) return;
+    readId.mutate(idPhoto, {
+      onSuccess: (r) => {
+        setIdPhoto(null);
+        if (!r.found) return void toast.info('The card could not be read: type the details.');
+        setF((cur) => ({ ...cur, name: cur.name || r.name, id_type: r.id_type || cur.id_type, id_last4: r.id_last4 || cur.id_last4 }));
+        toast.success('ID card read: check the details');
+      },
+      onError: (e) => {
+        setIdPhoto(null);
+        toast.error(errorMessage(e));
+      },
+    });
+  }, [idPhoto]);
   const onFile = useVisitorPhoto(found?.has_photo ? found.id : null);
   const onFileSrc = useBlobUrl(onFile.data);
   const visitPhoto = useVisitPhoto(accept?.has_photo ? accept.id : null);
@@ -469,6 +508,15 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
             />
           </Field>
         )}
+        {config.id_scan && config.id_proof !== 'off' && (
+          <div className="rounded-md border border-dashed p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-[13px] font-medium">
+              <IdCard className="size-4" aria-hidden /> Read the ID card {readId.isPending && '· reading…'}
+            </p>
+            <PhotoField label="ID card" value={null} onChange={(v) => v && setIdPhoto(v)} testId="id-card-photo" />
+            <p className="mt-1 text-[13px] text-muted-foreground">Fills the name, ID type and last 4 digits. The card photo is not kept.</p>
+          </div>
+        )}
         {config.id_proof !== 'off' && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="ID type" required={config.id_proof === 'required'}>
@@ -510,17 +558,32 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
  * Scan a pass (camera) or type the pass number / sign-in code. Inside → checked out at once. Expected (invited) or
  * waiting at the gate → the check-in form opens. Anything else → what happened to that pass.
  */
-function ScanPassDialog({ open, onClose, onCheckIn }: { open: boolean; onClose: () => void; onCheckIn: (v: Visit) => void }) {
+function ScanPassDialog({
+  open,
+  onClose,
+  onCheckIn,
+  onOther,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCheckIn: (v: Visit) => void;
+  onOther: (x: { contractor?: ContractorPass; material?: MaterialPass }) => void;
+}) {
   const [code, setCode] = useState('');
   const [note, setNote] = useState('');
-  const find = useFindPass();
+  const find = useScanPass();
   const out = useCheckOutVisit();
   const busy = find.isPending || out.isPending;
   const go = async (value: string) => {
     if (!value.trim() || busy) return;
     setNote('');
     try {
-      const v = await find.mutateAsync(value.trim());
+      const hit = await find.mutateAsync(value.trim());
+      if (hit.kind !== 'visit') {
+        setCode('');
+        return onOther(hit.kind === 'contractor' ? { contractor: hit.data } : { material: hit.data });
+      }
+      const v = hit.data;
       if (v.status === 'inside') {
         const done = await out.mutateAsync(v.id);
         toast.success(`${done.name} checked out · ${formatMinutes(done.minutes_inside)}`);
@@ -549,7 +612,7 @@ function ScanPassDialog({ open, onClose, onCheckIn }: { open: boolean; onClose: 
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Scan pass</DialogTitle>
-          <DialogDescription>Scan the QR on the visitor's pass or phone, or type the pass number. Coming in: the check-in opens. Leaving: checked out.</DialogDescription>
+          <DialogDescription>Scan any pass (visitor, contractor, material) or type its number. A visitor coming in: the check-in opens; leaving: checked out.</DialogDescription>
         </DialogHeader>
         {open && <CameraScanner onCode={(c) => void go(c)} />}
         {note && (

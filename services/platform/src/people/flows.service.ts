@@ -127,6 +127,24 @@ export class FlowsService implements OnModuleInit, OnModuleDestroy {
     if (app === 'assets' && e.type === 'ticket.created') return this.ticketToTask(companyId, e.payload);
     if (app === 'tasks' && e.type === 'task.completed') return this.resolveTicket(companyId, e.payload);
     if (app === 'assets' && e.type === 'exit.completed') return this.switchOff(companyId, e.payload.personIds ?? []);
+    if (app === 'tasks' && e.type === 'material.moved') return this.materialMoved(companyId, e.payload);
+  }
+
+  /** Visitors' material gate pass (PLAN.md §22.10): the assets on it get the movement in their Assets history. */
+  private async materialMoved(companyId: string, p: Record<string, any>) {
+    const [c] = await this.dbs.db.select({ apps: companies.enabledApps }).from(companies).where(eq(companies.id, companyId));
+    if (!c?.apps.includes('assets') || !internalUrl('assets') || !Array.isArray(p.assets) || !p.assets.length) return;
+    await this.provisioner.internal('assets', 'POST', '/assets/gate-movement', companyId, {
+      kind: p.kind,
+      passNo: p.passNo,
+      direction: p.direction,
+      purpose: p.purpose ?? '',
+      returnable: !!p.returnable,
+      expectedReturn: p.expectedReturn ?? null,
+      carrier: p.carrier || null,
+      by: p.by || null,
+      assets: p.assets.filter((a: { id?: unknown }) => typeof a?.id === 'string').slice(0, 50),
+    });
   }
 
   /** Tasks people among these Platform people (same company, active, with Tasks), in the order given. */

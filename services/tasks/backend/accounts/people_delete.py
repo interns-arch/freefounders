@@ -162,6 +162,18 @@ RELATIONS = {
     "visitors.Delivery.closed_by": NULL,
     "visitors.WatchEntry.added_by": NULL,
     "visitors.WatchEntry.removed_by": NULL,
+    "visitors.ContractorPass.supervisor": NULL,
+    "visitors.ContractorPass.revoked_by": NULL,
+    "visitors.ContractorPass.created_by": NULL,
+    "visitors.ContractorEntry.in_by": NULL,
+    "visitors.ContractorEntry.out_by": NULL,
+    "visitors.MaterialPass.requested_by": NULL,
+    "visitors.MaterialPass.decided_by": NULL,
+    "visitors.MaterialPass.gate_by": NULL,
+    "visitors.MaterialPass.returned_by": NULL,
+    "visitors.PatrolScan.guard": NULL,
+    "visitors.Incident.reported_by": NULL,
+    "visitors.Incident.closed_by": NULL,
 }
 
 

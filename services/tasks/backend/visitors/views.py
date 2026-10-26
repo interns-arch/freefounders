@@ -19,7 +19,7 @@ from rest_framework.throttling import AnonRateThrottle
 from config.exports import ExportMixin, export_file, export_format
 
 from . import conf, services as sv
-from .models import Delivery, GateAction, GateLog, VehicleEntry, Visit, VisitStatus, WatchEntry
+from .models import Delivery, GateAction, GateLog, IncidentKind, VehicleEntry, Visit, VisitStatus, WatchEntry
 
 
 def _brief(u):
@@ -451,7 +451,9 @@ def config_view(request):
         "can": can, "purposes": s["purposes"], "host_approval": s["host_approval"], "photo_visitor": s["photo_visitor"],
         "photo_vehicle": s["photo_vehicle"], "id_proof": s["id_proof"], "id_types": conf.ID_TYPES,
         "overstay_hours": s["overstay_hours"], "locations": _locations(), "send_pass": s["send_pass"],
-        "watch_action": s["watch_action"], "badge_format": s["badge_format"],
+        "watch_action": s["watch_action"], "badge_format": s["badge_format"], "id_scan": s["id_scan"],
+        "contractor_max_days": s["contractor_max_days"],
+        "incident_kinds": [{"value": k, "label": v} for k, v in IncidentKind.choices],
         "vehicle_types": [{"value": k, "label": v} for k, v in VehicleEntry._meta.get_field("type").choices],
     })
 
@@ -551,13 +553,17 @@ def inside_view(request):
     staff = [{"id": a.user_id, "name": sv.name_of(a.user), "department": a.user.get_department_display(), "check_in": _dt(a.check_in)}
              for a in Attendance.objects.filter(date=timezone.localdate(), check_in__isnull=False, check_out__isnull=True)
              .select_related("user").order_by("user__first_name")]
+    from .views_v3 import inside_contractors
+    contractors = inside_contractors(now)
     fmt = export_format(request)
     if fmt:
         rows = ([["Visitor", v["name"], v["company"], v["mobile"], (v["host"] or {}).get("name") or v["host_label"], v["check_in_at"]] for v in visits]
+                + [["Contractor", f"{c['name']} (+{c['people'] - 1})" if c["people"] > 1 else c["name"], c["company"], c["mobile"],
+                    (c["supervisor"] or {}).get("name", ""), c["since"]] for c in contractors]
                 + [["Vehicle", e["number"], e["type_display"], e["driver_mobile"], e["driver_name"], e["in_at"]] for e in vehicles]
                 + [["Employee", s["name"], s["department"], "", "", s["check_in"]] for s in staff])
         return export_file(fmt, "Who is inside", f"inside-now-{timezone.localdate()}", ["Kind", "Name / number", "From / type", "Mobile", "Host / driver", "Since"], rows)
-    return Response({"visitors": visits, "vehicles": vehicles, "employees": staff})
+    return Response({"visitors": visits, "vehicles": vehicles, "employees": staff, "contractors": contractors})
 
 
 @api_view(["GET"])
@@ -675,6 +681,13 @@ def public_pass_view(request, code, token):
     def one():
         if not module_on("visitors"):
             return Response(PASS_NOT_FOUND, status=404)
+        from . import services_v3
+        from .models import ContractorPass
+        c = ContractorPass.objects.filter(pass_token=token, anonymised=False).select_related("supervisor", "location").first()
+        if c:
+            res = Response(services_v3.public_contractor_pass(c))
+            res["Cache-Control"] = "no-store"
+            return res
         v = Visit.objects.filter(pass_token=token, anonymised=False).select_related("host", "location").first()
         if not v or v.status in (VisitStatus.WAITING, VisitStatus.REJECTED, VisitStatus.DENIED):
             return Response(PASS_NOT_FOUND, status=404)

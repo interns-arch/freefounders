@@ -15,6 +15,7 @@ CATEGORIES = ("attendance", "tasks", "approvals", "company", "visitors")
 APPROVAL_TYPES = {
     "leave_request", "correction_request", "approval_reminder", "approval_escalated",
     "task_change_request", "task_completion_review", "task_completion_reminder", "visitor_approval",
+    "visitor_material_approval",
 }
 ATTENDANCE_TYPES = {"leave_reviewed", "correction_reviewed"}
 ATTENDANCE_PREFIXES = ("attendance", "leave", "correction", "payslip", "payroll", "salary", "punch", "hr_")

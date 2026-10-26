@@ -7,7 +7,7 @@ import { type AuthedRequest, Public, ZodPipe } from '../../common/http';
 import { HistoryService } from '../../core/history.service';
 import { OutboxService } from '../../core/outbox.service';
 import { DbService } from '../../db/db.service';
-import { employees, exitCases, onboardingCases, onboardingKits, tickets, users } from '../../db/schema';
+import { assets, employees, exitCases, onboardingCases, onboardingKits, tickets, users } from '../../db/schema';
 import { EmployeesService } from '../employees/employees.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
 import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-token';
@@ -27,6 +27,17 @@ const exitSchema = z.object({ personId: z.string().uuid(), lastWorkingDate: date
 const joinerSchema = z.object({ personId: z.string().uuid(), joinDate: date, roleNames: z.array(z.string().max(120)).max(50).optional().default([]) });
 const linkSchema = z.object({ assigneePersonId: z.string().uuid().nullable().optional(), ref: z.string().max(40), url: z.string().max(300).startsWith('/') });
 const resolveSchema = z.object({ resolution: z.string().max(2000).nullable().optional() });
+const gateMoveSchema = z.object({
+  kind: z.enum(['passed', 'returned']),
+  passNo: z.string().max(20),
+  direction: z.enum(['out', 'in']),
+  purpose: z.string().max(200).optional().default(''),
+  returnable: z.boolean().optional().default(false),
+  expectedReturn: date.nullable().optional(),
+  carrier: z.string().max(120).nullable().optional(),
+  by: z.string().max(120).nullable().optional(),
+  assets: z.array(z.object({ id: z.string().uuid(), tag: z.string().max(60).optional() })).min(1).max(50),
+});
 
 /**
  * What the Kaampilot Platform's cross-app rules need from Assets (PLAN.md §17.4). Platform service token only.
@@ -147,5 +158,41 @@ export class InternalFlowsController {
       assetId: t.assetId,
     });
     return { ok: true };
+  }
+
+  /**
+   * Visitors' material gate pass (PLAN.md §22.10): an asset went out of (or came in through) the gate, or came back.
+   * Recorded in each asset's history; nothing else changes (custody stays as it is).
+   */
+  @Public()
+  @Post('assets/gate-movement')
+  @HttpCode(200)
+  async gateMovement(@Req() req: AuthedRequest, @Body() raw: unknown) {
+    await this.requireService(req);
+    const input = new ZodPipe(gateMoveSchema).transform(raw);
+    const ids = [...new Set(input.assets.map((a) => a.id))];
+    const found = await this.dbs.db.select({ id: assets.id, tag: assets.assetTag }).from(assets).where(inArray(assets.id, ids));
+    const back = input.kind === 'returned';
+    const what = back
+      ? `Came back through the gate (material pass ${input.passNo})`
+      : `${input.direction === 'out' ? 'Went out' : 'Came in'} through the gate on material pass ${input.passNo}`;
+    const extra = [
+      input.purpose,
+      !back && input.returnable ? `returnable${input.expectedReturn ? `, expected back ${input.expectedReturn}` : ''}` : null,
+      input.carrier ? `carried by ${input.carrier}` : null,
+      input.by ? `guard ${input.by}` : null,
+    ].filter(Boolean);
+    await this.history.recordMany(
+      PLATFORM,
+      found.map((a) => ({
+        entityType: 'ASSET' as const,
+        entityId: a.id,
+        entityLabel: a.tag,
+        action: back ? 'GATE_RETURNED' : 'GATE_PASS',
+        summary: `${what}${extra.length ? ` · ${extra.join(' · ')}` : ''}`.slice(0, 500),
+        metadata: { passNo: input.passNo, direction: input.direction, returnable: input.returnable, source: 'visitors' },
+      })),
+    );
+    return { ok: true, recorded: found.length, unknown: ids.length - found.length };
   }
 }

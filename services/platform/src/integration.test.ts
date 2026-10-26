@@ -1131,6 +1131,16 @@ describe('cross-app flows (Phase 5)', () => {
     assert.equal(resolve.body.resolution, 'New battery (T-00042 in Tasks)');
   });
 
+  test('a material gate pass in Visitors is recorded on its assets in Assets (PLAN.md §22.10)', async () => {
+    fakeTaskEvents.push({ id: 2, type: 'material.moved', payload: { kind: 'passed', passNo: 'M00007', direction: 'out', purpose: 'Repair', returnable: true, expectedReturn: '2026-11-30', carrier: 'Ravi', by: 'Guard', assets: [{ id: '11111111-2222-3333-4444-555555555555', tag: 'LT-7' }, { bad: true }] } });
+    const before = flowCalls.length;
+    await app.get(FlowsService).pollAll();
+    const move = flowCalls.slice(before).find((c) => c.app === 'assets' && c.url.endsWith('/assets/gate-movement'))!;
+    assert.ok(move, 'sent to Assets');
+    assert.equal(move.body.passNo, 'M00007');
+    assert.deepEqual(move.body.assets, [{ id: '11111111-2222-3333-4444-555555555555', tag: 'LT-7' }]);
+  });
+
   test('start exit: Assets opens the case and Tasks makes the checklist; the completed exit switches the person off', async () => {
     const admin = await login('admin@acme.test');
     const dbs = app.get(DbService);

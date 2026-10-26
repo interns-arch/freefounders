@@ -404,8 +404,28 @@ function fitText(g: CanvasRenderingContext2D, text: string, maxWidth: number, si
   } while (g.measureText(text).width > maxWidth && s > 12);
 }
 
-/** Draws the badge (photo, name, company, host, date, pass number + QR) as a PNG data URL, black on white. */
-export async function badgePng(v: Visit, format: BadgeFormat, photo: Blob | null): Promise<string> {
+/** What a printed badge shows (a visitor's or, V3, a contractor's). */
+export interface BadgeData {
+  heading: string;
+  name: string;
+  lines: string[];
+  /** QR content, e.g. "KPV:<token>". */
+  qr: string;
+  passNo: string;
+  footer: string;
+}
+
+export const visitBadge = (v: Visit): BadgeData => ({
+  heading: 'VISITOR',
+  name: v.name,
+  lines: [v.company, `To meet: ${hostName(v)}`, `${clock(v.check_in_at ?? v.created_at)}${v.location ? ` · ${v.location.name}` : ''}`].filter(Boolean),
+  qr: `KPV:${v.pass_token}`,
+  passNo: v.pass_no,
+  footer: 'Return this badge at the gate when you leave',
+});
+
+/** Draws the badge (photo, name, lines, pass number + QR) as a PNG data URL, black on white. */
+export async function badgePng(v: BadgeData, format: BadgeFormat, photo: Blob | null): Promise<string> {
   const { w, h } = BADGE_PAGE[format];
   const canvas = document.createElement('canvas');
   canvas.width = w;
@@ -419,8 +439,8 @@ export async function badgePng(v: Visit, format: BadgeFormat, photo: Blob | null
   g.textAlign = 'center';
   g.fillRect(0, 0, w, Math.round(h * 0.09));
   g.fillStyle = 'white';
-  fitText(g, 'VISITOR', w - pad * 2, Math.round(h * 0.06));
-  g.fillText('VISITOR', w / 2, Math.round(h * 0.068));
+  fitText(g, v.heading, w - pad * 2, Math.round(h * 0.06));
+  g.fillText(v.heading, w / 2, Math.round(h * 0.068));
   g.fillStyle = 'black';
   let y = Math.round(h * 0.13);
   const photoSize = Math.round(w * (format === 'label' ? 0.42 : 0.36));
@@ -441,29 +461,37 @@ export async function badgePng(v: Visit, format: BadgeFormat, photo: Blob | null
   fitText(g, v.name, w - pad * 2, Math.round(h * 0.05));
   g.fillText(v.name, w / 2, y);
   y += Math.round(h * 0.04);
-  const lines = [v.company, `To meet: ${hostName(v)}`, `${clock(v.check_in_at ?? v.created_at)}${v.location ? ` · ${v.location.name}` : ''}`].filter(Boolean);
-  for (const line of lines) {
+  for (const line of v.lines) {
     fitText(g, line, w - pad * 2, Math.round(h * 0.03), '500');
     g.fillText(line, w / 2, y);
     y += Math.round(h * 0.038);
   }
   const qrSize = Math.round(Math.min(w * 0.5, h - y - h * 0.12));
-  const qr = await loadImage(await QRCodeLib.toDataURL(`KPV:${v.pass_token}`, { margin: 0, width: qrSize, errorCorrectionLevel: 'M' }));
+  const qr = await loadImage(await QRCodeLib.toDataURL(v.qr, { margin: 0, width: qrSize, errorCorrectionLevel: 'M' }));
   y += Math.round(h * 0.01);
   g.drawImage(qr, (w - qrSize) / 2, y, qrSize, qrSize);
   y += qrSize + Math.round(h * 0.055);
-  fitText(g, v.pass_no, w - pad * 2, Math.round(h * 0.05));
   g.font = `bold ${Math.round(h * 0.045)}px monospace`;
-  g.fillText(v.pass_no, w / 2, y);
-  g.font = `${Math.round(h * 0.022)}px sans-serif`;
-  g.fillText('Return this badge at the gate when you leave', w / 2, h - Math.round(h * 0.03));
+  g.fillText(v.passNo, w / 2, y);
+  fitText(g, v.footer, w - pad * 2, Math.round(h * 0.022), 'normal');
+  g.fillText(v.footer, w / 2, h - Math.round(h * 0.03));
   return canvas.toDataURL('image/png');
 }
 
-/** Prints the badge on its own page (the phone app prints through the bridge; a browser opens a print window). */
-export async function printBadge(v: Visit, format: BadgeFormat, photo: Blob | null): Promise<void> {
+/** Prints a visitor's badge on its own page. */
+export const printBadge = (v: Visit, format: BadgeFormat, photo: Blob | null) => printBadgeData(visitBadge(v), format, photo);
+
+/** Prints a badge on its own page (the phone app prints through the bridge; a browser opens a print window). */
+export async function printBadgeData(v: BadgeData, format: BadgeFormat, photo: Blob | null): Promise<void> {
   const png = await badgePng(v, format, photo);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Visitor badge ${v.pass_no}</title><style>@page{size:${BADGE_PAGE[format].css};margin:0}html,body{margin:0;padding:0;background:white}img{display:block;width:100%;height:auto}</style></head><body><img alt="Visitor badge" src="${png}"></body></html>`;
+  await printHtml(
+    `<!doctype html><html><head><meta charset="utf-8"><title>Badge ${v.passNo}</title><style>@page{size:${BADGE_PAGE[format].css};margin:0}html,body{margin:0;padding:0;background:white}img{display:block;width:100%;height:auto}</style></head><body><img alt="Badge" src="${png}"></body></html>`,
+  );
+}
+
+/** Prints a small stand-alone page (badges, checkpoint stickers): the phone app through the bridge, a browser in a
+ * print window once its images have loaded. */
+export async function printHtml(html: string): Promise<void> {
   if (isInApp()) {
     try {
       await appRequest('print', { html });
@@ -473,16 +501,17 @@ export async function printBadge(v: Visit, format: BadgeFormat, photo: Blob | nu
     return;
   }
   const w = window.open('', '_blank');
-  if (!w) throw new Error('Allow pop-ups to print the badge.');
+  if (!w) throw new Error('Allow pop-ups to print.');
   w.document.open();
   w.document.write(html);
   w.document.close();
-  const img = w.document.querySelector('img');
+  const pending = [...w.document.images].filter((i) => !i.complete);
   const go = () => {
     w.focus();
     w.print();
   };
-  if (img && !img.complete) img.onload = go;
-  else go();
+  if (!pending.length) return go();
+  let left = pending.length;
+  for (const i of pending) i.onload = i.onerror = () => --left === 0 && go();
 }
 

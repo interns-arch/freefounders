@@ -57,7 +57,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
       toast.error(errorMessage(e));
     }
   };
-  const toggle = (k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass', label: string, hint: string) => (
+  const toggle = (k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass' | 'id_scan', label: string, hint: string) => (
     <label className="flex cursor-pointer items-start justify-between gap-4 py-2">
       <span>
         <span className="block font-medium">{label}</span>
@@ -77,6 +77,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
           {toggle('open_link', 'Visitor QR sign-in', 'Visitors scan the QR at the gate and fill in their details themselves; the guard checks them in.')}
           {toggle('photo_vehicle', 'Vehicle photo required', 'A photo of the vehicle / number plate at vehicle check-in.')}
           {toggle('send_pass', 'Send the visitor pass', 'The pass link (QR) goes to the visitor by WhatsApp, and by email when given: at check-in and with every invite.')}
+          {toggle('id_scan', 'Read ID cards with AI', "The guard photographs the ID card; the company's AI fills the name, ID type and last 4 digits. The card photo is sent to the AI provider once and never kept. Needs the company's AI set up.")}
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Visitor photo (guard)">
@@ -126,6 +127,31 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
           </Field>
           <Field label="Parcel reminder after (hours)" hint="0 = no reminder" error={errors.delivery_reminder_hours}>
             <Input type="number" min={0} max={168} value={f.delivery_reminder_hours} onChange={(e) => set('delivery_reminder_hours', Number(e.target.value))} />
+          </Field>
+          <Field label="Patrol: alert if a checkpoint is not checked for (hours)" hint="0 = no alert" error={errors.patrol_every_hours}>
+            <Input type="number" min={0} max={24} value={f.patrol_every_hours} onChange={(e) => set('patrol_every_hours', Number(e.target.value))} />
+          </Field>
+          <Field label="Patrol hours" hint="Same start and end = all day; 20 → 6 = nights" error={errors.patrol_from || errors.patrol_to}>
+            <div className="flex items-center gap-2">
+              <NativeSelect value={f.patrol_from} onChange={(e) => set('patrol_from', Number(e.target.value))} aria-label="Patrol from">
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, '0')}:00
+                  </option>
+                ))}
+              </NativeSelect>
+              <span>to</span>
+              <NativeSelect value={f.patrol_to} onChange={(e) => set('patrol_to', Number(e.target.value))} aria-label="Patrol to">
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, '0')}:00
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          </Field>
+          <Field label="Contractor pass: at most (days)" error={errors.contractor_max_days}>
+            <Input type="number" min={1} max={366} value={f.contractor_max_days} onChange={(e) => set('contractor_max_days', Number(e.target.value))} />
           </Field>
         </div>
         <Field label="Purposes of visit" hint="One per line" error={errors.purposes}>

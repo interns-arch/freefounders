@@ -3373,7 +3373,7 @@ per period, cancel any time to stop the next period, no partial refunds; duplica
 on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
 top of `legal.tsx`.
 
-## 22. Visitor management (V1 + V2 built 2026-10-26, §22.8, §22.9)
+## 22. Visitor management (V1, V2, V3 built 2026-10-26, §22.8–§22.10)
 
 Founder (2026-10-26): "one more option: visitor management software, to keep the record of every visitor and all the
 company's security records." This is a plan only; nothing is built until the founder answers §22.7.
@@ -3558,7 +3558,48 @@ Founder (2026-10-26): "do it, make it perfect" (V2 of §22.7). Tasks `visitors` 
   stop / warn / admin override / names / invites / QR flag / removal, parcels receive / notify / badge / hand over /
   return / reminder / retention), `visitors/tests.py` (pass page only with its own company, Postgres), e2e
   `e2e/web-visitors-v2.spec.ts`.
-
-**Next (V3, §22.7)**: contractors' multi-day passes, material gate pass linked to Assets, ID card scan (OCR), patrol
-rounds / incident log, analytics. WhatsApp passes need the company's WhatsApp values set (`WHATSAPP_*`, per company via `company_setting`); a Meta
+WhatsApp passes need the company's WhatsApp values set (`WHATSAPP_*`, per company via `company_setting`); a Meta
 template for the pass (outside the 24 h window) is still to be approved.
+
+### 22.10 V3 built (2026-10-26)
+Founder (2026-10-26): "yes start V3". Tasks `visitors` migration 0004 (`services_v3.py`, `views_v3.py`); web
+`features/visitors` (`contractors.tsx`, `material.tsx`, `patrol.tsx`, `incidents.tsx`, `reports.tsx`); Assets
+`POST /internal/assets/gate-movement`; Platform flow `material.moved`.
+- **Contractors** (`/visitors/contractors`): a pass for a person or a crew (people count), work, permit no., safety
+  note, supervisor (me, or anyone for gate / register people), optional linked Tasks task (my open tasks; all for the
+  register), valid from … to (today onwards, at most `contractor_max_days`, 90). Pass `C00001`, QR `KPC:<token>`, pass
+  link by WhatsApp (same page as visitors: `/v/<code>/p/<token>` shows "Contractor pass", work permit and safety
+  note). The gate taps In / Out (or scans): photo once (kept on the pass, required when the visitor photo is), the
+  watchlist checked like visitors, revoked / not started / ended passes refused with the reason. The supervisor is told
+  at the first entry of each day. In the roll call (Inside now + download). Revoke (supervisor, maker, gate, register).
+- **Material gate pass** (`/visitors/material`): an employee asks (out / in, purpose, items with quantity + unit,
+  optionally an asset picked from Assets when they have Assets, returnable + expected back date, carrier, vehicle).
+  Approver: the requester's reporting manager, else the security head(s) (`visitors.view_all`); a head's own pass is
+  approved at once; nobody approves their own. Notification is an Approval; badge `visitors.material`. The gate sees
+  every pass (scanning an unapproved one says "do not let it through") and lets an approved one through; returnable
+  goods are marked back (all or per item); not back by the date → one alert to the requester and the head. **Assets**:
+  passing the gate and coming back emit `material.moved` (outbox); the Platform sends it to Assets, which writes
+  `GATE_PASS` / `GATE_RETURNED` into each asset's history (custody unchanged).
+- **Patrol** (`/visitors/patrol`): admins add checkpoints and **print QR stickers** (A4 sheet; "New sticker code"
+  replaces a lost one); the guard taps **Scan checkpoint** (camera or typed code, location when the phone allows,
+  "Something is wrong here" + note → the head is told). Settings: alert after N hours without a scan (2; 0 = off)
+  within patrol hours (from / to, wraps past midnight; equal = all day) → one alert per gap to the head(s). The register
+  sees every round (filters, download).
+- **Incidents** (`/visitors/incidents`): kind (theft, damage, trespass, fire, medical, fight, safety, power, other),
+  severity, when (not in the future), where, details, up to 4 photos (private). Medium / high alert the head(s) at once
+  ("URGENT" for high); badge `visitors.incidents` = open ones for the head. The head writes the action taken and
+  closes it; the reporter is told. Kept as the security record past retention (photos deleted).
+- **One scan at the gate** (`GET /visitors/scan/?code=`): visitor pass, contractor pass (`KPC:`) or material pass
+  (`KPM:`), or a typed pass number; a patrol sticker is refused there.
+- **ID card reading** (setting **Read ID cards with AI**, OFF by default): the guard photographs the card in the
+  check-in; the company's AI (`config/llm.read_image_json`, Anthropic or any OpenAI-compatible provider) returns the
+  name, ID type and last 4; whatever it returns, only 4 characters are kept and the photo is never stored. Needs the
+  company's AI configured; logged as "ID card read" without the digits.
+- **Reports** (`/visitors/reports`, register): visits, people, unique / returning visitors, average time inside,
+  overstays, turned away, invited / no-shows, QR sign-ins, parcels, vehicles, contractor entries, material passes,
+  incidents, patrol scans; visits per day and by hour (charts), purposes, most visited people, companies, how they
+  came, incidents by kind; 7 / 30 / 90 days or custom (≤ 1 year); Download.
+- Tests: `visitors/tests_v3.py` (contractors, material + outbox, patrol, incidents, ID scan, reports), Assets
+  `platform.test.ts` (gate movement in history), Platform `integration.test.ts` (flow), e2e `e2e/web-visitors-v3.spec.ts`.
+
+**Still open**: WhatsApp pass template approval (Meta); analytics beyond the reports page if the founder wants more.

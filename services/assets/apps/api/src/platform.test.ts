@@ -511,6 +511,28 @@ describe('cross-app flows (Phase 5)', () => {
     assert.equal((await call('POST', `/internal/tickets/${t.body.id}/resolve`, await service(), {})).body.already, true);
   });
 
+  test('a material gate pass is recorded in the asset history (Visitors, PLAN.md §22.10)', async () => {
+    const suffix = randomUUID().slice(0, 8);
+    const [cat] = await dbs.root.insert(assetCategories).values({ name: `Gate cat ${suffix}`, code: `GC${suffix}` }).returning();
+    const [type] = await dbs.root.insert(assetTypes).values({ categoryId: cat.id, name: 'Laptop', code: `GT${suffix}` }).returning();
+    const [laptop] = await dbs.root
+      .insert(assets)
+      .values({ assetTag: `GATE-${suffix}`, qrCode: `g-${suffix}`, name: 'Gate laptop', categoryId: cat.id, assetTypeId: type.id, status: 'AVAILABLE' })
+      .returning();
+    const body = { kind: 'passed', passNo: 'M00042', direction: 'out', purpose: 'Repair at vendor', returnable: true, expectedReturn: '2026-11-30', carrier: 'Ravi', by: 'Guard G', assets: [{ id: laptop.id, tag: laptop.assetTag }, { id: randomUUID(), tag: 'GONE' }] };
+    assert.equal((await call('POST', '/internal/assets/gate-movement', undefined, body)).status, 401);
+    const res = await call('POST', '/internal/assets/gate-movement', await service(), body);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual([res.body.recorded, res.body.unknown], [1, 1]);
+    await call('POST', '/internal/assets/gate-movement', await service(), { ...body, kind: 'returned' });
+    const rows = await dbs.root.select().from(historyEvents).where(eq(historyEvents.assetId, laptop.id));
+    assert.deepEqual(rows.map((r) => r.action).sort(), ['GATE_PASS', 'GATE_RETURNED']);
+    const out = rows.find((r) => r.action === 'GATE_PASS')!;
+    assert.match(out.summary, /Went out through the gate on material pass M00042 · Repair at vendor · returnable, expected back 2026-11-30/);
+    const [after] = await dbs.root.select().from(assets).where(eq(assets.id, laptop.id));
+    assert.equal(after.status, 'AVAILABLE', 'custody is not changed');
+  });
+
   test('starting an exit puts the employee on notice with an exit case', async () => {
     const leaver = await person('fl-leaver@t.test', 'FL Leaver', 'Employee');
     const res = await call('POST', '/internal/exits', await service(), { personId: leaver.user.platformPersonId, lastWorkingDate: '2026-12-31', reason: 'Moving' });

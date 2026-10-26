@@ -255,6 +255,19 @@ class GateAction(models.TextChoices):
     DELIVERY_IN = "delivery_in", "Parcel received"
     DELIVERY_OUT = "delivery_out", "Parcel handed over"
     DELIVERY_RETURN = "delivery_return", "Parcel returned"
+    CONTRACTOR_PASS = "contractor_pass", "Contractor pass made"
+    CONTRACTOR_IN = "contractor_in", "Contractor in"
+    CONTRACTOR_OUT = "contractor_out", "Contractor out"
+    CONTRACTOR_REVOKE = "contractor_revoke", "Contractor pass revoked"
+    MATERIAL_REQUEST = "material_request", "Material pass asked"
+    MATERIAL_DECIDE = "material_decide", "Material pass decided"
+    MATERIAL_GATE = "material_gate", "Material passed the gate"
+    MATERIAL_RETURN = "material_return", "Material returned"
+    PATROL = "patrol", "Patrol checkpoint scanned"
+    CHECKPOINT = "checkpoint", "Patrol checkpoints changed"
+    INCIDENT = "incident", "Incident reported"
+    INCIDENT_CLOSE = "incident_close", "Incident closed"
+    ID_SCAN = "id_scan", "ID card read"
     SETTINGS = "settings", "Visitor settings changed"
     LINK = "link", "Visitor QR link changed"
 
@@ -268,9 +281,207 @@ class GateLog(models.Model):
     visit = models.ForeignKey(Visit, null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
     vehicle = models.ForeignKey(VehicleEntry, null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
     delivery = models.ForeignKey(Delivery, null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
+    contractor = models.ForeignKey("ContractorPass", null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
+    material = models.ForeignKey("MaterialPass", null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
+    incident = models.ForeignKey("Incident", null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
     summary = models.CharField(max_length=300, blank=True, default="")
     # {"field": [before, after]} for edits
     changes = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-at", "-id"]
+
+
+# ================================================================ V3 (PLAN.md §22.10)
+
+class ContractorPass(models.Model):
+    """A contractor, vendor or daily worker allowed in for several days (V3), with a work permit; in / out each day."""
+    name = models.CharField(max_length=80)
+    mobile = models.CharField(max_length=16, blank=True, default="", db_index=True)
+    company = models.CharField(max_length=120, blank=True, default="")
+    people = models.PositiveSmallIntegerField(default=1)          # a crew on one pass
+    work = models.CharField(max_length=200)                         # what they are here to do
+    permit_no = models.CharField(max_length=40, blank=True, default="")
+    safety_note = models.CharField(max_length=300, blank=True, default="")  # PPE, hot work, height…
+    supervisor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="contractor_passes")
+    location = models.ForeignKey("hr.OfficeLocation", null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="contractor_passes")
+    task = models.ForeignKey("crm.Task", null=True, blank=True, on_delete=models.SET_NULL, related_name="contractor_passes")
+    valid_from = models.DateField()
+    valid_to = models.DateField()
+    photo = models.FileField(upload_to=photo_path, blank=True, default="")
+    id_type = models.CharField(max_length=30, blank=True, default="")
+    id_last4 = models.CharField(max_length=4, blank=True, default="")
+    pass_no = models.CharField(max_length=20, blank=True, default="", db_index=True)
+    pass_token = models.CharField(max_length=40, unique=True, default=new_token)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+    pass_sent_at = models.DateTimeField(null=True, blank=True)
+    pass_channels = models.JSONField(default=list, blank=True)
+    anonymised = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class ContractorEntry(models.Model):
+    """One in / out of a contractor pass (several a day are fine)."""
+    contractor = models.ForeignKey(ContractorPass, on_delete=models.CASCADE, related_name="entries")
+    in_at = models.DateTimeField(default=timezone.now, db_index=True)
+    in_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    out_at = models.DateTimeField(null=True, blank=True)
+    out_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    people = models.PositiveSmallIntegerField(default=1)
+    location = models.ForeignKey("hr.OfficeLocation", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-in_at"]
+
+    def minutes_inside(self, now=None) -> int:
+        end = self.out_at or now or timezone.now()
+        return max(0, int((end - self.in_at).total_seconds() // 60))
+
+
+class MaterialStatus(models.TextChoices):
+    PENDING = "pending", "Waiting for approval"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    PASSED = "passed", "Passed the gate"
+    RETURNED = "returned", "Returned"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class MaterialPass(models.Model):
+    """Goods going out of (or coming in to) the premises (V3): an employee asks, a manager or the security head
+    approves, the guard checks it at the gate. Returnable goods are expected back; assets are recorded in Assets."""
+    direction = models.CharField(max_length=3, choices=[("out", "Going out"), ("in", "Coming in")], default="out")
+    purpose = models.CharField(max_length=200)
+    carrier_name = models.CharField(max_length=80, blank=True, default="")      # who carries it
+    carrier_company = models.CharField(max_length=120, blank=True, default="")
+    vehicle_no = models.CharField(max_length=15, blank=True, default="")
+    returnable = models.BooleanField(default=False)
+    expected_return = models.DateField(null=True, blank=True)
+    location = models.ForeignKey("hr.OfficeLocation", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    status = models.CharField(max_length=10, choices=MaterialStatus.choices, default=MaterialStatus.PENDING,
+                              db_index=True)
+    pass_no = models.CharField(max_length=20, blank=True, default="", db_index=True)
+    pass_token = models.CharField(max_length=40, unique=True, default=new_token)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name="material_passes")
+    requested_at = models.DateTimeField(default=timezone.now, db_index=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True, default="")
+    gate_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="+")
+    gate_at = models.DateTimeField(null=True, blank=True)
+    gate_note = models.CharField(max_length=300, blank=True, default="")
+    returned_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="+")
+    returned_at = models.DateTimeField(null=True, blank=True)
+    overdue_alerted_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=500, blank=True, default="")
+
+    class Meta:
+        ordering = ["-requested_at"]
+
+
+class MaterialItem(models.Model):
+    material = models.ForeignKey(MaterialPass, on_delete=models.CASCADE, related_name="items")
+    description = models.CharField(max_length=200)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, default=1)
+    unit = models.CharField(max_length=20, blank=True, default="nos")
+    # An asset in the Assets app (its tag and name as picked; the movement is recorded on it there).
+    asset_id = models.CharField(max_length=40, blank=True, default="")
+    asset_tag = models.CharField(max_length=60, blank=True, default="")
+    # Returnable goods: how many came back (partial returns are fine).
+    returned_qty = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["id"]
+
+
+class Checkpoint(models.Model):
+    """A patrol point (V3): a QR sticker on a wall; guards scan it on their round."""
+    name = models.CharField(max_length=80)
+    location = models.ForeignKey("hr.OfficeLocation", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    token = models.CharField(max_length=40, unique=True, default=new_token)
+    order = models.PositiveSmallIntegerField(default=0)
+    active = models.BooleanField(default=True)
+    last_scan_at = models.DateTimeField(null=True, blank=True)
+    missed_alerted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+
+class PatrolScan(models.Model):
+    checkpoint = models.ForeignKey(Checkpoint, on_delete=models.CASCADE, related_name="scans")
+    guard = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                              related_name="patrol_scans")
+    at = models.DateTimeField(default=timezone.now, db_index=True)
+    note = models.CharField(max_length=300, blank=True, default="")
+    all_ok = models.BooleanField(default=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    class Meta:
+        ordering = ["-at"]
+
+
+class IncidentKind(models.TextChoices):
+    THEFT = "theft", "Theft / loss"
+    DAMAGE = "damage", "Damage"
+    TRESPASS = "trespass", "Trespass / unauthorised entry"
+    FIRE = "fire", "Fire / smoke"
+    MEDICAL = "medical", "Medical / injury"
+    FIGHT = "fight", "Fight / misbehaviour"
+    SAFETY = "safety", "Safety hazard"
+    POWER = "power", "Power / utility failure"
+    OTHER = "other", "Other"
+
+
+class IncidentSeverity(models.TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+
+
+class Incident(models.Model):
+    """A security incident (V3): reported by a guard (or anyone at the gate), followed up and closed by the head."""
+    kind = models.CharField(max_length=10, choices=IncidentKind.choices, default=IncidentKind.OTHER)
+    severity = models.CharField(max_length=6, choices=IncidentSeverity.choices, default=IncidentSeverity.MEDIUM,
+                                db_index=True)
+    title = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
+    place = models.CharField(max_length=120, blank=True, default="")
+    location = models.ForeignKey("hr.OfficeLocation", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    occurred_at = models.DateTimeField(default=timezone.now, db_index=True)
+    reported_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="reported_incidents")
+    reported_at = models.DateTimeField(default=timezone.now)
+    status = models.CharField(max_length=6, choices=[("open", "Open"), ("closed", "Closed")], default="open",
+                              db_index=True)
+    action_taken = models.TextField(blank=True, default="")
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                  related_name="+")
+    closed_at = models.DateTimeField(null=True, blank=True)
+    visit = models.ForeignKey(Visit, null=True, blank=True, on_delete=models.SET_NULL, related_name="incidents")
+
+    class Meta:
+        ordering = ["-occurred_at"]
+
+
+class IncidentPhoto(models.Model):
+    incident = models.ForeignKey(Incident, on_delete=models.CASCADE, related_name="photos")
+    photo = models.FileField(upload_to=photo_path)
+    added_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["id"]

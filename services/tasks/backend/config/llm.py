@@ -227,3 +227,46 @@ def chat_json(system: str, user: str, max_tokens: int = 700,
     except json.JSONDecodeError:
         log.warning("AI returned unparsable JSON: %s", text[:200])
         return None
+
+
+def read_image_json(system: str, image: bytes, mime: str = "image/jpeg", max_tokens: int = 300,
+                    timeout: int | None = None) -> dict | None:
+    """A JSON object read from one image (e.g. an ID card, PLAN.md §22.10), or None. The image is sent once and never
+    stored. Anthropic takes an image block; every OpenAI-compatible provider (Gemini's too) takes a data URL."""
+    if not enabled() or not image:
+        return None
+    import base64
+    key, who = _key(), provider()
+    b64 = base64.b64encode(image).decode()
+    try:
+        if who == "anthropic":
+            res = requests.post(
+                ANTHROPIC_URL,
+                headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json={"model": model(), "max_tokens": max_tokens, "system": system,
+                      "messages": [{"role": "user", "content": [
+                          {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
+                          {"type": "text", "text": "Read the card. Reply with the JSON object only."}]}]},
+                timeout=timeout or _timeout(),
+            )
+            reply = "".join(b.get("text", "") for b in res.json().get("content", [])) if res.status_code == 200 else None
+        else:
+            res = requests.post(
+                _chat_url(who),
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": model(), "max_tokens": max_tokens, "temperature": 0,
+                      "messages": [{"role": "system", "content": system},
+                                   {"role": "user", "content": [
+                                       {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                                       {"type": "text", "text": "Read the card. Reply with the JSON object only."}]}]},
+                timeout=timeout or _timeout(),
+            )
+            reply = res.json()["choices"][0]["message"]["content"] if res.status_code == 200 else None
+        if not reply:
+            log.warning("AI image (%s) %s", who, res.status_code)
+            return None
+        match = re.search(r"\{.*\}", reply, re.DOTALL)
+        return json.loads(match.group(0)) if match else None
+    except Exception:  # noqa: BLE001 -- the AI must never break a feature
+        log.warning("AI image (%s) call failed", who, exc_info=True)
+        return None

@@ -51,7 +51,7 @@ export function PublicPassPage() {
           ) : (
             <div className="space-y-4 rounded-xl border bg-card p-5 text-center" data-testid="visitor-pass">
               <div>
-                <p className="text-[13px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">Visitor pass</p>
+                <p className="text-[13px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">{p.kind === 'contractor' ? 'Contractor pass' : 'Visitor pass'}</p>
                 <h1 className="mt-1 text-2xl font-bold">{p.name}</h1>
                 {p.visitor_company && <p className="text-sm text-muted-foreground">{p.visitor_company}</p>}
               </div>
@@ -64,13 +64,21 @@ export function PublicPassPage() {
               <p className="font-mono text-3xl font-bold tracking-wider" data-testid="pass-no">
                 {p.pass_no}
               </p>
-              <p className="text-sm">{NOTE[p.status] ?? ''}</p>
+              <p className="text-sm">{p.kind === 'contractor' ? (usable ? 'Show this QR at the gate each time you come in and go out.' : 'This pass is not valid now.') : (NOTE[p.status] ?? '')}</p>
+              {p.kind === 'contractor' && (p.permit_no || p.safety_note) && (
+                <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-left text-[13px]">
+                  {p.permit_no ? `Work permit ${p.permit_no}. ` : ''}
+                  {p.safety_note ? `Safety: ${p.safety_note}` : ''}
+                </p>
+              )}
               <dl className="space-y-1.5 border-t pt-3 text-left text-sm">
                 {p.host && (
                   <div className="flex items-center gap-2">
                     <UserRound className="size-4 text-muted-foreground" aria-hidden />
-                    <dt className="sr-only">To meet</dt>
-                    <dd>To meet {p.host}</dd>
+                    <dt className="sr-only">{p.kind === 'contractor' ? 'Supervisor' : 'To meet'}</dt>
+                    <dd>
+                      {p.kind === 'contractor' ? 'Supervisor' : 'To meet'} {p.host}
+                    </dd>
                   </div>
                 )}
                 {p.window && (

@@ -3,7 +3,8 @@ import { Navigate, type RouteObject, useLocation } from 'react-router';
 
 const VisitorsPage = lazy(() => import('./visitors-page').then((m) => ({ default: m.VisitorsPage })));
 
-/** /visitors, /visitors/today|vehicles|deliveries|inside|my|register|activity|watchlist|settings (PLAN.md §22). */
+/** /visitors/<tab>: today, vehicles, deliveries, contractors, material, patrol, incidents, inside, my, register, reports,
+ * activity, watchlist, settings (PLAN.md §22). */
 export const visitorsRoutes: RouteObject[] = [
   { index: true, element: <VisitorsPage /> },
   { path: ':tab', element: <VisitorsPage /> },
