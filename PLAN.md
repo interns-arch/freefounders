@@ -3372,3 +3372,86 @@ with the registered address when ready), the "aim to reply within 2 working days
 per period, cancel any time to stop the next period, no partial refunds; duplicate charges or payments taken but failed
 on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
 top of `legal.tsx`.
+
+## 22. Visitor management (draft 2026-10-26, for the founder's approval)
+
+Founder (2026-10-26): "one more option: visitor management software, to keep the record of every visitor and all the
+company's security records." This is a plan only; nothing is built until the founder answers §22.7.
+
+### 22.1 Goal
+A digital visitor book and gate register for each company: who came, whom they met, when they entered and left, what
+they carried, and who is inside right now. It replaces the paper register at reception / the security gate.
+
+### 22.2 Where it lives (no new service)
+- **A new module "Visitors"** inside the Tasks service (Django app `visitors`), like HR: it reuses people + reports-to,
+  office locations (§19.18) as sites/gates, notifications + WhatsApp (§19.37), private photos with signed links (§16),
+  the worker, downloads (§19.31), count badges (§19.42) and one schema per company (§14). No cross-company data.
+- **Module switch** in the Platform company profile (§16), like Assets; billing can later price it as an add-on.
+- **Web**: `apps/web/src/features/visitors` + `packages/core/src/visitors`, sidebar group "Visitors", URLs `/visitors/<tab>`.
+- **Phone / tablet**: the same screens in the Android app; the reception tablet uses a "Gate mode" screen (big buttons,
+  camera via the existing bridge, stays signed in as the gate account).
+
+### 22.3 Who uses it (new permissions, given through roles §15)
+| Person | Can |
+|---|---|
+| Guard / receptionist (`visitors.gate`) | Check visitors in and out, take the photo, print/show the pass, see who is inside, log vehicles and deliveries |
+| Any employee (`visitors.invite`, on by default) | Invite a visitor in advance, approve/deny a visitor waiting for them, see their own visitors |
+| Admin / Owner / security head (`visitors.view_all`, `visitors.settings`) | Full register, reports, blacklist, settings, downloads |
+
+### 22.4 Flows
+1. **Walk-in at the gate** (V1): mobile number → returning visitors fill themselves in → name, company, purpose, whom to
+   meet (search employees), photo, optional ID proof (type + last 4 digits only), vehicle number, items carried →
+   the host gets a notification "Ravi from ABC Ltd is at the gate" with **Allow / Deny** (or the guard lets them in if the
+   company switches approval off) → a visitor pass with a number and QR (screen, WhatsApp or printed) → **Check out**
+   at the gate (scan the QR or tap the name). Overstay after N hours → alert to the guard and the host.
+2. **Pre-invite** (V2): an employee adds the expected visitor (date, time window, purpose) → the visitor gets a QR pass
+   by WhatsApp/email → at the gate: scan → photo → in, in seconds. Group invites for meetings/interviews.
+3. **Self check-in kiosk** (V2): a tablet at reception; the visitor types their mobile, takes their own photo, picks the
+   host; the guard only confirms.
+4. **Deliveries and couriers** (V2): quick entry (courier company, parcel for whom); the employee is told "a parcel
+   is waiting at reception"; collected by / when.
+5. **Vehicles** (V2): vehicle number, type, driver, in/out time, parking slot.
+6. **Contractors / vendors / daily workers** (V3): a pass valid for several days, with in/out each day and a work
+   permit note; ties to Tasks for the work order.
+7. **Material gate pass** (V3): goods going out or coming in, with items and quantities, approved by a manager; linked
+   to Assets so an asset leaving the premises is recorded against the asset.
+8. **Emergency roll call** (V1): one screen "Who is inside now" (visitors + employees punched in today), downloadable,
+   for evacuation.
+9. **Blacklist / watchlist** (V2): a blocked mobile number or name warns the guard at check-in; only admins edit it.
+
+### 22.5 Records (tables in each company schema)
+- `Visitor`: name, mobile, email, company, photo, ID type + last 4, blocked + reason, first/last visit.
+- `Visit`: visitor, host (person), site/gate, purpose, type (walk-in / invited / delivery / contractor / vehicle),
+  status (expected → waiting → allowed / denied → inside → out / no-show), expected time, check-in/out time + by whom,
+  pass number + QR token, vehicle, items carried, notes, group id.
+- `GatePass` (V3): direction in/out, items + quantities, linked assets, approved by, returned.
+- Settings per company (`CompanySetting`): host approval on/off, ask ID proof (off / optional / required), photo
+  required, pass validity, overstay hours, data kept for N days (default 180), fields to show, gate accounts.
+- Every change is audited (who, when, before → after); the register can never be edited silently.
+
+### 22.6 Reports and downloads
+Daily visitor register (the digital visitor book), visitors by host / department / purpose / company, frequent
+visitors, average time inside, overstays, denied entries, deliveries pending collection, "who is inside now"; all with
+Download (Excel/PDF) and the same filters as the screen. Count badges: "Waiting at the gate" for hosts, "Inside now"
+for guards.
+
+**Privacy (India, DPDP Act 2023):** a consent line on check-in, only the last 4 digits of an ID number are kept (never
+the full Aadhaar), photos and ID data deleted automatically after the company's retention days, visitors' data never
+shown to other companies, and photos only through signed links.
+
+### 22.7 Phases and decisions for the founder
+- **V1 (one build session):** module switch + permissions; walk-in check-in/out with photo, host Allow/Deny, pass
+  number + QR on screen/WhatsApp, "Inside now", overstay alert, daily register + downloads, settings, badges, phone.
+- **V2:** pre-invite QR passes, self check-in kiosk, deliveries, vehicles, blacklist, printed badges.
+- **V3:** contractors' multi-day passes, material gate pass linked to Assets, ID card scan (OCR), analytics.
+
+Decisions needed before building:
+1. Who checks visitors in first: the guard/receptionist on a phone/tablet (recommended for V1) or the visitor at a kiosk?
+2. Host approval: must the employee tap Allow before the visitor goes in, or does the guard decide (company setting;
+   which default)?
+3. ID proof: off, optional or required by default? (Recommended: optional, last 4 digits only.)
+4. Badge: QR on the visitor's phone (WhatsApp) only, or also printed stickers (needs a label printer at the gate)?
+5. How long to keep visitor photos and records by default (recommended 180 days)?
+6. Is it included in every plan, or a paid add-on (e.g. per site per month)?
+7. "Security records": besides visitors, vehicles and deliveries, should guards also log patrol rounds / incidents
+   (V3 candidate)?
