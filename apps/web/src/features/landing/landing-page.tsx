@@ -6,7 +6,7 @@
  * short fade/rise when a section comes into view and is off for people who ask for less motion.
  */
 import { usePublicPricing } from '@kaampilot/core';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { ArrowRight, Download, Moon, Smartphone, Sun } from '@/components/icons';
 import { BrandLockup, BrandMark } from '@/components/brand';
@@ -20,9 +20,11 @@ import { FeatureTour, ShotFrame } from './feature-tour';
 import { PricingCalculator } from './pricing-calculator';
 import { usePageMeta } from './page-meta';
 
-const WRAP = 'mx-auto w-full max-w-6xl px-4 sm:px-6';
+const WRAP = 'mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 2xl:max-w-7xl';
+/** Touch screens (phones, tablets) get buttons at least 44 px tall; mouse screens keep the compact size. */
+const TAP = 'pointer-coarse:min-h-[44px]';
 const EYEBROW = 'font-mono text-[11px] font-semibold tracking-widest text-primary uppercase';
-const H2 = 'text-[1.85rem] leading-tight font-extrabold tracking-tight text-balance sm:text-[2.25rem]';
+const H2 = 'text-[clamp(1.6rem,1.1rem+2.2vw,1.85rem)] leading-tight font-extrabold tracking-tight text-balance sm:text-[2.25rem] lg:text-[clamp(2.25rem,1.3rem+1.1vw,2.6rem)]';
 
 export function LandingPage({ only }: { only?: 'pricing' }) {
   usePageMeta(
@@ -36,6 +38,15 @@ export function LandingPage({ only }: { only?: 'pricing' }) {
         },
   );
   const { pricing } = usePublicPricing();
+  // From 1024 px the website's root size grows with the screen (index.css, `html[data-site]`), so laptops and big
+  // screens get a wider column and larger text instead of a small strip in the middle. The app frame never has it.
+  useLayoutEffect(() => {
+    const html = document.documentElement;
+    html.dataset.site = '';
+    return () => {
+      delete html.dataset.site;
+    };
+  }, []);
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -153,10 +164,10 @@ function TopBar() {
           <Button variant="ghost" size="icon" onClick={theme.toggle} aria-label={theme.dark ? 'Light mode' : 'Dark mode'} title={theme.dark ? 'Light mode' : 'Dark mode'}>
             {theme.dark ? <Sun /> : <Moon />}
           </Button>
-          <Button variant="ghost" asChild>
+          <Button variant="ghost" asChild className={TAP}>
             <Link to="/login">Sign in</Link>
           </Button>
-          <Button variant="cta" asChild className="max-[360px]:hidden">
+          <Button variant="cta" asChild className={cn('max-[359px]:hidden', TAP)}>
             <Link to="/signup">Start free trial</Link>
           </Button>
         </div>
@@ -165,28 +176,43 @@ function TopBar() {
   );
 }
 
+/** True on phone-width screens (under 640 px, Tailwind `sm`); follows rotation and window resizes. */
+function usePhoneWidth() {
+  const query = '(max-width: 639px)';
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
 function Hero({ trialDays, trialUsers }: { trialDays: number; trialUsers: number }) {
+  const phone = usePhoneWidth();
   return (
-    <section aria-labelledby="hero-title" className="overflow-hidden pt-10 pb-14 sm:pt-16 sm:pb-20">
-      <div className={cn(WRAP, 'grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]')}>
+    <section aria-labelledby="hero-title" className="overflow-hidden pt-8 pb-14 sm:pt-16 sm:pb-20 2xl:pt-20">
+      <div className={cn(WRAP, 'grid items-center gap-10 sm:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-10 xl:gap-14')}>
         <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-700">
           <p className="inline-flex items-center gap-2 rounded-sm border border-primary/25 bg-accent px-2.5 py-1 font-mono text-[11px] font-semibold tracking-widest text-accent-foreground uppercase">
             For Indian SMEs · 5 to 500 people
           </p>
-          <h1 id="hero-title" className="mt-5 text-[2.5rem] leading-[1.06] font-extrabold tracking-tight text-balance sm:text-[3.4rem]">
+          <h1 id="hero-title" className="mt-5 text-[clamp(2.1rem,1.2rem+4.2vw,2.6rem)] leading-[1.06] font-extrabold tracking-tight text-balance sm:text-[3.25rem] lg:text-[clamp(2.6rem,1.2rem+2.4vw,3.75rem)]">
             Your team’s <span className="text-primary">kaam</span>, on autopilot.
           </h1>
           <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-muted-foreground sm:text-lg">
             Attendance with a selfie and GPS punch, leave and payroll, tasks with approvals, assets and a visitor gate register. One app
             and one login for everyone, on the web and Android.
           </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Button variant="cta" size="lg" asChild>
+          <div className="mt-7 flex flex-wrap items-center gap-3 max-[399px]:[&>*]:flex-1">
+            <Button variant="cta" size="lg" asChild className={TAP}>
               <Link to="/signup">
                 Start free trial <ArrowRight className="size-4" />
               </Link>
             </Button>
-            <BookDemoButton />
+            <BookDemoButton className={TAP} />
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
             Free for {trialDays} days with up to {trialUsers} users. No card needed.
@@ -200,10 +226,18 @@ function Hero({ trialDays, trialUsers }: { trialDays: number; trialUsers: number
           </ul>
         </div>
         <div className="relative motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:delay-150 motion-safe:fill-mode-both motion-safe:duration-700">
-          <ShotFrame eager shot={{ src: '/landing/home.webp', alt: 'Kaampilot Home: today’s attendance, tasks and assets at a glance', label: 'Home' }} className="lg:mr-16" />
-          <div className="absolute -right-1 -bottom-10 hidden w-[170px] lg:block">
-            <ShotFrame shot={{ kind: 'phone', src: '/landing/phone-attendance.webp', alt: 'Punch in on the phone', label: 'Phone' }} className="border-[5px]" />
-          </div>
+          {phone ? (
+            // A desktop screenshot is unreadable at phone width: phones see the phone app in a phone frame instead.
+            <ShotFrame eager shot={{ kind: 'phone', src: '/landing/phone-attendance.webp', alt: 'Kaampilot on an Android phone: punch in with a selfie', label: 'Phone' }} className="max-w-[250px]" />
+          ) : (
+            <>
+              <ShotFrame eager shot={{ src: '/landing/home.webp', alt: 'Kaampilot Home: today’s attendance, tasks and assets at a glance', label: 'Home' }} className="xl:mr-20" />
+              {/* The phone beside the desktop shot only where there is room for both (from 1280 px). */}
+              <div className="absolute -right-1 -bottom-10 hidden w-[24%] max-w-[200px] xl:block">
+                <ShotFrame shot={{ kind: 'phone', src: '/landing/phone-attendance.webp', alt: 'Punch in on the phone', label: 'Phone' }} className="border-[5px]" />
+              </div>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -213,7 +247,7 @@ function Hero({ trialDays, trialUsers }: { trialDays: number; trialUsers: number
 function Highlights() {
   return (
     <section aria-label="Highlights" className="pb-14 sm:pb-20">
-      <ul className={cn(WRAP, 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4')}>
+      <ul className={cn(WRAP, 'grid gap-3 sm:grid-cols-2 xl:grid-cols-4')}>
         {HIGHLIGHTS.map((h, i) => (
           <li key={h.title}>
             <Reveal delay={i * 70} className="flex h-full items-start gap-3 rounded-xl border bg-card p-4 shadow-card">
@@ -277,7 +311,7 @@ function PhoneApp() {
             <li>Same account as the web: sign in once, everything is there.</li>
           </ul>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Button size="lg" asChild>
+            <Button size="lg" asChild className={TAP}>
               <a href={APP_APK} download>
                 <Download className="size-4" /> Download for Android
               </a>
@@ -326,7 +360,7 @@ function DemoBand() {
             </h2>
             <p className="mt-1.5 text-[15px] text-muted-foreground">Book a short call. We show Kaampilot for your kind of team and help you move from registers or Excel.</p>
           </div>
-          <BookDemoButton variant="default" />
+          <BookDemoButton variant="default" className={cn(TAP, 'max-md:w-full')} />
         </Reveal>
       </div>
     </section>
@@ -367,12 +401,12 @@ function FinalCta({ trialDays }: { trialDays: number }) {
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-[17px] text-muted-foreground">{trialDays} days free, no card. Set up your company in a few minutes.</p>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-          <Button variant="cta" size="lg" asChild>
+          <Button variant="cta" size="lg" asChild className={TAP}>
             <Link to="/signup">
               Start free trial <ArrowRight className="size-4" />
             </Link>
           </Button>
-          <Button variant="outline" size="lg" asChild>
+          <Button variant="outline" size="lg" asChild className={TAP}>
             <Link to="/login">Sign in</Link>
           </Button>
         </div>

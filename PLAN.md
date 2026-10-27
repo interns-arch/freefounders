@@ -3758,6 +3758,16 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
   Attendance + Home, and og.jpg; it refuses any non-local address. Visitor and punch photos are a plain silhouette.
 - Tests: `e2e/web-landing.spec.ts` (landing renders + tour + footer links, the three calculator totals, signed-in `/`
   is Home, in the app `/` → sign-in).
+- **Responsive pass 2026-10-27** (checked with Playwright at 360/375/390/414, 768/834, 1024 portrait + landscape,
+  1280/1366/1440, 1920/2560; no horizontal scroll at any width): the website sets `data-site` on `<html>` and from
+  1024 px its root size grows 15 → 18 px (`index.css`, clamp), with the column `max-w-6xl` → `2xl:max-w-7xl`, so big
+  screens are not a narrow strip; the app frame keeps 15 px. Hero: heading sizes by `clamp()` (two lines from 1024 up;
+  it was four at 1024), phones (< 640 px) see the phone screenshot in a phone frame instead of an unreadable desktop
+  shot, the phone beside the desktop shot only from 1280 px (it covered it at 1024). Highlights 2 × 2 until 1280.
+  Feature tour on phones: one sideways row with snap, the chosen tab scrolled into view, 44 px tabs and picture
+  buttons. Touch screens (`pointer-coarse`) get ≥ 44 px buttons, steppers, number field and slider; on phones and
+  tablets a small total bar (aria-hidden) sticks to the bottom of the calculator's choices card so the price stays in
+  sight while choosing (it stops short of the Ask Kaampilot button when that is on).
 
 ### 24.3 AI helper "Ask Kaampilot" (built 2026-10-27)
 

@@ -1,7 +1,8 @@
 /**
  * The feature tour (PLAN.md §24.2): one tab per module with its points and real screenshots. Tabs follow the WAI-ARIA
  * tabs pattern (arrow keys move between them); a module with more than one picture has small picture buttons.
- * Pictures load lazily and keep their space (width/height), so nothing jumps while they arrive.
+ * Pictures load lazily and keep their space (width/height), so nothing jumps while they arrive. On phones the tabs are
+ * one row that scrolls sideways with snap; the chosen tab is scrolled into view (the next one peeks out as a cue).
  */
 import { type KeyboardEvent, useRef, useState } from 'react';
 import { Check } from '@/components/icons';
@@ -16,6 +17,13 @@ export function FeatureTour() {
   const pick = (i: number) => {
     setActive(i);
     setShot(0);
+    // Keep the chosen tab fully visible in the sideways-scrolling row (phones); no-op where the row wraps.
+    const el = tabs.current[i];
+    const row = el?.parentElement;
+    if (el && row && row.scrollWidth > row.clientWidth) {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      row.scrollTo({ left: el.offsetLeft - row.offsetLeft - 16, behavior: reduce ? 'auto' : 'smooth' });
+    }
   };
   const onKey = (e: KeyboardEvent) => {
     const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -29,7 +37,7 @@ export function FeatureTour() {
 
   return (
     <div>
-      <div role="tablist" aria-label="Modules" onKeyDown={onKey} className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
+      <div role="tablist" aria-label="Modules" onKeyDown={onKey} className="no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:mx-0 sm:snap-none sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0">
         {TOUR.map((m, i) => {
           const on = i === active;
           return (
@@ -46,7 +54,7 @@ export function FeatureTour() {
               tabIndex={on ? 0 : -1}
               onClick={() => pick(i)}
               className={cn(
-                'inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+                'inline-flex h-[2.75rem] shrink-0 cursor-pointer snap-start items-center gap-2 rounded-md border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
                 on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-foreground hover:border-primary/40 hover:bg-accent',
               )}
             >
@@ -61,14 +69,14 @@ export function FeatureTour() {
         id={`tour-panel-${mod.key}`}
         role="tabpanel"
         aria-labelledby={`tour-tab-${mod.key}`}
-        className="mt-8 grid items-start gap-8 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.6fr)] lg:gap-12"
+        className="mt-8 grid items-start gap-8 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.6fr)] lg:gap-10 xl:gap-14"
       >
         <div className="lg:pt-4">
           <span className={cn('inline-grid size-11 place-items-center rounded-md', mod.tone)}>
             <mod.icon className="size-5" />
           </span>
-          <h3 className="mt-4 text-2xl leading-tight font-bold tracking-tight text-balance">{mod.headline}</h3>
-          <ul className="mt-5 space-y-3">
+          <h3 className="mt-4 max-w-xl text-2xl leading-tight font-bold tracking-tight text-balance">{mod.headline}</h3>
+          <ul className="mt-5 max-w-xl space-y-3">
             {mod.points.map((p) => (
               <li key={p} className="flex gap-3 text-[15px] leading-snug">
                 <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-sm bg-success/12 text-success">
@@ -87,7 +95,7 @@ export function FeatureTour() {
                   aria-pressed={i === shot}
                   onClick={() => setShot(i)}
                   className={cn(
-                    'h-9 cursor-pointer rounded-md border px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:h-11',
+                    'h-9 cursor-pointer rounded-md border px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:h-[2.75rem] pointer-coarse:h-[44px]',
                     i === shot ? 'border-primary bg-accent text-accent-foreground' : 'bg-card text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -107,7 +115,7 @@ export function FeatureTour() {
 export function ShotFrame({ shot, eager = false, className }: { shot: Shot; eager?: boolean; className?: string }) {
   if (shot.kind === 'phone') {
     return (
-      <div className={cn('mx-auto w-full max-w-[290px] rounded-[2rem] border-[6px] border-foreground/85 bg-card p-1 shadow-card-lg motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300', className)}>
+      <div className={cn('mx-auto w-full max-w-[min(290px,72vw)] rounded-[2rem] border-[6px] border-foreground/85 bg-card p-1 shadow-card-lg motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300', className)}>
         <img
           src={shot.src}
           alt={shot.alt}

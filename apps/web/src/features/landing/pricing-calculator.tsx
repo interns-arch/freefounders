@@ -2,8 +2,11 @@
  * The pricing calculator (PLAN.md §24): pick modules one by one or Complete, AI on or off (for the whole subscription),
  * the number of users → the monthly total before GST, with the GST shown separately. Prices come from
  * GET /api/platform/public/pricing (usePublicPricing), else the §24 prices built into @kaampilot/core.
+ * Touch screens get 44 px controls; on phones and tablets a small total bar sticks to the bottom of the screen while the
+ * choices are on screen, so the price is visible while changing them with one thumb.
  */
 import { type PricedModuleKey, type PublicPricing, quotePrice } from '@kaampilot/core';
+import { useAiStatus } from '@kaampilot/core/ai';
 import { useId, useState } from 'react';
 import { Link } from 'react-router';
 import { Check, ListChecks, MapPin, Minus, Package, Plus, Sparkles } from '@/components/icons';
@@ -29,11 +32,13 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
   };
   const setUserCount = (n: number) => setUsers(Math.min(MAX_USERS, Math.max(1, Math.round(n) || 1)));
   const nothing = !complete && modules.length === 0;
+  // The "Ask Kaampilot" button sits bottom-right when the AI helper is on: the sticky total bar stops short of it.
+  const helperShown = !!useAiStatus().data?.enabled;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start">
       {/* Choices */}
-      <div className="space-y-5 rounded-xl border bg-card p-5 shadow-card sm:p-6">
+      <div className="relative space-y-5 rounded-xl border bg-card p-4 shadow-card sm:p-6">
         <fieldset>
           <legend className="mb-3 text-sm font-semibold">1. Choose modules</legend>
           <div className="grid gap-2.5 sm:grid-cols-3">
@@ -106,7 +111,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
             3. Number of users
           </label>
           <div className="flex items-center gap-3">
-            <Button type="button" variant="outline" size="icon" aria-label="One user less" onClick={() => setUserCount(users - 1)} disabled={users <= 1}>
+            <Button type="button" variant="outline" size="icon" className="pointer-coarse:size-[44px]" aria-label="One user less" onClick={() => setUserCount(users - 1)} disabled={users <= 1}>
               <Minus />
             </Button>
             <input
@@ -117,9 +122,9 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
               max={MAX_USERS}
               value={users}
               onChange={(e) => setUserCount(Number(e.target.value))}
-              className="h-9 w-20 rounded-md border border-input bg-card px-2 text-center text-base font-semibold tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:h-[2.75rem]"
+              className="h-9 w-20 rounded-md border border-input bg-card px-2 text-center text-base font-semibold tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:h-[2.75rem] pointer-coarse:h-[44px]"
             />
-            <Button type="button" variant="outline" size="icon" aria-label="One user more" onClick={() => setUserCount(users + 1)}>
+            <Button type="button" variant="outline" size="icon" className="pointer-coarse:size-[44px]" aria-label="One user more" onClick={() => setUserCount(users + 1)}>
               <Plus />
             </Button>
           </div>
@@ -130,8 +135,23 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
             value={Math.min(users, 200)}
             onChange={(e) => setUserCount(Number(e.target.value))}
             aria-label="Number of users (slider)"
-            className="mt-4 w-full cursor-pointer accent-primary"
+            className="mt-2 h-11 w-full cursor-pointer accent-primary"
           />
+        </div>
+
+        {/* Phones and tablets: the price stays in sight while the choices are on screen (the full card is below). */}
+        <div
+          aria-hidden
+          className={cn(
+            'sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 -mx-1 flex items-center justify-between gap-3 rounded-md border bg-card px-4 py-2.5 shadow-card-lg lg:hidden',
+            helperShown && 'mr-12',
+          )}
+        >
+          <span className="min-w-0 text-sm leading-tight text-muted-foreground">
+            {nothing ? 'Pick a module' : `${users} ${users === 1 ? 'user' : 'users'}, per month`}
+            <span className="block text-xs">before GST</span>
+          </span>
+          <span className="text-xl font-extrabold tracking-tight tabular-nums">{rupees(quote.monthly)}</span>
         </div>
       </div>
 
@@ -162,7 +182,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
           Prices are per user per month; GST is added on the invoice. Free for {pricing.trial.days} days with up to {pricing.trial.maxUsers} users, no card needed.
         </p>
         <div className="mt-auto pt-5">
-          <Button variant="cta" size="lg" className="w-full" asChild>
+          <Button variant="cta" size="lg" className="w-full pointer-coarse:min-h-[44px]" asChild>
             <Link to="/signup">Start free trial</Link>
           </Button>
         </div>

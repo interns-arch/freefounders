@@ -122,6 +122,14 @@
       font-size: 15px;
     }
   }
+  /* The public website only (landing page and /pricing set `data-site` on <html>, PLAN.md §24.2): from 1024 px the root
+     size grows with the screen, 15 px at 1024 → 18 px from ~1900 px, so every rem-based width, gap and text scales and
+     big screens are not a narrow strip in the middle. The signed-in app keeps 15 px. */
+  @media (min-width: 1024px) {
+    html[data-site] {
+      font-size: clamp(15px, 0.35vw + 11.4px, 18px);
+    }
+  }
   body {
     @apply bg-background text-foreground antialiased;
     line-height: 1.5;
