@@ -59,7 +59,7 @@ async function newPerson(request: APIRequestContext, owner: string, label: strin
 async function ownerPage(browser: Browser, path: string) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await signIn(page, OWNER.login, OWNER.password);
   await page.goto(path);
   return { ctx, page };
@@ -73,7 +73,7 @@ test('check-in with a photo; HR sees the thumbnail in Team', async ({ browser, r
   try {
     const context = await browser.newContext({ permissions: ['camera'] });
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, person.login, person.password);
     await page.goto('/tasks/hr');
     await expect(page.getByRole('heading', { name: 'Leave & Attendance' })).toBeVisible();
@@ -113,7 +113,7 @@ test('punch in and out from Home (PLAN.md §19.3, §19.14); old /tasks/hr links 
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, person.login, person.password);
     await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     const card = page.getByRole('region', { name: 'Attendance & Shifts' });
@@ -145,7 +145,7 @@ test('leave is applied for and approved in Approvals', async ({ browser, request
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, person.login, person.password);
     await page.goto('/tasks/hr?tab=leave');
     await page.getByRole('button', { name: 'Apply for leave' }).click();

@@ -90,7 +90,7 @@ test('uniform rule switched on while the punch screen is open still asks; Must c
     // The employee opens Today while the company does not ask yet.
     const desk = await browser.newContext({ colorScheme: 'light' });
     const page = await desk.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, a.login, a.password);
     await page.goto('/attendance');
     await expect(page.getByRole('button', { name: 'Check in' })).toBeEnabled();
@@ -98,7 +98,7 @@ test('uniform rule switched on while the punch screen is open still asks; Must c
     // HR switches to "Must confirm" on the settings screen.
     const ownerCtx = await browser.newContext();
     const hr = await ownerCtx.newPage();
-    await hr.goto('/');
+    await hr.goto('/login');
     await signIn(hr, OWNER.login, OWNER.password);
     await hr.goto('/attendance/settings');
     const card = hr.getByRole('form', { name: 'Uniform at punch-in' });
@@ -151,7 +151,7 @@ test('uniform rule switched on while the punch screen is open still asks; Must c
     // Phone app, Home card: the screen is open with "Must confirm", HR changes it to "Reminder only" → OK punches in.
     const app = await appContext(browser);
     const mp = await app.newPage();
-    await mp.goto('/');
+    await mp.goto('/login');
     await signIn(mp, b.login, b.password);
     await mp.goto('/?home=1');
     await expect(mp.getByRole('button', { name: 'Punch in' })).toBeEnabled();

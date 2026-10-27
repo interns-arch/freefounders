@@ -8,7 +8,8 @@ import {
   useSignOut,
 } from '@kaampilot/core';
 import { NotificationTabs, NotificationText, notificationRowClass } from '@/components/common/notifications';
-import { AlarmClock, Bell, CheckCheck, ChevronDown, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
+import { AlarmClock, Bell, CalendarCheck, CheckCheck, ChevronDown, Gauge, Keyboard, KeyRound, LogOut, Moon, Sun } from '@/components/icons';
+import { BookDemoDialog } from '@/features/landing/book-demo';
 import { CompanyMenuItems } from '@/features/account/switcher';
 import { CountBadge } from '@/components/common/count-badge';
 import { isInApp } from '@/lib/native-bridge';
@@ -189,6 +190,7 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
   const navigate = useNavigate();
   const signOut = useSignOut();
   const theme = useTheme();
+  const [demo, setDemo] = useState(false);
   const name = access.platform?.person.fullName ?? access.claims?.name ?? '';
   // The owner is a mark, not a role in the list (PLAN.md §19.28): say Owner rather than the Admin role they also hold.
   const role = access.platform?.person.role === 'owner' ? 'Owner' : (access.tasks.me?.role_display ?? access.assets.me?.role.name ?? (access.isAdmin ? 'Admin' : 'Member'));
@@ -241,11 +243,16 @@ export function UserMenu({ access, onShortcuts }: { access: Access; onShortcuts?
         <DropdownMenuItem onSelect={() => navigate('/account')}>
           <KeyRound className="size-4" /> Change password
         </DropdownMenuItem>
+        {/* Book a demo / talk to us (PLAN.md §24.2): Calendly, or an email to support while no Calendly link is set. */}
+        <DropdownMenuItem onSelect={() => setDemo(true)}>
+          <CalendarCheck className="size-4" /> Book a demo / talk to us
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => signOut.mutate(undefined, { onSuccess: () => navigate('/login') })}>
           <LogOut className="size-4" /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
+      {demo && <BookDemoDialog open onOpenChange={setDemo} />}
     </DropdownMenu>
   );
 }

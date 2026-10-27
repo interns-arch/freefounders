@@ -60,7 +60,7 @@ const pending = (label: string, n: number) => new RegExp(`^${label} ?, ${n} pend
 async function signedIn(browser: Browser, login: string, password: string, phone = false) {
   const ctx = await browser.newContext(phone ? { viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true } : {});
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await page.getByLabel('Email, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();

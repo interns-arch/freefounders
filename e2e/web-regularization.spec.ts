@@ -69,7 +69,7 @@ function workingDays(weekOffs: number[]): [string, string] {
 async function phonePage(browser: Browser, login: string, password: string) {
   const ctx = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await signIn(page, login, password);
   return { ctx, page };
 }

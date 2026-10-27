@@ -18,7 +18,7 @@ async function token(request: APIRequestContext): Promise<string> {
 async function ownerPage(browser: Browser, path: string) {
   const ctx = await browser.newContext({ acceptDownloads: true });
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await page.getByLabel('Email, username or employee ID').fill(OWNER.login);
   await page.getByLabel('Password').fill(OWNER.password);
   await page.getByRole('button', { name: 'Sign in' }).click();

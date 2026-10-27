@@ -58,7 +58,7 @@ async function newMember(request: APIRequestContext, owner: string) {
 async function signedIn(browser: Browser, login: string, password: string, phone = false) {
   const ctx = await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {});
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await page.getByLabel('Email, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();

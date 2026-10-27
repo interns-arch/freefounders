@@ -34,3 +34,4 @@ export { useChangePassword, useSignIn, useSignOut } from './auth';
 export { useBadges, BADGES_KEY } from './badges';
 export { countLabel, toBadges, NO_BADGES, type Badges } from './badge-count';
 export { isOlderVersion, useAppVersionInfo, type AppVersionInfo } from './app-update';
+export { FALLBACK_PRICING, quotePrice, usePublicPricing, type PriceChoice, type PriceQuote, type PricedModuleKey, type PublicPricing } from './public-pricing';

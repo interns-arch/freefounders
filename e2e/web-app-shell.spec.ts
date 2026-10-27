@@ -145,7 +145,7 @@ test('in the app: punch with the app camera (photo stored); face check cannot be
   try {
     const ctx = await shellContext(browser);
     const page = await ctx.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, person.login, person.password);
     await expect(page).toHaveURL(/\/attendance/); // phones land on Attendance
     await expect(page.getByText('A photo is taken at every check-in and check-out.')).toBeVisible();
@@ -187,7 +187,7 @@ test('in the app: a report download goes to the app, not the browser', async ({ 
   const page = await ctx.newPage();
   let browserDownloads = 0;
   page.on('download', () => browserDownloads++);
-  await page.goto('/');
+  await page.goto('/login');
   await signIn(page, OWNER.login, OWNER.password);
   await page.goto('/attendance/reports');
   await page.getByLabel('Report type').selectOption('daily');
@@ -215,7 +215,7 @@ test('location blocked → an Allow button: the app opens its Settings; the brow
     // In the app: the phone blocked location for good → "Open settings to allow location" asks the app to open Settings.
     const ctx = await shellContext(browser, { locationBlocked: true });
     const page = await ctx.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, person.login, person.password);
     await expect(page).toHaveURL(/\/attendance/);
     await page.getByRole('button', { name: 'Check in' }).click(); await answerUniform(page);
@@ -227,7 +227,7 @@ test('location blocked → an Allow button: the app opens its Settings; the brow
     // In a browser that refused location: "Allow location" tries again (the browser asks again when it may).
     const web = await browser.newContext(PHONE);
     const wp = await web.newPage();
-    await wp.goto('/');
+    await wp.goto('/login');
     await signIn(wp, person.login, person.password);
     await wp.getByRole('button', { name: 'Check in' }).click(); await answerUniform(wp);
     await expect(wp.getByText(/Your browser is blocking location for this site/)).toBeVisible();
@@ -246,7 +246,7 @@ test('location blocked → an Allow button: the app opens its Settings; the brow
 test('in the app: Voice draft listens with the phone (no browser microphone) and fills the task form', async ({ browser }) => {
   const ctx = await shellContext(browser, { version: '1.1.0' });
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await signIn(page, OWNER.login, OWNER.password);
   await page.goto('/tasks/tasks?tab=my');
   await page.getByRole('button', { name: 'Add task' }).click();
@@ -266,7 +266,7 @@ test('an app older than MOBILE_MIN_VERSION shows an update pop-up (Later = 24 h)
   const ctx = await shellContext(browser, { version: '1.2.1', legacy: true }); // the installed APK names window.FreeFoundersApp
   await minVersion(ctx, '1.3.0');
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await signIn(page, OWNER.login, OWNER.password);
   const popup = page.getByRole('dialog', { name: 'Update Kaampilot' });
   await expect(popup).toBeVisible();
@@ -299,7 +299,7 @@ test('no update banner for an up-to-date app, or when MOBILE_MIN_VERSION is off'
   const ctx = await shellContext(browser, { version: '9.9.9' });
   await minVersion(ctx, '1.2.2');
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await signIn(page, OWNER.login, OWNER.password);
   await expect(page.getByRole('heading').first()).toBeVisible();
   await expect(page.getByText('A new version of Kaampilot is available')).toHaveCount(0);
@@ -309,7 +309,7 @@ test('no update banner for an up-to-date app, or when MOBILE_MIN_VERSION is off'
   const old = await shellContext(browser, { version: '1.0.0' });
   await minVersion(old, null);
   const oldPage = await old.newPage();
-  await oldPage.goto('/');
+  await oldPage.goto('/login');
   await signIn(oldPage, OWNER.login, OWNER.password);
   await expect(oldPage.getByRole('heading').first()).toBeVisible();
   await expect(oldPage.getByText('A new version of Kaampilot is available')).toHaveCount(0);
@@ -330,7 +330,7 @@ test('punch-in reminder: only in an app that can do it; saving sends reminder-se
     // A normal browser: no reminder card on Today; its own page says it works in the phone app.
     const web = await browser.newContext(PHONE);
     const wp = await web.newPage();
-    await wp.goto('/');
+    await wp.goto('/login');
     await signIn(wp, person.login, person.password);
     await expect(wp.getByRole('button', { name: 'Check in' })).toBeVisible();
     await expect(wp.getByRole('region', { name: 'Punch-in reminder' })).toHaveCount(0);
@@ -341,7 +341,7 @@ test('punch-in reminder: only in an app that can do it; saving sends reminder-se
     // An app from before reminders (no capabilities): a note to update, nothing sent.
     const old = await shellContext(browser, { version: '1.1.0' });
     const op = await old.newPage();
-    await op.goto('/');
+    await op.goto('/login');
     await signIn(op, person.login, person.password);
     await expect(op.getByText(/Punch-in reminders need the latest Kaampilot app/)).toBeVisible();
     expect((await shellLog(op)).some((m) => m.type?.startsWith('reminder'))).toBe(false);
@@ -357,7 +357,7 @@ test('punch-in reminder: only in an app that can do it; saving sends reminder-se
     const expectedTime = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
     const ctx = await shellContext(browser, { version: '1.2.0', capabilities: ['location', 'photo', 'download', 'print', 'voice', 'reminders'] });
     const page = await ctx.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, person.login, person.password);
     await expect(page).toHaveURL(/\/attendance/);
     const card = page.getByRole('region', { name: 'Punch-in reminder' });

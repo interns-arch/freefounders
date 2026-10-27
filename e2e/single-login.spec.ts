@@ -14,7 +14,7 @@ async function signIn(page: Page) {
 }
 
 test('one sign-in opens Tasks and Assets, switch between them, sign out', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await shot(page, '1-sign-in');
 
@@ -68,14 +68,14 @@ test('opening an app while signed out goes to sign-in, then back to that app', a
 
 // PLAN.md §19.14: on a phone a person with Attendance lands on the Today page (marking attendance first); desktop lands on Home.
 test('a phone lands on Attendance after sign-in, a desktop on Home; /?home=1 opens Home on a phone', async ({ browser, page }) => {
-  await page.goto('/');
+  await page.goto('/login');
   await signIn(page);
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
 
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const p = await phone.newPage();
-  await p.goto('/');
+  await p.goto('/login');
   await signIn(p);
   await expect(p).toHaveURL(/\/attendance$/);
   await expect(p.getByRole('navigation', { name: 'Quick menu' }).getByRole('link', { name: 'Attendance' })).toHaveAttribute('aria-current', 'page');

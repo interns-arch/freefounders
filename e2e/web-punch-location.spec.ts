@@ -50,7 +50,7 @@ async function signedIn(browser: Browser, who: { login: string; password: string
     ...(phone ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {}),
   });
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/login');
   await page.getByLabel('Email, username or employee ID').fill(who.login);
   await page.getByLabel('Password').fill(who.password);
   await page.getByRole('button', { name: 'Sign in' }).click();

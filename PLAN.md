@@ -3716,6 +3716,43 @@ with env, trial end → read-only, grandfathered Free / cancel paths, console pl
 Billing screen checked in the dev suite. e2e not run (testing-phase rule); `web-signup-billing` / `web-account-flows`
 selectors moved from Suite / Yearly to Complete / monthly, and their companies now have a 3-user trial.
 
+### 24.2 Landing page, screenshots, Calendly (built 2026-10-27)
+- **Where it shows**: `/` for a **signed-out visitor in a browser** shows the landing page; signed in, `/` is Home as
+  before. Inside the phone app (`isInApp()`, the native bridge) signed-out `/` still goes straight to `/login`: the app
+  never shows the landing page (nothing native changed). `/login` stays the sign-in page; `/pricing` is the pricing
+  section alone (public, also signed in). The switch is one branch in `app/session-guard.tsx` (the landing chunk is
+  lazy); `/pricing` is a public route in `app/router.tsx`. e2e specs that started signed out at `/` now start at `/login`.
+- **Page** (`apps/web/src/features/landing/`): sticky top bar (logo, Features / Pricing / FAQ, light-dark switch,
+  Sign in → `/login`, **Start free trial** → `/signup`, the one `cta` action), hero (selfie + GPS attendance, tasks,
+  assets, visitors; web + Android; trial line from the endpoint), highlights, **feature tour** (WAI-ARIA tabs per module
+  — Attendance & HR, Tasks, Assets, Visitors, Admin — with 4–5 points each and real screenshots, a picture switcher
+  where a module has two), how it works (3 steps), Android app (`/download/kaampilot.apk`), **pricing calculator**,
+  Book a demo band, FAQ (`<details>`), final CTA, footer (Pricing, `/contact`, `/terms`, `/privacy`, `/refunds`).
+  Theme tokens only, flat, Hugeicons; motion = one short fade/rise per section (IntersectionObserver), off with
+  `prefers-reduced-motion`; images lazy with fixed width/height; no horizontal scroll at 375 px; light + dark.
+  `<title>`, description, Open Graph + Twitter tags in `index.html` (link previews do not run scripts; image
+  `/landing/og.jpg` 1200×630) and per page via `usePageMeta`.
+- **Prices**: `usePublicPricing()` + `quotePrice()` in `@kaampilot/core` (`packages/core/src/public-pricing.ts`) read
+  `GET /api/platform/public/pricing` (§24 contract); while it is missing or down the built-in §24 prices are used.
+  Calculator: modules one by one or Complete, AI for all, users 1–1000 → monthly price before GST (e.g. Tasks +
+  Attendance × 10 = ₹1,980; with AI ₹2,580; Complete × 10 = ₹3,490), GST shown to the paisa as on the invoice.
+- **Calendly** (`features/landing/book-demo.tsx`, `lib/calendly.ts`): "Book a demo" opens a small form (name, work
+  email, both optional) → Calendly's popup with them prefilled. `assets.calendly.com/assets/external/widget.js` + css
+  load only on that click; only an https `calendly.com` link from `calendlyUrl` is opened. `calendlyUrl` null → the
+  dialog offers an email to support@kaampilot.com (mailto). Calendly sends the confirmation and reminders itself; no
+  backend. Signed in: account menu → **Book a demo / talk to us** (same dialog).
+- **CSP** (`infra/deploy/Caddyfile`, `infra/gateway/Caddyfile`, still Report-Only): script-src and style-src
+  `https://assets.calendly.com`, frame-src `https://calendly.com https://*.calendly.com`. Takes effect on the server
+  only when the Caddyfile is deployed.
+- **Screenshots** (`apps/web/public/landing/*.webp`, each < 100 KB; desktop 1440×900, phone 390×844 @2×): made from the
+  **local** dev suite only. `node scripts/landing-showcase.mjs` makes a tidy made-up company (Sharma Auto Components,
+  SHOWCASE, `anita.sharma` / Demo@1234: 8 people, tasks + a 2-level chain, assets, today's visitors and punches, all
+  through the APIs; the dev demo company is full of e2e rows), then `node scripts/landing-screenshots.mjs [names]`
+  takes Home, Live team, Tasks, Task chain, Assets, Visitors gate, People, Billing (dev-tools panel hidden), phone
+  Attendance + Home, and og.jpg; it refuses any non-local address. Visitor and punch photos are a plain silhouette.
+- Tests: `e2e/web-landing.spec.ts` (landing renders + tour + footer links, the three calculator totals, signed-in `/`
+  is Home, in the app `/` → sign-in).
+
 ### 24.3 AI helper "Ask Kaampilot" (built 2026-10-27)
 
 - **Platform** `services/platform/src/ai/`: `GET /api/platform/ai/status` → `{ enabled }` and `POST /api/platform/ai/ask`

@@ -96,7 +96,7 @@ test('photo optional: "Skip photo" checks in without one; required: no skip', as
   try {
     const context = await browser.newContext({ permissions: ['camera'] });
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, login, password);
     await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     // Required: the camera step has no way round it.
@@ -161,7 +161,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     // Fake camera (see launch args) and a granted camera permission.
     const context = await browser.newContext({ permissions: ['camera'] });
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/login');
     await signIn(page, login, password);
     // Tasks only: sign-in opens Home with the attendance card first (PLAN.md §19.14).
     await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
@@ -179,7 +179,7 @@ test('a photo is taken at check-in and HR sees it', async ({ browser, request })
     // HR (the owner) sees the photo in Team today.
     const hr = await browser.newContext();
     const hrPage = await hr.newPage();
-    await hrPage.goto('/');
+    await hrPage.goto('/login');
     await signIn(hrPage);
     await expect(hrPage.getByRole('heading', { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     await hrPage.goto('/tasks/hr');

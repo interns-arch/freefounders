@@ -32,6 +32,8 @@ export const router = createBrowserRouter([
   { path: '/terms', lazy: async () => ({ Component: (await import('@/features/account/legal')).TermsPage }), errorElement: <RouteError /> },
   { path: '/privacy', lazy: async () => ({ Component: (await import('@/features/account/legal')).PrivacyPage }), errorElement: <RouteError /> },
   { path: '/refunds', lazy: async () => ({ Component: (await import('@/features/account/legal')).RefundsPage }), errorElement: <RouteError /> },
+  // The public pricing section alone (PLAN.md §24.2); the whole landing page is `/` for signed-out visitors (session-guard.tsx).
+  { path: '/pricing', lazy: async () => ({ Component: (await import('@/features/landing/landing-page')).PricingPage }), errorElement: <RouteError /> },
   // The open visitor sign-in from the QR at the gate (PLAN.md §22): no sign-in, any phone browser.
   { path: '/v/:code/:token', lazy: async () => ({ Component: (await import('@/features/visitors/public')).PublicVisitorPage }), errorElement: <RouteError /> },
   { path: '/v/:code/p/:token', lazy: async () => ({ Component: (await import('@/features/visitors/pass')).PublicPassPage }), errorElement: <RouteError /> },

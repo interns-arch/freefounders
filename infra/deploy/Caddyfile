@@ -20,7 +20,9 @@
 		Cross-Origin-Opener-Policy "same-origin-allow-popups"
 		-Server
 		-X-Powered-By
-		?Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://sdk.cashfree.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.cashfree.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src 'self' https://*.cashfree.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://*.cashfree.com"
+		# Calendly ("Book a demo", PLAN.md §24.2): widget.js / widget.css from assets.calendly.com, loaded only when
+		# clicked, and its booking page in a frame (calendly.com).
+		?Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://sdk.cashfree.com https://assets.calendly.com; style-src 'self' 'unsafe-inline' https://assets.calendly.com; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.cashfree.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src 'self' https://*.cashfree.com https://calendly.com https://*.calendly.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://*.cashfree.com"
 	}
 }
 

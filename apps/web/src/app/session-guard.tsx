@@ -1,13 +1,18 @@
 import { session, useClaims } from '@kaampilot/core';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { PageLoader } from '@/components/common/page';
+import { isInApp } from '@/lib/native-bridge';
 import { persistedCacheReady } from './query-persist';
+
+const LandingPage = lazy(() => import('@/features/landing/landing-page').then((m) => ({ default: m.LandingPage })));
 
 /**
  * Every page behind sign-in. A fresh page has no token in memory yet: renew it from the refresh cookie first.
  * Signed out → /login?next=<here>. Nobody is sent to change their password first (docs/security/platform.md R7):
  * they can change it any time from the account menu.
+ * `/` signed out on the web shows the public landing page instead (PLAN.md §24.2); inside the phone app it still goes
+ * straight to sign-in.
  */
 export function RequireSession() {
   const claims = useClaims();
@@ -24,6 +29,13 @@ export function RequireSession() {
 
   if (!checked) return <PageLoader />;
   const here = loc.pathname + loc.search;
+  if (!claims && loc.pathname === '/' && !isInApp()) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LandingPage />
+      </Suspense>
+    );
+  }
   if (!claims) return <Navigate to={`/login${here !== '/' ? `?next=${encodeURIComponent(here)}` : ''}`} replace />;
   return <Outlet />;
 }
