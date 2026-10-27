@@ -15,6 +15,7 @@ import { ADMIN_NAV } from '@/features/admin/nav';
 import { SwitchingOverlay } from '@/features/account/switcher';
 import { AppUpdateBanner, AppUpdateDialog } from './app-update';
 import { BillingBanners } from '@/features/billing/banners';
+import { AiHelper } from '@/features/ai-helper';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
 import { TASKS_NAV } from '@/features/tasks/nav';
@@ -363,6 +364,7 @@ export function AppShell() {
       </div>
       <SwitchingOverlay />
       <AppUpdateDialog />
+      <AiHelper />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent className="max-w-md">
           <DialogHeader>

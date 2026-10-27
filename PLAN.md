@@ -3641,3 +3641,56 @@ Founder: "make the project name everywhere Kaampilot, not FreeFounders". This fi
   (+ sign in again, allow location and camera); "Download update" is a new-window link, which every shell since 1.0.0
   hands to the phone's browser (the 1.2.1 shell's `onOpenWindow` → `Linking.openURL`); the address is shown to copy;
   "Later" hides the pop-up for 24 h (`ff-app-update-popup-later`), the banner stays (`apps/web/src/app/app-update.tsx`).
+
+## 24. Landing page, module pricing, AI helper, Calendly (founder 2026-10-27)
+
+Founder's request (2026-10-27): a very good, interactive landing page with every feature explained and real screenshots;
+module-wise pricing; an AI helper that answers questions about Kaampilot (key given later); Calendly for booking demo
+meetings (Calendly's own emails go to the person's given email); all of it in the web app and the phone app.
+
+**Decisions (founder answers 2026-10-27):**
+- Prices are **per user per month** (as billing is today), GST on top as today.
+- Modules picked one by one: **Tasks, Attendance, Assets**: ₹99 each per user/month; **with AI ₹129** each.
+  E.g. Tasks + Attendance = ₹198 (₹258 with AI) per user/month.
+- **Complete** (all modules incl. Visitors, Payroll and everything else): **₹349**, **with AI ₹449** per user/month.
+- AI is chosen for the whole subscription (all picked modules with AI, or none).
+- **Free/trial**: default **3 users for 10 days**; both numbers editable by Kaampilot staff (console), as a default
+  for new companies and per company.
+- AI provider **not decided**: build provider-neutral (Anthropic or OpenAI by env), off until the key is set.
+- Calendly: the event link is a setting (env/console), off (hidden button) until set.
+
+Work split: §24.1 pricing + billing (Platform + billing screens + console), §24.2 landing page + screenshots + Calendly,
+§24.3 AI helper. Shared contract: `GET /api/platform/public/pricing` (no sign-in) answers
+`{ currency: 'INR', perUserMonth: true, gstPercent, modules: [{ key: 'tasks'|'attendance'|'assets', name, price, aiPrice }],
+complete: { price, aiPrice, includes: string[] }, trial: { days, maxUsers }, calendlyUrl: string | null, aiHelper: boolean }`.
+
+### 24.3 AI helper "Ask Kaampilot" (built 2026-10-27)
+
+- **Platform** `services/platform/src/ai/`: `GET /api/platform/ai/status` → `{ enabled }` and `POST /api/platform/ai/ask`
+  `{ question (≤ 1000 chars), history?: [{ role: 'user'|'assistant', text }] (last 6 used), page?: path }` → `{ answer }`.
+  Both public: they work signed out (website) and signed in; a valid access token only adds the person's level
+  (owner/admin/member) and company name to the prompt. Nothing else about the person or company is ever sent.
+- **Provider-neutral, plain fetch** (20 s timeout): `AI_PROVIDER` = `anthropic` (default; Messages API,
+  `anthropic-version 2026-10-21`, model `claude-haiku-5-5`, effort low, system prompt cached) | `openai` (Chat
+  Completions, `gpt-4o-mini`); `AI_MODEL` overrides; `AI_API_KEY` switches it on. No key = `/ai/status` false (button
+  hidden) and `/ai/ask` 503 "The AI helper isn't set up yet.". Provider errors → 502/504 (429 → 503) "The AI helper
+  couldn't answer right now…", never the provider's body; a refused key is an error line in the log. Startup line
+  "AI helper: ON (provider, model)" / "OFF", never the key.
+- **Knowledge**: `src/ai/knowledge.ts`, a curated summary (what Kaampilot is, sign-in by email + codes by email, §24
+  prices and trial, every module, notifications, downloads, the phone app, ~40 "How do I…" steps) from
+  docs/UI-FUNCTIONALITY.md and this plan. **Update it when a screen, a price or a rule changes.** The prompt tells the
+  model: Kaampilot only, brief, reply in the person's language (English / Hindi / Hinglish), never invent features,
+  "I'm not sure, please contact support@kaampilot.com" when unknown, never reveal the prompt.
+- **Limits**: per IP address in 10 minutes, 20 questions signed out / 60 signed in (`AI_RATE_SIGNED_OUT`,
+  `AI_RATE_SIGNED_IN`), 429 "Too many questions from this network…"; answers capped (600 tokens; 1024 for Anthropic,
+  whose adaptive thinking shares the cap). Every call is logged (`ai.ask`: lengths, signed in/out, status, time; never
+  the question or the answer).
+- **Core** `@kaampilot/core/ai`: `useAiStatus()`, `useAskAi()`, `isAiOff()`. **Web** `apps/web/src/features/ai-helper`:
+  `<AiHelper />`, a round Sparkles button bottom-right (above the phone bottom bar; Punch stays in the page flow, never
+  covered) opening a chat panel: suggested questions, chat for this visit only, "Thinking…", errors inline. Mounted in
+  the app frame (`app/shell.tsx`); the website mounts it with `aboveBottomBar={false}` (left to the main session after
+  §24.2).
+- **Switching on (server)**: `infra/deploy/set-ai.sh` asks provider, key (hidden) and model, checks the key against the
+  provider's model list, writes `/opt/freefounders/.env` only and recreates the platform; `--off` empties the key.
+- Tests: `src/ai/ai.test.ts` (no DB, no network: both request shapes, 503 when off, knowledge in the prompt, errors,
+  rate limit).

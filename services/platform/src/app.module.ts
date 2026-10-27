@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AiController } from './ai/ai.controller';
+import { AiService } from './ai/ai.service';
 import { AccountsController, InvitesController } from './accounts/accounts.controller';
 import { AccountsService } from './accounts/accounts.service';
 import { OTP_SENDER, OtpService, TicketsService } from './accounts/otp.service';
@@ -32,7 +34,7 @@ import { RolesController } from './roles/roles.controller';
 import { RolesService } from './roles/roles.service';
 
 @Module({
-  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController, AccountsController, InvitesController, BillingController, ConsoleController, ConsoleDashboardController, LogsIngestController],
+  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController, AccountsController, InvitesController, BillingController, ConsoleController, ConsoleDashboardController, LogsIngestController, AiController],
   providers: [
     DbService,
     Throttle,
@@ -55,6 +57,7 @@ import { RolesService } from './roles/roles.service';
     BillingService,
     LogsService,
     ConsoleDashboardService,
+    AiService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

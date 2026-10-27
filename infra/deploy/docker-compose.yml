@@ -88,6 +88,11 @@ services:
       MSG91_EMAIL_DOMAIN: ${MSG91_EMAIL_DOMAIN:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
+      # "Ask Kaampilot" AI helper (PLAN.md §24.3): off until AI_API_KEY is set (infra/deploy/set-ai.sh); the key lives
+      # only in FF_HOME/.env. AI_PROVIDER anthropic | openai; AI_MODEL empty = the provider's default.
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
       # Phone app update banner (PLAN.md §19.40): an installed app older than this sees "A new version of Kaampilot is
       # available" with the APK link. Empty = off (default).
       MOBILE_MIN_VERSION: ${MOBILE_MIN_VERSION:-}
@@ -96,7 +101,7 @@ services:
       # an optional shared token the apps must send to /internal/logs (empty = internal network only).
       APP_VERSION: ${APP_VERSION:-}
       LOG_SINK_TOKEN: ${LOG_SINK_TOKEN:-}
-    # egress: only the Platform may call out (api.cashfree.com, control.msg91.com); it still publishes no port.
+    # egress: only the Platform may call out (api.cashfree.com, control.msg91.com, api.resend.com, the AI provider); it still publishes no port.
     networks: [internal, egress]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/platform/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
