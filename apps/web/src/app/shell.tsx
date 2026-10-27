@@ -13,7 +13,7 @@ import { useHotkeys } from '@/lib/hotkeys';
 import { cn } from '@/lib/utils';
 import { ADMIN_NAV } from '@/features/admin/nav';
 import { SwitchingOverlay } from '@/features/account/switcher';
-import { AppUpdateBanner } from './app-update';
+import { AppUpdateBanner, AppUpdateDialog } from './app-update';
 import { BillingBanners } from '@/features/billing/banners';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
@@ -362,6 +362,7 @@ export function AppShell() {
         </nav>
       </div>
       <SwitchingOverlay />
+      <AppUpdateDialog />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent className="max-w-md">
           <DialogHeader>

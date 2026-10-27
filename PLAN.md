@@ -3616,3 +3616,8 @@ Founder: "make the project name everywhere Kaampilot, not FreeFounders". This fi
   (renaming moves live data); Expo `slug` `freefounders` (the expo.dev project is registered under it; rename it there
   first); `ff-*` storage keys and `FF_*` env vars; `freefounders` stays a reserved username and weak password word;
   the GitHub repo `interns-arch/freefounders` and the local folder (renamed by the founder if wanted).
+- **Phone app 1.3.0** (versionCode 6, 2026-10-27): the first APK with `com.kaampilot.app`. Older apps (`MOBILE_MIN_VERSION=1.3.0`)
+  get, besides the banner, a pop-up when the app opens: "Update Kaampilot", "Install it, then uninstall this old app."
+  (+ sign in again, allow location and camera); "Download update" is a new-window link, which every shell since 1.0.0
+  hands to the phone's browser (the 1.2.1 shell's `onOpenWindow` → `Linking.openURL`); the address is shown to copy;
+  "Later" hides the pop-up for 24 h (`ff-app-update-popup-later`), the banner stays (`apps/web/src/app/app-update.tsx`).

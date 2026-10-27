@@ -73,13 +73,14 @@ type Logged = {
 };
 
 /** A context that looks like the Android shell: phone size, the app marker and a fake native bridge. */
-async function shellContext(browser: Browser, opts: { locationBlocked?: boolean; version?: string; capabilities?: string[] } = {}) {
+async function shellContext(browser: Browser, opts: { locationBlocked?: boolean; version?: string; capabilities?: string[]; legacy?: boolean } = {}) {
   const ctx = await browser.newContext(PHONE);
-  await ctx.addInitScript(({ blocked, version, capabilities }: { blocked: boolean; version: string; capabilities: string[] | null }) => {
+  await ctx.addInitScript(({ blocked, version, capabilities, legacy }: { blocked: boolean; version: string; capabilities: string[] | null; legacy: boolean }) => {
     const w = window as unknown as Record<string, unknown>;
     const log: unknown[] = [];
     w.__shellLog = log;
-    w.KaampilotApp = { platform: 'android', version, camera: 'granted', ...(capabilities ? { capabilities } : {}) };
+    // Apps before 1.3.0 (PLAN.md §23) name the object window.FreeFoundersApp.
+    w[legacy ? 'FreeFoundersApp' : 'KaampilotApp'] = { platform: 'android', version, camera: 'granted', ...(capabilities ? { capabilities } : {}) };
     // The punch-in reminder kept "on the phone" (PLAN.md §19.32): survives reloads like the app's storage.
     const stored = () => {
       try {
@@ -129,7 +130,7 @@ async function shellContext(browser: Browser, opts: { locationBlocked?: boolean;
         return reply({ id: m.id, ok: false, error: `unknown ${m.type}` });
       },
     };
-  }, { blocked: !!opts.locationBlocked, version: opts.version ?? 'e2e', capabilities: opts.capabilities ?? null });
+  }, { blocked: !!opts.locationBlocked, version: opts.version ?? 'e2e', capabilities: opts.capabilities ?? null, legacy: !!opts.legacy });
   return ctx;
 }
 
@@ -261,17 +262,30 @@ test('in the app: Voice draft listens with the phone (no browser microphone) and
 const minVersion = (ctx: BrowserContext, version: string | null) =>
   ctx.route('**/api/platform/app-version', (route) => route.fulfill({ json: { minVersion: version, apkUrl: '/download/kaampilot.apk' } }));
 
-test('an app older than MOBILE_MIN_VERSION shows a non-blocking update banner; × hides it for the session', async ({ browser }) => {
-  const ctx = await shellContext(browser, { version: '1.0.0' });
-  await minVersion(ctx, '1.2.2');
+test('an app older than MOBILE_MIN_VERSION shows an update pop-up (Later = 24 h) and a banner (× = this session)', async ({ browser }) => {
+  const ctx = await shellContext(browser, { version: '1.2.1', legacy: true }); // the installed APK names window.FreeFoundersApp
+  await minVersion(ctx, '1.3.0');
   const page = await ctx.newPage();
   await page.goto('/');
   await signIn(page, OWNER.login, OWNER.password);
+  const popup = page.getByRole('dialog', { name: 'Update Kaampilot' });
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText('Install it, then uninstall this old app.');
+  await expect(popup).toContainText('sign in again and allow location and camera');
+  const download = popup.getByRole('link', { name: 'Download update' });
+  await expect(download).toHaveAttribute('target', '_blank'); // a new window always leaves the app: the phone's browser downloads it
+  await expect(download).toHaveAttribute('href', /^https?:\/\/[^/]+\/download\/kaampilot\.apk$/);
+  await expect(popup).toContainText('/download/kaampilot.apk'); // the address to copy if nothing opens
+  await popup.getByRole('button', { name: 'Later' }).click();
+  await expect(popup).toBeHidden();
+  await page.reload();
+  await expect(page.getByRole('heading').first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Update Kaampilot' })).toHaveCount(0); // Later holds for 24 h
+  // The banner stays.
   const banner = page.getByRole('status').filter({ hasText: 'A new version of Kaampilot is available' });
   await expect(banner).toBeVisible();
-  await expect(page.getByRole('dialog')).toHaveCount(0); // nothing blocks the screen
   const link = banner.getByRole('link', { name: 'Download the update' });
-  await expect(link).toHaveAttribute('target', '_blank'); // a new window always leaves the app: the phone's browser downloads it
+  await expect(link).toHaveAttribute('target', '_blank');
   await expect(link).toHaveAttribute('href', /\/download\/kaampilot\.apk$/);
   await banner.getByRole('button', { name: 'Hide the update message' }).click();
   await expect(banner).toBeHidden();
@@ -289,6 +303,7 @@ test('no update banner for an up-to-date app, or when MOBILE_MIN_VERSION is off'
   await signIn(page, OWNER.login, OWNER.password);
   await expect(page.getByRole('heading').first()).toBeVisible();
   await expect(page.getByText('A new version of Kaampilot is available')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Update Kaampilot' })).toHaveCount(0);
   await ctx.close();
   // An old app with the setting off (the default): nothing either.
   const old = await shellContext(browser, { version: '1.0.0' });
@@ -298,6 +313,7 @@ test('no update banner for an up-to-date app, or when MOBILE_MIN_VERSION is off'
   await signIn(oldPage, OWNER.login, OWNER.password);
   await expect(oldPage.getByRole('heading').first()).toBeVisible();
   await expect(oldPage.getByText('A new version of Kaampilot is available')).toHaveCount(0);
+  await expect(oldPage.getByRole('dialog', { name: 'Update Kaampilot' })).toHaveCount(0);
   await old.close();
 });
 
