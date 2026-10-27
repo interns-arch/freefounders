@@ -1,16 +1,17 @@
 import { Logger } from '@nestjs/common';
 import type { Identifier } from './identifier';
 import { Msg91OtpSender, msg91Config } from './msg91.sender';
+import { ResendOtpSender, resendConfig } from './resend.sender';
 import { CODES_OFF_MESSAGE, demoMode, FakeOtpSender, type OtpPurpose, type OtpSender } from './otp.service';
 
 export const EMAIL_OFF_MESSAGE = "Codes by email aren't set up yet. Use your mobile number instead.";
 export const SMS_OFF_MESSAGE = "Codes by SMS aren't set up yet. Use your email address instead.";
 
-/** `OTP_SENDER`: fake (default: codes go to the Platform log) or msg91. Anything else is treated as not set up. */
-export function otpSenderName(env: NodeJS.ProcessEnv = process.env): 'fake' | 'msg91' | 'unknown' {
+/** `OTP_SENDER`: fake (default: codes go to the Platform log), msg91 or resend. Anything else is treated as not set up. */
+export function otpSenderName(env: NodeJS.ProcessEnv = process.env): 'fake' | 'msg91' | 'resend' | 'unknown' {
   const raw = (env.OTP_SENDER ?? '').trim().toLowerCase();
   if (!raw || raw === 'fake') return 'fake';
-  return raw === 'msg91' ? 'msg91' : 'unknown';
+  return raw === 'msg91' || raw === 'resend' ? raw : 'unknown';
 }
 
 /**
@@ -23,10 +24,13 @@ export function otpSenderName(env: NodeJS.ProcessEnv = process.env): 'fake' | 'm
  *   up keeps using the fake sender on a dev machine or the open demo (DEMO_MODE=1), and in production answers 503
  *   "Codes by SMS aren't set up yet. Use your email address instead." (or the email twin). Email-only is the setup
  *   while SMS waits for DLT approval (founder 2026-10-24).
+ * - `OTP_SENDER=resend`: email through Resend (RESEND_API_KEY, RESEND_FROM; founder 2026-10-27). SMS is not set up:
+ *   fake sender on a dev machine / the open demo, 503 "Codes by SMS aren't set up yet…" in production.
  */
 export class EnvOtpSender implements OtpSender {
   private readonly fake = new FakeOtpSender();
   private cached: { key: string; sender: Msg91OtpSender | null } | null = null;
+  private cachedResend: { key: string; sender: ResendOtpSender | null } | null = null;
 
   constructor(private readonly fetchImpl?: typeof fetch) {}
 
@@ -34,7 +38,12 @@ export class EnvOtpSender implements OtpSender {
   describe(): string {
     const name = otpSenderName();
     if (name === 'fake') return 'One-time codes: fake sender (written to this log; nothing is sent)';
-    if (name === 'unknown') return `One-time codes are OFF (sending answers 503): OTP_SENDER="${process.env.OTP_SENDER}" is not known (use fake or msg91)`;
+    if (name === 'unknown') return `One-time codes are OFF (sending answers 503): OTP_SENDER="${process.env.OTP_SENDER}" is not known (use fake, msg91 or resend)`;
+    if (name === 'resend') {
+      const { config, problem } = resendConfig();
+      if (problem) return `One-time codes are OFF (sending answers 503): ${problem}. Everything else keeps working.`;
+      return `One-time codes: Resend email from ${config!.from} (SMS: ${this.fallback() ? 'fake sender' : 'OFF'})`;
+    }
     const { problem, smsProblem, emailProblem } = msg91Config();
     if (problem) return `One-time codes are OFF (sending answers 503): ${problem}. Everything else keeps working.`;
     const off = (what: string) => (this.fallback() ? `fake sender (MSG91 ${what} not set up)` : `OFF (MSG91 ${what} not set up)`);
@@ -55,25 +64,38 @@ export class EnvOtpSender implements OtpSender {
     return problem ? null : this.cached.sender;
   }
 
+  private resend(): ResendOtpSender | null {
+    const { config } = resendConfig();
+    const key = JSON.stringify(config);
+    if (this.cachedResend?.key !== key) this.cachedResend = { key, sender: config ? new ResendOtpSender(config, this.fetchImpl) : null };
+    return this.cachedResend.sender;
+  }
+
+  /** The real sender OTP_SENDER names (null: fake, unknown, or its key is missing). */
+  private real(): Msg91OtpSender | ResendOtpSender | null {
+    const name = otpSenderName();
+    return name === 'msg91' ? this.msg91() : name === 'resend' ? this.resend() : null;
+  }
+
   canSend(channel: 'email' | 'sms'): boolean {
     const name = otpSenderName();
     if (name === 'fake') return true;
     if (name === 'unknown') return false;
-    const sender = this.msg91();
+    const sender = this.real();
     if (!sender) return false;
     return sender.canSend(channel) || this.fallback();
   }
 
   unavailableMessage(channel: 'email' | 'sms'): string {
-    if (otpSenderName() === 'msg91' && this.msg91()) return channel === 'sms' ? SMS_OFF_MESSAGE : EMAIL_OFF_MESSAGE;
+    if (this.real()) return channel === 'sms' ? SMS_OFF_MESSAGE : EMAIL_OFF_MESSAGE;
     return CODES_OFF_MESSAGE;
   }
 
   async send(target: Identifier, code: string, purpose: OtpPurpose): Promise<void> {
     if (otpSenderName() === 'fake') return this.fake.send(target, code, purpose);
-    const sender = this.msg91();
+    const sender = this.real();
     if (sender && sender.canSend(target.channel)) return sender.send(target, code, purpose);
-    // Only reached for a channel MSG91 is not set up for, on a dev machine / the open demo (canSend said yes).
+    // Only reached for a channel the provider is not set up for, on a dev machine / the open demo (canSend said yes).
     return this.fake.send(target, code, purpose);
   }
 }

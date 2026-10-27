@@ -29,6 +29,7 @@ Postgres and the APIs are on an `internal` Docker network: no host ports, no int
 | `ff.sh` | `docker compose` with the right project / env file / compose file |
 | `bootstrap.sh` | once: first company + owner + `/console` staff account, then `company sync` |
 | `set-cashfree.sh` | switches payments to Cashfree: asks for the App ID, the Secret Key (hidden) and production/sandbox, writes `.env`, recreates the platform only |
+| `set-resend.sh` | switches email codes to Resend: asks for the API key (hidden) and the From address, writes `.env`, recreates the platform only |
 | `set-msg91.sh` | switches one-time codes to MSG91: asks for the authkey (hidden) and the SMS and/or email template IDs (email only is fine), writes `.env`, recreates the platform only |
 | `backup.sh` | nightly backup: all databases + uploaded files into `FF_HOME/backups`, 14 days kept (see **Backups**) |
 
@@ -152,6 +153,17 @@ nobody came back from). Our GST invoice (Billing → Invoices) is the tax invoic
 
 The platform container reaches `api.cashfree.com` through its own `egress` network (docker-compose.yml); the databases
 and the other APIs stay without internet. Live payments only with `DEMO_MODE=0`, `COOKIE_SECURE=true` and https.
+
+## Switching on Resend email codes (the current setup)
+Founder 2026-10-27: codes go by email through Resend (resend.com). Our server makes and checks the code; Resend only
+delivers it. SMS codes are not sent: with `DEMO_MODE=1` a mobile number still gets the code on screen; with `DEMO_MODE=0`
+it answers "Codes by SMS aren't set up yet. Use your email address instead."
+1. Resend → *Domains*: `kaampilot.com` must show **Verified** (add the DNS records Resend lists in GoDaddy first).
+2. Resend → *API Keys* → *Create API key* (permission *Sending access*, domain kaampilot.com). Copy it.
+3. On the server: `sudo /opt/freefounders/app/infra/deploy/set-resend.sh` → paste the key (hidden), Enter for the From
+   address (= `Kaampilot <otp@kaampilot.com>`). It recreates the platform only.
+4. The platform log shows `One-time codes: Resend email from Kaampilot <otp@kaampilot.com> …`. Try "Forgot password"
+   with your email address. Back to the fake sender: `set-resend.sh --off`.
 
 ## Switching on MSG91 codes
 Sign-up, forgot password and "Sign in with a code" (PLAN.md §21.8) send a 6-digit code. Our server makes and checks the

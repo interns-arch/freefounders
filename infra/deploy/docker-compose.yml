@@ -86,6 +86,8 @@ services:
       MSG91_EMAIL_FROM: ${MSG91_EMAIL_FROM:-}
       MSG91_EMAIL_FROM_NAME: ${MSG91_EMAIL_FROM_NAME:-}
       MSG91_EMAIL_DOMAIN: ${MSG91_EMAIL_DOMAIN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
       # Phone app update banner (PLAN.md §19.40): an installed app older than this sees "A new version of Kaampilot is
       # available" with the APK link. Empty = off (default).
       MOBILE_MIN_VERSION: ${MOBILE_MIN_VERSION:-}

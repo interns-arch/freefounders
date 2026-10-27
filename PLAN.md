@@ -3182,6 +3182,13 @@ mobile check, smoke 10 / 10, e2e console-dashboard / account-flows / code-signin
 app-shell pass (single-login now accepts the ", N pending" badge on the Tasks / Assets links; account-flows waits for the
 console's "Done" instead of any "trial" text, which matched the hidden filter option).
 
+**Resend for email codes (2026-10-27).** Founder: "use this for otp purpose" (a Resend send-email example). New
+`OTP_SENDER=resend` (`accounts/resend.sender.ts`): codes go by email through `POST https://api.resend.com/emails`
+(Bearer `RESEND_API_KEY`, From `RESEND_FROM`, default `Kaampilot <otp@kaampilot.com>`); our server still makes and
+checks the code. SMS: fake sender with DEMO_MODE=1 / dev, "Codes by SMS aren't set up yet" in production. The founder
+types the key on the server with `infra/deploy/set-resend.sh` (hidden; checked against Resend before saving). The key
+shown in chat must be rotated. MSG91 code stays for later SMS.
+
 ### 21.9 Kaampilot console dashboard + production log (2026-10-24)
 
 Founder: "production log, and I want a dashboard for my admin page where we can see the complete users of this
