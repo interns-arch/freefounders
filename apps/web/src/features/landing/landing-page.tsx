@@ -12,6 +12,7 @@ import { ArrowRight, Download, Moon, Smartphone, Sun } from '@/components/icons'
 import { BrandLockup, BrandMark } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { LEGAL_LINKS } from '@/features/account/legal-links';
+import { AiHelper } from '@/features/ai-helper';
 import { cn } from '@/lib/utils';
 import { BookDemoButton } from './book-demo';
 import { APP_APK, FAQ, HIGHLIGHTS, STEPS, TRUST } from './content';
@@ -42,6 +43,7 @@ export function LandingPage({ only }: { only?: 'pricing' }) {
         Skip to content
       </a>
       <TopBar />
+      <AiHelper aboveBottomBar={false} />
       <main id="main">
         {only === 'pricing' ? (
           <PricingSection pricing={pricing} standalone />
