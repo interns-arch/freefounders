@@ -2,7 +2,7 @@
 
 Read `PLAN.md` first. It is the source of truth for decisions and the phase roadmap.
 
-**Brand**: people see **Kaampilot** (kaampilot.com; logo in `apps/web/public/brand/`, `src/components/brand.tsx`); code identifiers are `kaampilot` too since PLAN.md §23 (`@kaampilot/*`, token audience, `window.KaampilotApp`, `com.kaampilot.app`); `ff-*` keys, the server folder `/opt/freefounders`, the Compose project, database names and the Expo slug keep the old name. Never show the old name "FreeFounders" to a person (PLAN.md §19.35).
+**Brand**: people see **Kaampilot** (kaampilot.com; logo in `apps/web/public/brand/`, `src/components/brand.tsx`); code identifiers are `kaampilot` too since PLAN.md §23 (`@kaampilot/*`, token audience, `window.KaampilotApp`, `com.kaampilot.app`); `ff-*` keys, the server folder `/opt/freefounders`, the Compose project, and database names keep the old name (the Expo slug is `kaampilot` since the expo.dev project was renamed). Never show the old name "FreeFounders" to a person (PLAN.md §19.35).
 
 ## What this repo is
 A **new application** built from copies of two existing apps. The originals keep

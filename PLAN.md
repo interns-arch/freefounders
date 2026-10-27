@@ -3613,8 +3613,8 @@ Founder: "make the project name everywhere Kaampilot, not FreeFounders". This fi
   get the new one as a separate app and should uninstall the old one; done now, before the first Play Store release);
   Docker image names; test / demo e-mails (`@kaampilot.test`, `@kaampilot.demo`); comments and docs.
 - **Kept on purpose**: `/opt/freefounders`, Compose project `freefounders` and database names on the live server
-  (renaming moves live data); Expo `slug` `freefounders` (the expo.dev project is registered under it; rename it there
-  first); `ff-*` storage keys and `FF_*` env vars; `freefounders` stays a reserved username and weak password word;
+  (renaming moves live data); Expo `slug` was `freefounders` until the expo.dev project was renamed (now `kaampilot`, 1.3.0; renamed there
+  first, done); `ff-*` storage keys and `FF_*` env vars; `freefounders` stays a reserved username and weak password word;
   the GitHub repo `interns-arch/freefounders` and the local folder (renamed by the founder if wanted).
 - **Phone app 1.3.0** (versionCode 6, 2026-10-27): the first APK with `com.kaampilot.app`. Older apps (`MOBILE_MIN_VERSION=1.3.0`)
   get, besides the banner, a pop-up when the app opens: "Update Kaampilot", "Install it, then uninstall this old app."
