@@ -36,6 +36,20 @@ MODULES = [
 # a new module never appears by itself. A standalone install (no profile at all) still has everything on.
 OPT_IN = {"visitors"}
 _OWNER = {segment: key for key, _l, _d, _on, segments in MODULES for segment in segments}
+
+# Plan areas (PLAN.md §24.1): Tasks and Attendance are sold one by one but live in this one app. The Platform pushes
+# `tasks` / `attendance` in the profile's module switches from the company's plan (never from the Settings Center, so
+# they are not in the catalogue above). Missing = on: a standalone install, Complete, the trial and older plans.
+# key: (name in messages, the first URL segments under /api/ it owns)
+PLAN_AREAS = {
+    "tasks": ("Tasks", ("tasks", "task-categories", "task-change-requests", "task-completions", "task-settings",
+                        "task-templates", "task-activities", "directory", "dashboard")),
+    "attendance": ("Attendance", ("attendance", "attendance-corrections", "leave-types", "leaves", "office-locations",
+                                  "hr", "holidays")),
+}
+_AREA_OF = {segment: area for area, (_n, segments) in PLAN_AREAS.items() for segment in segments}
+# Switchable modules that come with a plan area: leads, AI inbox, mistakes and links with Tasks; payroll with Attendance.
+MODULE_AREA = {"leads": "tasks", "intake": "tasks", "mistakes": "tasks", "links": "tasks", "payroll": "attendance"}
 # Paths under a module's prefix that other, always-on screens use: the team list for Groups, templates, settings.
 _SHARED = ("/api/leads/assignees/",)
 
@@ -81,9 +95,18 @@ def catalogue() -> list[dict]:
             for k, label, d, on, _s in MODULES]
 
 
+def plan_has(area: str) -> bool:
+    """The company's plan includes this area ("tasks" / "attendance"); always true without a plan switch."""
+    return (profile().get("modules") or {}).get(area) is not False
+
+
 def module_on(key: str) -> bool:
     """A module is on unless the company switched it off (no profile = everything on; an opt-in module is off until the
-    company switches it on)."""
+    company switches it on) or its plan area is not in the plan."""
+    if key in PLAN_AREAS:
+        return plan_has(key)
+    if key in MODULE_AREA and not plan_has(MODULE_AREA[key]):
+        return False
     p = profile()
     switches = p.get("modules") or {}
     if key in switches:
@@ -92,7 +115,7 @@ def module_on(key: str) -> bool:
 
 
 def modules() -> dict[str, bool]:
-    return {k: module_on(k) for k, *_rest in MODULES}
+    return {**{k: module_on(k) for k, *_rest in MODULES}, **{a: plan_has(a) for a in PLAN_AREAS}}
 
 
 def brand() -> dict | None:
@@ -118,7 +141,7 @@ def apply(data: dict) -> dict:
     current = int(row.value) if row and row.value.isdigit() else 0
     if version < current:
         return {"version": current, "applied": False}
-    known = {k for k, *_rest in MODULES}
+    known = {k for k, *_rest in MODULES} | set(PLAN_AREAS)
     switches = {k: bool(v) for k, v in (data.get("modules") or {}).items() if k in known}
     stored = {
         "name": str(data.get("name") or "")[:120],
@@ -141,8 +164,23 @@ def module_for_path(path: str) -> str | None:
     return _OWNER.get(parts[2])
 
 
+def area_for_path(path: str) -> str | None:
+    """'/api/leaves/' -> 'attendance', '/api/leads/' -> 'tasks'; None for the shared parts (sign-in, people,
+    notifications, badges, groups, notices, settings…), which stay open whatever the plan."""
+    parts = path.split("/")
+    if len(parts) < 3 or parts[1] != "api" or path.startswith(_SHARED):
+        return None
+    return _AREA_OF.get(parts[2]) or MODULE_AREA.get(_OWNER.get(parts[2], ""))
+
+
+def not_in_plan(area: str) -> JsonResponse:
+    return JsonResponse({"detail": f"{PLAN_AREAS[area][0]} is not in your plan. An owner can add it in Billing."},
+                        status=403)
+
+
 class ModuleGateMiddleware:
-    """Answers 404 for the API of a module the company switched off (PLAN.md §16.2).
+    """Answers 404 for the API of a module the company switched off (PLAN.md §16.2), and 403 for the API of a plan area
+    (Tasks or Attendance) the company's plan does not include (§24.1).
 
     Runs after CompanyMiddleware, so the company is known. Without a company in
     multi-company mode it does nothing: that request fails closed anyway.
@@ -152,7 +190,11 @@ class ModuleGateMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        area = area_for_path(request.path)
         key = module_for_path(request.path)
-        if key and not (schemas.enabled() and not schemas.current()) and not module_on(key):
-            return JsonResponse({"detail": "This module is switched off"}, status=404)
+        if (area or key) and not (schemas.enabled() and not schemas.current()):
+            if area and not plan_has(area):
+                return not_in_plan(area)
+            if key and not module_on(key):
+                return JsonResponse({"detail": "This module is switched off"}, status=404)
         return self.get_response(request)

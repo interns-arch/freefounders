@@ -11,7 +11,7 @@ import { decodeJwt } from 'jose';
 import { hashPassword } from './auth/auth.service';
 import { BillingService } from './billing/billing.service';
 import { financialYear, gst } from './billing/gst';
-import { appsFor, normaliseSelection, perUserMonthly, selectionName, tasksModuleAllowed, unitPrice } from './billing/pricing';
+import { appsFor, normaliseSelection, perUserMonthly, planAreas, selectionName, tasksModuleAllowed, unitPrice } from './billing/pricing';
 import { normaliseIdentifier } from './accounts/identifier';
 import { resetUsernameChecks } from './accounts/username';
 import { resetCompanyNameChecks } from './company/company-name';
@@ -1367,6 +1367,11 @@ describe('module-wise pricing and the trial (PLAN.md §24.1)', () => {
     assert.deepEqual([tasksModuleAllowed('visitors', modules, ['tasks', 'attendance', 'assets']), tasksModuleAllowed('payroll', modules, ['attendance'])], [false, false], 'Visitors and Payroll: Complete only');
     assert.deepEqual([tasksModuleAllowed('leads', modules, ['tasks']), tasksModuleAllowed('leads', modules, ['attendance'])], [true, false], 'leads come with the Tasks module');
     assert.equal(tasksModuleAllowed('visitors', complete, null), true);
+    assert.deepEqual([planAreas(modules, ['tasks']), planAreas(modules, ['attendance', 'assets']), planAreas(complete, null)], [
+      { tasks: true, attendance: false },
+      { tasks: false, attendance: true },
+      { tasks: true, attendance: true },
+    ], 'Tasks / Attendance switches for the Tasks app');
   });
 
   test('GET public/pricing: no sign-in, cacheable, the §24 contract in rupees; Calendly and AI from env', async () => {
@@ -1413,14 +1418,25 @@ describe('module-wise pricing and the trial (PLAN.md §24.1)', () => {
     assert.deepEqual(c.modules.tasks, { ...c.modules.tasks, leads: false, intake: false, mistakes: false, links: false, payroll: false, visitors: false }, 'no Tasks extras, no Complete modules');
     const pushed = appCalls.filter((x) => x.app === 'tasks' && x.method === 'PUT' && x.path === '/company').at(-1);
     assert.equal(pushed?.body.modules.visitors, false, 'the switches reach the Tasks app');
+    assert.deepEqual([pushed?.body.modules.tasks, pushed?.body.modules.attendance], [false, true], 'Attendance only: the Tasks app refuses Tasks');
     const me = await call('GET', '/auth/me', { token: out.accessToken });
     assert.deepEqual([me.body.billing.modules, me.body.billing.ai], [['attendance'], true], 'menus know the plan');
+    // Tasks, then Tasks + Attendance: same app and the same extras, only the split changes; the Tasks app still hears it.
+    await buy(out.accessToken, 'tasks', 1);
+    appCalls.length = 0;
+    const both = await call('POST', '/billing/checkout', { token: out.accessToken, body: { plan: 'modules', modules: ['tasks', 'attendance'], seats: 1 } });
+    assert.equal(both.status, 200, JSON.stringify(both.body));
+    await call('POST', `/billing/fake/${both.body.sessionId}/complete`, { token: out.accessToken, body: { outcome: 'success' } });
+    const split = appCalls.filter((x) => x.app === 'tasks' && x.method === 'PUT' && x.path === '/company').at(-1);
+    assert.deepEqual([split?.body.modules.tasks, split?.body.modules.attendance], [true, true], 'Attendance added: pushed');
     // Complete: everything on, Assets back.
     await buy(out.accessToken, 'complete', 1);
     c = await company(out.companyId);
     assert.deepEqual(c.enabledApps, ['tasks', 'assets']);
     assert.deepEqual([c.modules.tasks?.leads, c.modules.tasks?.payroll, c.modules.tasks?.visitors], [true, true, true]);
     assert.equal((await call('GET', '/auth/me', { token: out.accessToken })).body.billing.modules, null);
+    const full = appCalls.filter((x) => x.app === 'tasks' && x.method === 'PUT' && x.path === '/company').at(-1);
+    assert.deepEqual([full?.body.modules.tasks, full?.body.modules.attendance], [true, true], 'Complete: both areas on');
   });
 
   test('trial defaults (console) for new companies and a per-company override; existing trials untouched', async () => {

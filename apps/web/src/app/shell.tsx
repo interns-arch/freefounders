@@ -23,6 +23,7 @@ import { VISITORS_NAV } from '@/features/visitors/nav';
 import { isWorkspace, type NavItem, type Workspace, WORKSPACE_BADGE, WORKSPACE_HOME, WORKSPACE_NAMES, workspaceOf } from './nav';
 import { Logo, NotificationsBell, ThemeToggle, UserMenu } from './shell-parts';
 import { WORKSPACE_LOOK, workspacesFor } from './workspaces';
+import { NotInPlan } from './pages/not-in-plan';
 
 const MENUS: Record<Workspace, NavItem[]> = { attendance: ATTENDANCE_NAV, tasks: TASKS_NAV, assets: ASSETS_NAV, visitors: VISITORS_NAV, admin: ADMIN_NAV };
 
@@ -166,10 +167,11 @@ export function AppShell() {
     if (suspended && access.canManageBilling && !loc.pathname.startsWith('/billing')) navigate('/billing', { replace: true });
   }, [suspended, access.canManageBilling, loc.pathname, navigate]);
 
-  // A group this person cannot open: back to Home.
+  // An area the plan does not include (PLAN.md §24.1) explains itself; any other group this person cannot open: Home.
+  const notInPlan = (here === 'tasks' || here === 'attendance') && access.apps.includes('tasks') && !access.planHas(here) ? here : null;
   useEffect(() => {
-    if (access.ready && here && !workspaces.includes(here)) navigate('/?home=1', { replace: true });
-  }, [access.ready, workspaces, here, navigate]);
+    if (access.ready && here && !notInPlan && !workspaces.includes(here)) navigate('/?home=1', { replace: true });
+  }, [access.ready, workspaces, here, notInPlan, navigate]);
 
   const jumps = JUMPS.filter((j) => !j.w || workspaces.includes(j.w));
 
@@ -327,7 +329,9 @@ export function AppShell() {
         <BillingBanners key={access.claims?.cid} access={access} />
         <AppUpdateBanner />
         <main id="content" ref={mainRef} tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none lg:p-6 lg:pb-8 [&_h1:focus]:outline-none">
-          {access.ready ? (
+          {access.ready && notInPlan ? (
+            <NotInPlan area={notInPlan} access={access} />
+          ) : access.ready ? (
             <ReadOnlyContext.Provider value={access.readOnly}>
               <Suspense fallback={<PageLoader />}>
                 <Outlet />

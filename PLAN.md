@@ -3682,9 +3682,15 @@ monthly, names like "Tasks + Attendance with AI", plan → apps / module switche
   Tasks or Attendance is picked, Assets app if Assets; Tasks-app modules the plan lacks are switched off (Visitors,
   Payroll: Complete only; leads, AI inbox, mistakes, links: with the Tasks module); the ones a new plan adds are switched
   on, and buying Complete switches every one on. `PUT company/modules` refuses switching on a module the plan lacks.
-  Tasks and Attendance share one Django app with no switch for either, so the split between them is in the menus
-  (`/auth/me` `billing.modules`, `access.planHas`, `workspacesFor`); the Tasks API itself does not refuse it yet
-  (follow-up: `tasks` / `attendance` switch keys in `tenancy/profile.py`).
+  Tasks and Attendance share one Django app; **enforced since 2026-10-27**: the profile pushed to Tasks carries
+  `tasks` / `attendance` switches from the plan (`planAreas`; both on for Complete, trial, complimentary and
+  grandfathered plans), and `tenancy/profile.py` (`PLAN_AREAS`, `ModuleGateMiddleware`) answers 403 "Attendance is not
+  in your plan. An owner can add it in Billing." (or Tasks) for that area's API by URL prefix (attendance, corrections,
+  leave, holidays, office locations, hr/*, payroll ↔ tasks, task-*, directory, dashboard, leads, AI inbox, mistakes,
+  links); shared parts (me, people, notifications, badges, groups, notices, settings) stay open, the bell and badges
+  leave out the blocked area, the worker skips its jobs (punch reminders, leave escalations ↔ task reminders, digests,
+  duties). Web: menus, Home card, bottom bar and the Getting-started steps follow `planHas`; a direct link shows
+  "… is not in your plan" with Billing. No profile (standalone) = everything open.
 - **Trial**: a new company gets **Complete for 10 days, at most 3 users** (`billing_settings.trial`, staff change it:
   `GET/PUT console/trial-defaults {days, maxUsers}`, audited `trial.defaults`; it is copied to the company when its trial
   starts). Per company: `PUT console/companies/:id/trial {days?, maxUsers?}` (days from the trial's start; a trial that

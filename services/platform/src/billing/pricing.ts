@@ -91,6 +91,17 @@ export function planModules(plan: Pick<PlanRow, 'kind'>, modules: readonly strin
 }
 
 /**
+ * The plan areas of the Tasks app (PLAN.md §24.1): Tasks and Attendance are sold one by one but live in one app, so the
+ * profile pushed to it (`PUT /internal/company`) carries a `tasks` and an `attendance` switch, and the app refuses the
+ * API of an area that is off. Both on for every plan without a module list (Complete, the trial, complimentary, the
+ * older and grandfathered plans).
+ */
+export function planAreas(plan: Pick<PlanRow, 'kind'>, modules: readonly string[] | null): { tasks: boolean; attendance: boolean } {
+  const list = planModules(plan, modules);
+  return { tasks: !list || list.includes('tasks'), attendance: !list || list.includes('attendance') };
+}
+
+/**
  * The Tasks app's own module switches (§16) and what unlocks each: the Tasks module (leads, AI inbox, mistakes, links)
  * or only Complete (Visitors, Payroll). Modules not listed (tasks, groups, notices, attendance) are always on in the app.
  */

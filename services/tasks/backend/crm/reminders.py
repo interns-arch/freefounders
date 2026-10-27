@@ -17,7 +17,7 @@ from notifications.service import notify, notify_follow_up_due
 
 from .models import Lead, OPEN_STATUSES, Task, TaskAttachment, TaskStatus
 from tenancy.company_settings import company_env
-from tenancy.profile import app_name, module_on
+from tenancy.profile import app_name, module_on, plan_has
 
 
 def purge_expired_attachments() -> int:
@@ -402,19 +402,25 @@ def send_followup_reminders(force=False) -> int:
         lead.reminded_at = now
         lead.save(update_fields=["reminded_at"])
         sent += 1
-    sent += send_task_reminders()
-    from hr.punch_reminders import send_punch_reminders
-    send_punch_reminders()              # not punched in by the reporting time (PLAN.md §19.39); counted on its own
-    from hr.approvals import remind_and_escalate
-    sent += remind_and_escalate()       # leave / corrections waiting too long (PLAN.md §17.2)
-    sent += remind_task_approvals()     # change requests / completion reviews waiting too long
+    # A plan without Tasks or without Attendance (PLAN.md §24.1) runs none of that area's jobs.
+    tasks_on, attendance_on = plan_has("tasks"), plan_has("attendance")
+    if tasks_on:
+        sent += send_task_reminders()
+    if attendance_on:
+        from hr.punch_reminders import send_punch_reminders
+        send_punch_reminders()          # not punched in by the reporting time (PLAN.md §19.39); counted on its own
+        from hr.approvals import remind_and_escalate
+        sent += remind_and_escalate()   # leave / corrections waiting too long (PLAN.md §17.2)
+    if tasks_on:
+        sent += remind_task_approvals()  # change requests / completion reviews waiting too long
     from notifications.service import send_deferred_whatsapp
     send_deferred_whatsapp()            # what was held outside the WhatsApp hours goes at the opening
-    from .duties import create_duty_tasks
-    create_duty_tasks()                 # role duties due today (PLAN.md §17.3)
-    send_daily_task_digest()            # date-guarded: one per person per day
-    send_day_end_digest()               # date-guarded: once a day after 7 PM
-    send_weekly_overdue_email()         # week-guarded: Monday (1st working day) 10 AM
+    if tasks_on:
+        from .duties import create_duty_tasks
+        create_duty_tasks()             # role duties due today (PLAN.md §17.3)
+        send_daily_task_digest()        # date-guarded: one per person per day
+        send_day_end_digest()           # date-guarded: once a day after 7 PM
+        send_weekly_overdue_email()     # week-guarded: Monday (1st working day) 10 AM
     purge_expired_attachments()
     purge_attendance_photos()            # punch photos past the company's retention period
     from mistakes.sla import escalate_overdue_mistakes  # lazy: avoids app-load cycles

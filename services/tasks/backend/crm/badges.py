@@ -65,5 +65,8 @@ def visitor_badges(user) -> dict:
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def badges(request):
-    return Response({"tasks": task_badges(request.user), "hr": hr_badges(request.user),
-                     "visitors": visitor_badges(request.user)})
+    # An area the plan does not include (PLAN.md §24.1) counts nothing.
+    from tenancy.profile import plan_has
+    tasks = task_badges(request.user) if plan_has("tasks") else {"my_tasks": 0, "to_accept": 0, "requests": 0, "total": 0}
+    hr = hr_badges(request.user) if plan_has("attendance") else {"leave": 0, "corrections": 0, "approvals": 0}
+    return Response({"tasks": tasks, "hr": hr, "visitors": visitor_badges(request.user)})

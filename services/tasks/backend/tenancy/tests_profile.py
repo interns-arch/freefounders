@@ -113,3 +113,107 @@ class ProfileTests(TestCase):
         with mock.patch("mistakes.sla.escalate_overdue_mistakes") as escalate:
             reminders.send_followup_reminders(force=True)
         escalate.assert_called_once()
+
+
+@override_settings(PLATFORM_JWKS=JWKS)
+class PlanAreaTests(TestCase):
+    """PLAN.md §24.1: a plan of picked modules with Tasks but not Attendance (or the reverse) refuses the other area's
+    API with 403; the shared parts stay open; without the plan switches (standalone, Complete) everything is open."""
+
+    TASKS = ("/api/tasks/", "/api/task-categories/", "/api/task-change-requests/", "/api/task-templates/",
+             "/api/leads/", "/api/mistakes/", "/api/links/")
+    ATTENDANCE = ("/api/attendance/today/", "/api/attendance-corrections/", "/api/leaves/", "/api/leave-types/",
+                  "/api/holidays/", "/api/hr/config/", "/api/office-locations/", "/api/payslips/")
+    SHARED = ("/api/auth/me", "/api/notifications/", "/api/badges/", "/api/users/", "/api/notices/", "/api/groups/",
+              "/api/leads/assignees/")
+
+    def setUp(self):
+        profile.forget()
+        self.platform = APIClient()
+        self.platform.credentials(HTTP_AUTHORIZATION=f"Bearer {service()}")
+        self.admin = User.objects.create_user("boss", "boss@x.com", "pass@12345", role=Role.ADMIN)
+        self.api = APIClient()
+        self.api.force_authenticate(self.admin)
+
+    def tearDown(self):
+        profile.forget()
+
+    def push(self, modules, version=1):
+        return self.platform.put("/api/internal/company", {"version": version, "name": "Acme", "modules": modules},
+                                 format="json")
+
+    def assertOpen(self, paths):
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertNotIn(self.api.get(path).status_code, (403, 404))
+
+    def assertBlocked(self, paths, name):
+        for path in paths:
+            with self.subTest(path=path):
+                res = self.api.get(path)
+                self.assertEqual(res.status_code, 403)
+                self.assertEqual(res.json()["detail"], f"{name} is not in your plan. An owner can add it in Billing.")
+
+    def test_without_plan_switches_everything_is_open(self):
+        self.assertOpen(self.TASKS + self.ATTENDANCE + self.SHARED)
+        self.push({"leads": True, "mistakes": True, "links": True, "payroll": True})  # Complete: both areas on
+        self.assertOpen(self.TASKS + self.ATTENDANCE + self.SHARED)
+        self.push({"tasks": True, "attendance": True, "leads": True, "mistakes": True, "links": True, "payroll": True},
+                  version=2)
+        self.assertOpen(self.TASKS + self.ATTENDANCE + self.SHARED)
+
+    def test_tasks_only_plan_blocks_attendance(self):
+        self.push({"tasks": True, "attendance": False, "leads": True, "mistakes": True, "links": True, "payroll": True})
+        self.assertBlocked(self.ATTENDANCE, "Attendance")
+        self.assertBlocked(("/api/attendance/check-in/",), "Attendance")
+        self.assertEqual(self.api.post("/api/attendance/check-in/", {}, format="json").status_code, 403)
+        self.assertOpen(self.TASKS + self.SHARED)
+        me = self.api.get("/api/auth/me").json()
+        self.assertFalse(me["modules"]["attendance"])
+        self.assertTrue(me["modules"]["tasks"])
+        self.assertFalse(me["modules"]["payroll"])  # payroll comes with Attendance
+
+    def test_attendance_only_plan_blocks_tasks(self):
+        self.push({"tasks": False, "attendance": True, "leads": True, "mistakes": True})
+        self.assertBlocked(self.TASKS, "Tasks")
+        self.assertOpen(("/api/attendance/today/", "/api/leaves/", "/api/leave-types/", "/api/holidays/") + self.SHARED)
+        self.assertFalse(self.api.get("/api/auth/me").json()["modules"]["leads"])
+
+    def test_buying_the_area_opens_it_again(self):
+        self.push({"tasks": True, "attendance": False})
+        self.assertBlocked(("/api/leaves/",), "Attendance")
+        self.push({"tasks": True, "attendance": True}, version=2)
+        self.assertOpen(("/api/leaves/",))
+
+    def test_bell_and_badges_leave_out_the_blocked_area(self):
+        from notifications.models import Notification
+        Notification.objects.create(user=self.admin, type="leave_reviewed", title="Leave approved")
+        Notification.objects.create(user=self.admin, type="task_assigned", title="New task")
+        self.push({"tasks": True, "attendance": False})
+        listed = self.api.get("/api/notifications/").json()
+        rows = listed["results"] if isinstance(listed, dict) else listed
+        self.assertEqual([n["title"] for n in rows], ["New task"])
+        counts = self.api.get("/api/notifications/unread_count/").json()
+        self.assertEqual(counts["by_category"]["attendance"], 0)
+        self.assertEqual(counts["by_category"]["tasks"], 1)
+        self.assertEqual(self.api.get("/api/badges/").json()["hr"]["approvals"], 0)
+
+    def test_worker_skips_the_area_not_in_the_plan(self):
+        from crm import reminders
+        self.push({"tasks": True, "attendance": False})
+        with mock.patch("hr.punch_reminders.send_punch_reminders") as punch, \
+                mock.patch("hr.approvals.remind_and_escalate", return_value=0) as hr_remind, \
+                mock.patch("crm.reminders.send_task_reminders", return_value=0) as task_remind:
+            reminders.send_followup_reminders(force=True)
+        punch.assert_not_called()
+        hr_remind.assert_not_called()
+        task_remind.assert_called_once()
+        self.push({"tasks": False, "attendance": True}, version=2)
+        with mock.patch("hr.punch_reminders.send_punch_reminders") as punch, \
+                mock.patch("hr.approvals.remind_and_escalate", return_value=0), \
+                mock.patch("crm.reminders.send_task_reminders", return_value=0) as task_remind, \
+                mock.patch("crm.duties.create_duty_tasks") as duties:
+            reminders.send_followup_reminders(force=True)
+        punch.assert_called_once()
+        task_remind.assert_not_called()
+        duties.assert_not_called()

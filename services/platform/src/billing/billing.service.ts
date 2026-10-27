@@ -68,7 +68,7 @@ import {
   type SubscriptionRow,
   subscriptionOf,
 } from './seats';
-import { appsFor, cleanModules, MODULE_KEYS, normaliseSelection, planModules, selectionName, tasksModuleAllowed, TASKS_MODULE_NEEDS, TRIAL_DEFAULTS, unitPrice } from './pricing';
+import { appsFor, cleanModules, MODULE_KEYS, normaliseSelection, planAreas, planModules, selectionName, tasksModuleAllowed, TASKS_MODULE_NEEDS, TRIAL_DEFAULTS, unitPrice } from './pricing';
 import { GST_RATE } from './gst';
 import { platformLog } from '../console/log-sink';
 
@@ -1129,7 +1129,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         }
       }
     }
-    if (!added.length && !removed.length && !switched) return;
+    // The Tasks / Attendance split changed (e.g. Tasks → Tasks + Attendance): the Tasks app must hear it (push below).
+    const was = prev ? planAreas(prev.plan, prev.modules) : null;
+    const now = planAreas(plan, modules);
+    const areasChanged = want.includes('tasks') && (!was || was.tasks !== now.tasks || was.attendance !== now.attendance);
+    if (!added.length && !removed.length && !switched && !areasChanged) return;
     await this.dbs.db
       .update(companies)
       .set({ enabledApps: want, ...(switched ? { modules: { ...(c.modules ?? {}), tasks: switches } } : {}), updatedAt: new Date() })

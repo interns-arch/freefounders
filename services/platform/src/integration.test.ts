@@ -937,7 +937,7 @@ describe('settings center (Phase 4)', () => {
     assert.deepEqual(tasks.modules.map((m: { key: string; on: boolean }) => [m.key, m.on]), [['leads', true], ['payroll', true]], 'nothing set = on (existing companies)');
     const res = await call('PUT', '/company/modules', { token: admin.token, body: { tasks: { payroll: false } } });
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.deepEqual(companyPushes.at(-1)!.body.modules, { payroll: false });
+    assert.deepEqual(companyPushes.at(-1)!.body.modules, { payroll: false, tasks: true, attendance: true }, 'plus the plan areas (§24.1)');
     assert.equal((await call('PUT', '/company/modules', { token: admin.token, body: { tasks: { rockets: true } } })).status, 400);
     assert.equal((await call('PUT', '/company/modules', { token: admin.token, body: { assets: { sims: true } } })).status, 400, 'Acme has no Assets');
   });

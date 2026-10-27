@@ -47,7 +47,8 @@ interface Item {
 
 export function GettingStarted({ access, welcome }: { access: Access; welcome?: boolean }) {
   const cid = access.claims?.cid ?? '';
-  const tasks = access.tasks.on;
+  // Attendance steps only when the plan includes Attendance (PLAN.md §24.1; the API refuses it otherwise).
+  const tasks = access.tasks.on && access.planHas('attendance');
   const offices = useOfficeLocations(tasks);
   const today = useAttendanceToday(tasks);
   const people = usePeople();

@@ -39,7 +39,11 @@ class NotificationViewSet(ExportMixin, mixins.DestroyModelMixin,
         return super().get_permissions()
 
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user)
+        qs = Notification.objects.filter(user=self.request.user)
+        # An area the plan does not include (PLAN.md §24.1) is left out of the bell.
+        from tenancy.profile import plan_has
+        hidden = [area for area in ("tasks", "attendance") if not plan_has(area)]
+        return qs.exclude(category__in=hidden) if hidden else qs
 
     def _in_area(self, qs, request):
         """?category=attendance (or several, comma-separated): one area of the bell (PLAN.md §19.37)."""

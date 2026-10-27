@@ -6,7 +6,7 @@ import { DbService } from '../db/db.service';
 import { assertCompanyNameFree, cleanCompanyName, normaliseCompanyName } from './company-name';
 import { type AppKey, APPS, companies, type ModuleSwitches } from '../db/schema';
 import { type AppModule, internalUrl, ProvisionClient } from '../provision/provision.client';
-import { tasksModuleAllowed } from '../billing/pricing';
+import { planAreas, tasksModuleAllowed } from '../billing/pricing';
 import { subscriptionOf } from '../billing/seats';
 
 export const profileSchema = z.object({
@@ -215,6 +215,9 @@ export class CompanyService {
     const c = await this.row(companyId);
     const result: Record<string, string> = {};
     let ahead = 0;
+    // PLAN.md §24.1: the Tasks app also gets the plan's Tasks / Attendance switches (it refuses an area that is off).
+    const { sub, plan } = await subscriptionOf(this.dbs, companyId);
+    const areas = planAreas(plan, sub.modules);
     for (const app of this.connectedApps(c.enabledApps)) {
       if (!internalUrl(app)) continue;
       try {
@@ -224,7 +227,7 @@ export class CompanyService {
           shortName: c.shortName,
           colour: c.colour,
           logoUrl: CompanyService.logoUrl(c),
-          modules: c.modules?.[app] ?? {},
+          modules: app === 'tasks' ? { ...(c.modules?.tasks ?? {}), ...areas } : (c.modules?.[app] ?? {}),
         });
         result[app] = res.applied ? 'ok' : 'stale';
         if (!res.applied && typeof res.version === 'number') ahead = Math.max(ahead, res.version);
