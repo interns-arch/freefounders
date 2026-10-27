@@ -1,6 +1,6 @@
-// Account flows as a real person goes through them (PLAN.md §21, quality pass 2026-10-19): sign-up by mobile number
-// with a wrong code, Back and the resend countdown; the same mobile again (password only → a 2nd company); sign-in
-// with the mobile → choose a company → switch from the account menu → reload keeps it; forgot password (code checked
+// Account flows as a real person goes through them (PLAN.md §21, quality pass 2026-10-19): sign-up by email (a mobile
+// number is refused: email only since 2026-10-27) with a wrong code, Back and the resend countdown; the same email again
+// (password only → a 2nd company); sign-in with the email → choose a company → switch from the account menu → reload keeps it; forgot password (code checked
 // on its own step, then signed in straight away; unknown email; a username); the email of an admin-made login;
 // invite links that are switched off or used up; billing with FakePay (fail, cancel, yearly, seats, cancel/resume,
 // GST details); the owner console; phone widths without sideways scroll.
@@ -10,8 +10,11 @@ import { type APIRequestContext, type Browser, expect, type Page, test } from '@
 const stamp = Date.now().toString(36);
 const PASSWORD = `Kite-River-${stamp}-77`;
 const NEW_PASSWORD = `Moon-Lake-${stamp}-31`;
-/** A fresh Indian mobile number per run (starts with 9; 10 digits). */
+/** The owner's email (fresh per run). */
+const mona = `mona-${stamp}@e2e.test`;
+/** A fresh Indian mobile number: refused everywhere (email only, 2026-10-27). */
 const mobile = `9${String(Date.now()).slice(-9)}`;
+const MOBILE_OFF = 'Use your email address. Sign-in with a mobile number is not available.';
 const H = { 'x-requested-with': 'XMLHttpRequest' };
 
 async function devCode(page: Page): Promise<string> {
@@ -68,26 +71,29 @@ async function noSideScroll(page: Page, what: string) {
 
 test.describe.configure({ mode: 'serial' });
 
-const companyA = `E2E Mobile Co ${stamp}`;
+const companyA = `E2E Email Co ${stamp}`;
 const companyB = `E2E Second Co ${stamp}`;
 
-test('sign up with a mobile number: wrong code, Back keeps the code, resend countdown, Tasks only', async ({ page }) => {
+test('sign up with an email (a mobile number is refused): wrong code, Back keeps the code, resend countdown, Tasks only', async ({ page }) => {
   test.setTimeout(150_000);
   await page.goto('/signup');
-  // Not a mobile or email: told what to type.
-  await page.getByLabel('Work email or mobile number').fill('12345');
+  // Not an email: told what to type; a mobile number is told that sign-in is by email only.
+  await page.getByLabel('Work email').fill('12345');
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Enter a work email (name@company.com) or a 10-digit mobile number.')).toBeVisible();
-  await page.getByLabel('Work email or mobile number').fill(`+91 ${mobile}`);
+  await expect(page.getByText('Enter a work email (name@company.com).')).toBeVisible();
+  await page.getByLabel('Work email').fill(`+91 ${mobile}`);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText(MOBILE_OFF)).toBeVisible();
+  await page.getByLabel('Work email').fill(mona);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'Check your code' })).toBeVisible();
-  await expect(page.getByText(/by SMS/)).toBeVisible();
+  await expect(page.getByText(`We sent a 6-digit code to ${mona}.`)).toBeVisible();
   await expect(page.getByText(/You can ask for a new code in \d+ s/)).toBeVisible();
   const code = await devCode(page);
   await page.getByLabel('Code', { exact: true }).fill(code === '000000' ? '111111' : '000000');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Wrong code. 4 tries left.' })).toBeVisible();
-  // Back and Continue with the same number: the same code still works (no new code, no "wait").
+  // Back and Continue with the same email: the same code still works (no new code, no "wait").
   await page.getByRole('button', { name: 'Back' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'Check your code' })).toBeVisible();
@@ -108,10 +114,10 @@ test('sign up with a mobile number: wrong code, Back keeps the code, resend coun
   await expect(page.getByRole('navigation').getByRole('link', { name: 'Assets', exact: true })).toHaveCount(0);
 });
 
-test('the same mobile again: password only (a wrong one sends you back), then a 2nd company', async ({ page }) => {
+test('the same email again: password only (a wrong one sends you back), then a 2nd company', async ({ page }) => {
   test.setTimeout(150_000);
   await page.goto('/signup');
-  await page.getByLabel('Work email or mobile number').fill(`0${mobile}`);
+  await page.getByLabel('Work email').fill(mona.toUpperCase());
   await askCode(page, 'Continue');
   await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -137,7 +143,7 @@ test('username: "already taken" for an existing one, Continue waits; sign up wit
   const email = `ria-${stamp}@e2e.test`;
   const mine = `Ria_${stamp}`;
   await page.goto('/signup');
-  await page.getByLabel('Work email or mobile number').fill(email);
+  await page.getByLabel('Work email').fill(email);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -176,13 +182,13 @@ test('username: "already taken" for an existing one, Continue waits; sign up wit
   const p2 = await ctx.newPage();
   try {
     await p2.goto('/login');
-    await p2.getByLabel('Email, mobile, username or employee ID').fill(mine.toLowerCase());
+    await p2.getByLabel('Email, username or employee ID').fill(mine.toLowerCase());
     await p2.getByLabel('Password', { exact: true }).fill('wrong-password');
     await p2.getByRole('button', { name: 'Sign in' }).click();
-    const alert = p2.getByRole('alert').filter({ hasText: 'The email, mobile number, username or password is not right.' });
+    const alert = p2.getByRole('alert').filter({ hasText: 'The email, username or password is not right.' });
     await expect(alert).toBeVisible();
-    await expect(alert).toContainText('Signed up yourself? Use the email, mobile number or username you chose.');
-    await p2.getByLabel('Email, mobile, username or employee ID').fill(mine.toUpperCase());
+    await expect(alert).toContainText('Signed up yourself? Use the email or username you chose.');
+    await p2.getByLabel('Email, username or employee ID').fill(mine.toUpperCase());
     await p2.getByLabel('Password', { exact: true }).fill(PASSWORD);
     await p2.getByRole('button', { name: 'Sign in' }).click();
     await p2.waitForURL((u) => u.pathname === '/' || u.pathname.startsWith('/attendance'));
@@ -197,12 +203,16 @@ test('username: "already taken" for an existing one, Continue waits; sign up wit
   }
 });
 
-test('sign in with the mobile: choose a company, switch from the account menu and back; a reload keeps it; sign out', async ({ page }) => {
+test('sign in with the email (not a mobile number): choose a company, switch from the account menu and back; a reload keeps it; sign out', async ({ page }) => {
   await page.goto('/login');
-  await page.getByLabel('Password', { exact: true }).fill('wrong-password');
-  await page.getByLabel('Email, mobile, username or employee ID').fill(mobile);
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('Email, username or employee ID').fill(mobile);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'The email, mobile number, username or password is not right.' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: MOBILE_OFF })).toBeVisible();
+  await page.getByLabel('Password', { exact: true }).fill('wrong-password');
+  await page.getByLabel('Email, username or employee ID').fill(mona);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'The email, username or password is not right.' })).toBeVisible();
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Choose a company' })).toBeVisible();
@@ -226,10 +236,14 @@ test('sign in with the mobile: choose a company, switch from the account menu an
 test('forgot password: the code is checked on its own step, then you are signed in with the new password', async ({ page }) => {
   await page.goto('/forgot');
   // A username: told to ask the admin.
-  await page.getByLabel('Email or mobile number').fill('ravi.kumar');
+  await page.getByLabel('Email address').fill('ravi.kumar');
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByText(/reset by your company admin/)).toBeVisible();
-  await page.getByLabel('Email or mobile number').fill(mobile);
+  // A mobile number: email only.
+  await page.getByLabel('Email address').fill(mobile);
+  await page.getByRole('button', { name: 'Send code' }).click();
+  await expect(page.getByText(MOBILE_OFF)).toBeVisible();
+  await page.getByLabel('Email address').fill(mona);
   await askCode(page, 'Send code');
   await expect(page.getByText(/You can ask for a new code in \d+ s/)).toBeVisible();
   const code = await devCode(page);
@@ -254,7 +268,7 @@ test('forgot password: an unknown email looks the same until the code, then says
   // A sign-up code was just sent to this email: forgot right after must wait, with a live countdown.
   await page.request.post('/api/platform/signup/start', { headers: H, data: { identifier: email } });
   await page.goto('/forgot');
-  await page.getByLabel('Email or mobile number').fill(email);
+  await page.getByLabel('Email address').fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   const wait = page.getByRole('status').filter({ hasText: /You can ask for a new code in \d+ s/ });
   await expect(wait).toBeVisible();
@@ -264,7 +278,7 @@ test('forgot password: an unknown email looks the same until the code, then says
   await page.getByRole('button', { name: 'Send code' }).click();
   await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'There is no Kaampilot account with this email or mobile number.' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'There is no Kaampilot account with this email address.' })).toBeVisible();
 });
 
 test('the email of an admin-made login: sign-up says to sign in; forgot says to ask the admin', async ({ page, request }) => {
@@ -273,7 +287,7 @@ test('the email of an admin-made login: sign-up says to sign in; forgot says to 
   const email: string = me.person.email;
   test.skip(!email, 'the demo owner has no email');
   await page.goto('/signup');
-  await page.getByLabel('Work email or mobile number').fill(email);
+  await page.getByLabel('Work email').fill(email);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -281,7 +295,7 @@ test('the email of an admin-made login: sign-up says to sign in; forgot says to 
   await page.getByRole('link', { name: 'Go to sign in' }).click();
   await expect(page).toHaveURL(/\/login/);
   // owner / Demo@1234 still signs in.
-  await page.getByLabel('Email, mobile, username or employee ID').fill('owner');
+  await page.getByLabel('Email, username or employee ID').fill('owner');
   await page.getByLabel('Password', { exact: true }).fill('Demo@1234');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'));
@@ -289,7 +303,7 @@ test('the email of an admin-made login: sign-up says to sign in; forgot says to 
 
 test('invite links: switched off and used up say so; an existing account joins with its password', async ({ browser, request }) => {
   test.setTimeout(120_000);
-  const token = await apiToken(request, mobile, NEW_PASSWORD, companyA);
+  const token = await apiToken(request, mona, NEW_PASSWORD, companyA);
   const auth = { ...H, authorization: `Bearer ${token}` };
   const mk = async (maxUses: number | null) => (await request.post('/api/platform/invites', { headers: auth, data: { apps: ['tasks'], expiresInDays: 7, maxUses } })).json();
   const off = await mk(null);
@@ -310,7 +324,7 @@ test('invite links: switched off and used up say so; an existing account joins w
   // An existing account (the e2e owner of another run is not needed: a fresh account joins, then the link is used up).
   const j = await open(browser, once.url);
   await j.page.getByRole('button', { name: 'Create my account' }).click();
-  await j.page.getByLabel('Email or mobile number').fill(`joiner-${stamp}@kaampilot.test`);
+  await j.page.getByLabel('Email address').fill(`joiner-${stamp}@kaampilot.test`);
   await j.page.getByRole('button', { name: 'Continue' }).click();
   await j.page.getByLabel('Code', { exact: true }).fill(await devCode(j.page));
   await j.page.getByRole('button', { name: 'Continue' }).click();
@@ -328,7 +342,7 @@ test('invite links: switched off and used up say so; an existing account joins w
 test('billing: FakePay failure and cancel change nothing; Suite yearly; more users (pro rata); cancel at period end → resume; GST details', async ({ page }) => {
   test.setTimeout(150_000);
   await page.goto('/login');
-  await page.getByLabel('Email, mobile, username or employee ID').fill(mobile);
+  await page.getByLabel('Email, username or employee ID').fill(mona);
   await page.getByLabel('Password', { exact: true }).fill(NEW_PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: new RegExp(companyA) }).click();
@@ -390,7 +404,7 @@ test('billing: FakePay failure and cancel change nothing; Suite yearly; more use
 
 test('owner console (staff): totals, extend a trial, suspend → the owner is sent to Billing → reactivate', async ({ page, request }) => {
   await page.goto('/login');
-  await page.getByLabel('Email, mobile, username or employee ID').fill('staff@kaampilot.test');
+  await page.getByLabel('Email, username or employee ID').fill('staff@kaampilot.test');
   await page.getByLabel('Password', { exact: true }).fill('Demo@1234');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => u.pathname !== '/login');
@@ -409,7 +423,7 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   await expect(companiesTable.getByRole('row', { name: new RegExp(companyB) }).getByText(/Suspended/i)).toBeVisible();
 
   // The owner of the suspended company lands on Billing.
-  const token = await apiToken(request, mobile, NEW_PASSWORD, companyB);
+  const token = await apiToken(request, mona, NEW_PASSWORD, companyB);
   const me = await (await request.get('/api/platform/auth/me', { headers: { ...H, authorization: `Bearer ${token}` } })).json();
   expect(me.billing.state).toBe('suspended');
 
@@ -431,7 +445,7 @@ test('owner console (staff): totals, extend a trial, suspend → the owner is se
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(1)).toContainText(/suspended/);
   // Not for anyone else: the owner of a company gets 403.
-  const ownerToken = await apiToken(request, mobile, NEW_PASSWORD, companyB);
+  const ownerToken = await apiToken(request, mona, NEW_PASSWORD, companyB);
   expect((await request.get('/api/platform/console/audit', { headers: { ...H, authorization: `Bearer ${ownerToken}` } })).status()).toBe(403);
 });
 
@@ -464,13 +478,13 @@ for (const width of [390, 320]) {
       await noSideScroll(page, path);
     }
     await page.goto('/forgot');
-    await page.getByLabel('Email or mobile number').fill(mobile);
+    await page.getByLabel('Email address').fill(mona);
     await page.getByRole('button', { name: 'Send code' }).click();
     await expect(page.getByRole('heading', { name: 'Check your code' }).or(page.getByRole('status'))).toBeVisible();
     await noSideScroll(page, '/forgot code step');
     // Signed in: Billing and the console list.
     await page.goto('/login');
-    await page.getByLabel('Email, mobile, username or employee ID').fill(mobile);
+    await page.getByLabel('Email, username or employee ID').fill(mona);
     await page.getByLabel('Password', { exact: true }).fill(NEW_PASSWORD);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.getByRole('button', { name: new RegExp(companyA) }).click();

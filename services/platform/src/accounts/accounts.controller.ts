@@ -77,7 +77,7 @@ export class AccountsController {
     return { ...respondTokens(res, out, body.client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs, setupIncomplete: out.setupIncomplete };
   }
 
-  /** Sign in with a code instead of a password (PLAN.md §21.8): step 1, a code to the account's email / mobile. */
+  /** Sign in with a code instead of a password (PLAN.md §21.8): step 1, a code to the account's email. */
   @Public()
   @Post('auth/login/code/start')
   @HttpCode(200)

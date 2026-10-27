@@ -13,7 +13,7 @@ let ownerToken = '';
 
 async function signIn(page: Page, login: string, password: string) {
   await page.goto('/login');
-  await page.getByLabel('Email, mobile, username or employee ID').fill(login);
+  await page.getByLabel('Email, username or employee ID').fill(login);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => u.pathname !== '/login');

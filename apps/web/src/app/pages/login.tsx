@@ -14,7 +14,7 @@ import { BrandFooter, BrandHeader, BrandPanel } from './login-brand';
  * Sign in (PLAN.md §19.14), the front page of kaampilot.com (§19.35): one short form, the login field focused, a
  * show-password button; then straight to Home (or ?next=). Desktop: the brand panel on the left (what Kaampilot is, a
  * small preview, "Start free"); phones: a compact header above the form. "Sign in with a code instead" (?code=1, PLAN.md
- * §21.8): a one-time code to the account's email / mobile replaces the password.
+ * §21.8): a one-time code to the account's email replaces the password.
  */
 export function LoginPage() {
   const [params] = useSearchParams();
@@ -91,7 +91,7 @@ export function LoginPage() {
             </h1>
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="login">Email, mobile, username or employee ID</Label>
+                <Label htmlFor="login">Email, username or employee ID</Label>
                 <Input
                   id="login"
                   ref={loginRef}
@@ -110,7 +110,7 @@ export function LoginPage() {
                 />
                 {missing.login && (
                   <p id="login-error" role="alert" className="text-[13px] font-medium text-destructive">
-                    Enter your email, mobile number, username or employee ID.
+                    Enter your email, username or employee ID.
                   </p>
                 )}
               </div>
@@ -162,7 +162,7 @@ export function LoginPage() {
               <div role="alert" className="space-y-1 rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive">
                 <p>{errorMessage(signIn.error)}</p>
                 {signIn.error instanceof ApiError && signIn.error.status === 401 && (
-                  <p className="text-foreground">Signed up yourself? Use the email, mobile number or username you chose.</p>
+                  <p className="text-foreground">Signed up yourself? Use the email or username you chose.</p>
                 )}
               </div>
             )}

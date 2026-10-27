@@ -69,7 +69,7 @@ export function GettingStarted({ access, welcome }: { access: Access; welcome?: 
           },
         ]
       : []),
-    { id: 'invite', title: 'Invite your team', text: 'Share an invite link: they join with their mobile or email.', done: (people.data?.length ?? 0) > 1, to: '/people?invite=1', action: 'Invite' },
+    { id: 'invite', title: 'Invite your team', text: 'Share an invite link: they join with their email.', done: (people.data?.length ?? 0) > 1, to: '/people?invite=1', action: 'Invite' },
     ...(tasks
       ? [{ id: 'punch', title: 'Mark your first attendance', text: 'Punch in from Home or the Attendance page.', done: !!today.data?.attendance?.check_in, to: '/attendance', action: 'Punch in' }]
       : []),

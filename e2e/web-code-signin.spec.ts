@@ -38,8 +38,11 @@ test('sign in with a code: username guidance, wrong code, then signed in; back t
   await expect(page).toHaveURL(/code=1/);
   await expect(page.getByRole('heading', { name: 'Sign in with a code' })).toBeVisible();
 
-  // A username has no email / mobile to send a code to.
-  await page.getByLabel('Email or mobile number').fill('ravi.kumar');
+  // A username has no email to send a code to; a mobile number is refused (email only, 2026-10-27).
+  await page.getByLabel('Email address').fill('9876543210');
+  await page.getByRole('button', { name: 'Send code' }).click();
+  await expect(page.getByText('Use your email address. Sign-in with a mobile number is not available.')).toBeVisible();
+  await page.getByLabel('Email address').fill('ravi.kumar');
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByText(/With a username or employee ID, sign in with your password/)).toBeVisible();
 
@@ -50,7 +53,7 @@ test('sign in with a code: username guidance, wrong code, then signed in; back t
   await page.getByRole('link', { name: 'Sign in with a code instead' }).click();
 
   // The sign-up code went to this email a moment ago: wait out the 30 s gap if it shows.
-  await page.getByLabel('Email or mobile number').fill(EMAIL);
+  await page.getByLabel('Email address').fill(EMAIL);
   await page.getByRole('button', { name: 'Send code' }).click();
   const wait = page.getByRole('status').filter({ hasText: /You can ask for a new code in \d+ s/ });
   const next = page.getByRole('heading', { name: 'Enter your code' });
@@ -73,30 +76,30 @@ test('sign in with a code: username guidance, wrong code, then signed in; back t
   await expect(page.getByRole('button', { name: 'Your account' })).toBeVisible();
 });
 
-test('codes by SMS not set up (email-only MSG91): sign-up, forgot and code sign-in say so on the field', async ({ page }) => {
-  // Production with only the MSG91 email template answers 503 for a mobile number (PLAN.md §21.8); the dev suite
-  // runs the fake sender, so the answer is stood in here.
-  const SMS_OFF = "Codes by SMS aren't set up yet. Use your email address instead.";
+test('codes by email not set up: sign-up, forgot and code sign-in say so on the field', async ({ page }) => {
+  // Production without an email sender answers 503 (PLAN.md §21.8); the dev suite runs the fake sender, so the answer
+  // is stood in here.
+  const CODES_OFF = "Codes by email aren't set up yet. Sign in with your password, or try again later.";
   for (const path of ['signup/start', 'auth/forgot', 'auth/login/code/start']) {
     await page.route(`**/api/platform/${path}`, (route) =>
-      route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ statusCode: 503, message: SMS_OFF }) }),
+      route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ statusCode: 503, message: CODES_OFF }) }),
     );
   }
   const screens = [
-    { url: '/signup', label: 'Work email or mobile number', button: 'Continue' },
-    { url: '/forgot', label: 'Email or mobile number', button: 'Send code' },
-    { url: '/login?code=1', label: 'Email or mobile number', button: 'Send code' },
+    { url: '/signup', label: 'Work email', button: 'Continue' },
+    { url: '/forgot', label: 'Email address', button: 'Send code' },
+    { url: '/login?code=1', label: 'Email address', button: 'Send code' },
   ];
   for (const s of screens) {
     await page.goto(s.url);
     const field = page.getByLabel(s.label);
-    await field.fill('9876543210');
+    await field.fill('asha@example.com');
     await page.getByRole('button', { name: s.button }).click();
-    await expect(page.getByRole('alert').filter({ hasText: SMS_OFF }), s.url).toBeVisible();
-    await expect(page.getByRole('alert').filter({ hasText: SMS_OFF }), `${s.url}: shown once`).toHaveCount(1);
+    await expect(page.getByRole('alert').filter({ hasText: CODES_OFF }), s.url).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: CODES_OFF }), `${s.url}: shown once`).toHaveCount(1);
     await expect(field).toHaveAttribute('aria-invalid', 'true');
     // Typing again clears it.
     await field.fill('someone@example.com');
-    await expect(page.getByRole('alert').filter({ hasText: SMS_OFF })).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: CODES_OFF })).toHaveCount(0);
   }
 });

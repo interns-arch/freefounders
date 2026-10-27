@@ -1,10 +1,10 @@
 /**
- * Sign in with a code instead of a password (PLAN.md §21.8), on /login?code=1: the email or mobile number of an account
- * → a 6-digit code (SMS / email, 10 minutes, 5 tries) → signed in, or the choice of company for an account in several.
+ * Sign in with a code instead of a password (PLAN.md §21.8), on /login?code=1: the email of an account
+ * → a 6-digit code by email (10 minutes, 5 tries) → signed in, or the choice of company for an account in several.
  * Usernames and employee IDs (admin-made logins) have nowhere to send a code: they sign in with their password.
  */
 import { type ChooseCompany } from '@kaampilot/core';
-import { identifierKind, type OtpSent, useLoginCodeStart, useLoginWithCode } from '@kaampilot/core/account';
+import { identifierKind, MOBILE_SIGN_IN_OFF, type OtpSent, useLoginCodeStart, useLoginWithCode } from '@kaampilot/core/account';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { BackButton, CodeField, channelOff, codeError, CodeWait, DevCodeNote, FormError, ResendCode, sentTo, StepTitle, TextField, useCodeTimer } from './parts';
@@ -35,15 +35,18 @@ export function CodeSignIn({ initial = '', onSignedIn, passwordLink }: { initial
 
   const submitIdentifier = (e: FormEvent) => {
     e.preventDefault();
-    if (!identifierKind(identifier)) {
+    const kind = identifierKind(identifier);
+    if (kind !== 'email') {
       return setFieldError(
-        identifier.includes('@') || /^[+\d\s()-]+$/.test(identifier.trim())
-          ? 'Enter a valid email, or a 10-digit mobile number.'
-          : 'Codes go to the email or mobile number of your Kaampilot account. With a username or employee ID, sign in with your password.',
+        kind === 'mobile'
+          ? MOBILE_SIGN_IN_OFF
+          : identifier.includes('@')
+            ? 'Enter a valid email address.'
+            : 'Codes go to the email address of your Kaampilot account. With a username or employee ID, sign in with your password.',
       );
     }
     setFieldError(null);
-    // Back from the code step with the same email / mobile: the code already sent still works.
+    // Back from the code step with the same email: the code already sent still works.
     if (otp && otp.for === identifier.trim()) return setStep('code');
     void send();
   };
@@ -62,7 +65,7 @@ export function CodeSignIn({ initial = '', onSignedIn, passwordLink }: { initial
     return (
       <form onSubmit={(e) => void submitCode(e)} noValidate className={card} aria-label="Sign in with a code">
         <BackButton onClick={() => (setFieldError(null), setStep('identifier'))} />
-        <StepTitle title="Enter your code">{sentTo(otp.for, otp.channel)}</StepTitle>
+        <StepTitle title="Enter your code">{sentTo(otp.for)}</StepTitle>
         <DevCodeNote code={otp.devCode} />
         <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null), verify.reset())} error={fieldError} />
         <FormError>{codeError(verify.error, verify.isError) ?? codeError(start.error, start.isError)}</FormError>
@@ -76,10 +79,10 @@ export function CodeSignIn({ initial = '', onSignedIn, passwordLink }: { initial
 
   return (
     <form onSubmit={submitIdentifier} noValidate className={card} aria-label="Sign in with a code">
-      <StepTitle title="Sign in with a code">We’ll send a 6-digit code to the email or mobile number of your account.</StepTitle>
+      <StepTitle title="Sign in with a code">We’ll send a 6-digit code to the email address of your account.</StepTitle>
       <TextField
         id="code-identifier"
-        label="Email or mobile number"
+        label="Email address"
         value={identifier}
         onChange={(e) => (setIdentifier(e.target.value), setFieldError(null), start.reset())}
         autoComplete="username"

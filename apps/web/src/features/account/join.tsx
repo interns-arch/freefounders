@@ -1,6 +1,6 @@
 /**
  * /join/:token (PLAN.md §21.1): "Join <company> on Kaampilot". Signed in: one Join button. Otherwise: sign up with
- * email / mobile → code → name + username + password (an existing account gives just its password), or "I already have an
+ * email → code → name + username + password (an existing account gives just its password), or "I already have an
  * account" (sign in, then back here). Then Home of that company.
  */
 import { errorMessage, session, useClaims } from '@kaampilot/core';
@@ -8,6 +8,7 @@ import {
   type AcceptAsNew,
   identifierKind,
   inviteRoleName,
+  MOBILE_SIGN_IN_OFF,
   type OtpSent,
   suggestUsername,
   useAcceptInvite,
@@ -182,16 +183,17 @@ export function JoinPage() {
           className="space-y-4"
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
-            if (!identifierKind(identifier)) return setFieldError('Enter your email or 10-digit mobile number.');
+            const kind = identifierKind(identifier);
+            if (kind !== 'email') return setFieldError(kind === 'mobile' ? MOBILE_SIGN_IN_OFF : 'Enter a valid email address.');
             setFieldError(null);
             if (otp && otp.for === identifier.trim()) return setStep(verified ? 'profile' : 'code');
             void send();
           }}
         >
-          <StepTitle title="Your email or mobile">We’ll send a 6-digit code to check it’s you.</StepTitle>
+          <StepTitle title="Your email">We’ll send a 6-digit code to check it’s you.</StepTitle>
           <TextField
             id="join-identifier"
-            label="Email or mobile number"
+            label="Email address"
             value={identifier}
             onChange={(e) => (setIdentifier(e.target.value), setFieldError(null), start.reset(), setOtp(null), setVerified(null))}
             autoComplete="username"
@@ -223,7 +225,7 @@ export function JoinPage() {
             setStep('profile');
           }}
         >
-          <StepTitle title="Check your code">{sentTo(otp.for, otp.channel)}</StepTitle>
+          <StepTitle title="Check your code">{sentTo(otp.for)}</StepTitle>
           <DevCodeNote code={otp.devCode} />
           <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null), verify.reset())} error={fieldError} />
           <FormError>{codeError(verify.error, verify.isError) ?? codeError(start.error, start.isError)}</FormError>

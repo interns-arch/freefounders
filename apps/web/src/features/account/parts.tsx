@@ -264,7 +264,7 @@ export function PasswordField({
   );
 }
 
-/** The 6-digit one-time code: one big field (paste and SMS autofill work), digits only. */
+/** The 6-digit one-time code: one big field (paste and one-time-code autofill work), digits only. */
 export function CodeField({ value, onChange, error, label = 'Code' }: { value: string; onChange: (v: string) => void; error?: string | null; label?: string }) {
   return (
     <TextField
@@ -296,7 +296,7 @@ export function DevCodeNote({ code }: { code?: string | null }) {
   );
 }
 
-/** Seconds between two codes for one email / mobile (the server's gap; a 429 says exactly how long is left). */
+/** Seconds between two codes for one email (the server's gap; a 429 says exactly how long is left). */
 const RESEND_GAP_S = 30;
 
 /** Whole seconds left until `until` (ms), ticking every second; 0 once it has passed. */
@@ -370,8 +370,7 @@ export function codeError(err: unknown, active: boolean): string | null {
 }
 
 /**
- * "Codes by SMS aren't set up yet. Use your email address instead." (or the email twin; 503, PLAN.md §21.8): shown on
- * the email / mobile field itself, since the fix is to type the other one there. null for any other error.
+ * "Codes by email aren't set up yet…" (503, PLAN.md §21.8): shown on the email field itself. null for any other error.
  */
 export function channelOff(err: unknown, active: boolean): string | null {
   if (!active || !(err instanceof ApiError) || err.status !== 503) return null;
@@ -379,6 +378,6 @@ export function channelOff(err: unknown, active: boolean): string | null {
 }
 
 /** Where the code went: "We sent a 6-digit code to a@b.com". */
-export function sentTo(identifier: string, channel?: string) {
-  return `We sent a 6-digit code to ${identifier}${channel === 'sms' ? ' by SMS' : ''}.`;
+export function sentTo(identifier: string) {
+  return `We sent a 6-digit code to ${identifier}.`;
 }

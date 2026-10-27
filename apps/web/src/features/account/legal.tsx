@@ -189,7 +189,7 @@ export function PrivacyPage() {
       <Section title="What we collect">
         <List
           items={[
-            'Account details: name, email address and/or mobile number, username, password (stored only as a one-way hash).',
+            'Account details: name, email address, username, password (stored only as a one-way hash), and a mobile number where one was given (contact only).',
             'Company details: company name, logo, departments, roles, and billing details such as legal name, GSTIN and address.',
             'Work data your company records: attendance punches with a selfie and GPS location at punch-in/out, leave, tasks, assets, payroll and documents.',
             'Payment records: plan, amount, invoice and the status returned by our payment partner. We never receive card, UPI or bank details.',
@@ -213,7 +213,7 @@ export function PrivacyPage() {
         <List
           items={[
             'Cashfree Payments, to process payments.',
-            'MSG91, to deliver sign-in codes by email or SMS.',
+            'Resend, to deliver sign-in codes by email.',
             'Our cloud hosting provider, on servers in India.',
             'Messaging or email services your company connects itself (for example WhatsApp), for the messages it switches on.',
           ]}

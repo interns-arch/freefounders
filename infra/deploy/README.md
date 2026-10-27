@@ -93,7 +93,7 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 | `PUBLIC_WEB_URL` | the address people open (invite links, Assets QR codes, Tasks CSRF origin) |
 | `TASKS_ALLOWED_HOSTS` | Django host names: the public host, localhost, 127.0.0.1, `tasks` (internal calls) |
 | `COOKIE_SECURE` | `false` on plain http (Platform refresh cookie and Assets session cookie); `true` on https |
-| `DEMO_MODE` | `1` = **open demo**: sign-up one-time codes are shown on screen (no email/SMS needed) and FakePay checkout works in this production build. **Unsafe for real customers** (anyone can sign up as any email/phone, and payments are fake). Default `0`. `BILLING_DEV_TOOLS` is always off here. |
+| `DEMO_MODE` | `1` = **open demo**: sign-up one-time codes are shown on screen (no email needed) and FakePay checkout works in this production build. **Unsafe for real customers** (anyone can sign up as any email, and payments are fake). Default `0`. `BILLING_DEV_TOOLS` is always off here. |
 | `FAKE_GATEWAY_SECRET` | FakePay signing secret (used only with `DEMO_MODE=1`) |
 | `PAYMENT_GATEWAY` | `fake` (FakePay, open demo only) or `cashfree`. Without `DEMO_MODE=1` only `cashfree` works; anything missing → checkout answers 503 "Payments are not set up yet" and the reason is in the platform log (never a key). `BILLING_GATEWAY` is the older name, read only when `PAYMENT_GATEWAY` is empty (`razorpay` there = payments off) |
 | `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV` | Cashfree App ID, Secret Key (also signs the webhooks) and `production` / `sandbox`. Set them only with `set-cashfree.sh` (below). Optional `CASHFREE_API_VERSION` (default `2026-01-01`) |
@@ -156,8 +156,9 @@ and the other APIs stay without internet. Live payments only with `DEMO_MODE=0`,
 
 ## Switching on Resend email codes (the current setup)
 Founder 2026-10-27: codes go by email through Resend (resend.com). Our server makes and checks the code; Resend only
-delivers it. SMS codes are not sent: with `DEMO_MODE=1` a mobile number still gets the code on screen; with `DEMO_MODE=0`
-it answers "Codes by SMS aren't set up yet. Use your email address instead."
+delivers it. **Email only** (founder 2026-10-27): sign-in, sign-up, forgot password, code sign-in and invites take an
+email address (password sign-in also a username or employee ID); a mobile number answers 400 "Use your email address.
+Sign-in with a mobile number is not available." everywhere, `DEMO_MODE` or not. No SMS is ever sent.
 1. Resend → *Domains*: `kaampilot.com` must show **Verified** (add the DNS records Resend lists in GoDaddy first).
 2. Resend → *API Keys* → *Create API key* (permission *Sending access*, domain kaampilot.com). Copy it.
 3. On the server: `sudo /opt/freefounders/app/infra/deploy/set-resend.sh` → paste the key (hidden), Enter for the From
@@ -171,10 +172,10 @@ code (10 minutes, 5 tries, 30 s between codes, limits per number and per network
 switched on, codes go to the platform log (and on screen while `DEMO_MODE=1`).
 
 SMS and email are each optional; at least one is needed (with the authkey). **Email only is the setup for now**
-(founder 2026-10-24: SMS waits for DLT approval): see "Email-only path" below. A channel that is not set up answers
-"Codes by SMS aren't set up yet. Use your email address instead." (or "Codes by email aren't set up yet. Use your
-mobile number instead.") once `DEMO_MODE=0`; with `DEMO_MODE=1` it stays on the fake sender (code on screen). Sign-up,
-forgot password and code sign-in all accept an email address, so nobody is blocked without SMS.
+(founder 2026-10-24: SMS waits for DLT approval): see "Email-only path" below. Email not set up answers
+"Codes by email aren't set up yet. Sign in with your password, or try again later." once `DEMO_MODE=0`; with
+`DEMO_MODE=1` it stays on the fake sender (code on screen). Since 2026-10-27 sign-in is by email only, so the SMS template
+is never used (a mobile number is refused before any code is made).
 
 **Email-only path** (no DLT needed):
 1. MSG91 → *Email* → *Domains* → *Add domain*: `mail.kaampilot.com` (a subdomain keeps the main domain's mail

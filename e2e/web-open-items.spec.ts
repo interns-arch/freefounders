@@ -14,7 +14,7 @@ async function token(request: APIRequestContext, login = OWNER.login, password =
 
 async function signIn(page: Page) {
   await page.goto('/');
-  await page.getByLabel('Email, mobile, username or employee ID').fill(OWNER.login);
+  await page.getByLabel('Email, username or employee ID').fill(OWNER.login);
   await page.getByLabel('Password').fill(OWNER.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'));

@@ -22,7 +22,7 @@ async function token(request: APIRequestContext, login = OWNER.login, password =
 
 async function signIn(page: Page, path: string, login = OWNER.login, password = OWNER.password) {
   await page.goto(path);
-  await page.getByLabel('Email, mobile, username or employee ID').fill(login);
+  await page.getByLabel('Email, username or employee ID').fill(login);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }

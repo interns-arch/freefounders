@@ -1,9 +1,9 @@
 /**
- * /forgot (PLAN.md §21.1): email or mobile → code (checked on its own step) → new password → signed in (or the choice
+ * /forgot (PLAN.md §21.1): email → code (checked on its own step) → new password → signed in (or the choice
  * of company for an account in several). For accounts; admin-made logins (username / employee ID) ask their admin.
  */
 import { type ChooseCompany, errorMessage, session } from '@kaampilot/core';
-import { identifierKind, type OtpSent, useForgotPassword, useResetPassword, useResetVerify } from '@kaampilot/core/account';
+import { identifierKind, MOBILE_SIGN_IN_OFF, type OtpSent, useForgotPassword, useResetPassword, useResetVerify } from '@kaampilot/core/account';
 import { PLATFORM_PASSWORD_MIN } from '@kaampilot/core/admin';
 import { CheckCircle2, Loader2 } from '@/components/icons';
 import { type FormEvent, useState } from 'react';
@@ -43,15 +43,18 @@ export function ForgotPage() {
 
   const submitIdentifier = (e: FormEvent) => {
     e.preventDefault();
-    if (!identifierKind(identifier)) {
+    const kind = identifierKind(identifier);
+    if (kind !== 'email') {
       return setFieldError(
-        identifier.includes('@') || /^[+\d\s()-]+$/.test(identifier.trim())
-          ? 'Enter a valid email, or a 10-digit mobile number.'
-          : 'Enter the email or mobile number of your Kaampilot account. A username or employee ID is reset by your company admin.',
+        kind === 'mobile'
+          ? MOBILE_SIGN_IN_OFF
+          : identifier.includes('@')
+            ? 'Enter a valid email address.'
+            : 'Enter the email address of your Kaampilot account. A username or employee ID is reset by your company admin.',
       );
     }
     setFieldError(null);
-    // Back from the code step with the same email / mobile: the code already sent still works.
+    // Back from the code step with the same email: the code already sent still works.
     if (otp && otp.for === identifier.trim()) return setStep('code');
     void send();
   };
@@ -113,10 +116,10 @@ export function ForgotPage() {
 
       {step === 'identifier' && (
         <form onSubmit={submitIdentifier} noValidate className="space-y-4">
-          <StepTitle title="Forgot your password?">We’ll send a code to the email or mobile number of your account.</StepTitle>
+          <StepTitle title="Forgot your password?">We’ll send a code to the email address of your account.</StepTitle>
           <TextField
             id="forgot-identifier"
-            label="Email or mobile number"
+            label="Email address"
             value={identifier}
             onChange={(e) => (setIdentifier(e.target.value), setFieldError(null), forgot.reset())}
             autoComplete="username"
@@ -136,7 +139,7 @@ export function ForgotPage() {
 
       {step === 'code' && otp && (
         <form onSubmit={(e) => void submitCode(e)} noValidate className="space-y-4">
-          <StepTitle title="Check your code">{sentTo(otp.for, otp.channel)}</StepTitle>
+          <StepTitle title="Check your code">{sentTo(otp.for)}</StepTitle>
           <DevCodeNote code={otp.devCode} />
           <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null), check.reset())} error={fieldError} />
           <FormError>{codeErr}</FormError>

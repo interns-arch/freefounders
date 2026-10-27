@@ -6,7 +6,7 @@ import { badRequest, type Caller } from '../common/http';
 import { CompanyService } from '../company/company.service';
 import { DbService } from '../db/db.service';
 import { accounts, authTickets, otpCodes, type AppKey, APPS, companies, logins, people, personApps, type PlatformRole, refreshSessions, subscriptions } from '../db/schema';
-import { normaliseIdentifier } from '../accounts/identifier';
+import { mobileRefused, normaliseIdentifier } from '../accounts/identifier';
 import { looksLikeUsername, normaliseUsername } from '../accounts/username';
 import { TicketsService } from '../accounts/otp.service';
 import { billingSummary, isReadOnly, paymentRequired, SUSPENDED_MESSAGE } from '../billing/seats';
@@ -25,7 +25,7 @@ const ROTATION_GRACE_MS = 60 * 1000;
 const LOCK_MS = 15 * 60 * 1000;
 /** An account with several companies picks one within this time (PLAN.md §21.2). */
 const CHOOSE_TTL_MS = 5 * 60 * 1000;
-const WRONG = 'The email, mobile number, username or password is not right. Check them and try again.';
+const WRONG = 'The email, username or password is not right. Check them and try again.';
 const LOCKED = 'Too many failed attempts. Try again in a few minutes.';
 /** Rotated or revoked refresh rows are kept this long (reuse of a copied token is detected while its row exists). */
 const SESSION_HISTORY_DAYS = 30;
@@ -161,22 +161,20 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     const db = this.dbs.db;
     const ipKey = `ip:${meta.ip ?? 'unknown'}`;
     if (this.throttle.blocked(ipKey, ipLimit())) throw new HttpException(IP_LIMIT_MESSAGE, 429);
-    // An account's email or mobile number (PLAN.md §21) comes first, then an account's username (§21.5); everything else
-    // is an admin-made login as before (username, then employee ID). Usernames are one namespace across accounts and
-    // admin-made logins, so at most one of them matches.
+    // An account's email (PLAN.md §21) comes first, then an account's username (§21.5); everything else is an admin-made
+    // login as before (username, then employee ID). Usernames are one namespace across accounts and admin-made logins,
+    // so at most one of them matches. A mobile number no longer signs in (email only, 2026-10-27): it is only tried as
+    // an employee ID, and otherwise refused with a clear message.
     const ident = normaliseIdentifier(input);
-    if (ident) {
-      const [account] = await db
-        .select()
-        .from(accounts)
-        .where(ident.kind === 'email' ? sql`lower(${accounts.email}) = ${ident.value}` : eq(accounts.mobile, ident.value))
-        .limit(1);
+    if (ident?.kind === 'email') {
+      const [account] = await db.select().from(accounts).where(sql`lower(${accounts.email}) = ${ident.value}`).limit(1);
       if (account) return this.loginAccount(account, password, meta, ipKey);
     } else if (looksLikeUsername(input)) {
       const [account] = await db.select().from(accounts).where(sql`lower(${accounts.username}) = ${normaliseUsername(input)}`).limit(1);
       if (account) return this.loginAccount(account, password, meta, ipKey);
     }
     const found = await this.findLogin(input);
+    if (!found && ident?.kind === 'mobile') throw mobileRefused('login');
 
     if (!found || found.person.status !== 'active' || found.companyStatus !== 'active') {
       // No usable account: same work and same answers as a real one (incl. "too many" when the lockout is on), so nobody can tell.

@@ -9,7 +9,7 @@ import { CompanySetupService } from '../company/setup.service';
 import { assertCompanyNameFree, COMPANY_NAME_MAX, companyNameAvailability } from '../company/company-name';
 import { DbService } from '../db/db.service';
 import { accounts, APPS, companies, logins, people } from '../db/schema';
-import { type Identifier, normaliseIdentifier } from './identifier';
+import { emailIdentifier, type Identifier, normaliseIdentifier } from './identifier';
 import { OtpService, TicketsService } from './otp.service';
 import { assertUsernameFree, lockUsername, USERNAME_MESSAGES, usernameConflict, usernameRefused, usernameShape, usernameTaken } from './username';
 
@@ -18,7 +18,7 @@ export const SIGNUP_TTL_MS = 30 * 60 * 1000;
 /** New companies one account may create per day (abuse guard, §20.5). */
 const COMPANIES_PER_DAY = 5;
 
-const identifierSchema = z.string().trim().min(3, 'Enter your email or mobile number').max(200);
+const identifierSchema = z.string().trim().min(3, 'Enter your email address').max(200);
 export const startSchema = z.object({ identifier: identifierSchema });
 export const verifySchema = z.object({ otpId: z.string().uuid('Ask for a new code'), code: z.string().trim().regex(/^[0-9]{6}$/, 'Enter the 6-digit code') });
 export const newPasswordSchema = z.string().min(6, 'Use at least 6 characters').max(200);
@@ -50,22 +50,22 @@ export type CompanyInput = z.infer<typeof companySchema>;
 export type AccountRow = typeof accounts.$inferSelect;
 
 const expired = () => new BadRequestException({ message: 'Your sign-up has expired. Start again.', errors: { signupToken: 'Expired' } });
-const invalidIdentifier = () => badRequest('Enter a valid email or a 10-digit Indian mobile number', { identifier: 'Enter a valid email or mobile number' });
-/** Forgot password with something that is not an email or mobile number: a username or employee ID made by an admin. */
+const invalidIdentifier = () => badRequest('Enter a valid email address', { identifier: 'Enter a valid email address' });
+/** Forgot password with something that is not an email: a username or employee ID made by an admin. */
 const adminResets = () =>
-  badRequest('Usernames and employee IDs are reset by your company admin. Ask them to reset your password, or enter the email or mobile number of your Kaampilot account.', {
-    identifier: 'Enter the email or mobile number of your account',
+  badRequest('Usernames and employee IDs are reset by your company admin. Ask them to reset your password, or enter the email address of your Kaampilot account.', {
+    identifier: 'Enter the email address of your account',
   });
 const askAdmin = () =>
   badRequest('This email signs in with a login your company admin made, so only your admin can reset its password. Ask them to reset it.', { code: 'Admin login' });
-/** Code sign-in with a username or employee ID: those have no email / mobile of their own to send a code to. */
+/** Code sign-in with a username or employee ID: those have no email of their own to send a code to. */
 const usePassword = () =>
-  badRequest('Codes go to the email or mobile number of a Kaampilot account. With a username or employee ID, sign in with your password.', {
-    identifier: 'Enter the email or mobile number of your account, or sign in with your password',
+  badRequest('Codes go to the email address of a Kaampilot account. With a username or employee ID, sign in with your password.', {
+    identifier: 'Enter the email address of your account, or sign in with your password',
   });
 const adminLoginUsesPassword = () =>
   badRequest('This email signs in with a login your company admin made. Sign in with your password instead.', { code: 'Admin login' });
-const noAccount = () => badRequest('There is no Kaampilot account with this email or mobile number. Check it, or sign up instead.', { code: 'No account' });
+const noAccount = () => badRequest('There is no Kaampilot account with this email address. Check it, or sign up instead.', { code: 'No account' });
 
 /**
  * Accounts (PLAN.md §21): sign-up by one-time code, forgot password, and new companies for an account. Sign-in with an
@@ -131,7 +131,7 @@ export class AccountsService {
   // ─── sign-up ────────────────────────────────────────────────────────────
 
   async signupStart(identifier: string, ip?: string) {
-    const id = normaliseIdentifier(identifier);
+    const id = emailIdentifier(identifier);
     if (!id) throw invalidIdentifier();
     return this.otp.start(id, 'signup', ip);
   }
@@ -167,7 +167,8 @@ export class AccountsService {
   async checkSignup(signupToken: string, password: string, ip?: string, fullName?: string, username?: string): Promise<{ id: Identifier; existing?: AccountRow; username?: string }> {
     const ticket = await this.tickets.peek(signupToken, 'signup');
     const id = ticket?.target ? normaliseIdentifier(ticket.target) : null;
-    if (!ticket || !id) throw expired();
+    // A sign-up proved by SMS before email-only (2026-10-27) is expired: start again with an email.
+    if (!ticket || !id || id.kind !== 'email') throw expired();
     const existing = await this.findAccount(id);
     if (existing) {
       await this.auth.verifyAccountPassword(existing, password, `ip:${ip ?? 'unknown'}`);
@@ -197,7 +198,7 @@ export class AccountsService {
     if (!(await this.tickets.take(signupToken, 'signup'))) throw expired();
     const [account] = await this.dbs.db
       .insert(accounts)
-      .values({ fullName, username, email: checked.id.kind === 'email' ? checked.id.value : null, mobile: checked.id.kind === 'mobile' ? checked.id.value : null, passwordHash: await hashPassword(password) })
+      .values({ fullName, username, email: checked.id.value, passwordHash: await hashPassword(password) })
       .returning();
     return account;
   }
@@ -218,7 +219,7 @@ export class AccountsService {
   /** POST companies: a new company owned by the caller's account; tokens for it (this session ends). */
   async createCompany(caller: Caller, input: CompanyInput, meta: Meta) {
     const account = await this.accountOfPerson(caller.personId);
-    if (!account) throw new ForbiddenException('New companies are made from an account. Sign up with your email or mobile number first.');
+    if (!account) throw new ForbiddenException('New companies are made from an account. Sign up with your email address first.');
     const ids = await this.dbs.tx(async () => {
       await this.assertCompanyQuota(account.id);
       return this.insertCompany(account, input);
@@ -296,18 +297,18 @@ export class AccountsService {
   // ─── sign in with a code (PLAN.md §21.8) ────────────────────────────────
 
   /**
-   * POST auth/login/code/start: a code to the account's email or mobile. Always the same answer, whether an account
+   * POST auth/login/code/start: a code to the account's email. Always the same answer, whether an account
    * exists or not (no account enumeration; the same limits as every code: 30 s gap, 5 per 15 minutes, per IP).
    */
   async loginCodeStart(identifier: string, ip?: string) {
-    const id = normaliseIdentifier(identifier);
-    if (!id) throw identifier.includes('@') || /^[+0-9 ()-]+$/.test(identifier.trim()) ? invalidIdentifier() : usePassword();
+    const id = emailIdentifier(identifier);
+    if (!id) throw identifier.includes('@') ? invalidIdentifier() : usePassword();
     const { otpId, channel, devCode } = await this.otp.start(id, 'login', ip);
     return { otpId, channel, ...(devCode ? { devCode } : {}) };
   }
 
   /**
-   * POST auth/login/code/verify: the code proves the email / mobile, so only now does the answer say that there is no
+   * POST auth/login/code/verify: the code proves the email, so only now does the answer say that there is no
    * account, or that the email belongs to an admin-made login (which signs in with its password). The per-IP sign-in
    * guard applies, and a wrong code counts like a wrong password.
    */
@@ -344,14 +345,14 @@ export class AccountsService {
 
   /** Always the same answer, whether an account exists or not (no account enumeration). */
   async forgot(identifier: string, ip?: string) {
-    const id = normaliseIdentifier(identifier);
-    if (!id) throw identifier.includes('@') || /^[+0-9 ()-]+$/.test(identifier.trim()) ? invalidIdentifier() : adminResets();
+    const id = emailIdentifier(identifier);
+    if (!id) throw identifier.includes('@') ? invalidIdentifier() : adminResets();
     const { otpId, channel, devCode } = await this.otp.start(id, 'reset', ip);
     return { otpId, channel, ...(devCode ? { devCode } : {}) };
   }
 
   /**
-   * The account a reset code was sent to. The code proves the email / mobile, so only now does the answer say that there
+   * The account a reset code was sent to. The code proves the email, so only now does the answer say that there
    * is no account, or that the email belongs to an admin-made login (whose password only the company admin resets).
    */
   private async accountForReset(target: string): Promise<AccountRow> {

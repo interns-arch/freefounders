@@ -3189,6 +3189,19 @@ checks the code. SMS: fake sender with DEMO_MODE=1 / dev, "Codes by SMS aren't s
 types the key on the server with `infra/deploy/set-resend.sh` (hidden; checked against Resend before saving). The key
 shown in chat must be rotated. MSG91 code stays for later SMS.
 
+**Email only (2026-10-27).** Founder: "email only for now, remove sms and phone no login from everywhere". A mobile
+number no longer signs in, signs up, resets a password, gets a code or accepts an invite: `emailIdentifier()`
+(`accounts/identifier.ts`) refuses it on `signup/start`, `auth/forgot`, `auth/login/code/start` with 400 "Use your email
+address. Sign-in with a mobile number is not available." (`errors.identifier`); `auth/login` with a mobile-shaped login
+that is not an employee ID answers the same 400 (`errors.login`); a sign-up token proved by SMS earlier counts as expired
+(invites use the same token). Password sign-in: email, username or employee ID ("The email, username or password is not
+right."). `accounts.mobile` and people's mobile numbers stay as contact data (HR, WhatsApp, People); the MSG91 SMS
+sender stays in code, unreachable from requests. Web: the fields are "Email address" / "Work email" / "Email, username
+or employee ID", a typed mobile number gets the same message before any request (`MOBILE_SIGN_IN_OFF` in
+`@kaampilot/core/account`); invite and checklist texts say email. Accounts that only ever had a mobile number (no email)
+sign in with their username (§21.5); one with neither has no way in until an email can be added (not built). Tests: `signup-billing.test.ts` (refused on all four
+endpoints), `otp-msg91.test.ts` (email paths; SMS on the sender only), e2e account-flows / code-signin updated.
+
 ### 21.9 Kaampilot console dashboard + production log (2026-10-24)
 
 Founder: "production log, and I want a dashboard for my admin page where we can see the complete users of this

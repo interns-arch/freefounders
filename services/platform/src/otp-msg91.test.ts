@@ -1,4 +1,5 @@
-// MSG91 codes and sign in with a code (PLAN.md §21.8). Run with `npm test`. No network: MSG91 is a local stand-in
+// MSG91 codes and sign in with a code (PLAN.md §21.8). Email only since 2026-10-27: the SMS path is tested on the
+// sender itself, because no request can reach it. Run with `npm test`. No network: MSG91 is a local stand-in
 // (MSG91_BASE_URL); the keys below are dummies, never real ones.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -9,7 +10,7 @@ import { type INestApplication, Logger, type LoggerService } from '@nestjs/commo
 import { eq } from 'drizzle-orm';
 import { decodeJwt } from 'jose';
 import { normaliseIdentifier } from './accounts/identifier';
-import { msg91Config } from './accounts/msg91.sender';
+import { msg91Config, Msg91OtpSender } from './accounts/msg91.sender';
 import { EnvOtpSender } from './accounts/otp-senders';
 import { hashPassword } from './auth/auth.service';
 import { Throttle } from './auth/throttle';
@@ -64,6 +65,15 @@ const rowsFor = async (identifier: string) => dbs.db.select().from(otpCodes).whe
 
 /** A random Indian mobile number. */
 const mobile = () => `9${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
+/** A random email address. */
+const email = () => `code-${randomUUID().slice(0, 8)}@mail.test`;
+const MOBILE_OFF = 'Use your email address. Sign-in with a mobile number is not available.';
+const EMAIL_ENV = { MSG91_EMAIL_TEMPLATE_ID: 'kaampilot_code', MSG91_EMAIL_FROM: 'no-reply@mail.kaampilot.test' };
+const emailOn = () => Object.assign(process.env, EMAIL_ENV);
+const emailOff = () => {
+  delete process.env.MSG91_EMAIL_TEMPLATE_ID;
+  delete process.env.MSG91_EMAIL_FROM;
+};
 
 /** An account in `n` new companies (rows only; no apps needed to sign in). */
 async function accountIn(n: number, ident: { email?: string; mobile?: string }) {
@@ -92,6 +102,7 @@ before(async () => {
     if (mode === '500') return json(500, { message: 'Internal error', type: 'error' });
     if (mode === '401') return json(401, { message: 'Invalid authkey', type: 'error', code: '201' });
     if (mode === '400') return json(400, { message: 'Bad request', type: 'error' });
+    if (mode === 'error200' && url.pathname === '/api/v5/email/send') return json(200, { status: 'fail', hasError: true, message: 'The template is invalid.' });
     if (mode === 'error200') return json(200, { message: 'The provided flow ID or template ID is invalid.', type: 'error' });
     if (url.pathname === '/api/v5/otp') return json(200, { request_id: '3561716b6c4a313233343536', type: 'success' });
     if (url.pathname === '/api/v5/email/send') return json(200, { status: 'success', data: { unique_id: 'a1d2e4b8-4d04-41f9-b8f2-34be6a5c6d49' }, errors: {}, hasError: false, message: 'Thank you. Your request has been queued.' });
@@ -105,6 +116,7 @@ before(async () => {
   process.env.MSG91_SMS_TEMPLATE_ID = 'tmpl-sms-1';
   process.env.MSG91_BASE_URL = msg91Url;
   process.env.MSG91_TIMEOUT_MS = '300';
+  emailOn();
   process.env.OTP_DEV_ECHO = '1';
   process.env.OTP_IP_LIMIT = '0';
   app = await createApp();
@@ -126,13 +138,16 @@ beforeEach(() => {
 });
 
 describe('MSG91 sender (PLAN.md §21.8)', () => {
-  test('SMS: SendOTP with OUR code, authkey header, 91XXXXXXXXXX, template id and variables; nothing secret in the log', async () => {
+  test('SMS (sender only; no request reaches it since email-only): SendOTP with OUR code, authkey header, 91XXXXXXXXXX, template id and variables; nothing secret in the log', async () => {
     const m = mobile();
+    // A request with a mobile number never gets this far.
+    const refused = await call('POST', '/signup/start', { identifier: `+91 ${m}` });
+    assert.equal(refused.status, 400);
+    assert.equal(refused.body.message, MOBILE_OFF);
+    assert.equal(received.length, 0);
     logs.length = 0;
-    const res = await call('POST', '/signup/start', { identifier: `+91 ${m}` });
-    assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.equal(res.body.channel, 'sms');
-    assert.match(res.body.devCode, /^[0-9]{6}$/);
+    const sender = new Msg91OtpSender(msg91Config().config!);
+    await sender.send({ kind: 'mobile', value: `+91${m}`, channel: 'sms' }, '424242', 'signup');
     assert.equal(received.length, 1);
     const r = received[0];
     assert.equal(r.method, 'POST');
@@ -141,27 +156,23 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
     assert.match(String(r.headers['content-type']), /application\/json/);
     assert.equal(r.query.get('template_id'), 'tmpl-sms-1');
     assert.equal(r.query.get('mobile'), `91${m}`);
-    assert.equal(r.query.get('otp'), res.body.devCode, 'our code, so our checks stay the source of truth');
+    assert.equal(r.query.get('otp'), '424242', 'our code, so our checks stay the source of truth');
     assert.equal(r.query.get('otp_length'), '6');
     assert.equal(r.query.get('otp_expiry'), '10');
     assert.deepEqual(r.body, { app: 'Kaampilot', minutes: '10' });
     // The provider's request id is logged; the code and the authkey never are.
     assert.ok(logs.some((l) => l.includes('3561716b6c4a313233343536')), logs.join('\n'));
-    assert.ok(!logs.some((l) => l.includes(res.body.devCode) || l.includes(AUTHKEY) || l.includes(m)), logs.join('\n'));
-    // The code works (verified by us, never by MSG91).
-    const v = await call('POST', '/signup/verify', { otpId: res.body.otpId, code: res.body.devCode });
-    assert.equal(v.status, 200, JSON.stringify(v.body));
-    assert.equal(received.length, 1, 'no MSG91 verify call');
+    assert.ok(!logs.some((l) => l.includes('424242') || l.includes(AUTHKEY) || l.includes(m)), logs.join('\n'));
   });
 
   test('refused by MSG91 (error body, 400): a plain message, the code is never usable, and asking again works at once', async () => {
     for (const m of ['error200', '400'] as const) {
-      const num = mobile();
+      const num = email();
       mode = m;
       logs.length = 0;
       const res = await call('POST', '/auth/forgot', { identifier: num });
       assert.equal(res.status, 400, `${m}: ${JSON.stringify(res.body)}`);
-      assert.equal(res.body.message, "We couldn't send the code. Check the number and try again.");
+      assert.equal(res.body.message, "We couldn't send the code. Check the email address and try again.");
       assert.equal(res.body.devCode, undefined);
       const [row] = await rowsFor(num);
       assert.ok(row.failedAt, 'marked failed');
@@ -178,7 +189,7 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
 
   test('MSG91 down (500 or no answer within the timeout): 503, the row is failed, the quota is not used', async () => {
     for (const m of ['500', 'hang'] as const) {
-      const num = mobile();
+      const num = email();
       mode = m;
       const started = Date.now();
       const res = await call('POST', '/signup/start', { identifier: num });
@@ -196,7 +207,7 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
   test('a wrong authkey (401) answers "codes can\'t be sent right now" and says why in the log', async () => {
     mode = '401';
     logs.length = 0;
-    const res = await call('POST', '/signup/start', { identifier: mobile() });
+    const res = await call('POST', '/signup/start', { identifier: email() });
     assert.equal(res.status, 503);
     assert.match(res.body.message, /Codes can't be sent right now/);
     assert.ok(logs.some((l) => /MSG91_AUTHKEY/.test(l)), logs.join('\n'));
@@ -204,7 +215,7 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
   });
 
   test('missing keys: 503 before anything is stored; the server keeps running', async () => {
-    const num = mobile();
+    const num = email();
     delete process.env.MSG91_AUTHKEY;
     try {
       const res = await call('POST', '/signup/start', { identifier: num });
@@ -216,37 +227,36 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
       process.env.MSG91_AUTHKEY = AUTHKEY;
     }
     delete process.env.MSG91_SMS_TEMPLATE_ID;
+    emailOff();
     try {
-      assert.equal((await call('POST', '/signup/start', { identifier: mobile() })).status, 503);
+      assert.equal((await call('POST', '/signup/start', { identifier: email() })).status, 503);
     } finally {
       process.env.MSG91_SMS_TEMPLATE_ID = 'tmpl-sms-1';
+      emailOn();
     }
   });
 
   test('email: MSG91 Email API with template, from, domain and variables once set up; before that dev keeps the fake sender, production says not set up', async () => {
     const email = `code-${randomUUID().slice(0, 8)}@mail.test`;
+    emailOff();
     // Not set up, dev machine: the fake sender (log), nothing to MSG91.
     const dev = await call('POST', '/signup/start', { identifier: email });
     assert.equal(dev.status, 200);
     assert.equal(received.length, 0);
-    // Not set up, production without DEMO_MODE: 503, and no code on screen for SMS either.
+    // Not set up, production without DEMO_MODE: 503.
     const env = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
       await ageCodes(email);
       const prod = await call('POST', '/signup/start', { identifier: email });
       assert.equal(prod.status, 503);
-      assert.equal(prod.body.message, "Codes by email aren't set up yet. Use your mobile number instead.");
-      const sms = await call('POST', '/signup/start', { identifier: mobile() });
-      assert.equal(sms.status, 200);
-      assert.equal(sms.body.devCode, undefined, 'production with DEMO_MODE=0 never shows the code');
+      assert.equal(prod.body.message, "Codes by email aren't set up yet. Sign in with your password, or try again later.");
     } finally {
       process.env.NODE_ENV = env;
     }
     // Set up: MSG91 email.
-    process.env.MSG91_EMAIL_TEMPLATE_ID = 'kaampilot_code';
-    process.env.MSG91_EMAIL_FROM = 'no-reply@mail.kaampilot.test';
-    try {
+    emailOn();
+    {
       received.length = 0;
       await ageCodes(email);
       const res = await call('POST', '/auth/login/code/start', { identifier: email });
@@ -262,16 +272,11 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
         domain: 'mail.kaampilot.test',
         template_id: 'kaampilot_code',
       });
-    } finally {
-      delete process.env.MSG91_EMAIL_TEMPLATE_ID;
-      delete process.env.MSG91_EMAIL_FROM;
     }
   });
 
-  test('email only (no SMS template; founder 2026-10-24): email codes go by MSG91, SMS falls back to the fake sender on dev / DEMO_MODE=1 and is refused in production with a clear message', async () => {
+  test('email only (no SMS template; founder 2026-10-24, 2026-10-27): email codes go by MSG91; a mobile number is refused on every path, dev or production, nothing stored or sent', async () => {
     delete process.env.MSG91_SMS_TEMPLATE_ID;
-    process.env.MSG91_EMAIL_TEMPLATE_ID = 'kaampilot_code';
-    process.env.MSG91_EMAIL_FROM = 'no-reply@mail.kaampilot.test';
     const env = process.env.NODE_ENV;
     const demo = process.env.DEMO_MODE;
     try {
@@ -284,8 +289,7 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
       assert.match(new EnvOtpSender().describe(), /SMS: fake sender \(MSG91 SMS not set up\); email: MSG91 Email/);
 
       // Email sign-up works: MSG91 Email API, and the code verifies.
-      const email = `only-${randomUUID().slice(0, 8)}@mail.test`;
-      const res = await call('POST', '/signup/start', { identifier: email });
+      const res = await call('POST', '/signup/start', { identifier: email() });
       assert.equal(res.status, 200, JSON.stringify(res.body));
       assert.equal(res.body.channel, 'email');
       assert.equal(received.length, 1);
@@ -294,40 +298,31 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
       assert.equal(received[0].body.recipients[0].variables.purpose, 'finish signing up');
       assert.equal((await call('POST', '/signup/verify', { otpId: res.body.otpId, code: res.body.devCode })).status, 200);
 
-      // SMS on a dev machine: the fake sender, nothing to MSG91.
+      // A mobile number: 400 with the email-only message on dev, the open demo and production alike.
       received.length = 0;
-      const dev = await call('POST', '/signup/start', { identifier: mobile() });
-      assert.equal(dev.status, 200, JSON.stringify(dev.body));
-      assert.equal(received.length, 0);
-
-      // SMS in production without DEMO_MODE: 503 with the message, nothing stored, nothing sent.
-      process.env.NODE_ENV = 'production';
-      for (const path of ['/signup/start', '/auth/forgot', '/auth/login/code/start']) {
-        const num = mobile();
-        const prod = await call('POST', path, { identifier: num });
-        assert.equal(prod.status, 503, `${path}: ${JSON.stringify(prod.body)}`);
-        assert.equal(prod.body.message, "Codes by SMS aren't set up yet. Use your email address instead.");
-        assert.equal((await rowsFor(num)).length, 0);
+      for (const [nodeEnv, demoMode] of [[env, undefined], ['production', '1'], ['production', undefined]] as const) {
+        process.env.NODE_ENV = nodeEnv;
+        if (demoMode === undefined) delete process.env.DEMO_MODE;
+        else process.env.DEMO_MODE = demoMode;
+        for (const path of ['/signup/start', '/auth/forgot', '/auth/login/code/start']) {
+          const num = mobile();
+          const r = await call('POST', path, { identifier: num });
+          assert.equal(r.status, 400, `${path}: ${JSON.stringify(r.body)}`);
+          assert.equal(r.body.message, MOBILE_OFF);
+          assert.equal(r.body.errors.identifier, 'Use your email address');
+          assert.equal((await rowsFor(num)).length, 0);
+        }
       }
       assert.equal(received.length, 0);
       // Email still works in production.
-      const prodEmail = await call('POST', '/auth/forgot', { identifier: `only-${randomUUID().slice(0, 8)}@mail.test` });
+      const prodEmail = await call('POST', '/auth/forgot', { identifier: email() });
       assert.equal(prodEmail.status, 200, JSON.stringify(prodEmail.body));
       assert.equal(received.length, 1);
-
-      // Production with DEMO_MODE=1 (the open demo): SMS stays on the fake sender.
-      process.env.DEMO_MODE = '1';
-      received.length = 0;
-      const demoSms = await call('POST', '/signup/start', { identifier: mobile() });
-      assert.equal(demoSms.status, 200, JSON.stringify(demoSms.body));
-      assert.equal(received.length, 0);
     } finally {
       process.env.NODE_ENV = env;
       if (demo === undefined) delete process.env.DEMO_MODE;
       else process.env.DEMO_MODE = demo;
       process.env.MSG91_SMS_TEMPLATE_ID = 'tmpl-sms-1';
-      delete process.env.MSG91_EMAIL_TEMPLATE_ID;
-      delete process.env.MSG91_EMAIL_FROM;
     }
   });
 
@@ -346,13 +341,17 @@ describe('MSG91 sender (PLAN.md §21.8)', () => {
 });
 
 describe('sign in with a code (PLAN.md §21.8)', () => {
-  test('mobile of an account in one company: code → tokens and the refresh cookie, like a password sign-in', async () => {
-    const m = mobile();
-    const { companyIds } = await accountIn(1, { mobile: m });
+  test('email of an account in one company: code → tokens and the refresh cookie, like a password sign-in; its stored mobile number does not sign in', async () => {
+    const m = email();
+    const num = mobile();
+    const { companyIds } = await accountIn(1, { email: m, mobile: num });
+    const byMobile = await call('POST', '/auth/login/code/start', { identifier: num });
+    assert.equal(byMobile.status, 400);
+    assert.equal(byMobile.body.message, MOBILE_OFF);
     const start = await call('POST', '/auth/login/code/start', { identifier: m });
     assert.equal(start.status, 200, JSON.stringify(start.body));
-    assert.equal(start.body.channel, 'sms');
-    assert.equal(received[0].query.get('mobile'), `91${m}`);
+    assert.equal(start.body.channel, 'email');
+    assert.equal(received[0].body.recipients[0].to[0].email, m);
     const res = await call('POST', '/auth/login/code/verify', { otpId: start.body.otpId, code: start.body.devCode });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.ok(res.body.accessToken);
@@ -364,8 +363,8 @@ describe('sign in with a code (PLAN.md §21.8)', () => {
   });
 
   test('wrong codes count down, then the code is gone', async () => {
-    const m = mobile();
-    await accountIn(1, { mobile: m });
+    const m = email();
+    await accountIn(1, { email: m });
     const start = await call('POST', '/auth/login/code/start', { identifier: m });
     const wrong = start.body.devCode === '000000' ? '111111' : '000000';
     const first = await call('POST', '/auth/login/code/verify', { otpId: start.body.otpId, code: wrong });
@@ -392,9 +391,9 @@ describe('sign in with a code (PLAN.md §21.8)', () => {
   });
 
   test('no account: the same answer at the start; only the code reveals it', async () => {
-    const known = mobile();
-    await accountIn(1, { mobile: known });
-    const unknown = mobile();
+    const known = email();
+    await accountIn(1, { email: known });
+    const unknown = email();
     const a = await call('POST', '/auth/login/code/start', { identifier: known });
     const b = await call('POST', '/auth/login/code/start', { identifier: unknown });
     assert.equal(a.status, b.status);
@@ -423,8 +422,8 @@ describe('sign in with a code (PLAN.md §21.8)', () => {
   });
 
   test('same limits as every code: 30 s gap, and the per-IP sign-in guard', async () => {
-    const m = mobile();
-    await accountIn(1, { mobile: m });
+    const m = email();
+    await accountIn(1, { email: m });
     assert.equal((await call('POST', '/auth/login/code/start', { identifier: m })).status, 200);
     const soon = await call('POST', '/auth/login/code/start', { identifier: m });
     assert.equal(soon.status, 429);

@@ -97,7 +97,7 @@ export function useResetVerify() {
 export function useResetPassword() {
   return useMutation({ mutationFn: accountApi.reset });
 }
-/** Sign in with a code, step 1: a code to the account's email or mobile number. */
+/** Sign in with a code, step 1: a code to the account's email. */
 export function useLoginCodeStart() {
   return useMutation({ mutationFn: (identifier: string) => accountApi.loginCodeStart(identifier) });
 }

@@ -10,10 +10,10 @@ export interface OtpSent {
   devCode?: string;
 }
 
-/** POST signup/verify: the token proves the email / mobile for 30 minutes. */
+/** POST signup/verify: the token proves the email for 30 minutes. */
 export interface SignupVerified {
   signupToken: string;
-  /** This email / mobile already has an account: it signs in with its password instead of choosing one. */
+  /** This email already has an account: it signs in with its password instead of choosing one. */
   accountExists: boolean;
 }
 
@@ -137,7 +137,13 @@ export const INDUSTRIES = [
 /** The name of a role on an invite, whatever shape the server sent. */
 export const inviteRoleName = (r: InviteRole) => (typeof r === 'string' ? r : r.name);
 
-/** "email" or "mobile", from what was typed (Indian mobiles: 10 digits, optional +91 / 91 / 0). */
+/** Email only for sign-in, sign-up, codes and invites (founder 2026-10-27, PLAN.md §21.8). */
+export const MOBILE_SIGN_IN_OFF = 'Use your email address. Sign-in with a mobile number is not available.';
+
+/**
+ * "email" or "mobile", from what was typed (Indian mobiles: 10 digits, optional +91 / 91 / 0). A mobile number is
+ * recognised only to say that it no longer signs in (`MOBILE_SIGN_IN_OFF`).
+ */
 export function identifierKind(value: string): 'email' | 'mobile' | null {
   const v = value.trim();
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email';

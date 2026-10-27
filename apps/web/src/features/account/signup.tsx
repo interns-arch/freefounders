@@ -1,10 +1,10 @@
 /**
- * /signup (PLAN.md §20.5, §21.1): work email or mobile → 6-digit code → name + username + password (or, for an existing account,
+ * /signup (PLAN.md §20.5, §21.1): work email → 6-digit code → name + username + password (or, for an existing account,
  * just its password) → the company → "Setting up your company…" → Home with the Getting started checklist.
  * One question per screen, a progress bar and a back button; nothing typed is lost going back.
  */
 import { ApiError, errorMessage } from '@kaampilot/core';
-import { companyNameErrorOf, type CompanyInput, identifierKind, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@kaampilot/core/account';
+import { companyNameErrorOf, type CompanyInput, identifierKind, MOBILE_SIGN_IN_OFF, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@kaampilot/core/account';
 import { PLATFORM_PASSWORD_MIN } from '@kaampilot/core/admin';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -15,7 +15,7 @@ import { AuthFrame, BackButton, CodeField, channelOff, codeError, CodeWait, DevC
 
 type Step = 'identifier' | 'code' | 'profile' | 'company' | 'setup';
 const ORDER: Step[] = ['identifier', 'code', 'profile', 'company'];
-const LABELS: Record<Step, string> = { identifier: 'Your email or mobile', code: 'Verify', profile: 'About you', company: 'Your company', setup: '' };
+const LABELS: Record<Step, string> = { identifier: 'Your email', code: 'Verify', profile: 'About you', company: 'Your company', setup: '' };
 
 export function SignupPage() {
   const navigate = useNavigate();
@@ -77,12 +77,13 @@ export function SignupPage() {
 
   const submitIdentifier = (e: FormEvent) => {
     e.preventDefault();
-    if (!identifierKind(identifier)) {
-      setFieldError('Enter a work email (name@company.com) or a 10-digit mobile number.');
+    const kind = identifierKind(identifier);
+    if (kind !== 'email') {
+      setFieldError(kind === 'mobile' ? MOBILE_SIGN_IN_OFF : 'Enter a work email (name@company.com).');
       return;
     }
     setFieldError(null);
-    // Back from the code step with the same email / mobile: the code already sent still works.
+    // Back from the code step with the same email: the code already sent still works.
     if (otp && otp.for === identifier.trim() && !token) return setStep('code');
     if (token && otp?.for === identifier.trim()) return setStep('profile');
     void sendCode();
@@ -174,7 +175,7 @@ export function SignupPage() {
           <StepTitle title="Start free">Attendance, tasks and assets for your team. 14-day trial, no card.</StepTitle>
           <TextField
             id="signup-identifier"
-            label="Work email or mobile number"
+            label="Work email"
             value={identifier}
             onChange={(e) => {
               setIdentifier(e.target.value);
@@ -198,7 +199,7 @@ export function SignupPage() {
 
       {step === 'code' && otp && (
         <form onSubmit={submitCode} noValidate className="space-y-4">
-          <StepTitle title="Check your code">{sentTo(otp.for, otp.channel)}</StepTitle>
+          <StepTitle title="Check your code">{sentTo(otp.for)}</StepTitle>
           <DevCodeNote code={otp.devCode} />
           <CodeField value={code} onChange={(v) => (setCode(v), setFieldError(null), verify.reset())} error={fieldError} />
           <FormError>{codeError(verify.error, verify.isError) ?? codeError(start.error, start.isError)}</FormError>

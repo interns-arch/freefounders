@@ -10,7 +10,7 @@ export const REFRESH_COOKIE = 'ff_refresh';
 const COOKIE_PATH = '/api/platform/auth';
 
 const loginSchema = z.object({
-  login: z.string().trim().min(1, 'Enter your email, mobile number, username or employee ID').max(200),
+  login: z.string().trim().min(1, 'Enter your email, username or employee ID').max(200),
   password: z.string().min(1, 'Enter your password').max(200),
   client: z.enum(['web', 'mobile']).default('web'),
 });
@@ -60,7 +60,7 @@ export class AuthController {
   }
 
   /**
-   * `{login, password}`: username, email or employee ID of an admin-made login, or an account's email / mobile. An
+   * `{login, password}`: username, email or employee ID of an admin-made login, or an account's email (or username). An
    * account in several companies gets `{chooseCompany, ticket}`, then sends `{ticket, companyId}` (PLAN.md §21.2).
    */
   @Public()

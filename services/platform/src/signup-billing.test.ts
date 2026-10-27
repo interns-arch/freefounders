@@ -192,11 +192,29 @@ describe('sign-up (PLAN.md §21)', () => {
     assert.ok(again.body.accessToken && again.cookie, 'refresh cookie like any sign-in');
   });
 
-  test('a mobile number works the same; the same identifier again means the existing account (its password)', async () => {
-    const out = await signup('98111 22333', { name: 'Mobile Works' });
-    const [a] = await dbs.db.select().from(accounts).where(eq(accounts.mobile, '+919811122333'));
-    assert.ok(a && !a.email);
-    const v = await verified('+91 9811122333');
+  test('email only (2026-10-27): a mobile number is refused for sign-up, forgot, code sign-in and password sign-in; the same email again means the existing account', async () => {
+    const MOBILE_OFF = 'Use your email address. Sign-in with a mobile number is not available.';
+    // An account made before email-only keeps its stored mobile number (contact data), but it no longer signs in.
+    const [old] = await dbs.db.insert(accounts).values({ fullName: 'Old Mobile', mobile: '+919811122333', passwordHash: await hashPassword(PASSWORD) }).returning();
+    assert.ok(old.mobile);
+    for (const path of ['/signup/start', '/auth/forgot', '/auth/login/code/start']) {
+      for (const identifier of ['98111 22333', '+91 9811122333', '9876543210']) {
+        const res = await call('POST', path, { body: { identifier } });
+        assert.equal(res.status, 400, `${path} ${identifier}: ${JSON.stringify(res.body)}`);
+        assert.equal(res.body.message, MOBILE_OFF);
+        assert.equal(res.body.errors.identifier, 'Use your email address');
+      }
+    }
+    assert.equal((await dbs.db.select().from(otpCodes).where(eq(otpCodes.target, '+919811122333'))).length, 0, 'no code stored');
+    const pw = await login('9811122333');
+    assert.equal(pw.status, 400, JSON.stringify(pw.body));
+    assert.equal(pw.body.message, MOBILE_OFF);
+    assert.equal(pw.body.errors.login, 'Use your email address');
+
+    // The same email again: the existing account (its password).
+    const email = `again-${randomUUID().slice(0, 8)}@mail.test`;
+    const out = await signup(email, { name: 'Email Works' });
+    const v = await verified(email);
     assert.equal(v.accountExists, true);
     const wrong = await call('POST', '/signup/complete', { body: { signupToken: v.signupToken, fullName: 'x', password: 'Wrong@pass1', company: { name: 'Second Co', apps: ['tasks'] } } });
     assert.equal(wrong.status, 401);

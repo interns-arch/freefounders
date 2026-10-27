@@ -79,7 +79,7 @@ export function InvitesDialog({ open, onClose, companyName }: { open: boolean; o
       <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Invite people</DialogTitle>
-          <DialogDescription>Anyone with the link joins {companyName ?? 'the company'} with the role you choose. They sign up with their mobile or email.</DialogDescription>
+          <DialogDescription>Anyone with the link joins {companyName ?? 'the company'} with the role you choose. They sign up with their email.</DialogDescription>
         </DialogHeader>
 
         {made ? (

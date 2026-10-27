@@ -37,10 +37,10 @@ function UsernameCard({ account }: { account: MeAccount }) {
         <p className="text-sm text-muted-foreground">
           {current ? (
             <>
-              You sign in with <span className="font-semibold text-foreground">{current}</span>, or your email or mobile number.
+              You sign in with <span className="font-semibold text-foreground">{current}</span>, or your email.
             </>
           ) : (
-            'Not set. Add one to sign in with it instead of your email or mobile number.'
+            'Not set. Add one to sign in with it instead of your email.'
           )}
         </p>
       </div>

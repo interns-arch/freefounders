@@ -4,7 +4,7 @@ import { Msg91OtpSender, msg91Config } from './msg91.sender';
 import { ResendOtpSender, resendConfig } from './resend.sender';
 import { CODES_OFF_MESSAGE, demoMode, FakeOtpSender, type OtpPurpose, type OtpSender } from './otp.service';
 
-export const EMAIL_OFF_MESSAGE = "Codes by email aren't set up yet. Use your mobile number instead.";
+export const EMAIL_OFF_MESSAGE = "Codes by email aren't set up yet. Sign in with your password, or try again later.";
 export const SMS_OFF_MESSAGE = "Codes by SMS aren't set up yet. Use your email address instead.";
 
 /** `OTP_SENDER`: fake (default: codes go to the Platform log), msg91 or resend. Anything else is treated as not set up. */

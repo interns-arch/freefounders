@@ -51,7 +51,7 @@ async function signedIn(browser: Browser, who: { login: string; password: string
   });
   const page = await ctx.newPage();
   await page.goto('/');
-  await page.getByLabel('Email, mobile, username or employee ID').fill(who.login);
+  await page.getByLabel('Email, username or employee ID').fill(who.login);
   await page.getByLabel('Password').fill(who.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'));

@@ -156,7 +156,7 @@ export class InvitesService {
     } else {
       if (!caller) throw new HttpException({ statusCode: 401, message: 'Please sign in' }, 401);
       account = await this.accounts.accountOfPerson(caller.personId);
-      if (!account) throw new ForbiddenException('Sign in with your account (email or mobile number) to join, or sign up.');
+      if (!account) throw new ForbiddenException('Sign in with your account (email) to join, or sign up.');
     }
 
     // Already in this company: sign in there (nothing is used up).

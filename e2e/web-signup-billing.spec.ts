@@ -18,7 +18,7 @@ async function devCode(page: Page): Promise<string> {
 
 async function signUp(page: Page, email: string, name: string, password: string, company: string) {
   await page.goto('/signup');
-  await page.getByLabel('Work email or mobile number').fill(email);
+  await page.getByLabel('Work email').fill(email);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -39,7 +39,7 @@ async function joinWithNewAccount(browser: Browser, url: string, email: string, 
     await page.goto(url);
     await expect(page.getByRole('heading', { name: `Join ${company} on Kaampilot` })).toBeVisible();
     await page.getByRole('button', { name: 'Create my account' }).click();
-    await page.getByLabel('Email or mobile number').fill(email);
+    await page.getByLabel('Email address').fill(email);
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByLabel('Code', { exact: true }).fill(await devCode(page));
     await page.getByRole('button', { name: 'Continue' }).click();
@@ -73,7 +73,7 @@ async function buySuite(page: Page) {
 
 test('sign-in page links to sign-up and forgot password', async ({ page }) => {
   await page.goto('/login');
-  await expect(page.getByLabel('Email, mobile, username or employee ID')).toBeVisible();
+  await expect(page.getByLabel('Email, username or employee ID')).toBeVisible();
   await page.getByRole('link', { name: 'Start free' }).click();
   await expect(page).toHaveURL(/\/signup$/);
   await expect(page.getByRole('heading', { name: 'Start free' })).toBeVisible();

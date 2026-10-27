@@ -1,6 +1,9 @@
+import { badRequest } from '../common/http';
+
 /**
- * An account identifier (PLAN.md §21): an email, or an Indian mobile number (10 digits starting 6-9, optionally written
+ * An identifier (PLAN.md §21): an email, or an Indian mobile number (10 digits starting 6-9, optionally written
  * with +91, 91 or 0 in front, spaces or dashes), normalised to `+91XXXXXXXXXX`.
+ * Since 2026-10-27 a mobile number is recognised only to be refused for sign-in (`emailIdentifier`).
  */
 export interface Identifier {
   kind: 'email' | 'mobile';
@@ -27,3 +30,18 @@ export function normaliseIdentifier(input: string | null | undefined): Identifie
   return /^[6-9][0-9]{9}$/.test(digits) ? { kind: 'mobile', value: `+91${digits}`, channel: 'sms' } : null;
 }
 
+
+/** Email only for signing in, signing up, codes and password resets (founder 2026-10-27, PLAN.md §21.8). */
+export const MOBILE_SIGN_IN_OFF = 'Use your email address. Sign-in with a mobile number is not available.';
+export const mobileRefused = (field = 'identifier') => badRequest(MOBILE_SIGN_IN_OFF, { [field]: 'Use your email address' });
+
+/**
+ * The identifier for sign-up, forgot password and code sign-in: an email, or null for anything that is neither an email
+ * nor a mobile number (the callers say what to do instead). A mobile number is refused with a 400 field error; stored
+ * mobile numbers stay contact data only.
+ */
+export function emailIdentifier(input: string | null | undefined): Identifier | null {
+  const id = normaliseIdentifier(input);
+  if (id?.kind === 'mobile') throw mobileRefused();
+  return id;
+}
