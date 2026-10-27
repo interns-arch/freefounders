@@ -3799,3 +3799,20 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
   provider's model list, writes `/opt/freefounders/.env` only and recreates the platform; `--off` empties the key.
 - Tests: `src/ai/ai.test.ts` (no DB, no network: both request shapes, 503 when off, knowledge in the prompt, errors,
   rate limit).
+
+### 24.4 Buy now, without the trial (planned for 2026-10-28)
+Founder 2026-10-27: "anyone who wants to get started directly, without the free trial, can do that." Build tomorrow:
+- **Landing/pricing**: next to "Start free trial", a **"Buy now"** button on the calculator (and on /pricing). It
+  carries the chosen plan into sign-up: `/signup?buy=modules&m=tasks,attendance&ai=0&users=10` (or `buy=complete`).
+- **Sign-up**: same steps (email code, company name, password). With `buy=…` the last step says "Continue to payment"
+  instead of "Start free trial", shows the plan summary (modules, AI, users, monthly total + GST), and goes straight to
+  Cashfree checkout with that plan. The company is created first (needed for the order) in a **pending payment** state:
+  no trial clock, apps not open yet, a "Finish payment" screen until paid.
+- **After payment** (Cashfree webhook / return): plan active from that moment for the paid period; modules switched on per
+  the plan; invoice made (and emailed, see GST invoice email task). No trial is recorded for this company.
+- **Payment not finished**: "Finish payment" screen with Pay again and "Start the free trial instead" (if the company
+  never had a trial). Pending companies not paid within 7 days are cleaned up by the billing clock (no data yet).
+- **Inside the app during a trial**: Billing already lets a company pay any time; make the trial banner's "Upgrade now"
+  open Billing with the plan preselected, and paying ends the trial at once.
+- Console: pending-payment companies visible with their chosen plan; staff can mark paid or extend.
+- Tests: platform tests for buy-now sign-up → pending → paid (FakePay) → active, no trial; e2e on the calculator "Buy now".
