@@ -104,10 +104,17 @@ export const session = {
         const store = config.refreshStore;
         const stored = store ? await store.get() : null;
         if (store && !stored) return false;
-        const res = await post('/refresh', stored ? { refreshToken: stored } : {});
-        if (!res.ok) {
+        // A deploy restarts the Platform for a few seconds (502/503/504) and the bot guard may answer 429: retry those
+        // and never treat them as a sign-out. Only 401/403 end the session (and clear the phone's stored token).
+        let res: Response | null = null;
+        for (const wait of [0, 1500, 4000, 8000]) {
+          if (wait) await new Promise((r) => setTimeout(r, wait));
+          res = await post('/refresh', stored ? { refreshToken: stored } : {}).catch(() => null);
+          if (res && (res.ok || res.status === 401 || res.status === 403)) break;
+        }
+        if (!res || !res.ok) {
           set(null);
-          if (store) await store.set(null);
+          if (res && (res.status === 401 || res.status === 403) && store) await store.set(null);
           return false;
         }
         const data = (await res.json()) as { accessToken: string; refreshToken?: string };
