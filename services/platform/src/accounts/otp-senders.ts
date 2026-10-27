@@ -106,7 +106,7 @@ export function otpSenderFromEnv(): EnvOtpSender {
   if (process.env.NODE_ENV !== 'test') {
     const line = sender.describe();
     const log = new Logger('OTP');
-    if (/OFF/.test(line)) log.error(line);
+    if (/codes are OFF/.test(line)) log.error(line);
     else log.log(line);
   }
   return sender;
