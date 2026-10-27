@@ -2,10 +2,12 @@
  * /console: the Kaampilot console for Kaampilot staff only (PLAN.md §20.6, §21.1, §21.9). Tabs: Overview (totals, sign-ups,
  * health), Companies (every company; extend a trial, give a plan, suspend / reactivate, each asked first and logged in
  * Recent actions), Users (every account and admin-made login), Billing (subscriptions, invoices, payments, revenue) and
- * Logs (the production log of every service). Everything but the existing company actions is read-only.
+ * Logs (the production log of every service). Everything but the existing company actions and the trial settings
+ * (PLAN.md §24.1: the default for new companies here, one company's trial on its page) is read-only.
  */
 import { errorMessage } from '@kaampilot/core';
 import {
+  type BillingModuleKey,
   type ConsoleAuditAction,
   type ConsoleAuditRow,
   type ConsoleCompany,
@@ -14,10 +16,13 @@ import {
   formatInr,
   planLabel,
   STATE_LABELS,
+  useBillingPricing,
   useConsoleAction,
   useConsoleAudit,
   useDashboardCompanies,
   usePlans,
+  useSetTrialDefaults,
+  useTrialDefaults,
 } from '@kaampilot/core/billing';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from '@/components/icons';
 import { useMemo, useState } from 'react';
@@ -30,7 +35,7 @@ import { DownloadMenu } from '@/components/common/download-menu';
 import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { SearchField } from '@/components/common/search-field';
 import { Button } from '@/components/ui/button';
-import { Label, NativeSelect } from '@/components/ui/input';
+import { Input, Label, NativeSelect } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -44,7 +49,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/overlays';
-import { Badge, Tabs, TabsList, TabsTrigger } from '@/components/ui/primitives';
+import { Badge, Checkbox, Switch, Tabs, TabsList, TabsTrigger } from '@/components/ui/primitives';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { ConsoleBillingTab } from './console-billing';
 import { ConsoleLogsTab } from './console-logs';
@@ -229,6 +234,7 @@ function CompaniesTab({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="space-y-4">
+      <TrialDefaultsCard enabled={enabled} />
       <div className="flex flex-wrap items-end gap-3">
         <SearchField value={search} onChange={setSearch} label="Search companies" placeholder="Name, code or owner" className="w-full max-w-sm" />
         <div className="min-w-36 space-y-1.5">
@@ -303,8 +309,63 @@ function CompaniesTab({ enabled }: { enabled: boolean }) {
   );
 }
 
+/** The trial new companies get (PLAN.md §24.1): days and users; a company's own trial is changed on its page. */
+function TrialDefaultsCard({ enabled }: { enabled: boolean }) {
+  const q = useTrialDefaults(enabled);
+  const save = useSetTrialDefaults();
+  const [days, setDays] = useState('');
+  const [users, setUsers] = useState('');
+  const shownDays = days || String(q.data?.days ?? '');
+  const shownUsers = users || String(q.data?.maxUsers ?? '');
+  const d = Number(shownDays);
+  const u = Number(shownUsers);
+  const valid = Number.isInteger(d) && d >= 1 && d <= 365 && Number.isInteger(u) && u >= 1;
+  const changed = !!q.data && (d !== q.data.days || u !== q.data.maxUsers);
+  return (
+    <section aria-labelledby="trial-defaults" className="rounded-xl border bg-card p-4 shadow-card">
+      <h2 id="trial-defaults" className="text-base font-semibold">
+        Free trial for new companies
+      </h2>
+      <p className="mt-0.5 text-sm text-muted-foreground">Every new company gets this trial of Complete; then it is read-only until a plan is paid. Companies already trialing keep theirs.</p>
+      <form
+        className="mt-3 flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!valid) return;
+          save.mutate(
+            { days: d, maxUsers: u },
+            {
+              onSuccess: () => {
+                setDays('');
+                setUsers('');
+                toast.success('Trial for new companies saved');
+              },
+              onError: (err) => toast.error(errorMessage(err)),
+            },
+          );
+        }}
+      >
+        <div className="w-28 space-y-1.5">
+          <Label htmlFor="trial-days">Days</Label>
+          <Input id="trial-days" type="number" inputMode="numeric" min={1} max={365} value={shownDays} onChange={(e) => setDays(e.target.value)} disabled={!q.data} />
+        </div>
+        <div className="w-28 space-y-1.5">
+          <Label htmlFor="trial-users">Users</Label>
+          <Input id="trial-users" type="number" inputMode="numeric" min={1} value={shownUsers} onChange={(e) => setUsers(e.target.value)} disabled={!q.data} />
+        </div>
+        <Button type="submit" variant="outline" disabled={!valid || !changed} loading={save.isPending}>
+          Save
+        </Button>
+        {q.error ? <span className="text-sm text-destructive">{errorMessage(q.error)}</span> : null}
+      </form>
+    </section>
+  );
+}
+
 export const ACTION_LABELS: Record<ConsoleAuditAction, string> = {
   'trial.extend': 'Extended trial',
+  'trial.set': 'Set trial',
+  'trial.defaults': 'Trial for new companies',
   'plan.set': 'Set plan',
   'company.suspend': 'Suspended',
   'company.reactivate': 'Reactivated',
@@ -325,7 +386,15 @@ export function auditSummary(r: Pick<ConsoleAuditRow, 'action' | 'details'>): st
     return 'Opened';
   }
   if (r.action === 'trial.extend') return `+${String(input.days ?? '?')} days · trial ends ${formatDate((after?.trialEndsAt as string | null) ?? null)}`;
-  if (r.action === 'plan.set') return `${String(before?.plan ?? '—')} → ${String(after?.plan ?? input.plan ?? '—')}${after?.seats ? `, ${String(after.seats)} users` : ''}`;
+  if (r.action === 'trial.defaults') return `${String(input.days ?? '?')} days, ${String(input.maxUsers ?? '?')} users`;
+  if (r.action === 'trial.set')
+    return [input.days !== undefined ? `${String(input.days)} days from the start` : '', input.maxUsers !== undefined ? `${String(input.maxUsers)} users` : '', after?.trialEndsAt ? `ends ${formatDate(after.trialEndsAt as string)}` : '']
+      .filter(Boolean)
+      .join(' · ');
+  if (r.action === 'plan.set') {
+    const mods = Array.isArray(after?.modules) ? ` (${(after.modules as string[]).join(', ')})` : '';
+    return `${String(before?.plan ?? '—')} → ${String(after?.plan ?? input.plan ?? '—')}${mods}${after?.ai ? ' with AI' : ''}${after?.seats ? `, ${String(after.seats)} users` : ''}`;
+  }
   return `${String(before?.state ?? '—')} → ${String(after?.state ?? '—')}`;
 }
 
@@ -436,11 +505,15 @@ function RecentActions({ companies, enabled }: { companies: ConsoleCompany[]; en
 
 function SetPlanDialog({ company, onClose }: { company: ConsoleCompany; onClose: () => void }) {
   const plans = usePlans();
+  const pricing = useBillingPricing();
   const act = useConsoleAction();
   const [plan, setPlan] = useState(company.plan || 'complimentary');
+  const [modules, setModules] = useState<BillingModuleKey[]>(company.modules ?? ['tasks', 'attendance']);
+  const [ai, setAi] = useState(!!company.ai);
   const [seats, setSeats] = useState(Math.max(1, seatsOf(company).paid || seatsOf(company).used || 5));
-  const options = [...(plans.data ?? []).map((p) => ({ key: p.key, name: p.name }))];
+  const options = [...(plans.data ?? []).map((p) => ({ key: p.key, name: p.key === 'modules' ? 'Modules (pick)' : p.name }))];
   if (!options.some((o) => o.key === 'complimentary')) options.push({ key: 'complimentary', name: 'Complimentary' });
+  const priced = plan === 'modules' || plan === 'complete';
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
@@ -459,6 +532,26 @@ function SetPlanDialog({ company, onClose }: { company: ConsoleCompany; onClose:
               ))}
             </NativeSelect>
           </div>
+          {plan === 'modules' && (
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Modules</legend>
+              {(pricing.data?.modules ?? []).map((m) => (
+                <label key={m.key} htmlFor={`console-module-${m.key}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    id={`console-module-${m.key}`}
+                    checked={modules.includes(m.key)}
+                    onCheckedChange={(v) => setModules((list) => (v === true ? [...new Set([...list, m.key])] : list.filter((x) => x !== m.key)))}
+                  />
+                  {m.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {priced && (
+            <label htmlFor="console-ai" className="flex cursor-pointer items-center gap-2 text-sm">
+              <Switch id="console-ai" checked={ai} onCheckedChange={setAi} /> With AI
+            </label>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="console-seats">Users</Label>
             <SeatStepper id="console-seats" value={seats} onChange={setSeats} min={1} />
@@ -475,7 +568,13 @@ function SetPlanDialog({ company, onClose }: { company: ConsoleCompany; onClose:
           </Button>
           <Button
             loading={act.isPending}
-            onClick={() => act.mutate({ id: company.id, kind: 'plan', plan, seats }, { onSuccess: () => (toast.success('Plan set'), onClose()) })}
+            disabled={plan === 'modules' && modules.length === 0}
+            onClick={() =>
+              act.mutate(
+                { id: company.id, kind: 'plan', plan, seats, ...(priced ? { ai } : {}), ...(plan === 'modules' ? { modules } : {}) },
+                { onSuccess: () => (toast.success('Plan set'), onClose()) },
+              )
+            }
           >
             Set plan
           </Button>

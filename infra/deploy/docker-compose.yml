@@ -93,6 +93,8 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-anthropic}
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
+      # "Book a demo" (PLAN.md §24.1): the Calendly event link in GET /api/platform/public/pricing; empty = no button.
+      CALENDLY_URL: ${CALENDLY_URL:-}
       # Phone app update banner (PLAN.md §19.40): an installed app older than this sees "A new version of Kaampilot is
       # available" with the APK link. Empty = off (default).
       MOBILE_MIN_VERSION: ${MOBILE_MIN_VERSION:-}

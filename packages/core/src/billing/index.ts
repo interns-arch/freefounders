@@ -4,3 +4,4 @@ export * from './api';
 export * from './format';
 export * from './exports';
 export * from './console-dashboard';
+export * from './quote';

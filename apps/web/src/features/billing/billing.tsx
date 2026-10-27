@@ -1,16 +1,18 @@
 /**
- * Admin → Billing (/billing, PLAN.md §20.6, §21.1): the plan and its state, seats, plans with monthly / yearly prices,
- * an order summary with GST, checkout through the payment page, GST details, invoices, change seats, cancel / resume,
- * and the dev tools (billing clock) while BILLING_DEV_TOOLS is on. Owner, or a role with "Manage billing".
+ * Admin → Billing (/billing, PLAN.md §20.6, §21.1, §24.1): the plan and its state, users, the plan picker (modules one by
+ * one or Complete, with or without AI, users, a live total with GST), checkout through the payment page, GST details,
+ * invoices, change users, cancel / resume, and the dev tools (billing clock) while BILLING_DEV_TOOLS is on. Owner, or a
+ * role with "Manage billing".
  */
 import { errorMessage } from '@kaampilot/core';
 import {
-  type BillingInterval,
+  type BillingModuleKey,
+  type BillingPricing,
   type BillingProfile,
   type BillingSummary,
+  choiceName,
   daysUntil,
   formatInr,
-  GST_RATE,
   gstinMatchesState,
   INDIAN_STATES,
   isGstin,
@@ -19,8 +21,9 @@ import {
   planLabel,
   planMaxSeats,
   planMinSeats,
-  planPrice,
+  quotePlan,
   useBilling,
+  useBillingPricing,
   useCancelSubscription,
   useDevAdvance,
   useDevRenew,
@@ -33,8 +36,7 @@ import {
   useStartCheckout,
   useSwitchToFree,
 } from '@kaampilot/core/billing';
-import { APP_NAMES } from '@kaampilot/core/admin';
-import { Check, CreditCard, FileText, Timer, Wrench } from '@/components/icons';
+import { CalendarClock, Check, CheckSquare, CreditCard, FileText, Package, Sparkles, Timer, Wrench } from '@/components/icons';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -45,11 +47,9 @@ import { DownloadButton, DownloadMenu } from '@/components/common/download-menu'
 import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
-import { Card } from '@/components/ui/primitives';
+import { Card, Checkbox, Switch } from '@/components/ui/primitives';
 import { cn, formatDate } from '@/lib/utils';
 import { SeatStepper, StateBadge } from './parts';
-
-const appsText = (apps: Plan['apps']) => apps.map((a) => (a === 'tasks' ? 'Attendance + Tasks' : APP_NAMES[a] ?? a)).join(' · ');
 
 /** Opens the payment page the server named: our own pages in-app, anything else as a full page. */
 export function useOpenCheckout() {
@@ -79,7 +79,7 @@ function Billing({ b, plans, plansError }: { b: BillingSummary; plans: Plan[]; p
       <PageHeader title="Billing" description="Your plan, users, GST details and invoices." />
       <CurrentPlan b={b} plans={plans} />
       {b.devTools && <DevTools b={b} />}
-      {plansError ? <ErrorState error={plansError} /> : <ChoosePlan b={b} plans={plans} />}
+      {plansError ? <ErrorState error={plansError} /> : <ChoosePlan b={b} />}
       <GstDetails profile={b.profile} />
       <Invoices />
     </div>
@@ -120,7 +120,8 @@ function CurrentPlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
   const resume = useResumeSubscription();
   const setSeats = useSetSeats();
   const plan = plans.find((p) => p.key === b.plan);
-  const paid = !!plan && isPaidPlan(plan) && (b.state === 'active' || b.state === 'past_due' || b.state === 'cancelled');
+  // An older plan (Suite…) is no longer listed: the server's per-user price says it is paid (PLAN.md §24.1).
+  const paid = ((b.perUser ?? 0) > 0 || (!!plan && isPaidPlan(plan))) && (b.state === 'active' || b.state === 'past_due' || b.state === 'cancelled');
   const [seats, setSeatCount] = useState(b.seats.paid);
   useEffect(() => setSeatCount(b.seats.paid), [b.seats.paid]);
   const minSeats = Math.max(plan ? planMinSeats(plan) : 1, b.seats.used);
@@ -129,7 +130,9 @@ function CurrentPlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
   const doCancel = async () => {
     const ok = await confirm({
       title: 'Cancel at the end of the period?',
-      description: `Everything keeps working until ${formatDate(b.currentPeriodEnd)}. After that the company moves to Free if it fits (up to 3 users), otherwise it becomes read-only.`,
+      description: b.freeAvailable
+        ? `Everything keeps working until ${formatDate(b.currentPeriodEnd)}. After that the company moves to Free if it fits (up to 3 users), otherwise it becomes read-only.`
+        : `Everything keeps working until ${formatDate(b.currentPeriodEnd)}. After that the company becomes read-only (everyone can look and export) until a plan is paid again.`,
       confirmText: 'Cancel subscription',
       destructive: true,
     });
@@ -159,8 +162,14 @@ function CurrentPlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
         )}
         <Fact label="Users">
           <span className="font-mono tabular-nums">{b.seats.used}</span> used · <span className="font-mono tabular-nums">{b.seats.paid}</span> paid
-          {b.seats.limit != null && <span className="block text-xs text-muted-foreground">Limit {b.seats.limit}</span>}
+          {b.seats.limit != null && <span className="block text-xs text-muted-foreground">{b.state === 'trialing' ? `The trial allows ${b.seats.limit}` : `Limit ${b.seats.limit}`}</span>}
         </Fact>
+        {(b.perUser ?? 0) > 0 && (
+          <Fact label="Per user">
+            {formatInr(b.perUser)}
+            <span className="block text-xs text-muted-foreground">per month{b.ai ? ', with AI' : ''}</span>
+          </Fact>
+        )}
         <Fact label={b.paysEachPeriod ? 'Next payment (you pay it here)' : 'Next charge'}>
           {b.nextCharge ? (
             <>
@@ -212,45 +221,221 @@ function CurrentPlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
   );
 }
 
-// ─── choose a plan ──────────────────────────────────────────────────────────
+// ─── choose a plan (PLAN.md §24.1) ──────────────────────────────────────────
 
-function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
+const MODULE_ICONS: Record<BillingModuleKey, typeof CheckSquare> = { tasks: CheckSquare, attendance: CalendarClock, assets: Package };
+
+/** What the current subscription has, as a starting choice: its modules, or Complete (also the trial and Suite). */
+function initialChoice(b: BillingSummary): { complete: boolean; modules: BillingModuleKey[] } {
+  if (b.plan === 'modules' && b.modules?.length) return { complete: false, modules: b.modules };
+  if (b.plan === 'tasks' || b.plan === 'free') return { complete: false, modules: ['tasks', 'attendance'] };
+  if (b.plan === 'assets') return { complete: false, modules: ['assets'] };
+  return { complete: true, modules: ['tasks', 'attendance'] };
+}
+
+function ChoosePlan({ b }: { b: BillingSummary }) {
+  const pricing = useBillingPricing();
+  if (pricing.isLoading) return <Section id="choose-plan" title="Choose your plan"><PageLoader /></Section>;
+  if (pricing.error || !pricing.data) return <ErrorState error={pricing.error} onRetry={() => void pricing.refetch()} />;
+  return <PlanPicker b={b} p={pricing.data} />;
+}
+
+function PlanPicker({ b, p }: { b: BillingSummary; p: BillingPricing }) {
   const openCheckout = useOpenCheckout();
   const checkout = useStartCheckout();
-  const shown = useMemo(() => plans.filter((p) => p.public !== false && p.selfServe !== false && p.key !== 'complimentary'), [plans]);
-  const [interval, setBillingInterval] = useState<BillingInterval>(b.interval ?? 'month');
-  const [selected, setSelected] = useState<string>(() => {
-    const cur = shown.find((p) => p.key === b.plan && isPaidPlan(p));
-    return cur?.key ?? shown.find((p) => p.key === 'suite')?.key ?? shown.find(isPaidPlan)?.key ?? shown[0]?.key ?? '';
-  });
-  const plan = shown.find((p) => p.key === selected);
-  const current = plans.find((p) => p.key === b.plan);
-  const min = plan ? Math.max(planMinSeats(plan), isPaidPlan(plan) ? b.seats.used : 1) : 1;
-  const max = plan ? planMaxSeats(plan) : null;
-  const [seats, setSeats] = useState(() => Math.max(b.seats.paid || 0, b.seats.used, 5));
-  useEffect(() => setSeats((s) => Math.max(min, max != null ? Math.min(max, s) : s)), [min, max]);
-
-  const isCurrent = (p: Plan) => p.key === b.plan && (b.state === 'active' || (p.key === 'free' && b.state !== 'trialing')) && (!isPaidPlan(p) || b.interval === interval);
-  const price = plan ? planPrice(plan, interval) : 0;
-  const subtotal = plan && isPaidPlan(plan) ? price * seats : 0;
-  const gst = Math.round((subtotal * GST_RATE) / 100);
-  const tooMany = !!plan && max != null && b.seats.used > max;
+  const start = useMemo(() => initialChoice(b), [b]);
+  const [complete, setComplete] = useState(start.complete);
+  const [modules, setModules] = useState<BillingModuleKey[]>(start.modules);
+  const [ai, setAi] = useState(!!b.ai);
+  const min = Math.max(p.minSeats, b.seats.used, 1);
+  const [users, setUsers] = useState(() => Math.max(b.seats.paid || 0, min));
+  useEffect(() => setUsers((u) => Math.max(min, u)), [min]);
+  const q = quotePlan(p, { complete, modules, ai, users });
+  const name = choiceName(p, { complete, modules, ai });
+  const noModule = !complete && modules.length === 0;
+  const sameAsNow =
+    b.state === 'active' &&
+    users === b.seats.paid &&
+    ai === !!b.ai &&
+    (complete ? b.plan === 'complete' : b.plan === 'modules' && [...modules].sort().join() === [...(b.modules ?? [])].sort().join());
   const needsReadOnlyCta = b.state === 'read_only' || b.state === 'suspended' || b.state === 'past_due';
+  const toggle = (k: BillingModuleKey, on: boolean) => setModules((list) => (on ? [...new Set([...list, k])] : list.filter((x) => x !== k)));
 
+  const go = () =>
+    checkout.mutate(complete ? { plan: 'complete', ai, interval: 'month', seats: users } : { plan: 'modules', modules, ai, interval: 'month', seats: users }, {
+      onSuccess: (r) => (r?.checkoutUrl ? openCheckout(r.checkoutUrl) : toast.success('Plan changed')),
+      onError: (e) => toast.error(errorMessage(e)),
+    });
+
+  const aiExtra = (price: number, aiPrice: number) => formatInr(aiPrice - price);
+  const firstModule = p.modules[0];
+
+  return (
+    <Section
+      id="choose-plan"
+      title={b.state === 'trialing' || needsReadOnlyCta ? 'Choose your plan' : 'Change plan'}
+      description={`Price per user per month. Pick the modules you need, or Complete for everything. GST ${p.gstPercent}% is added.`}
+    >
+      <div role="radiogroup" aria-label="Plan" className="grid gap-3 sm:grid-cols-2">
+        {[false, true].map((isComplete) => {
+          const on = complete === isComplete;
+          return (
+            <button
+              key={String(isComplete)}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setComplete(isComplete)}
+              className={cn(
+                'flex min-w-0 cursor-pointer flex-col gap-1 rounded-lg border bg-card p-4 text-left transition outline-none hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/40',
+                on && 'border-primary ring-1 ring-primary',
+              )}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-base font-bold">{isComplete ? p.complete.name : 'Pick modules'}</span>
+                {on && <Check className="size-4 text-primary" aria-hidden />}
+              </span>
+              <span className="text-[22px] leading-tight font-bold tabular-nums">
+                {isComplete ? formatInr(ai ? p.complete.aiPrice : p.complete.price) : `${formatInr(firstModule ? (ai ? firstModule.aiPrice : firstModule.price) : 0)}`}
+                <span className="text-sm font-medium text-muted-foreground">{isComplete ? ' / user / month' : ' / module / user / month'}</span>
+              </span>
+              <span className="text-[13px] text-muted-foreground">
+                {isComplete ? 'Every module: Tasks, Attendance, Assets, Visitors, Payroll and everything else.' : 'Tasks, Attendance, Assets: only the ones you need.'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {!complete && (
+        <fieldset className="mt-4">
+          <legend className="mb-2 text-sm font-semibold">Modules</legend>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {p.modules.map((m) => {
+              const Icon = MODULE_ICONS[m.key] ?? CheckSquare;
+              const checked = modules.includes(m.key);
+              return (
+                <label
+                  key={m.key}
+                  htmlFor={`module-${m.key}`}
+                  className={cn('flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 transition hover:border-primary/40', checked && 'border-primary')}
+                >
+                  <Checkbox id={`module-${m.key}`} checked={checked} onCheckedChange={(v) => toggle(m.key, v === true)} className="mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 font-semibold">
+                      <Icon className="size-4 text-muted-foreground" aria-hidden /> {m.name}
+                    </span>
+                    <span className="block font-mono text-sm tabular-nums">{formatInr(ai ? m.aiPrice : m.price)} / user / month</span>
+                    {m.description && <span className="block text-xs text-muted-foreground">{m.description}</span>}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {noModule && (
+            <p role="alert" className="mt-2 text-[13px] font-medium text-destructive">
+              Choose at least one module.
+            </p>
+          )}
+        </fieldset>
+      )}
+
+      <div className="mt-4 flex items-start gap-3 rounded-lg border bg-card p-3">
+        <Switch id="plan-ai" checked={ai} onCheckedChange={setAi} className="mt-0.5" />
+        <label htmlFor="plan-ai" className="min-w-0 cursor-pointer">
+          <span className="flex items-center gap-1.5 font-semibold">
+            <Sparkles className="size-4 text-muted-foreground" aria-hidden /> With AI
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            The AI helper for the whole subscription:{' '}
+            {complete
+              ? `${formatInr(p.complete.aiPrice)} instead of ${formatInr(p.complete.price)} per user`
+              : firstModule
+                ? `${aiExtra(firstModule.price, firstModule.aiPrice)} more per module per user`
+                : ''}
+            .
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-5 grid gap-5 border-t pt-4 md:grid-cols-[1fr_minmax(0,22rem)]">
+        <div className="space-y-1.5">
+          <Label htmlFor="checkout-seats">Users</Label>
+          <SeatStepper id="checkout-seats" value={users} onChange={setUsers} min={min} max={null} />
+          <p className="text-xs text-muted-foreground">At least {min} ({b.seats.used} in use). Paid monthly.</p>
+          {q.completeIsCheaper && (
+            <p className="mt-2 rounded-md border border-primary/30 bg-primary/8 px-3 py-2 text-sm">
+              Complete costs less: {formatInr(ai ? p.complete.aiPrice : p.complete.price)} per user for every module.{' '}
+              <button type="button" className="cursor-pointer font-semibold text-primary underline-offset-2 hover:underline" onClick={() => setComplete(true)}>
+                Choose Complete
+              </button>
+            </p>
+          )}
+          {b.freeAvailable && <FreeChoice b={b} />}
+        </div>
+        <div className="rounded-lg border bg-muted/30 p-4" aria-labelledby="order-title" aria-live="polite">
+          <h3 id="order-title" className="mb-2 text-sm font-semibold">
+            Order summary
+          </h3>
+          <dl className="space-y-1.5 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="min-w-0 text-muted-foreground">{name}</dt>
+              <dd className="font-mono whitespace-nowrap tabular-nums">{formatInr(q.perUser)} / user</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">
+                {users} user{users === 1 ? '' : 's'} × {formatInr(q.perUser)}
+              </dt>
+              <dd className="font-mono tabular-nums">{formatInr(q.monthly)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">GST {p.gstPercent}%</dt>
+              <dd className="font-mono tabular-nums">{formatInr(q.gst)}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-t pt-1.5 font-semibold">
+              <dt>Total per month</dt>
+              <dd className="font-mono tabular-nums">{formatInr(q.total)}</dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-xs text-muted-foreground">
+            CGST + SGST or IGST is worked out from your GST state on the payment page.
+            {(b.perUser ?? 0) > 0 && (b.state === 'active' || b.state === 'cancelled') ? ' Unused time on your current plan comes off the price.' : ''}
+            {b.checkoutGateway === 'cashfree' && ' Paid by UPI, card or net banking through Cashfree, one month at a time: nothing is charged by itself, you pay each month here.'}
+          </p>
+          {b.checkoutGateway === null && (
+            <p role="status" className="mt-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2 text-xs">
+              Payments are not set up yet. Please try again later.
+            </p>
+          )}
+          <Button
+            variant="cta"
+            allowReadOnly={needsReadOnlyCta}
+            size="lg"
+            className="mt-3 h-11 w-full"
+            disabled={noModule || sameAsNow || b.checkoutGateway === null}
+            loading={checkout.isPending}
+            onClick={go}
+          >
+            <CreditCard /> {sameAsNow ? 'Your current plan' : 'Continue to payment'}
+          </Button>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+/** The older Free plan, still offered to companies from before §24.1 (PLAN.md §21.7). */
+function FreeChoice({ b }: { b: BillingSummary }) {
   const confirm = useConfirm();
   const toFree = useSwitchToFree();
   const [freeError, setFreeError] = useState<string | null>(null);
-  useEffect(() => setFreeError(null), [selected]);
-  const paidNow = !!current && isPaidPlan(current) && (b.state === 'active' || b.state === 'cancelled');
-
-  /** Free needs no payment: the server checks that the company fits it (users, Assets) and says what to switch off. */
+  const paidNow = (b.perUser ?? 0) > 0 && (b.state === 'active' || b.state === 'cancelled');
   const goFree = async () => {
-    if (!plan) return;
-    const limits = `up to ${max ?? 3} users with Attendance and Tasks; the Assets app is switched off for the company (nothing is deleted, it comes back with a paid plan)`;
+    const limits = 'up to 3 users with Attendance and Tasks; the Assets app is switched off for the company (nothing is deleted, it comes back with a paid plan)';
     const ok = await confirm({
       title: 'Switch to the Free plan?',
       description: paidNow
-        ? `Your ${b.planName ?? planLabel(b.plan, plans)} plan keeps working until ${formatDate(b.currentPeriodEnd)} and is not renewed. Then the company moves to Free: ${limits}. Nothing more is charged.`
+        ? `Your ${b.planName ?? b.plan} plan keeps working until ${formatDate(b.currentPeriodEnd)} and is not renewed. Then the company moves to Free: ${limits}.`
         : b.state === 'trialing'
           ? `The trial ends now and the company moves to Free: ${limits}. No payment is needed.`
           : `The company moves to Free now and can be used again (read-only ends): ${limits}. No payment is needed.`,
@@ -266,152 +451,18 @@ function ChoosePlan({ b, plans }: { b: BillingSummary; plans: Plan[] }) {
       },
     });
   };
-
-  const go = () => {
-    if (!plan) return;
-    if (!isPaidPlan(plan)) return void goFree();
-    checkout.mutate(
-      { plan: plan.key, interval, seats: isPaidPlan(plan) ? seats : Math.max(1, b.seats.used) },
-      {
-        onSuccess: (r) => (r?.checkoutUrl ? openCheckout(r.checkoutUrl) : toast.success('Plan changed')),
-        onError: (e) => toast.error(errorMessage(e)),
-      },
-    );
-  };
-
   return (
-    <Section
-      id="choose-plan"
-      title={b.state === 'trialing' ? 'Choose a plan' : 'Plans'}
-      description="Price per user. Yearly = 2 months free. GST 18% is added."
-      actions={
-        <div role="radiogroup" aria-label="Billing period" className="inline-flex gap-0.5 rounded-md border bg-muted p-0.5">
-          {(['month', 'year'] as const).map((i) => (
-            <button
-              key={i}
-              type="button"
-              role="radio"
-              aria-checked={interval === i}
-              onClick={() => setBillingInterval(i)}
-              className={cn(
-                'inline-flex h-8 cursor-pointer items-center rounded-sm px-3 text-[13px] font-semibold text-muted-foreground transition outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:h-[2.375rem]',
-                interval === i && 'bg-card text-primary shadow-card ring-1 ring-border',
-              )}
-            >
-              {i === 'month' ? 'Monthly' : 'Yearly'}
-              {i === 'year' && <span className="ml-1 text-xs font-medium text-success">−2 months</span>}
-            </button>
-          ))}
-        </div>
-      }
-    >
-      <div role="radiogroup" aria-label="Plan" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {shown.map((p) => {
-          const on = p.key === selected;
-          const pp = planPrice(p, interval);
-          const pMax = planMaxSeats(p);
-          return (
-            <button
-              key={p.key}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              onClick={() => setSelected(p.key)}
-              className={cn(
-                'relative flex min-w-0 cursor-pointer flex-col gap-1 rounded-lg border bg-card p-4 text-left transition outline-none hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/40',
-                on && 'border-primary ring-1 ring-primary',
-              )}
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="text-base font-bold">{p.name}</span>
-                {isCurrent(p) ? (
-                  <span className="rounded-sm bg-success/10 px-1.5 py-0.5 text-xs font-semibold text-success">Current</span>
-                ) : on ? (
-                  <Check className="size-4 text-primary" aria-hidden />
-                ) : null}
-              </span>
-              <span className="text-[22px] leading-tight font-bold tabular-nums">
-                {isPaidPlan(p) ? formatInr(pp) : '₹0'}
-                <span className="text-sm font-medium text-muted-foreground"> {isPaidPlan(p) ? `/ user / ${interval === 'year' ? 'year' : 'month'}` : 'forever'}</span>
-              </span>
-              <span className="text-[13px] text-muted-foreground">{appsText(p.apps) || '—'}</span>
-              <span className="text-[13px] text-muted-foreground">
-                {pMax != null ? `Up to ${pMax} users` : `From ${planMinSeats(p)} users`}
-              </span>
-              {p.description && <span className="text-[13px] text-muted-foreground">{p.description}</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      {plan && (
-        <div className="mt-5 grid gap-5 border-t pt-4 md:grid-cols-[1fr_minmax(0,22rem)]">
-          <div className="space-y-1.5">
-            {isPaidPlan(plan) ? (
-              <>
-                <Label htmlFor="checkout-seats">Users</Label>
-                <SeatStepper id="checkout-seats" value={seats} onChange={setSeats} min={min} max={max} />
-                <p className="text-xs text-muted-foreground">
-                  At least {min} ({b.seats.used} in use{planMinSeats(plan) > 1 ? `, plan minimum ${planMinSeats(plan)}` : ''}).
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {plan.name} is free for up to {max ?? '—'} users{plan.apps.length ? ` with ${appsText(plan.apps)}` : ''}.
-                {tooMany && !freeError && <span className="mt-1 block font-medium text-destructive">You have {b.seats.used} users: switch some off first, or choose a paid plan.</span>}
-                {freeError && (
-                  <span role="alert" className="mt-1 block font-medium text-destructive">
-                    {freeError}
-                  </span>
-                )}
-                {b.cancelAtPeriodEnd && !freeError && <span className="mt-1 block">Moves to Free on {formatDate(b.currentPeriodEnd)} if it fits.</span>}
-              </p>
-            )}
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-4" aria-labelledby="order-title">
-            <h3 id="order-title" className="mb-2 text-sm font-semibold">
-              Order summary
-            </h3>
-            <dl className="space-y-1.5 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="min-w-0 text-muted-foreground">
-                  {plan.name} · {isPaidPlan(plan) ? `${seats} × ${formatInr(price)}` : 'free'}
-                </dt>
-                <dd className="font-mono tabular-nums">{formatInr(subtotal)}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">GST {GST_RATE}%</dt>
-                <dd className="font-mono tabular-nums">{formatInr(gst)}</dd>
-              </div>
-              <div className="flex justify-between gap-3 border-t pt-1.5 font-semibold">
-                <dt>Total {isPaidPlan(plan) ? `per ${interval === 'year' ? 'year' : 'month'}` : ''}</dt>
-                <dd className="font-mono tabular-nums">{formatInr(subtotal + gst)}</dd>
-              </div>
-            </dl>
-            <p className="mt-2 text-xs text-muted-foreground">
-              CGST + SGST or IGST is worked out from your GST state on the payment page.
-              {b.checkoutGateway === 'cashfree' && ' Paid by UPI, card or net banking through Cashfree, one period at a time: nothing is charged by itself, you pay each renewal here.'}
-            </p>
-            {b.checkoutGateway === null && isPaidPlan(plan) && (
-              <p role="status" className="mt-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2 text-xs">
-                Payments are not set up yet. Please try again later.
-              </p>
-            )}
-            <Button
-              variant="cta"
-              allowReadOnly={needsReadOnlyCta}
-              size="lg"
-              className="mt-3 h-11 w-full"
-              disabled={(isCurrent(plan) && (!isPaidPlan(plan) || seats === b.seats.paid)) || (!isPaidPlan(plan) && b.cancelAtPeriodEnd) || (b.checkoutGateway === null && isPaidPlan(plan))}
-              loading={checkout.isPending || toFree.isPending}
-              onClick={go}
-            >
-              <CreditCard /> {isPaidPlan(plan) ? 'Continue to payment' : `Switch to ${plan.name}`}
-            </Button>
-          </div>
-        </div>
+    <div className="mt-3 border-t pt-3 text-sm">
+      <p className="text-muted-foreground">Your company can still use the Free plan (up to 3 users, Attendance and Tasks).</p>
+      <Button variant="ghost" size="sm" className="mt-1 px-0" allowReadOnly disabled={b.cancelAtPeriodEnd} loading={toFree.isPending} onClick={() => void goFree()}>
+        Switch to Free
+      </Button>
+      {freeError && (
+        <p role="alert" className="mt-1 font-medium text-destructive">
+          {freeError}
+        </p>
       )}
-    </Section>
+    </div>
   );
 }
 

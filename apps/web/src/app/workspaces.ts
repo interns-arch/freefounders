@@ -40,8 +40,9 @@ export function hasVisitors(access: Access): boolean {
  */
 export function workspacesFor(access: Access): Workspace[] {
   const list: Workspace[] = [];
-  if (access.apps.includes('tasks')) list.push('attendance');
-  if (access.apps.includes('tasks') && hasTasksWork(access)) list.push('tasks');
+  // PLAN.md §24.1: a plan of picked modules shows only those (Tasks and Attendance both live in the Tasks app).
+  if (access.apps.includes('tasks') && access.planHas('attendance')) list.push('attendance');
+  if (access.apps.includes('tasks') && access.planHas('tasks') && hasTasksWork(access)) list.push('tasks');
   if (access.apps.includes('assets')) list.push('assets');
   if (hasVisitors(access)) list.push('visitors');
   if (access.admin.any) list.push('admin'); // any Admin permission (PLAN.md §19.19)

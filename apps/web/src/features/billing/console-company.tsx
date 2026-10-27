@@ -1,10 +1,16 @@
 /**
  * /console/companies/:id (PLAN.md §21.9): one company for Kaampilot staff: people (name, login, role, active, last
  * sign-in), subscription, invoices, payments, plan changes and staff actions. Read-only; opening it writes a
- * `view.company` row in the staff audit log. The existing staff actions stay on the Companies tab.
+ * `view.company` row in the staff audit log. The existing staff actions stay on the Companies tab; the company's own
+ * trial (days, users; PLAN.md §24.1) is set here.
  */
-import { formatInr, planLabel, STATE_LABELS, useDashboardCompany, usePlans } from '@kaampilot/core/billing';
+import { errorMessage } from '@kaampilot/core';
+import { type DashboardCompany, formatInr, planLabel, STATE_LABELS, useConsoleAction, useDashboardCompany, usePlans } from '@kaampilot/core/billing';
+import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input, Label } from '@/components/ui/input';
 import { ChevronLeft } from '@/components/icons';
 import { DataTable } from '@/components/common/data-table';
 import { BACK_LINK, DetailList, DETAIL_TITLE, ErrorState, PageLoader } from '@/components/common/page';
@@ -13,6 +19,49 @@ import { formatDate, formatDateTime } from '@/lib/utils';
 import { ACTION_LABELS, auditSummary } from './console';
 import { ago, Section, StatTile, useStaff } from './console-parts';
 import { StateBadge } from './parts';
+
+/**
+ * This company's trial (PLAN.md §24.1): its length in days from its start and how many users it allows, instead of the
+ * defaults. A trial that ended read-only without any payment starts again when the new end is later.
+ */
+function TrialOverride({ company: c, trialStart }: { company: DashboardCompany; trialStart: string }) {
+  const act = useConsoleAction();
+  const [days, setDays] = useState('');
+  const [users, setUsers] = useState(c.trialMaxUsers != null ? String(c.trialMaxUsers) : '');
+  const d = days ? Number(days) : undefined;
+  const u = users ? Number(users) : undefined;
+  const ok = (d === undefined || (Number.isInteger(d) && d >= 1 && d <= 365)) && (u === undefined || (Number.isInteger(u) && u >= 1)) && (d !== undefined || u !== undefined);
+  return (
+    <Section id="company-trial" title="Trial">
+      <p className="mb-3 text-sm text-muted-foreground">
+        Overrides the default trial for this company only. Days count from the start ({formatDate(trialStart)}); a trial that ended read-only without a payment starts again.
+      </p>
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!ok) return;
+          act.mutate(
+            { id: c.id, kind: 'trialOverride', days: d, maxUsers: u },
+            { onSuccess: () => (setDays(''), toast.success('Trial saved')), onError: (err) => toast.error(errorMessage(err)) },
+          );
+        }}
+      >
+        <div className="w-32 space-y-1.5">
+          <Label htmlFor="co-trial-days">Days from start</Label>
+          <Input id="co-trial-days" type="number" inputMode="numeric" min={1} max={365} value={days} placeholder="unchanged" onChange={(e) => setDays(e.target.value)} />
+        </div>
+        <div className="w-32 space-y-1.5">
+          <Label htmlFor="co-trial-users">Users</Label>
+          <Input id="co-trial-users" type="number" inputMode="numeric" min={1} value={users} onChange={(e) => setUsers(e.target.value)} />
+        </div>
+        <Button type="submit" variant="outline" disabled={!ok} loading={act.isPending}>
+          Save trial
+        </Button>
+      </form>
+    </Section>
+  );
+}
 
 export function ConsoleCompanyPage() {
   const { ready, staff } = useStaff();
@@ -51,6 +100,9 @@ export function ConsoleCompanyPage() {
             { label: 'Owner', value: c.owner },
             { label: 'Created', value: formatDate(c.createdAt) },
             { label: 'Apps', value: (c.apps ?? []).map((a) => (a === 'tasks' ? 'Tasks' : a === 'assets' ? 'Assets' : a)).join(', ') },
+            { label: 'Plan modules', value: c.modules ? c.modules.map((m) => m.charAt(0).toUpperCase() + m.slice(1)).join(', ') : 'Every module' },
+            { label: 'AI', value: c.ai ? 'Yes' : 'No' },
+            { label: 'Trial users', value: c.trialMaxUsers != null ? String(c.trialMaxUsers) : null },
             { label: 'Modules switched off', value: c.modulesOff.join(', ') },
             { label: 'State', value: STATE_LABELS[c.state] ?? c.state },
             { label: 'Trial ends', value: s?.trialEndsAt ? formatDate(s.trialEndsAt) : null },
@@ -61,6 +113,7 @@ export function ConsoleCompanyPage() {
           ]}
         />
       </div>
+      <TrialOverride company={c} trialStart={c.createdAt} />
       <Section id="company-people" title={`People (${people.length})`}>
         <DataTable
           columns={[

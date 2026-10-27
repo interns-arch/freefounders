@@ -11,6 +11,7 @@ import { decodeJwt } from 'jose';
 import { hashPassword } from './auth/auth.service';
 import { BillingService } from './billing/billing.service';
 import { financialYear, gst } from './billing/gst';
+import { appsFor, normaliseSelection, perUserMonthly, selectionName, tasksModuleAllowed, unitPrice } from './billing/pricing';
 import { normaliseIdentifier } from './accounts/identifier';
 import { resetUsernameChecks } from './accounts/username';
 import { resetCompanyNameChecks } from './company/company-name';
@@ -79,6 +80,8 @@ async function login(loginId: string, password = PASSWORD) {
 
 const sub = async (companyId: string) => (await dbs.db.select().from(subscriptions).where(eq(subscriptions.companyId, companyId)))[0];
 const company = async (companyId: string) => (await dbs.db.select().from(companies).where(eq(companies.id, companyId)))[0];
+/** A company as it was before §24.1 (grandfathered): its trial (50 users) or cancelled plan may still end on Free. */
+const legacy = (companyId: string) => dbs.db.update(subscriptions).set({ freeFallback: true, trialMaxUsers: null }).where(eq(subscriptions.companyId, companyId));
 
 /** A company with N active people holding Tasks (seats), the owner signing in by account. */
 async function addSeatHolders(companyId: string, n: number, app = 'tasks') {
@@ -88,9 +91,10 @@ async function addSeatHolders(companyId: string, n: number, app = 'tasks') {
   }
 }
 
-/** A paid, active plan bought through FakePay. */
+/** A paid, active plan bought through FakePay: the Tasks module (₹99 per user) unless told otherwise (PLAN.md §24.1). */
 async function buy(token: string, plan = 'tasks', seats = 5, interval: 'month' | 'year' = 'month') {
-  const co = await call('POST', '/billing/checkout', { token, body: { plan, interval, seats } });
+  const body = plan === 'tasks' ? { plan: 'modules', modules: ['tasks'] } : { plan };
+  const co = await call('POST', '/billing/checkout', { token, body: { ...body, interval, seats } });
   assert.equal(co.status, 200, JSON.stringify(co.body));
   const done = await call('POST', `/billing/fake/${co.body.sessionId}/complete`, { token, body: { outcome: 'success' } });
   assert.equal(done.status, 200, JSON.stringify(done.body));
@@ -155,7 +159,7 @@ describe('identifiers', () => {
 });
 
 describe('sign-up (PLAN.md §21)', () => {
-  test('email → code → name, password, company: a company with its owner, a 14-day Suite trial, set up in the apps', async () => {
+  test('email → code → name, password, company: a company with its owner, a 10-day trial for 3 users (§24.1), set up in the apps', async () => {
     appCalls.length = 0;
     const out = await signup('asha@bright.test', { name: 'Bright Traders Pvt Ltd', teamSize: '11-50', industry: 'Retail', state: 'Karnataka', apps: ['tasks'] });
     assert.ok(out.accessToken && out.companyId);
@@ -164,9 +168,11 @@ describe('sign-up (PLAN.md §21)', () => {
     assert.equal(c.code, 'BRIGHTTRADERSPVT', 'code from the name');
     assert.deepEqual(c.enabledApps, ['tasks']);
     const s = await sub(out.companyId);
-    assert.equal(s.plan, 'suite');
+    assert.equal(s.plan, 'complete');
     assert.equal(s.state, 'trialing');
-    assert.ok(Math.abs(s.trialEndsAt!.getTime() - Date.now() - 14 * 86400_000) < 60_000);
+    assert.equal(s.trialMaxUsers, 3);
+    assert.equal(s.freeFallback, false, 'a new company has no Free plan after the trial');
+    assert.ok(Math.abs(s.trialEndsAt!.getTime() - Date.now() - 10 * 86400_000) < 60_000);
     const [profile] = await dbs.db.select().from(billingProfiles).where(eq(billingProfiles.companyId, out.companyId));
     assert.equal(profile.state, 'Karnataka');
     // Same steps as `company -- create`: set up in Tasks, Admin and Member made, the owner gets Tasks (Admin + the Owner role).
@@ -178,7 +184,7 @@ describe('sign-up (PLAN.md §21)', () => {
     assert.equal(me.body.person.role, 'owner');
     assert.equal(me.body.account.email, 'asha@bright.test');
     assert.equal(me.body.account.isStaff, false);
-    assert.deepEqual({ ...me.body.billing, trialEndsAt: undefined }, { plan: 'suite', state: 'trialing', trialEndsAt: undefined, readOnly: false, daysLeft: 14 });
+    assert.deepEqual({ ...me.body.billing, trialEndsAt: undefined }, { plan: 'complete', state: 'trialing', trialEndsAt: undefined, readOnly: false, daysLeft: 10, modules: null, ai: false, maxUsers: 3 });
     assert.deepEqual(me.body.apps.map((a: { app: string }) => a.app), ['tasks']);
     // A new company has exactly the two built-in roles; the owner holds Admin (and the hidden Owner role) (PLAN.md §19.28).
     const roleList = await call('GET', '/roles', { token: out.accessToken });
@@ -483,19 +489,24 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
     ids.company = out.companyId;
     owner = out.accessToken;
     const plans = await call('GET', '/billing/plans', { token: owner });
-    assert.deepEqual(plans.body.map((p: { code: string; priceMonthly: number; priceYearly: number }) => [p.code, p.priceMonthly, p.priceYearly]), [
-      ['free', 0, 0],
-      ['tasks', 9900, 99000],
-      ['assets', 7900, 79000],
-      ['suite', 14900, 149000],
+    assert.deepEqual(plans.body.map((p: { code: string; priceMonthly: number; priceYearly: number; aiPriceMonthly: number }) => [p.code, p.priceMonthly, p.priceYearly, p.aiPriceMonthly]), [
+      ['modules', 9900, 99000, 12900],
+      ['complete', 34900, 349000, 44900],
     ]);
-    assert.equal(plans.body[0].maxSeats, 3, 'Free: up to 3 people');
-    assert.equal(plans.body[1].minSeats, 5);
+    assert.equal(plans.body[0].minSeats, 1);
+    const pricing = await call('GET', '/billing/pricing', { token: owner });
+    assert.deepEqual(pricing.body.modules.map((m: { key: string; price: number; aiPrice: number }) => [m.key, m.price, m.aiPrice]), [
+      ['tasks', 9900, 12900],
+      ['attendance', 9900, 12900],
+      ['assets', 9900, 12900],
+    ]);
+    assert.deepEqual([pricing.body.complete.price, pricing.body.complete.aiPrice, pricing.body.gstPercent], [34900, 44900, 18]);
     const view = await call('GET', '/billing', { token: owner });
     assert.equal(view.status, 200);
-    assert.equal(view.body.plan, 'suite');
+    assert.equal(view.body.plan, 'complete');
     assert.equal(view.body.state, 'trialing');
-    assert.deepEqual(view.body.seats, { used: 1, paid: 0, limit: 50, nextPeriod: null });
+    assert.deepEqual(view.body.seats, { used: 1, paid: 0, limit: 3, nextPeriod: null }, 'the trial: 3 users');
+    assert.equal(view.body.freeAvailable, false);
     assert.equal(view.body.nextCharge, null);
     assert.equal(view.body.devTools, true);
     assert.equal(view.body.profile.state, 'Karnataka');
@@ -508,10 +519,12 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
   });
 
   test('checkout: IGST for another state; Pay → active, invoice, payment; the plan sets the apps', async () => {
-    const tooFew = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'tasks', interval: 'month', seats: 2 } });
-    assert.equal(tooFew.status, 400, 'paid plans start at 5 seats');
+    const tooFew = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'modules', modules: ['tasks'], interval: 'month', seats: 1 } });
+    assert.equal(tooFew.status, 400, '2 people use the apps');
     assert.equal((await call('POST', '/billing/checkout', { token: owner, body: { plan: 'complimentary', interval: 'month', seats: 5 } })).status, 400);
-    const co = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'tasks', interval: 'month', seats: 5 } });
+    assert.equal((await call('POST', '/billing/checkout', { token: owner, body: { plan: 'suite', interval: 'month', seats: 5 } })).status, 200, 'an older client: Suite means Complete');
+    assert.equal((await call('POST', '/billing/checkout', { token: owner, body: { plan: 'modules', modules: [], interval: 'month', seats: 5 } })).status, 400, 'no module picked');
+    const co = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'modules', modules: ['tasks'], seats: 5 } });
     assert.equal(co.status, 200);
     assert.equal(co.body.checkoutUrl, `/billing/pay/${co.body.sessionId}`);
     const page = await call('GET', `/billing/checkout/${co.body.sessionId}`, { token: owner });
@@ -519,11 +532,13 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
     const done = await call('POST', `/billing/fake/${co.body.sessionId}/complete`, { token: owner, body: { outcome: 'success' } });
     assert.equal(done.body.status, 'paid');
     const view = await call('GET', '/billing', { token: owner });
-    assert.equal(view.body.plan, 'tasks');
+    assert.deepEqual([view.body.plan, view.body.modules, view.body.ai, view.body.planName, view.body.perUser], ['modules', ['tasks'], false, 'Tasks', 9900]);
     assert.equal(view.body.state, 'active');
     assert.deepEqual(view.body.seats, { used: 2, paid: 5, limit: 5, nextPeriod: null }, 'the member joined as Member (an invite without a role, PLAN.md §19.28): a seat');
     assert.equal(view.body.nextCharge.total, 58410);
-    assert.deepEqual((await company(ids.company)).enabledApps, ['tasks'], 'Assets is off on the Tasks plan (nothing deleted)');
+    const c = await company(ids.company);
+    assert.deepEqual(c.enabledApps, ['tasks'], 'Assets is off with only the Tasks module (nothing deleted)');
+    assert.deepEqual([c.modules.tasks?.visitors, c.modules.tasks?.payroll, c.modules.tasks?.leads], [false, false, undefined], 'Visitors and Payroll need Complete; the Tasks extras stay as they were');
     const list = await call('GET', '/billing/invoices', { token: owner });
     assert.equal(list.body.length, 1);
     const inv = await call('GET', `/billing/invoices/${list.body[0].id}`, { token: owner });
@@ -534,13 +549,14 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
     assert.equal(inv.body.igstRate, 18);
     assert.equal(inv.body.total, 58410);
     assert.equal(inv.body.lines[0].sac, '997331');
+    assert.equal(inv.body.lines[0].description, 'Tasks plan, monthly (5 users)');
     // Paying the same checkout again changes nothing.
     await call('POST', `/billing/fake/${co.body.sessionId}/complete`, { token: owner, body: { outcome: 'success' } });
     assert.equal((await call('GET', '/billing/invoices', { token: owner })).body.length, 1);
   });
 
   test('webhooks: a bad signature is refused; the same event twice is applied once; a failed first payment changes nothing', async () => {
-    const co = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'suite', interval: 'year', seats: 5 } });
+    const co = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'complete', ai: true, interval: 'year', seats: 5 } });
     const [s] = await dbs.db.select().from(checkoutSessions).where(eq(checkoutSessions.id, co.body.sessionId));
     const event = JSON.stringify({ id: `evt_${randomUUID()}`, type: 'payment.captured', sessionId: s.id, amount: s.total });
     const bad = await call('POST', '/billing/webhook/fake', { raw: event, headers: { 'x-fakepay-signature': 'f'.repeat(64), 'x-requested-with': '' } });
@@ -556,20 +572,23 @@ describe('billing with the fake gateway (PLAN.md §21)', () => {
     assert.deepEqual(await second.json(), { ok: true, duplicate: true });
     assert.equal((await call('GET', '/billing/invoices', { token: owner })).body.length, 2);
     const view = await call('GET', '/billing', { token: owner });
-    assert.equal(view.body.plan, 'suite');
+    assert.deepEqual([view.body.plan, view.body.ai, view.body.planName, view.body.modules], ['complete', true, 'Complete with AI', null]);
     assert.equal(view.body.interval, 'year');
-    assert.deepEqual((await company(ids.company)).enabledApps, ['tasks', 'assets'], 'upgrading to Suite brings Assets back');
+    assert.equal(s.lines[0].unitPrice, 449000, 'yearly = 10 × ₹449');
+    const c = await company(ids.company);
+    assert.deepEqual(c.enabledApps, ['tasks', 'assets'], 'upgrading to Complete brings Assets back');
+    assert.deepEqual([c.modules.tasks?.visitors, c.modules.tasks?.payroll, c.modules.tasks?.leads], [true, true, true], 'Complete: every module on');
     assert.ok(appCalls.some((x) => x.app === 'assets' && x.path === '/companies' && x.body.companyId === ids.company), 'set up in Assets again (safe to repeat)');
     // Upgrade credit: the unused Tasks month came off the yearly price.
     assert.ok(s.lines.some((l) => l.amount < 0 && /credit/.test(l.description)));
 
-    const fail = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'tasks', interval: 'month', seats: 5 } });
+    const fail = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'modules', modules: ['tasks'], interval: 'month', seats: 5 } });
     const failed = await call('POST', `/billing/fake/${fail.body.sessionId}/complete`, { token: owner, body: { outcome: 'failure' } });
     assert.equal(failed.body.status, 'failed');
-    const cancel = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'tasks', interval: 'month', seats: 5 } });
+    const cancel = await call('POST', '/billing/checkout', { token: owner, body: { plan: 'modules', modules: ['tasks'], interval: 'month', seats: 5 } });
     assert.equal((await call('POST', `/billing/fake/${cancel.body.sessionId}/complete`, { token: owner, body: { outcome: 'cancel' } })).body.status, 'cancelled');
     const after = await call('GET', '/billing', { token: owner });
-    assert.equal(after.body.plan, 'suite', 'unchanged');
+    assert.equal(after.body.plan, 'complete', 'unchanged');
     assert.equal(after.body.state, 'active');
   });
 
@@ -662,8 +681,22 @@ describe('the billing clock (PLAN.md §21.1)', () => {
     assert.equal((await login('clock.member')).status, 200);
   });
 
-  test('trial end: Free when it fits (≤ 3 people, Tasks only), else read-only', async () => {
+  test('trial end (§24.1): read-only until a plan is paid, even when it would fit Free', async () => {
+    const small = await signup('small24@trial.test', { name: 'Small Trial 24', apps: ['tasks'] });
+    await addSeatHolders(small.companyId, 1);
+    const nine = await call('POST', '/billing/dev/advance', { token: small.accessToken, body: { days: 9 } });
+    assert.equal(nine.body.state, 'trialing', 'day 9 of 10');
+    const s = await call('POST', '/billing/dev/advance', { token: small.accessToken, body: { days: 2 } });
+    assert.deepEqual([s.body.plan, s.body.state, s.body.readOnly], ['complete', 'read_only', true]);
+    assert.equal((await call('POST', '/billing/free', { token: small.accessToken })).status, 400, 'Free is no longer offered');
+    // Paying a plan ends read-only.
+    await buy(small.accessToken, 'tasks', 2);
+    assert.equal((await sub(small.companyId)).state, 'active');
+  });
+
+  test('trial end of a company from before §24.1: Free when it fits (≤ 3 people, Tasks only), else read-only', async () => {
     const small = await signup('small@trial.test', { name: 'Small Trial', apps: ['tasks'] });
+    await legacy(small.companyId);
     await addSeatHolders(small.companyId, 2);
     const s = await call('POST', '/billing/dev/advance', { token: small.accessToken, body: { days: 15 } });
     assert.equal(s.body.plan, 'free');
@@ -671,18 +704,29 @@ describe('the billing clock (PLAN.md §21.1)', () => {
     assert.deepEqual(s.body.seats, { used: 3, paid: 0, limit: 3, nextPeriod: null });
 
     const big = await signup('big@trial.test', { name: 'Big Trial', apps: ['tasks'] });
+    await legacy(big.companyId);
     await addSeatHolders(big.companyId, 3);
     const b = await call('POST', '/billing/dev/advance', { token: big.accessToken, body: { days: 15 } });
     assert.equal(b.body.state, 'read_only', '4 people do not fit Free');
 
     const assetsCo = await signup('assets@trial.test', { name: 'Assets Trial', apps: ['tasks', 'assets'] });
+    await legacy(assetsCo.companyId);
     await addSeatHolders(assetsCo.companyId, 1, 'assets');
     const a = await call('POST', '/billing/dev/advance', { token: assetsCo.accessToken, body: { days: 15 } });
     assert.equal(a.body.state, 'read_only', 'Assets in use does not fit Free');
   });
 
-  test('cancel → at the period end Free if it fits, else read-only; resume undoes it', async () => {
+  test('cancel (§24.1) → read-only at the period end', async () => {
+    const out = await signup('cancel24@co.test', { name: 'Cancel New' });
+    await buy(out.accessToken, 'tasks', 1);
+    await call('POST', '/billing/cancel', { token: out.accessToken });
+    const end = await call('POST', '/billing/dev/advance', { token: out.accessToken, body: { days: 32 } });
+    assert.deepEqual([end.body.plan, end.body.state], ['modules', 'read_only']);
+  });
+
+  test('cancel (company from before §24.1) → at the period end Free if it fits, else read-only; resume undoes it', async () => {
     const fits = await signup('cancel1@co.test', { name: 'Cancel Fits' });
+    await legacy(fits.companyId);
     await buy(fits.accessToken, 'tasks', 5);
     const c = await call('POST', '/billing/cancel', { token: fits.accessToken });
     assert.equal(c.body.state, 'cancelled');
@@ -695,6 +739,7 @@ describe('the billing clock (PLAN.md §21.1)', () => {
     assert.equal(end.body.state, 'active');
 
     const tooBig = await signup('cancel2@co.test', { name: 'Cancel Big' });
+    await legacy(tooBig.companyId);
     await addSeatHolders(tooBig.companyId, 4);
     await buy(tooBig.accessToken, 'tasks', 5);
     await call('POST', '/billing/cancel', { token: tooBig.accessToken });
@@ -790,9 +835,13 @@ describe('owner console (staff only)', () => {
     const target = list.body.find((c: { id: string }) => c.id === out.companyId);
     assert.equal(target.state, 'trialing');
     const trial = await call('POST', `/console/companies/${out.companyId}/trial`, { token: staff.accessToken, body: { days: 10 } });
-    assert.ok(new Date(trial.body.trialEndsAt).getTime() > Date.now() + 23 * 86400_000);
+    assert.ok(new Date(trial.body.trialEndsAt).getTime() > Date.now() + 19 * 86400_000, '10 more days after the first 10');
     const plan = await call('POST', `/console/companies/${out.companyId}/plan`, { token: staff.accessToken, body: { plan: 'suite', seats: 10 } });
-    assert.deepEqual([plan.body.plan, plan.body.state, plan.body.seats.paid, plan.body.mrr], ['suite', 'active', 10, 149000]);
+    assert.deepEqual([plan.body.plan, plan.body.state, plan.body.seats.paid, plan.body.mrr], ['suite', 'active', 10, 149000], 'an older plan keeps its price');
+    const picked = await call('POST', `/console/companies/${out.companyId}/plan`, { token: staff.accessToken, body: { plan: 'modules', modules: ['assets', 'attendance'], ai: true, seats: 4 } });
+    assert.deepEqual([picked.body.plan, picked.body.modules, picked.body.ai, picked.body.planName, picked.body.mrr], ['modules', ['attendance', 'assets'], true, 'Attendance + Assets with AI', 4 * 25800]);
+    const complete = await call('POST', `/console/companies/${out.companyId}/plan`, { token: staff.accessToken, body: { plan: 'complete', ai: true, seats: 10 } });
+    assert.deepEqual([complete.body.planName, complete.body.mrr], ['Complete with AI', 449000]);
     const susp = await call('POST', `/console/companies/${out.companyId}/status`, { token: staff.accessToken, body: { status: 'suspended' } });
     assert.equal(susp.body.state, 'suspended');
     assert.equal((await call('POST', `/console/companies/${out.companyId}/status`, { token: staff.accessToken, body: { status: 'active' } })).body.state, 'active');
@@ -801,8 +850,16 @@ describe('owner console (staff only)', () => {
 });
 
 describe('switch to Free from Billing (PLAN.md §21.7)', () => {
+  test('a company from after §24.1 cannot choose Free', async () => {
+    const out = await signup('free0@co.test', { name: 'Free Never Co' });
+    const res = await call('POST', '/billing/free', { token: out.accessToken });
+    assert.equal(res.status, 400);
+    assert.match(res.body.message, /no longer offered/);
+  });
+
   test('trialing and fits: Free now, the Assets app switched off; again is refused', async () => {
     const out = await signup('free1@co.test', { name: 'Free Now Co', apps: ['tasks', 'assets'] });
+    await legacy(out.companyId);
     await addSeatHolders(out.companyId, 2);
     assert.deepEqual([...(await company(out.companyId)).enabledApps].sort(), ['assets', 'tasks']);
     // The owner holds Assets (the trial is Suite): that does not fit Free until nobody uses Assets.
@@ -823,6 +880,7 @@ describe('switch to Free from Billing (PLAN.md §21.7)', () => {
 
   test('does not fit: a clear message naming how many people and the Assets app; nothing changes', async () => {
     const many = await signup('free2@co.test', { name: 'Free Too Many' });
+    await legacy(many.companyId);
     await addSeatHolders(many.companyId, 4); // 5 in use
     const r1 = await call('POST', '/billing/free', { token: many.accessToken });
     assert.equal(r1.status, 400);
@@ -830,12 +888,14 @@ describe('switch to Free from Billing (PLAN.md §21.7)', () => {
     assert.equal((await sub(many.companyId)).state, 'trialing');
 
     const assetsCo = await signup('free3@co.test', { name: 'Free Assets Used', apps: ['tasks', 'assets'] });
+    await legacy(assetsCo.companyId);
     await addSeatHolders(assetsCo.companyId, 1, 'assets');
     const r2 = await call('POST', '/billing/free', { token: assetsCo.accessToken });
     assert.equal(r2.status, 400);
     assert.equal(r2.body.message, 'The Free plan is for up to 3 users using Attendance and Tasks. Switch off the Assets app first (Admin → People: take Assets away from the 2 people who have it).');
 
     const both = await signup('free4@co.test', { name: 'Free Both', apps: ['tasks', 'assets'] });
+    await legacy(both.companyId);
     await addSeatHolders(both.companyId, 3, 'assets');
     const r3 = await call('POST', '/billing/free', { token: both.accessToken });
     assert.equal(r3.body.message, 'The Free plan is for up to 3 users using Attendance and Tasks. Switch off 1 person and the Assets app first (Admin → People: take Assets away from the 4 people who have it).');
@@ -846,10 +906,11 @@ describe('switch to Free from Billing (PLAN.md §21.7)', () => {
 
   test('active paid plan: Free at the end of the paid period (like cancel)', async () => {
     const out = await signup('free5@co.test', { name: 'Free Later Co' });
+    await legacy(out.companyId);
     await buy(out.accessToken, 'tasks', 5);
     const res = await call('POST', '/billing/free', { token: out.accessToken });
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.deepEqual([res.body.plan, res.body.state, res.body.cancelAtPeriodEnd, res.body.freeFrom, res.body.nextCharge], ['tasks', 'cancelled', true, 'period_end', null]);
+    assert.deepEqual([res.body.plan, res.body.state, res.body.cancelAtPeriodEnd, res.body.freeFrom, res.body.nextCharge], ['modules', 'cancelled', true, 'period_end', null]);
     const twice = await call('POST', '/billing/free', { token: out.accessToken });
     assert.equal(twice.body.freeFrom, 'period_end', 'already ending: nothing more to do');
     const end = await call('POST', '/billing/dev/advance', { token: out.accessToken, body: { days: 32 } });
@@ -858,6 +919,7 @@ describe('switch to Free from Billing (PLAN.md §21.7)', () => {
 
   test('past due or read-only: Free now and read-only ends', async () => {
     const pd = await signup('free6@co.test', { name: 'Free Past Due' });
+    await legacy(pd.companyId);
     await buy(pd.accessToken, 'tasks', 5);
     await call('POST', '/billing/dev/renew', { token: pd.accessToken, body: { outcome: 'failure' } });
     assert.equal((await sub(pd.companyId)).state, 'past_due');
@@ -865,6 +927,7 @@ describe('switch to Free from Billing (PLAN.md §21.7)', () => {
     assert.deepEqual([r1.body.plan, r1.body.state, r1.body.freeFrom, r1.body.seats.paid], ['free', 'active', 'now', 0]);
 
     const ro = await signup('free7@co.test', { name: 'Free Read Only' });
+    await legacy(ro.companyId);
     await buy(ro.accessToken, 'tasks', 5);
     await call('POST', '/billing/dev/renew', { token: ro.accessToken, body: { outcome: 'failure' } });
     await call('POST', '/billing/dev/advance', { token: ro.accessToken, body: { days: 8 } });
@@ -908,7 +971,7 @@ describe('owner console audit log (PLAN.md §21.7)', () => {
     rows = await rowsFor(target.companyId);
     assert.deepEqual(rows.map((r) => r.action), ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate']);
     const plan = rows[1].details as any;
-    assert.deepEqual([plan.input, plan.before.plan, plan.after.plan, plan.after.seats], [{ plan: 'tasks', seats: 7 }, 'suite', 'tasks', 7]);
+    assert.deepEqual([plan.input, plan.before.plan, plan.after.plan, plan.after.seats], [{ plan: 'tasks', seats: 7 }, 'complete', 'tasks', 7], 'the trial is Complete (PLAN.md §24.1)');
     assert.deepEqual([(rows[2].details as any).after.state, (rows[3].details as any).after.state], ['suspended', 'active']);
     // A failed action (unknown company, unknown plan) writes nothing.
     const before = (await dbs.db.select().from(staffAudit)).length;
@@ -923,7 +986,7 @@ describe('owner console audit log (PLAN.md §21.7)', () => {
     assert.equal(all.body.rows[0].companyId, other.companyId, 'newest first');
     assert.equal(all.body.rows[0].action, 'company.suspend');
     assert.ok(all.body.total >= 5);
-    assert.deepEqual(all.body.actions, ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate', 'view.company', 'view.user', 'view.users', 'view.billing', 'view.logs']);
+    assert.deepEqual(all.body.actions, ['trial.extend', 'trial.set', 'trial.defaults', 'plan.set', 'company.suspend', 'company.reactivate', 'view.company', 'view.user', 'view.users', 'view.billing', 'view.logs']);
     const byCompany = await call('GET', `/console/audit?company=${target.companyId}`, { token: t });
     assert.deepEqual(byCompany.body.rows.map((r: { action: string }) => r.action), ['company.reactivate', 'company.suspend', 'plan.set', 'trial.extend']);
     assert.equal(byCompany.body.rows[0].companyName, 'Audit Target Co');
@@ -1272,5 +1335,142 @@ describe('company names are unique (PLAN.md §21.6)', () => {
       delete process.env.COMPANY_NAME_CHECK_IP_LIMIT;
       resetCompanyNameChecks();
     }
+  });
+});
+
+describe('module-wise pricing and the trial (PLAN.md §24.1)', () => {
+  test('prices: per user per month from the data; AI for the whole subscription; older plan codes mean the same modules now', () => {
+    const catalogue = [
+      { key: 'tasks', name: 'Tasks', description: '', priceMonthly: 9900, aiPriceMonthly: 12900, sort: 1 },
+      { key: 'attendance', name: 'Attendance', description: '', priceMonthly: 9900, aiPriceMonthly: 12900, sort: 2 },
+      { key: 'assets', name: 'Assets', description: '', priceMonthly: 9900, aiPriceMonthly: 12900, sort: 3 },
+    ];
+    const base = { description: '', apps: ['tasks', 'assets'], minSeats: 1, maxSeats: null, offered: true, sort: 1 };
+    const modules = { ...base, code: 'modules', name: 'Modules', kind: 'pick', priceMonthly: 9900, priceYearly: 99000, aiPriceMonthly: 12900 };
+    const complete = { ...base, code: 'complete', name: 'Complete', kind: 'bundle', priceMonthly: 34900, priceYearly: 349000, aiPriceMonthly: 44900 };
+    const suite = { ...base, code: 'suite', name: 'Suite', kind: 'plan', priceMonthly: 14900, priceYearly: 149000, aiPriceMonthly: 0 };
+    assert.equal(perUserMonthly(modules, { modules: ['tasks', 'attendance'], ai: false }, catalogue), 19800, 'Tasks + Attendance = Rs 198');
+    assert.equal(perUserMonthly(modules, { modules: ['tasks', 'attendance'], ai: true }, catalogue), 25800, 'with AI Rs 258');
+    assert.equal(perUserMonthly(complete, { modules: null, ai: false }, catalogue), 34900);
+    assert.equal(perUserMonthly(complete, { modules: null, ai: true }, catalogue), 44900);
+    assert.equal(unitPrice(complete, { modules: null, ai: true }, catalogue, 'year'), 449000, 'yearly = 10 x monthly');
+    assert.equal(unitPrice(suite, { modules: null, ai: false }, catalogue, 'year'), 149000, 'an older plan keeps its yearly price');
+    assert.equal(selectionName(modules, { modules: ['assets', 'tasks'], ai: true }, catalogue), 'Tasks + Assets with AI');
+    assert.deepEqual(normaliseSelection({ plan: 'modules', modules: ['assets', 'tasks', 'assets'] }), { plan: 'modules', modules: ['tasks', 'assets'], ai: false });
+    assert.deepEqual(normaliseSelection({ plan: 'tasks' }), { plan: 'modules', modules: ['tasks', 'attendance'], ai: false });
+    assert.deepEqual(normaliseSelection({ plan: 'suite', ai: true }), { plan: 'complete', modules: null, ai: true });
+    assert.throws(() => normaliseSelection({ plan: 'modules', modules: [] }), /at least one module/);
+    // Plan -> apps and module switches.
+    assert.deepEqual(appsFor(modules, ['attendance']), ['tasks'], 'Attendance lives in the Tasks app');
+    assert.deepEqual(appsFor(modules, ['assets']), ['assets']);
+    assert.deepEqual(appsFor(complete, null), ['tasks', 'assets']);
+    assert.deepEqual([tasksModuleAllowed('visitors', modules, ['tasks', 'attendance', 'assets']), tasksModuleAllowed('payroll', modules, ['attendance'])], [false, false], 'Visitors and Payroll: Complete only');
+    assert.deepEqual([tasksModuleAllowed('leads', modules, ['tasks']), tasksModuleAllowed('leads', modules, ['attendance'])], [true, false], 'leads come with the Tasks module');
+    assert.equal(tasksModuleAllowed('visitors', complete, null), true);
+  });
+
+  test('GET public/pricing: no sign-in, cacheable, the §24 contract in rupees; Calendly and AI from env', async () => {
+    delete process.env.CALENDLY_URL;
+    delete process.env.AI_API_KEY;
+    const res = await fetch(`${base}/public/pricing`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('cache-control') ?? '', /public, max-age=300/);
+    assert.deepEqual(await res.json(), {
+      currency: 'INR',
+      perUserMonth: true,
+      gstPercent: 18,
+      modules: [
+        { key: 'tasks', name: 'Tasks', price: 99, aiPrice: 129 },
+        { key: 'attendance', name: 'Attendance', price: 99, aiPrice: 129 },
+        { key: 'assets', name: 'Assets', price: 99, aiPrice: 129 },
+      ],
+      complete: { price: 349, aiPrice: 449, includes: ['Tasks', 'Attendance', 'Assets', 'Visitors', 'Payroll'] },
+      trial: { days: 10, maxUsers: 3 },
+      calendlyUrl: null,
+      aiHelper: false,
+    });
+    process.env.CALENDLY_URL = 'https://calendly.com/kaampilot/demo';
+    process.env.AI_API_KEY = 'test-key';
+    try {
+      const on = (await (await fetch(`${base}/public/pricing`)).json()) as { calendlyUrl: string | null; aiHelper: boolean };
+      assert.deepEqual([on.calendlyUrl, on.aiHelper], ['https://calendly.com/kaampilot/demo', true]);
+    } finally {
+      delete process.env.CALENDLY_URL;
+      delete process.env.AI_API_KEY;
+    }
+  });
+
+  test('plan -> module switches: picked modules on, the rest off; Complete switches everything on; pushed to the apps', async () => {
+    const out = await signup('modules@co.test', { name: 'Modules Co', apps: ['tasks', 'assets'] });
+    appCalls.length = 0;
+    const co = await call('POST', '/billing/checkout', { token: out.accessToken, body: { plan: 'modules', modules: ['attendance'], ai: true, seats: 1 } });
+    assert.equal(co.status, 200, JSON.stringify(co.body));
+    const page = await call('GET', `/billing/checkout/${co.body.sessionId}`, { token: out.accessToken });
+    assert.deepEqual([page.body.planName, page.body.subtotal, page.body.modules, page.body.ai], ['Attendance with AI', 12900, ['attendance'], true]);
+    await call('POST', `/billing/fake/${co.body.sessionId}/complete`, { token: out.accessToken, body: { outcome: 'success' } });
+    let c = await company(out.companyId);
+    assert.deepEqual(c.enabledApps, ['tasks'], 'Assets off');
+    assert.deepEqual(c.modules.tasks, { ...c.modules.tasks, leads: false, intake: false, mistakes: false, links: false, payroll: false, visitors: false }, 'no Tasks extras, no Complete modules');
+    const pushed = appCalls.filter((x) => x.app === 'tasks' && x.method === 'PUT' && x.path === '/company').at(-1);
+    assert.equal(pushed?.body.modules.visitors, false, 'the switches reach the Tasks app');
+    const me = await call('GET', '/auth/me', { token: out.accessToken });
+    assert.deepEqual([me.body.billing.modules, me.body.billing.ai], [['attendance'], true], 'menus know the plan');
+    // Complete: everything on, Assets back.
+    await buy(out.accessToken, 'complete', 1);
+    c = await company(out.companyId);
+    assert.deepEqual(c.enabledApps, ['tasks', 'assets']);
+    assert.deepEqual([c.modules.tasks?.leads, c.modules.tasks?.payroll, c.modules.tasks?.visitors], [true, true, true]);
+    assert.equal((await call('GET', '/auth/me', { token: out.accessToken })).body.billing.modules, null);
+  });
+
+  test('trial defaults (console) for new companies and a per-company override; existing trials untouched', async () => {
+    const staff = await signup('staff24@ff.test', { name: 'FF Staff 24' });
+    await dbs.db.update(accounts).set({ isStaff: true }).where(eq(accounts.email, 'staff24@ff.test'));
+    const owner = await signup('owner24@co.test', { name: 'Owner 24 Co' });
+    assert.equal((await call('GET', '/console/trial-defaults', { token: owner.accessToken })).status, 403);
+    assert.equal((await call('PUT', '/console/trial-defaults', { token: owner.accessToken, body: { days: 30, maxUsers: 10 } })).status, 403);
+    assert.deepEqual((await call('GET', '/console/trial-defaults', { token: staff.accessToken })).body, { days: 10, maxUsers: 3 });
+    try {
+      const set = await call('PUT', '/console/trial-defaults', { token: staff.accessToken, body: { days: 14, maxUsers: 5 } });
+      assert.deepEqual(set.body, { days: 14, maxUsers: 5 });
+      assert.equal((await call('PUT', '/console/trial-defaults', { token: staff.accessToken, body: { days: 0, maxUsers: 5 } })).status, 400);
+      const later = await signup('later24@co.test', { name: 'Later 24 Co' });
+      const s = await sub(later.companyId);
+      assert.equal(s.trialMaxUsers, 5);
+      assert.ok(Math.abs(s.trialEndsAt!.getTime() - Date.now() - 14 * 86400_000) < 60_000);
+      assert.deepEqual(((await (await fetch(`${base}/public/pricing`)).json()) as { trial: unknown }).trial, { days: 14, maxUsers: 5 });
+      assert.equal((await sub(owner.companyId)).trialMaxUsers, 3, 'a company already trialing keeps its trial');
+      const [audit] = await dbs.db.select().from(staffAudit).where(eq(staffAudit.action, 'trial.defaults'));
+      assert.deepEqual(audit.details.input, { days: 14, maxUsers: 5 });
+    } finally {
+      await call('PUT', '/console/trial-defaults', { token: staff.accessToken, body: { days: 10, maxUsers: 3 } });
+    }
+    // Per company: 6 users, 20 days from the start.
+    const o = await call('PUT', `/console/companies/${owner.companyId}/trial`, { token: staff.accessToken, body: { days: 20, maxUsers: 6 } });
+    assert.equal(o.status, 200, JSON.stringify(o.body));
+    assert.equal(o.body.trialMaxUsers, 6);
+    const s = await sub(owner.companyId);
+    assert.ok(Math.abs(s.trialEndsAt!.getTime() - s.createdAt.getTime() - 20 * 86400_000) < 60_000);
+    assert.equal((await call('GET', '/billing', { token: owner.accessToken })).body.seats.limit, 6);
+    await addSeatHolders(owner.companyId, 5); // 6 in use
+    const p = await call('POST', '/people', { token: owner.accessToken, body: { fullName: 'Seventh' } });
+    const grant = await call('PUT', `/people/${p.body.person.id}/apps/tasks`, { token: owner.accessToken, body: {} });
+    assert.equal(grant.status, 402);
+    assert.match(grant.body.message, /free trial is for up to 6 users/);
+    // The trial ran out (read-only): a longer one starts it again.
+    await call('POST', '/billing/dev/advance', { token: owner.accessToken, body: { days: 21 } });
+    assert.equal((await sub(owner.companyId)).state, 'read_only');
+    const again = await call('PUT', `/console/companies/${owner.companyId}/trial`, { token: staff.accessToken, body: { days: 60 } });
+    assert.equal(again.body.state, 'trialing');
+    // Not for a paid plan.
+    await buy(owner.accessToken, 'tasks', 6);
+    assert.equal((await call('PUT', `/console/companies/${owner.companyId}/trial`, { token: staff.accessToken, body: { days: 30 } })).status, 400);
+  });
+
+  test('existing companies (migration 0019): complimentary untouched; Free no longer offered', async () => {
+    const [{ n }] = (await dbs.db.execute<{ n: number }>(sql`select count(*)::int as n from platform.subscriptions where plan = 'complimentary' and free_fallback`)).rows;
+    assert.equal(n, 0, 'complimentary companies (CarTrends, demo) are never touched by the billing clock');
+    const [free] = (await dbs.db.execute<{ offered: boolean }>(sql`select offered from platform.plans where code = 'free'`)).rows;
+    assert.equal(free.offered, false);
   });
 });

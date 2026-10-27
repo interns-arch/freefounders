@@ -24,6 +24,7 @@ import {
   APPS,
   billingEvents,
   billingProfiles,
+  billingSettings,
   checkoutSessions,
   companies,
   type GstParty,
@@ -31,6 +32,7 @@ import {
   invoiceLines,
   type InvoiceLineInput,
   invoices,
+  modulePrices,
   payments,
   people,
   personApps,
@@ -61,11 +63,13 @@ import {
   type PlanRow,
   READ_ONLY_DAYS,
   seatLimit,
+  TRIAL_SEAT_LIMIT,
   seatsUsed,
   type SubscriptionRow,
   subscriptionOf,
-  TRIAL_DAYS,
 } from './seats';
+import { appsFor, cleanModules, MODULE_KEYS, normaliseSelection, planModules, selectionName, tasksModuleAllowed, TASKS_MODULE_NEEDS, TRIAL_DEFAULTS, unitPrice } from './pricing';
+import { GST_RATE } from './gst';
 import { platformLog } from '../console/log-sink';
 
 /** Postgres advisory lock: one Platform process runs the billing clock at a time (like the events poller). */
@@ -89,10 +93,20 @@ export const profileSchema = z.object({
   email: z.preprocess((v) => (typeof v === 'string' && !v.trim() ? null : v), z.string().trim().toLowerCase().email('Enter a valid email').max(200).nullable().optional()),
 });
 export const checkoutSchema = z.object({
+  /** 'modules' (with `modules`) or 'complete' (PLAN.md §24.1); the older plan codes still work (pricing.ts). */
   plan: z.string().trim().min(1).max(40),
-  interval: z.enum(['month', 'year']),
+  modules: z.array(z.enum(MODULE_KEYS)).max(MODULE_KEYS.length).optional(),
+  ai: z.boolean().default(false),
+  interval: z.enum(['month', 'year']).default('month'),
+  /** Users (paid seats). */
   seats: z.number().int().min(1).max(MAX_SEATS),
 });
+/** Trial length and users: the default for new companies (console). */
+export const trialSettingsSchema = z.object({ days: z.number().int().min(1).max(365), maxUsers: z.number().int().min(1).max(MAX_SEATS) });
+/** One company's trial (console): its length from the trial's start and/or its users. */
+export const companyTrialSchema = z
+  .object({ days: z.number().int().min(1).max(365).optional(), maxUsers: z.number().int().min(1).max(MAX_SEATS).optional() })
+  .refine((v) => v.days !== undefined || v.maxUsers !== undefined, 'Give days or maxUsers');
 export const seatsSchema = z.object({ seats: z.number().int().min(1).max(MAX_SEATS) });
 export const outcomeSchema = z.object({ outcome: z.enum(['success', 'failure', 'cancel']) });
 export const renewSchema = z.object({ outcome: z.enum(['success', 'failure']).default('success') });
@@ -110,12 +124,14 @@ const addInterval = (d: Date, interval: string) => {
   else out.setUTCMonth(out.getUTCMonth() + 1);
   return out;
 };
-const priceOf = (plan: PlanRow, interval: string) => (interval === 'year' ? plan.priceYearly : plan.priceMonthly);
 const isPaid = (plan: PlanRow) => plan.priceMonthly > 0;
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 const intervalLabel = (i: string) => (i === 'year' ? 'yearly' : 'monthly');
 
 type After = Array<() => Promise<unknown>>;
+type ModulePriceRow = typeof modulePrices.$inferSelect;
+/** What a subscription or a checkout has bought (PLAN.md §24.1). */
+type Bought = { modules: readonly string[] | null; ai: boolean };
 
 /**
  * Plans, subscriptions and invoices (PLAN.md §21). The state machine:
@@ -192,12 +208,59 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return p;
   }
 
+  /** Module prices (PLAN.md §24.1), in their order. */
+  async catalogue(db: Executor = this.dbs.db): Promise<ModulePriceRow[]> {
+    return db.select().from(modulePrices).orderBy(asc(modulePrices.sort));
+  }
+
+  /** Per user for one period of this subscription or checkout. */
+  private async unit(plan: PlanRow, bought: Bought, interval: string, db: Executor = this.dbs.db) {
+    return unitPrice(plan, bought, await this.catalogue(db), interval);
+  }
+
+  // ─── trial defaults (console) ───────────────────────────────────────────
+
+  /** The trial new companies get (staff change it in the console); 3 users for 10 days when nothing is stored. */
+  async trialDefaults(db: Executor = this.dbs.db): Promise<{ days: number; maxUsers: number }> {
+    const [row] = await db.select().from(billingSettings).where(eq(billingSettings.key, 'trial')).limit(1);
+    const parsed = trialSettingsSchema.safeParse(row?.value);
+    return parsed.success ? parsed.data : { ...TRIAL_DEFAULTS };
+  }
+
+  async setTrialDefaults(input: z.infer<typeof trialSettingsSchema>) {
+    await this.dbs.db
+      .insert(billingSettings)
+      .values({ key: 'trial', value: input })
+      .onConflictDoUpdate({ target: billingSettings.key, set: { value: input, updatedAt: new Date() } });
+    return this.trialDefaults();
+  }
+
+  /** GET /api/platform/public/pricing (PLAN.md §24 shared contract): rupees per user per month, no sign-in. */
+  async publicPricing() {
+    const [catalogue, trial, complete] = await Promise.all([this.catalogue(), this.trialDefaults(), this.plan('complete')]);
+    const rs = (paise: number) => Math.round(paise) / 100;
+    return {
+      currency: 'INR' as const,
+      perUserMonth: true,
+      gstPercent: GST_RATE,
+      modules: catalogue.map((m) => ({ key: m.key, name: m.name, price: rs(m.priceMonthly), aiPrice: rs(m.aiPriceMonthly) })),
+      complete: { price: rs(complete.priceMonthly), aiPrice: rs(complete.aiPriceMonthly), includes: [...catalogue.map((m) => m.name), 'Visitors', 'Payroll'] },
+      trial,
+      calendlyUrl: process.env.CALENDLY_URL?.trim() || null,
+      aiHelper: !!process.env.AI_API_KEY?.trim(),
+    };
+  }
+
   // ─── new companies ──────────────────────────────────────────────────────
 
-  /** A new company (sign-up, New company): 14 days of Suite, no card; its GST details start from the sign-up form. */
+  /**
+   * A new company (sign-up, New company): a trial of Complete for the default days and users (PLAN.md §24.1; 3 users
+   * for 10 days), no card; then read-only until a plan is paid. Its GST details start from the sign-up form.
+   */
   async startTrial(tx: Executor, companyId: string, buyer: { legalName: string; state: string | null; email: string | null }) {
     const now = new Date();
-    await tx.insert(subscriptions).values({ companyId, plan: 'suite', interval: 'month', state: 'trialing', stateSince: now, trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * DAY_MS) });
+    const trial = await this.trialDefaults(tx);
+    await tx.insert(subscriptions).values({ companyId, plan: 'complete', interval: 'month', state: 'trialing', stateSince: now, trialEndsAt: new Date(now.getTime() + trial.days * DAY_MS), trialMaxUsers: trial.maxUsers });
     await tx.insert(billingProfiles).values({ companyId, legalName: buyer.legalName, state: stateName(buyer.state) ?? seller().state, email: buyer.email }).onConflictDoNothing();
   }
 
@@ -205,7 +268,18 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   async plans() {
     const rows = await this.dbs.db.select().from(plans).where(eq(plans.offered, true)).orderBy(asc(plans.sort));
-    return rows.map((p) => ({ code: p.code, name: p.name, description: p.description, apps: p.apps, priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, minSeats: p.minSeats, maxSeats: p.maxSeats }));
+    return rows.map((p) => ({ code: p.code, name: p.name, description: p.description, apps: p.apps, kind: p.kind, priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, aiPriceMonthly: p.aiPriceMonthly, minSeats: p.minSeats, maxSeats: p.maxSeats }));
+  }
+
+  /** GET billing/pricing: what the Billing screen prices with (paise per user per month; GST on top). */
+  async pricing() {
+    const [catalogue, complete, modules] = await Promise.all([this.catalogue(), this.plan('complete'), this.plan('modules')]);
+    return {
+      gstPercent: GST_RATE,
+      modules: catalogue.map((m) => ({ key: m.key, name: m.name, description: m.description, price: m.priceMonthly, aiPrice: m.aiPriceMonthly })),
+      complete: { name: complete.name, description: complete.description, price: complete.priceMonthly, aiPrice: complete.aiPriceMonthly },
+      minSeats: Math.min(complete.minSeats, modules.minSeats),
+    };
   }
 
   private async profile(companyId: string) {
@@ -226,10 +300,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return this.profile(companyId);
   }
 
-  /** The plan line(s) of one period. */
-  private planLines(plan: PlanRow, interval: string, seats: number, start: Date | null, end: Date | null): InvoiceLineInput[] {
-    const unit = priceOf(plan, interval);
-    return [{ description: `${plan.name} plan, ${intervalLabel(interval)} (${seats} seat${seats === 1 ? '' : 's'})`, sac: SAC_SAAS, quantity: seats, unitPrice: unit, amount: unit * seats, periodStart: iso(start), periodEnd: iso(end) }];
+  /** The plan line(s) of one period: "Tasks + Attendance with AI plan, monthly (5 users)". */
+  private async planLines(plan: PlanRow, bought: Bought, interval: string, seats: number, start: Date | null, end: Date | null, db: Executor = this.dbs.db): Promise<InvoiceLineInput[]> {
+    const catalogue = await this.catalogue(db);
+    const unit = unitPrice(plan, bought, catalogue, interval);
+    const name = selectionName(plan, bought, catalogue);
+    return [{ description: `${name} plan, ${intervalLabel(interval)} (${seats} user${seats === 1 ? '' : 's'})`, sac: SAC_SAAS, quantity: seats, unitPrice: unit, amount: unit * seats, periodStart: iso(start), periodEnd: iso(end) }];
   }
 
   /** Seats added mid-period, not invoiced yet. */
@@ -258,14 +334,22 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     if (isPaid(plan) && ['active', 'past_due'].includes(sub.state) && !sub.cancelAtPeriodEnd && sub.currentPeriodEnd) {
       const seats = sub.nextPeriodSeats ?? sub.seats;
       const start = sub.currentPeriodEnd;
-      const lines = [...this.planLines(plan, sub.interval, seats, start, addInterval(start, sub.interval)), ...(await this.pendingSeatLines(companyId)).lines];
+      const lines = [...(await this.planLines(plan, sub, sub.interval, seats, start, addInterval(start, sub.interval))), ...(await this.pendingSeatLines(companyId)).lines];
       const tax = gst(lines, (await this.buyer(companyId)).state);
       nextCharge = { date: iso(start), lines, subtotal: tax.subtotal, tax: tax.cgst + tax.sgst + tax.igst, total: tax.total };
     }
+    const catalogue = await this.catalogue();
     return {
       plan: plan.code,
-      planName: plan.name,
-      apps: plan.apps,
+      planName: selectionName(plan, sub, catalogue),
+      apps: plan.kind === 'pick' ? appsFor(plan, sub.modules) : plan.apps,
+      /** PLAN.md §24.1: the picked modules (plan 'modules'); null = every module. */
+      modules: planModules(plan, sub.modules),
+      ai: sub.ai,
+      /** Per user per month now (paise); 0 on Free, trial and complimentary. */
+      perUser: isPaid(plan) && sub.state !== 'trialing' ? unitPrice(plan, sub, catalogue, 'month') : 0,
+      /** The older Free plan can still be chosen (companies from before §24.1). */
+      freeAvailable: sub.freeFallback && plan.code !== 'free' && plan.code !== 'complimentary',
       interval: sub.interval,
       state: sub.state,
       readOnly: isReadOnly(sub.state),
@@ -293,24 +377,26 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   /** POST billing/checkout: prices the purchase (with a credit for unused paid time), opens a gateway checkout. */
   async checkout(caller: Caller, input: z.infer<typeof checkoutSchema>) {
     const gateway = this.gateway(); // 503 first: nothing is priced or stored while payments are off
-    const plan = await this.plan(input.plan);
+    const sel = normaliseSelection(input);
+    const plan = await this.plan(sel.plan);
     if (!plan.offered || !isPaid(plan)) throw new BadRequestException({ message: 'Choose a paid plan', errors: { plan: 'Choose a paid plan' } });
+    const bought: Bought = { modules: sel.modules, ai: sel.ai };
     const used = await seatsUsed(this.dbs, caller.companyId);
     const min = Math.max(plan.minSeats, used);
     if (input.seats < min) {
-      const why = used > plan.minSeats ? `${used} people use the apps now` : `the ${plan.name} plan starts at ${plan.minSeats} seats`;
-      throw new BadRequestException({ message: `Choose at least ${min} seats: ${why}.`, errors: { seats: `At least ${min}` } });
+      const why = used > plan.minSeats ? `${used} people use the apps now` : `the ${plan.name} plan starts at ${plan.minSeats} users`;
+      throw new BadRequestException({ message: `Choose at least ${min} users: ${why}.`, errors: { seats: `At least ${min}` } });
     }
-    if (plan.maxSeats && input.seats > plan.maxSeats) throw new BadRequestException({ message: `At most ${plan.maxSeats} seats`, errors: { seats: `At most ${plan.maxSeats}` } });
+    if (plan.maxSeats && input.seats > plan.maxSeats) throw new BadRequestException({ message: `At most ${plan.maxSeats} users`, errors: { seats: `At most ${plan.maxSeats}` } });
     const { sub, plan: current } = await subscriptionOf(this.dbs, caller.companyId);
     const now = companyNow(sub);
     const end = addInterval(now, input.interval);
-    const lines = this.planLines(plan, input.interval, input.seats, now, end);
-    // An upgrade starts now: what is left of the paid period comes off the price.
+    const lines = await this.planLines(plan, bought, input.interval, input.seats, now, end);
+    // An upgrade starts now: what is left of the paid period comes off the price (at the price it was bought for).
     if (isPaid(current) && ['active', 'cancelled'].includes(sub.state) && sub.currentPeriodStart && sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
       const len = sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime();
-      const credit = Math.round((sub.seats * priceOf(current, sub.interval) * (sub.currentPeriodEnd.getTime() - now.getTime())) / Math.max(1, len));
-      if (credit > 0) lines.push({ description: `Unused time on the ${current.name} plan (credit)`, sac: SAC_SAAS, quantity: 1, unitPrice: -credit, amount: -credit, periodStart: iso(now), periodEnd: iso(sub.currentPeriodEnd) });
+      const credit = Math.round((sub.seats * (await this.unit(current, sub, sub.interval)) * (sub.currentPeriodEnd.getTime() - now.getTime())) / Math.max(1, len));
+      if (credit > 0) lines.push({ description: `Unused time on the ${selectionName(current, sub, await this.catalogue())} plan (credit)`, sac: SAC_SAAS, quantity: 1, unitPrice: -credit, amount: -credit, periodStart: iso(now), periodEnd: iso(sub.currentPeriodEnd) });
     }
     lines.push(...(await this.pendingSeatLines(caller.companyId)).lines);
     const buyerState = (await this.buyer(caller.companyId)).state;
@@ -325,6 +411,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         companyId: caller.companyId,
         gateway: gateway.name,
         plan: plan.code,
+        modules: sel.modules,
+        ai: sel.ai,
         interval: input.interval,
         seats: input.seats,
         lines,
@@ -387,7 +475,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const plan = await this.plan(s.plan);
     const [c] = await this.dbs.db.select({ name: companies.name }).from(companies).where(eq(companies.id, companyId)).limit(1);
     const status = s.status === 'open' && s.expiresAt < new Date() ? 'expired' : s.status;
-    const out = { id: s.id, plan: s.plan, planName: plan.name, interval: s.interval, seats: s.seats, lines: s.lines, subtotal: s.subtotal, cgst: s.cgst, sgst: s.sgst, igst: s.igst, total: s.total, companyName: c?.name ?? '', status, gateway: s.gateway };
+    const out = { id: s.id, plan: s.plan, planName: selectionName(plan, s, await this.catalogue()), modules: planModules(plan, s.modules), ai: s.ai, interval: s.interval, seats: s.seats, lines: s.lines, subtotal: s.subtotal, cgst: s.cgst, sgst: s.sgst, igst: s.igst, total: s.total, companyName: c?.name ?? '', status, gateway: s.gateway };
     if (s.gateway !== 'cashfree' || status !== 'open') return out;
     const paymentSessionId = typeof s.gatewayData?.paymentSessionId === 'string' ? s.gatewayData.paymentSessionId : null;
     const mode = s.gatewayData?.mode === 'production' ? 'production' : 'sandbox';
@@ -557,10 +645,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const now = companyNow(sub);
     const end = addInterval(now, s.interval);
     platformLog({ level: 'info', event: 'billing.payment', message: `${gatewayName} payment captured: ${s.total} paise`, companyId: s.companyId });
+    const prev = { plan: await this.plan(sub.plan), modules: sub.modules };
     await tx
       .update(subscriptions)
       .set({
         plan: s.plan,
+        modules: s.modules,
+        ai: s.ai,
         interval: s.interval,
         state: 'active',
         stateSince: now,
@@ -578,7 +669,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     if (pending.ids.length) await tx.update(seatChanges).set({ invoiceId: invoice.id }).where(inArray(seatChanges.id, pending.ids));
     await tx.insert(payments).values({ companyId: s.companyId, invoiceId: invoice.id, checkoutSessionId: s.id, gateway: gatewayName, gatewayPaymentId: event.paymentId ?? null, amount: s.total, status: 'captured' });
     const plan = await this.plan(s.plan);
-    after.push(() => this.applyEntitlements(s.companyId, plan));
+    after.push(() => this.applyEntitlements(s.companyId, plan, s.modules, prev));
   }
 
   /**
@@ -598,7 +689,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const end = r.periodEnd ? new Date(r.periodEnd) : addInterval(start, sub.interval);
     const seats = sub.nextPeriodSeats ?? sub.seats;
     const pending = await this.pendingSeatLines(companyId, tx);
-    const lines = [...this.planLines(plan, sub.interval, seats, start, end), ...pending.lines];
+    const lines = [...(await this.planLines(plan, sub, sub.interval, seats, start, end, tx)), ...pending.lines];
     const invoice = await this.createInvoice(tx, companyId, { issuedAt: start, periodStart: start, periodEnd: end, lines });
     if (typeof r.amount === 'number' && r.amount !== invoice.total) {
       this.log.warn(`Company ${companyId}: ${r.gatewayName} charged ${r.amount} paise, invoice ${invoice.number} says ${invoice.total} (rounding)`);
@@ -692,7 +783,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       if (seats > sub.seats) {
         const len = sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime();
         const left = Math.max(0, sub.currentPeriodEnd.getTime() - now.getTime());
-        const amount = Math.round(((seats - sub.seats) * priceOf(plan, sub.interval) * left) / Math.max(1, len));
+        const amount = Math.round(((seats - sub.seats) * (await this.unit(plan, sub, sub.interval, tx)) * left) / Math.max(1, len));
         await tx.insert(seatChanges).values({ companyId, seatsFrom: sub.seats, seatsTo: seats, effectiveAt: now, periodEnd: sub.currentPeriodEnd, amount });
         await tx.update(subscriptions).set({ seats, nextPeriodSeats: null, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
       } else {
@@ -818,6 +909,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       const plan = await this.plan(sub.plan);
       if (plan.code === 'free') throw new BadRequestException('This company is already on the Free plan.');
       if (plan.code === 'complimentary') throw new BadRequestException('This company has a complimentary plan. Contact Kaampilot support to change it.');
+      // PLAN.md §24.1: Free is no longer offered; only companies from before keep it as a choice.
+      if (!sub.freeFallback) throw new BadRequestException('The Free plan is no longer offered. Choose modules or Complete to keep using Kaampilot.');
       if (sub.state === 'suspended') throw new BadRequestException('This company is suspended. Contact Kaampilot support.');
       const fit = await this.freeFit(tx, companyId);
       if (!fit.ok) throw new BadRequestException({ message: fit.message, errors: { plan: fit.message } });
@@ -850,8 +943,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       const plan = await this.plan(sub.plan);
       const now = companyNow(sub);
       const set = (values: Partial<SubscriptionRow>) => tx.update(subscriptions).set({ ...values, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
+      // PLAN.md §24.1: a trial or a cancelled plan ends read-only (until a plan is paid); companies from before §24.1
+      // (free_fallback) still drop to Free when they fit it.
       const toFreeOrReadOnly = async (at: Date) => {
-        if (await this.fitsFree(tx, companyId)) {
+        if (sub.freeFallback && (await this.fitsFree(tx, companyId))) {
           await set({ plan: 'free', state: 'active', stateSince: at, seats: 0, nextPeriodSeats: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false });
           const free = await this.plan('free');
           after.push(() => this.applyEntitlements(companyId, free));
@@ -907,7 +1002,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const fake = this.fake;
     const start = forced || sub.state === 'past_due' ? now : (sub.currentPeriodEnd ?? now);
     const seats = sub.nextPeriodSeats ?? sub.seats;
-    const lines = [...this.planLines(plan, sub.interval, seats, start, addInterval(start, sub.interval)), ...(await this.pendingSeatLines(companyId, tx)).lines];
+    const lines = [...(await this.planLines(plan, sub, sub.interval, seats, start, addInterval(start, sub.interval), tx)), ...(await this.pendingSeatLines(companyId, tx)).lines];
     const tax = gst(lines, (await this.buyer(companyId)).state);
     const charge = await fake.chargeRenewal({ companyId, amount: tax.total, outcome });
     if (!charge.ok) return this.renewalFailed(tx, sub, now, forced, fake.name, charge, tax.total);
@@ -1004,22 +1099,44 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   // ─── what a plan unlocks ────────────────────────────────────────────────
 
   /**
-   * The plan's apps become the company's apps (module switches stay as they were). A new app is set up in that app and
-   * opened for the people whose roles reach it; an app the plan lacks is switched off for the company. Nothing is
-   * deleted: switching it back on brings everything back. Complimentary keeps whatever the company has.
+   * The plan's apps become the company's apps, and its module switches follow the plan (PLAN.md §16, §24.1). A new app
+   * is set up in that app and opened for the people whose roles reach it; an app the plan lacks is switched off for the
+   * company. Tasks-app modules the plan does not include (Visitors and Payroll without Complete; leads, AI inbox,
+   * mistakes, links without the Tasks module) are switched off; the ones the new plan adds are switched on (a new
+   * Complete: every one), the rest stay as the company set them. Nothing is deleted: switching back brings everything
+   * back. Complimentary keeps whatever the company has.
    */
-  async applyEntitlements(companyId: string, plan: PlanRow) {
+  async applyEntitlements(companyId: string, plan: PlanRow, modules: readonly string[] | null = null, prev?: { plan: PlanRow; modules: readonly string[] | null }) {
     if (plan.code === 'complimentary') return;
-    const want = plan.apps.filter((a): a is AppKey => (APPS as readonly string[]).includes(a));
-    const [c] = await this.dbs.db.select({ apps: companies.enabledApps }).from(companies).where(eq(companies.id, companyId)).limit(1);
+    const want = appsFor(plan, modules).filter((a): a is AppKey => (APPS as readonly string[]).includes(a));
+    const [c] = await this.dbs.db.select({ apps: companies.enabledApps, modules: companies.modules }).from(companies).where(eq(companies.id, companyId)).limit(1);
     if (!c) return;
     const have = c.apps.filter((a): a is AppKey => (APPS as readonly string[]).includes(a));
     const added = want.filter((a) => !have.includes(a));
     const removed = have.filter((a) => !want.includes(a));
-    if (!added.length && !removed.length) return;
-    await this.dbs.db.update(companies).set({ enabledApps: want, updatedAt: new Date() }).where(eq(companies.id, companyId));
-    this.log.log(`Company ${companyId} on ${plan.code}: apps ${want.join(', ') || 'none'}`);
+    // The Tasks app's switches under the new plan.
+    const switches: Record<string, boolean> = { ...(c.modules?.tasks ?? {}) };
+    let switched = false;
+    if (want.includes('tasks')) {
+      const newComplete = plan.kind === 'bundle' && prev?.plan.code !== plan.code;
+      for (const key of Object.keys(TASKS_MODULE_NEEDS)) {
+        const allowed = tasksModuleAllowed(key, plan, modules);
+        const before = prev ? tasksModuleAllowed(key, prev.plan, prev.modules) : true;
+        const value = !allowed ? false : newComplete || !before ? true : undefined;
+        if (value !== undefined && switches[key] !== value) {
+          switches[key] = value;
+          switched = true;
+        }
+      }
+    }
+    if (!added.length && !removed.length && !switched) return;
+    await this.dbs.db
+      .update(companies)
+      .set({ enabledApps: want, ...(switched ? { modules: { ...(c.modules ?? {}), tasks: switches } } : {}), updatedAt: new Date() })
+      .where(eq(companies.id, companyId));
+    this.log.log(`Company ${companyId} on ${plan.code}${modules ? ` (${cleanModules(modules).join(', ')})` : ''}: apps ${want.join(', ') || 'none'}`);
     try {
+      // addApps pushes the profile (with the switches) too.
       if (added.length) await this.setup.addApps(companyId, added);
       else await this.company.push(companyId);
     } catch (err) {
@@ -1029,9 +1146,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   // ─── owner console (Kaampilot staff) ─────────────────────────────────
 
-  private mrrOf(sub: { state: string; seats: number; interval: string }, plan: { priceMonthly: number; priceYearly: number }) {
+  private mrrOf(sub: { state: string; seats: number; interval: string } & Bought, plan: PlanRow, catalogue: ModulePriceRow[]) {
     if (!['active', 'past_due', 'cancelled'].includes(sub.state) || plan.priceMonthly === 0) return 0;
-    return sub.interval === 'year' ? Math.round((sub.seats * plan.priceYearly) / 12) : sub.seats * plan.priceMonthly;
+    const unit = unitPrice(plan, sub, catalogue, sub.interval);
+    return sub.interval === 'year' ? Math.round((sub.seats * unit) / 12) : sub.seats * unit;
   }
 
   async consoleCompanies() {
@@ -1047,6 +1165,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         state: sql<string>`coalesce(${subscriptions.state}, 'active')`,
         interval: sql<string>`coalesce(${subscriptions.interval}, 'month')`,
         seats: sql<number>`coalesce(${subscriptions.seats}, 0)`,
+        modules: subscriptions.modules,
+        ai: sql<boolean>`coalesce(${subscriptions.ai}, false)`,
+        trialMaxUsers: subscriptions.trialMaxUsers,
         trialEndsAt: subscriptions.trialEndsAt,
         currentPeriodEnd: subscriptions.currentPeriodEnd,
         clockOffsetDays: sql<number>`coalesce(${subscriptions.clockOffsetDays}, 0)`,
@@ -1059,6 +1180,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       .orderBy(desc(companies.createdAt))
       .limit(1000);
     const planRows = await this.dbs.db.select().from(plans);
+    const catalogue = await this.catalogue();
     return rows.map((r) => {
       const plan = planRows.find((p) => p.code === r.plan)!;
       return {
@@ -1068,11 +1190,16 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         owner: r.owner,
         apps: r.apps,
         plan: r.plan,
-        planName: plan?.name ?? r.plan,
+        planName: plan ? selectionName(plan, r, catalogue) : r.plan,
+        /** PLAN.md §24.1: picked modules (null = all) and AI. */
+        modules: plan ? planModules(plan, r.modules) : null,
+        ai: r.ai,
         state: r.state,
         interval: r.interval,
         seats: { used: r.used, paid: plan && plan.priceMonthly > 0 ? r.seats : 0 },
-        mrr: plan ? this.mrrOf(r, plan) : 0,
+        mrr: plan ? this.mrrOf(r, plan, catalogue) : 0,
+        /** While trialing: the users the trial allows (older trials: 50). */
+        trialMaxUsers: r.state === 'trialing' ? (r.trialMaxUsers ?? TRIAL_SEAT_LIMIT) : r.trialMaxUsers,
         trialEndsAt: iso(r.trialEndsAt),
         currentPeriodEnd: iso(r.currentPeriodEnd),
         clockOffsetDays: r.clockOffsetDays,
@@ -1113,18 +1240,58 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       const from = sub.state === 'trialing' && sub.trialEndsAt && sub.trialEndsAt > now ? sub.trialEndsAt : now;
       await tx
         .update(subscriptions)
-        .set({ plan: 'suite', state: 'trialing', stateSince: now, trialEndsAt: new Date(from.getTime() + days * DAY_MS), currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, updatedAt: new Date() })
+        .set({
+          plan: 'complete',
+          modules: null,
+          ai: false,
+          state: 'trialing',
+          stateSince: now,
+          trialEndsAt: new Date(from.getTime() + days * DAY_MS),
+          ...(sub.trialMaxUsers === null && sub.state !== 'trialing' ? { trialMaxUsers: (await this.trialDefaults(tx)).maxUsers } : {}),
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
+          updatedAt: new Date(),
+        })
         .where(eq(subscriptions.companyId, companyId));
     });
     return (await this.consoleCompanies()).find((c) => c.id === companyId);
   }
 
-  /** Sets a plan without payment (a staff decision: complimentary, a deal paid by bank transfer…). */
-  async consolePlan(companyId: string, planCode: string, seats: number) {
+  /**
+   * PUT console/companies/:id/trial (PLAN.md §24.1): this company's trial, overriding the defaults: `days` = its length
+   * from the trial's start (the company's creation), `maxUsers` = its users. A trial that ended read-only without any
+   * payment starts again when the new end is later; a paid or complimentary plan only keeps the numbers for later.
+   */
+  async consoleTrialOverride(companyId: string, input: z.infer<typeof companyTrialSchema>) {
     await this.assertCompany(companyId);
-    const plan = await this.plan(planCode);
     await this.dbs.tx(async (tx) => {
       const sub = await this.lockSub(tx, companyId);
+      const now = companyNow(sub);
+      const set: Partial<SubscriptionRow> = { updatedAt: new Date() };
+      if (input.maxUsers !== undefined) set.trialMaxUsers = input.maxUsers;
+      if (input.days !== undefined) {
+        const end = new Date(sub.createdAt.getTime() + input.days * DAY_MS);
+        const neverPaid = !sub.currentPeriodStart && sub.plan !== 'complimentary' && sub.plan !== 'free';
+        if (sub.state === 'trialing') set.trialEndsAt = end;
+        else if (neverPaid && ['read_only', 'suspended'].includes(sub.state) && end > now) Object.assign(set, { state: 'trialing', stateSince: now, trialEndsAt: end });
+        else if (sub.state !== 'trialing') throw new BadRequestException('This company is not on a trial. Use "Extend trial" to start a new one.');
+      }
+      await tx.update(subscriptions).set(set).where(eq(subscriptions.companyId, companyId));
+    });
+    await this.tick(companyId); // a shorter trial may have ended already
+    return (await this.consoleCompanies()).find((c) => c.id === companyId);
+  }
+
+  /** Sets a plan without payment (a staff decision: complimentary, a deal paid by bank transfer…). */
+  async consolePlan(companyId: string, planCode: string, seats: number, picked?: { modules?: string[]; ai?: boolean }) {
+    await this.assertCompany(companyId);
+    const sel = ['modules', 'complete'].includes(planCode) ? normaliseSelection({ plan: planCode, modules: picked?.modules, ai: picked?.ai }) : { plan: planCode, modules: null, ai: !!picked?.ai };
+    const plan = await this.plan(sel.plan);
+    let prev: { plan: PlanRow; modules: string[] | null } | undefined;
+    await this.dbs.tx(async (tx) => {
+      const sub = await this.lockSub(tx, companyId);
+      prev = { plan: await this.plan(sub.plan), modules: sub.modules };
       const now = companyNow(sub);
       const paid = isPaid(plan);
       // A staff-set plan is not charged by any gateway.
@@ -1132,6 +1299,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         .update(subscriptions)
         .set({
           plan: plan.code,
+          modules: sel.modules,
+          ai: sel.ai,
           state: 'active',
           stateSince: now,
           seats: paid ? Math.max(seats, plan.minSeats) : 0,
@@ -1144,7 +1313,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         })
         .where(eq(subscriptions.companyId, companyId));
     });
-    await this.applyEntitlements(companyId, plan);
+    await this.applyEntitlements(companyId, plan, sel.modules, prev);
     return (await this.consoleCompanies()).find((c) => c.id === companyId);
   }
 
@@ -1160,7 +1329,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       }
       const plan = await this.plan(sub.plan);
       const restart = isPaid(plan) && (!sub.currentPeriodEnd || sub.currentPeriodEnd <= now);
-      const trialRunning = sub.plan === 'suite' && !sub.currentPeriodEnd && sub.trialEndsAt && sub.trialEndsAt > now;
+      const trialRunning = (sub.plan === 'suite' || sub.plan === 'complete') && !sub.currentPeriodEnd && sub.trialEndsAt && sub.trialEndsAt > now;
       await tx
         .update(subscriptions)
         .set({
@@ -1190,23 +1359,36 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   private async consoleSnapshot(companyId: string) {
     const [r] = await this.dbs.db
-      .select({ code: companies.code, plan: subscriptions.plan, state: subscriptions.state, seats: subscriptions.seats, trialEndsAt: subscriptions.trialEndsAt, currentPeriodEnd: subscriptions.currentPeriodEnd })
+      .select({
+        code: companies.code,
+        plan: subscriptions.plan,
+        modules: subscriptions.modules,
+        ai: subscriptions.ai,
+        state: subscriptions.state,
+        seats: subscriptions.seats,
+        trialMaxUsers: subscriptions.trialMaxUsers,
+        trialEndsAt: subscriptions.trialEndsAt,
+        currentPeriodEnd: subscriptions.currentPeriodEnd,
+      })
       .from(companies)
       .leftJoin(subscriptions, eq(subscriptions.companyId, companies.id))
       .where(eq(companies.id, companyId))
       .limit(1);
     if (!r) return null;
-    return { code: r.code, state: { plan: r.plan ?? 'complimentary', state: r.state ?? 'active', seats: r.seats ?? 0, trialEndsAt: iso(r.trialEndsAt), currentPeriodEnd: iso(r.currentPeriodEnd) } };
+    return {
+      code: r.code,
+      state: { plan: r.plan ?? 'complimentary', modules: r.modules ?? null, ai: r.ai ?? false, state: r.state ?? 'active', seats: r.seats ?? 0, trialMaxUsers: r.trialMaxUsers ?? null, trialEndsAt: iso(r.trialEndsAt), currentPeriodEnd: iso(r.currentPeriodEnd) },
+    };
   }
 
   /**
    * Runs one console change and writes one staff_audit row for it: who, from where, what was asked, the company's plan
    * before and after. A change that fails (404, bad plan) writes nothing.
    */
-  async consoleAction<T>(staff: StaffActor, ip: string | undefined, action: ConsoleAction, companyId: string, input: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
-    const before = await this.consoleSnapshot(companyId);
+  async consoleAction<T>(staff: StaffActor, ip: string | undefined, action: ConsoleAction, companyId: string | null, input: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
+    const before = companyId ? await this.consoleSnapshot(companyId) : null;
     const result = await run();
-    const afterState = await this.consoleSnapshot(companyId);
+    const afterState = companyId ? await this.consoleSnapshot(companyId) : null;
     await this.dbs.db.insert(staffAudit).values({
       staffAccountId: staff.accountId,
       staffEmail: staff.email,
@@ -1288,7 +1470,7 @@ export interface StaffActor {
   email: string | null;
 }
 /** Every mutating owner-console action (each writes one staff_audit row). */
-export const CONSOLE_ACTIONS = ['trial.extend', 'plan.set', 'company.suspend', 'company.reactivate'] as const;
+export const CONSOLE_ACTIONS = ['trial.extend', 'trial.set', 'trial.defaults', 'plan.set', 'company.suspend', 'company.reactivate'] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
 /** Read-only console views of a company's or person's data, also in the staff audit log (PLAN.md §21.9). */
 export const VIEW_ACTIONS = ['view.company', 'view.user', 'view.users', 'view.billing', 'view.logs'] as const;

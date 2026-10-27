@@ -339,7 +339,7 @@ test('invite links: switched off and used up say so; an existing account joins w
   await u.ctx.close();
 });
 
-test('billing: FakePay failure and cancel change nothing; Suite yearly; more users (pro rata); cancel at period end → resume; GST details', async ({ page }) => {
+test('billing: FakePay failure and cancel change nothing; Complete monthly; more users (pro rata); cancel at period end → resume; GST details', async ({ page }) => {
   test.setTimeout(150_000);
   await page.goto('/login');
   await page.getByLabel('Email, username or employee ID').fill(mona);
@@ -360,10 +360,10 @@ test('billing: FakePay failure and cancel change nothing; Suite yearly; more use
   await gst.getByRole('button', { name: 'Save GST details' }).click();
   await expect(page.getByText('GST details saved')).toBeVisible();
 
-  const checkout = async (interval: 'Monthly' | 'Yearly', outcome: 'Pay' | 'Fail' | 'Cancel') => {
+  // PLAN.md §24.1: Complete, monthly (no yearly choice on the screen any more).
+  const checkout = async (outcome: 'Pay' | 'Fail' | 'Cancel') => {
     await page.goto('/billing');
-    await page.getByRole('radio', { name: interval }).click();
-    await page.getByRole('radio', { name: /^Suite/ }).click();
+    await page.getByRole('radio', { name: /^Complete/ }).click();
     await page.locator('#checkout-seats').fill('5');
     await page.locator('#checkout-seats').blur();
     await page.getByRole('button', { name: 'Continue to payment' }).click();
@@ -376,13 +376,13 @@ test('billing: FakePay failure and cancel change nothing; Suite yearly; more use
     await page.getByRole('link', { name: /Back to/ }).click();
     await page.waitForURL(/\/billing/);
   };
-  await checkout('Monthly', 'Fail');
+  await checkout('Fail');
   await expect(page.getByRole('region', { name: 'Current plan' }).getByText(/Trial/).first()).toBeVisible();
-  await checkout('Monthly', 'Cancel');
-  await checkout('Yearly', 'Pay');
+  await checkout('Cancel');
+  await checkout('Pay');
   const plan = page.getByRole('region', { name: 'Current plan' });
   await expect(plan.getByText('Active', { exact: true })).toBeVisible();
-  await expect(plan.getByText('Yearly')).toBeVisible();
+  await expect(plan.getByText('Monthly')).toBeVisible();
 
   // More users now: pro rata on the next invoice.
   await page.locator('#current-seats').fill('7');

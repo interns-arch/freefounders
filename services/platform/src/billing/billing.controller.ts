@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Param, Post, Put, Query, Req, StreamableFile } from '@nestjs/common';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { exportFile, exportFormat } from '../common/export';
@@ -9,16 +9,41 @@ import {
   BillingService,
   cashfreeCheckSchema,
   checkoutSchema,
+  companyTrialSchema,
   outcomeSchema,
   profileSchema,
   renewSchema,
   seatsSchema,
+  trialSettingsSchema,
 } from './billing.service';
+import { MODULE_KEYS } from './pricing';
 import { invoicePdf } from './invoice-pdf';
 
 const statusSchema = z.object({ status: z.enum(['active', 'suspended']) });
 const trialSchema = z.object({ days: z.number().int().min(1).max(365) });
-const planSchema = z.object({ plan: z.string().trim().min(1).max(40), seats: z.number().int().min(0).max(10_000).default(0) });
+const planSchema = z.object({
+  plan: z.string().trim().min(1).max(40),
+  seats: z.number().int().min(0).max(10_000).default(0),
+  /** Plan 'modules': the picked modules; AI for 'modules' / 'complete' (PLAN.md §24.1). */
+  modules: z.array(z.enum(MODULE_KEYS)).max(MODULE_KEYS.length).optional(),
+  ai: z.boolean().optional(),
+});
+
+/**
+ * Public prices (PLAN.md §24 shared contract): no sign-in, the same answer for everyone, cacheable for 5 minutes.
+ * Rupees per user per month; GST on top.
+ */
+@Public()
+@Controller('public')
+export class PublicPricingController {
+  constructor(private readonly billing: BillingService) {}
+
+  @Get('pricing')
+  @Header('Cache-Control', 'public, max-age=300')
+  pricing() {
+    return this.billing.publicPricing();
+  }
+}
 
 /**
  * Billing (PLAN.md §21.2): the owner, or anyone with the "Manage billing" Admin permission. Every route works while
@@ -38,6 +63,12 @@ export class BillingController {
   @Get('plans')
   plans() {
     return this.billing.plans();
+  }
+
+  /** Module prices + Complete for the plan picker (paise per user per month, PLAN.md §24.1). */
+  @Get('pricing')
+  pricing() {
+    return this.billing.pricing();
   }
 
   @Put('profile')
@@ -194,7 +225,28 @@ export class ConsoleController {
   async plan(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string, @Body(new ZodPipe(planSchema)) body: z.infer<typeof planSchema>) {
     const staff = await this.billing.assertStaff(caller);
     const companyId = uuidParam(id);
-    return this.billing.consoleAction(staff, req.ip, 'plan.set', companyId, body, () => this.billing.consolePlan(companyId, body.plan, body.seats));
+    return this.billing.consoleAction(staff, req.ip, 'plan.set', companyId, body, () => this.billing.consolePlan(companyId, body.plan, body.seats, body));
+  }
+
+  /** This company's trial: days from its start and/or users (overrides the defaults, PLAN.md §24.1). */
+  @Put('companies/:id/trial')
+  async trialOverride(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string, @Body(new ZodPipe(companyTrialSchema)) body: z.infer<typeof companyTrialSchema>) {
+    const staff = await this.billing.assertStaff(caller);
+    const companyId = uuidParam(id);
+    return this.billing.consoleAction(staff, req.ip, 'trial.set', companyId, body, () => this.billing.consoleTrialOverride(companyId, body));
+  }
+
+  /** The trial new companies get: days and users (PLAN.md §24.1; 10 days, 3 users at first). */
+  @Get('trial-defaults')
+  async trialDefaults(@CurrentCaller() caller: Caller) {
+    await this.billing.assertStaff(caller);
+    return this.billing.trialDefaults();
+  }
+
+  @Put('trial-defaults')
+  async setTrialDefaults(@CurrentCaller() caller: Caller, @Req() req: Request, @Body(new ZodPipe(trialSettingsSchema)) body: z.infer<typeof trialSettingsSchema>) {
+    const staff = await this.billing.assertStaff(caller);
+    return this.billing.consoleAction(staff, req.ip, 'trial.defaults', null, body, () => this.billing.setTrialDefaults(body));
   }
 
   @Post('companies/:id/status')

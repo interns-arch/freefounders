@@ -370,6 +370,27 @@ export const plans = platform.table('plans', {
   maxSeats: integer('max_seats'),
   offered: boolean('offered').notNull().default(true),
   sort: integer('sort').notNull().default(0),
+  /** Per seat per month with the AI helper (PLAN.md §24.1); 0 = no AI price. */
+  aiPriceMonthly: integer('ai_price_monthly').notNull().default(0),
+  /** 'bundle' (Complete), 'pick' (modules picked one by one, priced from module_prices), 'plan' (Free, older plans). */
+  kind: text('kind').notNull().default('plan'),
+});
+
+/** Modules sold one by one (PLAN.md §24.1): price per user per month in paise, with and without AI. */
+export const modulePrices = platform.table('module_prices', {
+  key: text('key').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  priceMonthly: integer('price_monthly').notNull(),
+  aiPriceMonthly: integer('ai_price_monthly').notNull(),
+  sort: integer('sort').notNull().default(0),
+});
+
+/** Billing defaults Kaampilot staff change in the console, e.g. `trial` = {days, maxUsers} for new companies. */
+export const billingSettings = platform.table('billing_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** One per company. States: trialing, active, cancelled, past_due, read_only, suspended (PLAN.md §21.1). */
@@ -399,6 +420,14 @@ export const subscriptions = platform.table('subscriptions', {
    * owner pays each period on the Billing page (PLAN.md §21.10).
    */
   gateway: text('gateway'),
+  /** Plan 'modules': the modules picked (tasks, attendance, assets). Null for other plans (PLAN.md §24.1). */
+  modules: text('modules').array(),
+  /** The AI helper for the whole subscription. */
+  ai: boolean('ai').notNull().default(false),
+  /** While trialing: at most this many users (null = the older 50-user trial). */
+  trialMaxUsers: integer('trial_max_users'),
+  /** A company from before §24.1: a trial or cancelled plan may still end on the Free plan (else read-only). */
+  freeFallback: boolean('free_fallback').notNull().default(false),
   ...timestamps,
 });
 
@@ -451,6 +480,9 @@ export const checkoutSessions = platform.table(
     gatewayRef: text('gateway_ref'),
     /** What the gateway's checkout needs later (Cashfree: payment_session_id, cf_order_id, mode). */
     gatewayData: jsonb('gateway_data').$type<Record<string, unknown>>(),
+    /** Plan 'modules': the modules bought; with or without AI (PLAN.md §24.1). */
+    modules: text('modules').array(),
+    ai: boolean('ai').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('checkout_sessions_company_idx').on(t.companyId), index('checkout_sessions_gateway_ref_idx').on(t.gatewayRef)],

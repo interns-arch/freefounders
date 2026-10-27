@@ -5,7 +5,7 @@ import { AccountsController, InvitesController } from './accounts/accounts.contr
 import { AccountsService } from './accounts/accounts.service';
 import { OTP_SENDER, OtpService, TicketsService } from './accounts/otp.service';
 import { otpSenderFromEnv } from './accounts/otp-senders';
-import { BillingController, ConsoleController } from './billing/billing.controller';
+import { BillingController, ConsoleController, PublicPricingController } from './billing/billing.controller';
 import { BillingService } from './billing/billing.service';
 import { ConsoleDashboardController, LogsIngestController } from './console/console.controller';
 import { ConsoleDashboardService } from './console/console.service';
@@ -34,7 +34,7 @@ import { RolesController } from './roles/roles.controller';
 import { RolesService } from './roles/roles.service';
 
 @Module({
-  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController, AccountsController, InvitesController, BillingController, ConsoleController, ConsoleDashboardController, LogsIngestController, AiController],
+  controllers: [AuthController, PeopleController, AppsController, RolesController, CompanyController, DepartmentsController, FlowsController, AccountsController, InvitesController, BillingController, ConsoleController, PublicPricingController, ConsoleDashboardController, LogsIngestController, AiController],
   providers: [
     DbService,
     Throttle,

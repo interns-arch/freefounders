@@ -172,7 +172,7 @@ export function SignupPage() {
 
       {step === 'identifier' && (
         <form onSubmit={submitIdentifier} noValidate className="space-y-4">
-          <StepTitle title="Start free">Attendance, tasks and assets for your team. 14-day trial, no card.</StepTitle>
+          <StepTitle title="Start free">Attendance, tasks and assets for your team. Free trial, no card.</StepTitle>
           <TextField
             id="signup-identifier"
             label="Work email"

@@ -323,7 +323,8 @@ describe('Cashfree checkout (PLAN.md §21.10)', () => {
     assert.equal(r.body.status, 'paid');
     const s = await subOf(companyId);
     assert.equal(s.state, 'active');
-    assert.equal(s.plan, 'tasks');
+    assert.equal(s.plan, 'modules', 'the older Tasks plan code buys the Tasks + Attendance modules (PLAN.md §24.1)');
+    assert.deepEqual(s.modules, ['tasks', 'attendance']);
     assert.equal(s.gateway, 'cashfree');
     assert.equal(await invoiceCount(companyId), 1);
     const again = await call('POST', '/billing/cashfree/check', { token: accessToken, body: { sessionId: c.sessionId } });

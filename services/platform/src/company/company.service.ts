@@ -6,6 +6,8 @@ import { DbService } from '../db/db.service';
 import { assertCompanyNameFree, cleanCompanyName, normaliseCompanyName } from './company-name';
 import { type AppKey, APPS, companies, type ModuleSwitches } from '../db/schema';
 import { type AppModule, internalUrl, ProvisionClient } from '../provision/provision.client';
+import { tasksModuleAllowed } from '../billing/pricing';
+import { subscriptionOf } from '../billing/seats';
 
 export const profileSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -153,11 +155,17 @@ export class CompanyService {
     const c = await this.row(caller.companyId);
     const cat = await this.catalogue(c.id, c.enabledApps, c.modules);
     const next: ModuleSwitches = structuredClone(c.modules ?? {});
+    const { sub, plan } = await subscriptionOf(this.dbs, caller.companyId);
     for (const [app, switches] of Object.entries(wanted)) {
       const offered = cat.find((x) => x.app === app);
       if (!offered) throw badRequest(`Your plan does not include ${app}`);
       for (const [key, on] of Object.entries(switches ?? {})) {
         if (!offered.modules.some((m) => m.key === key)) throw badRequest(`${app} has no module "${key}"`);
+        // PLAN.md §24.1: a module the plan does not include (Visitors, Payroll without Complete…) cannot be switched on.
+        if (on && app === 'tasks' && !tasksModuleAllowed(key, plan, sub.modules)) {
+          const label = offered.modules.find((m) => m.key === key)?.label ?? key;
+          throw badRequest(`${label} is not in your plan. Choose it in Billing first.`);
+        }
         next[app as AppKey] = { ...(next[app as AppKey] ?? {}), [key]: on };
       }
     }

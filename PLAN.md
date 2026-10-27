@@ -3664,6 +3664,58 @@ Work split: §24.1 pricing + billing (Platform + billing screens + console), §2
 `{ currency: 'INR', perUserMonth: true, gstPercent, modules: [{ key: 'tasks'|'attendance'|'assets', name, price, aiPrice }],
 complete: { price, aiPrice, includes: string[] }, trial: { days, maxUsers }, calendlyUrl: string | null, aiHelper: boolean }`.
 
+### 24.1 Module-wise pricing, trial 3 users / 10 days, billing screens (built 2026-10-27)
+
+**Prices are data** (migration `0019_module_pricing`): table `module_prices` (tasks, attendance, assets: 9900 paise, with
+AI 12900, per user per month) and two new rows in `plans` with `kind` + `ai_price_monthly`: `modules` (kind `pick`: the
+price is the sum of the picked modules) and `complete` (kind `bundle`: 34900, with AI 44900). Change the rows to change
+prices (no console editor yet). Pure maths in `services/platform/src/billing/pricing.ts` (per-user price, yearly = 10 ×
+monthly, names like "Tasks + Attendance with AI", plan → apps / module switches). GST as before (18%, CGST+SGST or IGST).
+- **Subscription**: `subscriptions.modules` (picked modules, plan `modules` only), `ai` (one switch for the whole
+  subscription), `trial_max_users`, `free_fallback`; the same `modules` / `ai` on `checkout_sessions`.
+- **Checkout** `POST billing/checkout {plan: 'modules'|'complete', modules?: [...], ai?: bool, interval?: 'month', seats}`
+  prices users × per-user price (+ GST) into the one Cashfree order (or FakePay) as before; unused paid time is still
+  credited at the price it was bought for, users added mid-period still pro rata. Plans start at 1 user (never below
+  the people in use). The older codes still work for older clients: `tasks` = Tasks + Attendance, `assets` = Assets,
+  `suite` = Complete. The screen offers monthly only (yearly still accepted by the API).
+- **Module switches follow the plan** (`applyEntitlements`, pushed with `PUT /internal/company`): apps = Tasks app if
+  Tasks or Attendance is picked, Assets app if Assets; Tasks-app modules the plan lacks are switched off (Visitors,
+  Payroll: Complete only; leads, AI inbox, mistakes, links: with the Tasks module); the ones a new plan adds are switched
+  on, and buying Complete switches every one on. `PUT company/modules` refuses switching on a module the plan lacks.
+  Tasks and Attendance share one Django app with no switch for either, so the split between them is in the menus
+  (`/auth/me` `billing.modules`, `access.planHas`, `workspacesFor`); the Tasks API itself does not refuse it yet
+  (follow-up: `tasks` / `attendance` switch keys in `tenancy/profile.py`).
+- **Trial**: a new company gets **Complete for 10 days, at most 3 users** (`billing_settings.trial`, staff change it:
+  `GET/PUT console/trial-defaults {days, maxUsers}`, audited `trial.defaults`; it is copied to the company when its trial
+  starts). Per company: `PUT console/companies/:id/trial {days?, maxUsers?}` (days from the trial's start; a trial that
+  ended read-only without any payment starts again; audited `trial.set`), on the console company page. When the trial
+  ends without payment the company is **read-only** (§21.1 `ro`, then suspended after 30 days) until a plan is paid; a
+  cancelled plan also ends read-only. The Free plan is no longer offered.
+- **Existing companies (grandfathering)**: Complimentary companies (CarTrends #1, DEMO, imported) are untouched: the
+  billing clock skips them, so they can never become read-only. Every other subscription that existed before 0019 got
+  `free_fallback = true`: it keeps the old rules exactly (Free stays Free; a running trial keeps its end date and its 50
+  users; a trial or a cancelled plan may still drop to Free when it fits; "Switch to Free" stays on its Billing page).
+  Paid subscriptions on the older plans (Tasks ₹99, Assets ₹79, Suite ₹149) keep their plan and price for the period
+  they paid (FakePay renewals too); their next Cashfree payment is a new checkout on the new plans (Suite → Complete
+  preselected). Invoices and checkouts already issued are unchanged and readable.
+- **Endpoints**: public `GET /api/platform/public/pricing` (no sign-in, `Cache-Control: public, max-age=300`, rupees,
+  exactly the §24 contract; `calendlyUrl` from env `CALENDLY_URL`, `aiHelper` = `AI_API_KEY` set); `GET billing/pricing`
+  (paise, for the screen); `GET billing` adds `modules`, `ai`, `perUser`, `freeAvailable`; `/auth/me` billing adds
+  `modules`, `ai`, `maxUsers` (trial); console companies add `modules`, `ai`, `trialMaxUsers`; `POST
+  console/companies/:id/plan` takes `modules` and `ai`.
+- **Screens**: Billing (`features/billing/billing.tsx`): Pick modules (Tasks / Attendance / Assets checkboxes) or
+  Complete, With AI switch, users, live order summary (per user, users × price, GST, total per month; "Complete costs
+  less" hint), "Continue to payment" (the one CTA) → FakePay / Cashfree as before. Console: "Free trial for new
+  companies" (days, users) on Companies; Set plan with modules + AI; company page shows plan modules, AI, trial users and
+  a Trial form. Sign-up texts say "Free trial" (no fixed days).
+- **Env**: `CALENDLY_URL` in `services/platform/.env.example` and `infra/deploy/docker-compose.yml` (`${CALENDLY_URL:-}`).
+
+**Status 2026-10-27:** `npm run quick-check -- --tests platform` green (platform tests: prices, legacy codes, plan →
+apps / module switches pushed to Tasks, trial defaults + per-company override + seat limit + restart, public endpoint
+with env, trial end → read-only, grandfathered Free / cancel paths, console plan with modules + AI, audit actions).
+Billing screen checked in the dev suite. e2e not run (testing-phase rule); `web-signup-billing` / `web-account-flows`
+selectors moved from Suite / Yearly to Complete / monthly, and their companies now have a 3-user trial.
+
 ### 24.3 AI helper "Ask Kaampilot" (built 2026-10-27)
 
 - **Platform** `services/platform/src/ai/`: `GET /api/platform/ai/status` → `{ enabled }` and `POST /api/platform/ai/ask`

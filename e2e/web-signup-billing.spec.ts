@@ -1,5 +1,5 @@
 // Self-serve sign-up, invites and billing with the fake gateway (PLAN.md §21): a stranger signs up a company, sees the
-// Getting started checklist, invites a second person who joins with a new account, buys Suite monthly for 5 users
+// Getting started checklist, invites a second person who joins with a new account, buys Complete monthly for 5 users
 // through FakePay, gets a GST invoice, then a failed renewal (past due) and 8 more days (read-only: a create is refused
 // with 402) and pays again. Needs `npm run dev` with BILLING_DEV_TOOLS=1 and OTP_DEV_ECHO=1 (both on in dev).
 // Every company here is new (unique email), so nothing of the demo company changes.
@@ -57,8 +57,8 @@ async function joinWithNewAccount(browser: Browser, url: string, email: string, 
 async function buySuite(page: Page) {
   await page.goto('/billing');
   await expect(page.getByRole('heading', { name: 'Billing', level: 1 })).toBeVisible();
-  await page.getByRole('radio', { name: 'Monthly' }).click();
-  await page.getByRole('radio', { name: /^Suite/ }).click();
+  // PLAN.md §24.1: Complete (every module), monthly.
+  await page.getByRole('radio', { name: /^Complete/ }).click();
   await page.locator('#checkout-seats').fill('5');
   await page.locator('#checkout-seats').blur();
   await page.getByRole('button', { name: 'Continue to payment' }).click();

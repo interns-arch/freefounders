@@ -32,6 +32,12 @@ export interface MeBilling {
   daysLeft: number | null;
   /** Cashfree (PLAN.md §21.10): nothing renews by itself; past due means "pay the next period", not a failed charge. */
   paysEachPeriod?: boolean;
+  /** PLAN.md §24.1: the modules the plan includes (menus hide the others); null / missing = every module. */
+  modules?: Array<'tasks' | 'attendance' | 'assets'> | null;
+  /** The AI helper is part of the subscription. */
+  ai?: boolean;
+  /** While trialing: how many users the trial allows. */
+  maxUsers?: number | null;
 }
 
 export interface PlatformMe {
@@ -161,6 +167,8 @@ export interface Access {
   };
   /** The subscription (null: no billing, e.g. a complimentary or older install). */
   billing: MeBilling | null;
+  /** The plan includes this module (PLAN.md §24.1); true when the plan has no module list (Complete, trial, older plans). */
+  planHas: (module: 'tasks' | 'attendance' | 'assets') => boolean;
   /** Read-only company: screens hide or disable their create/edit actions (the APIs refuse them with 402 anyway). */
   readOnly: boolean;
   /** May open Billing: the owner, or a role with "Manage billing". */
@@ -213,6 +221,10 @@ export function useAccess(): Access {
       module: (key) => assetsConfig.data?.modules?.[key] !== false,
     },
     billing: platform.data?.billing ?? null,
+    planHas: (m) => {
+      const list = platform.data?.billing?.modules;
+      return !list || list.includes(m);
+    },
     readOnly: !!(platform.data?.billing?.readOnly ?? claims?.ro),
     canManageBilling: claims?.role === 'owner' || platform.data?.person.role === 'owner' || (platform.data?.permissions ?? []).some((p) => p === 'billing.manage' || p === 'platform.billing.manage'),
     brand: company ? { name: company.name, shortName: company.shortName || company.name, colour: company.colour, logoUrl: company.logoUrl } : null,

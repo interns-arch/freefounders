@@ -170,7 +170,7 @@ export function CompanyForm({
       <Button type="submit" size="lg" className="h-11 w-full" loading={busy} disabled={nameBlocked}>
         {submitLabel}
       </Button>
-      <p className="text-center text-xs text-muted-foreground">14-day free trial of every app. No card needed.</p>
+      <p className="text-center text-xs text-muted-foreground">Free trial of every module. No card needed.</p>
     </form>
   );
 }

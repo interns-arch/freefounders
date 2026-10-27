@@ -2,10 +2,10 @@ import { HttpException } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { DbService } from '../db/db.service';
 import { companies, people, personApps, plans, subscriptions } from '../db/schema';
+import { planModules } from './pricing';
 
-/** Seats while a trial runs (PLAN.md §21). */
+/** Seats while an older trial runs (PLAN.md §21; trials started before §24.1 have no trial_max_users). */
 export const TRIAL_SEAT_LIMIT = 50;
-export const TRIAL_DAYS = 14;
 export const READ_ONLY_STATES = ['read_only', 'suspended'] as const;
 export const READ_ONLY_MESSAGE = "Your company's subscription is read-only. The owner can renew it in Billing.";
 export const SUSPENDED_MESSAGE = "Your company's subscription is suspended. Ask the owner to renew it in Billing.";
@@ -24,8 +24,8 @@ export async function subscriptionOf(dbs: DbService, companyId: string): Promise
   if (row) return row;
   const now = new Date();
   return {
-    sub: { companyId, plan: 'complimentary', interval: 'month', state: 'active', stateSince: now, seats: 0, nextPeriodSeats: null, trialEndsAt: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, clockOffsetDays: 0, gateway: null, createdAt: now, updatedAt: now },
-    plan: { code: 'complimentary', name: 'Complimentary', description: '', apps: ['tasks', 'assets'], priceMonthly: 0, priceYearly: 0, minSeats: 1, maxSeats: null, offered: false, sort: 9 },
+    sub: { companyId, plan: 'complimentary', interval: 'month', state: 'active', stateSince: now, seats: 0, nextPeriodSeats: null, trialEndsAt: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, clockOffsetDays: 0, gateway: null, modules: null, ai: false, trialMaxUsers: null, freeFallback: false, createdAt: now, updatedAt: now },
+    plan: { code: 'complimentary', name: 'Complimentary', description: '', apps: ['tasks', 'assets'], priceMonthly: 0, priceYearly: 0, minSeats: 1, maxSeats: null, offered: false, sort: 9, aiPriceMonthly: 0, kind: 'plan' },
   };
 }
 
@@ -45,7 +45,7 @@ export async function seatsUsed(dbs: DbService, companyId: string): Promise<numb
 /** How many seats the company may use now; null = no limit. */
 export function seatLimit(sub: SubscriptionRow, plan: PlanRow): number | null {
   if (plan.code === 'complimentary') return null;
-  if (sub.state === 'trialing') return TRIAL_SEAT_LIMIT;
+  if (sub.state === 'trialing') return sub.trialMaxUsers ?? TRIAL_SEAT_LIMIT;
   if (plan.priceMonthly === 0) return plan.maxSeats; // Free
   return sub.seats;
 }
@@ -95,7 +95,7 @@ export function companyNow(sub: Pick<SubscriptionRow, 'clockOffsetDays'>): Date 
 
 /** What `/auth/me` shows for banners. daysLeft: of the trial, before read-only, of a cancelled period, before suspension. */
 export async function billingSummary(dbs: DbService, companyId: string) {
-  const { sub } = await subscriptionOf(dbs, companyId);
+  const { sub, plan } = await subscriptionOf(dbs, companyId);
   const now = companyNow(sub);
   let until: Date | null = null;
   if (sub.state === 'trialing') until = sub.trialEndsAt;
@@ -108,6 +108,10 @@ export async function billingSummary(dbs: DbService, companyId: string) {
     trialEndsAt: sub.trialEndsAt,
     readOnly: isReadOnly(sub.state),
     daysLeft: until ? Math.max(0, Math.ceil((until.getTime() - now.getTime()) / DAY_MS)) : null,
+    // PLAN.md §24.1: the modules the plan includes (menus hide the others); null = all. AI for the whole subscription.
+    modules: planModules(plan, sub.modules),
+    ai: sub.ai,
+    ...(sub.state === 'trialing' ? { maxUsers: seatLimit(sub, plan) } : {}),
     // Cashfree (PLAN.md §21.10): the owner pays each period; past due then means "pay now", not a failed charge.
     ...(sub.gateway && sub.gateway !== 'fake' ? { paysEachPeriod: true } : {}),
   };

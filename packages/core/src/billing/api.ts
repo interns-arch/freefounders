@@ -4,6 +4,8 @@ import { useClaims } from '../access';
 import { platformApi } from '../http';
 import { session } from '../session';
 import type {
+  BillingModuleKey,
+  BillingPricing,
   BillingProfile,
   BillingSummary,
   CheckoutInput,
@@ -19,12 +21,15 @@ import type {
   InvoiceSummary,
   Plan,
   SwitchToFreeResult,
+  TrialDefaults,
 } from './types';
 
 export const billingKeys = {
   all: ['billing'] as const,
   summary: (cid?: string) => ['billing', 'summary', cid ?? null] as const,
   plans: ['billing', 'plans'] as const,
+  pricing: ['billing', 'pricing'] as const,
+  trialDefaults: ['console', 'trial-defaults'] as const,
   checkout: (id: string) => ['billing', 'checkout', id] as const,
   invoices: (cid?: string) => ['billing', 'invoices', cid ?? null] as const,
   invoice: (id: string) => ['billing', 'invoice', id] as const,
@@ -37,6 +42,8 @@ export const billingKeys = {
 export const billingApi = {
   summary: () => platformApi.get<BillingSummary>('/billing'),
   plans: () => platformApi.get<Plan[]>('/billing/plans').then((rows) => rows.map((p) => ({ ...p, key: p.key ?? p.code ?? '' }))),
+  /** Module prices + Complete (paise per user per month, PLAN.md §24.1). */
+  pricing: () => platformApi.get<BillingPricing>('/billing/pricing'),
   saveProfile: (body: BillingProfile) => platformApi.put<BillingProfile>('/billing/profile', body),
   checkout: (body: CheckoutInput) => platformApi.post<CheckoutStarted>('/billing/checkout', body),
   checkoutSession: (id: string) => platformApi.get<CheckoutSession>(`/billing/checkout/${encodeURIComponent(id)}`),
@@ -63,7 +70,12 @@ export const billingApi = {
     return platformApi.get<ConsoleAuditPage>(`/console/audit?${q.toString()}`);
   },
   consoleTrial: (id: string, days: number) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/trial`, { days }),
-  consolePlan: (id: string, plan: string, seats: number) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/plan`, { plan, seats }),
+  consolePlan: (id: string, plan: string, seats: number, picked?: { modules?: BillingModuleKey[]; ai?: boolean }) =>
+    platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/plan`, { plan, seats, ...(picked ?? {}) }),
+  /** One company's trial: days from its start and/or users (PLAN.md §24.1). */
+  consoleTrialOverride: (id: string, body: { days?: number; maxUsers?: number }) => platformApi.put<unknown>(`/console/companies/${encodeURIComponent(id)}/trial`, body),
+  trialDefaults: () => platformApi.get<TrialDefaults>('/console/trial-defaults'),
+  setTrialDefaults: (body: TrialDefaults) => platformApi.put<TrialDefaults>('/console/trial-defaults', body),
   consoleStatus: (id: string, status: string) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/status`, { status }),
 };
 
@@ -88,6 +100,10 @@ export function useBilling(enabled = true) {
 }
 export function usePlans() {
   return useQuery({ queryKey: billingKeys.plans, queryFn: billingApi.plans, staleTime: 5 * 60_000 });
+}
+/** GET billing/pricing: what the plan picker prices with (PLAN.md §24.1). */
+export function useBillingPricing() {
+  return useQuery({ queryKey: billingKeys.pricing, queryFn: billingApi.pricing, staleTime: 5 * 60_000 });
 }
 /** GET billing/checkout/:id (the payment page). */
 export function useCheckoutSession(id: string | undefined) {
@@ -181,8 +197,29 @@ export function useConsoleAudit(filters: ConsoleAuditFilters, enabled = true) {
 export function useConsoleAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (a: { id: string } & ({ kind: 'trial'; days: number } | { kind: 'plan'; plan: string; seats: number } | { kind: 'status'; status: 'suspended' | 'active' | string })) =>
-      a.kind === 'trial' ? billingApi.consoleTrial(a.id, a.days) : a.kind === 'plan' ? billingApi.consolePlan(a.id, a.plan, a.seats) : billingApi.consoleStatus(a.id, a.status),
+    mutationFn: (
+      a: { id: string } & (
+        | { kind: 'trial'; days: number }
+        | { kind: 'trialOverride'; days?: number; maxUsers?: number }
+        | { kind: 'plan'; plan: string; seats: number; modules?: BillingModuleKey[]; ai?: boolean }
+        | { kind: 'status'; status: 'suspended' | 'active' | string }
+      ),
+    ) =>
+      a.kind === 'trial'
+        ? billingApi.consoleTrial(a.id, a.days)
+        : a.kind === 'trialOverride'
+          ? billingApi.consoleTrialOverride(a.id, { days: a.days, maxUsers: a.maxUsers })
+          : a.kind === 'plan'
+            ? billingApi.consolePlan(a.id, a.plan, a.seats, { modules: a.modules, ai: a.ai })
+            : billingApi.consoleStatus(a.id, a.status),
     onSuccess: () => qc.invalidateQueries({ queryKey: billingKeys.console }),
   });
+}
+/** Kaampilot staff: the trial new companies get (days, users). */
+export function useTrialDefaults(enabled = true) {
+  return useQuery({ queryKey: billingKeys.trialDefaults, queryFn: billingApi.trialDefaults, enabled });
+}
+export function useSetTrialDefaults() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: billingApi.setTrialDefaults, onSuccess: () => qc.invalidateQueries({ queryKey: billingKeys.console }) });
 }

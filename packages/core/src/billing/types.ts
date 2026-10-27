@@ -63,9 +63,34 @@ export interface BillingSummary {
   canResume?: boolean;
   /** Cashfree: nothing renews by itself; the owner pays each period on the Billing page (past due until then). */
   paysEachPeriod?: boolean;
+  /** PLAN.md §24.1: the picked modules (plan "modules"); null = every module (Complete, trial, older plans). */
+  modules?: BillingModuleKey[] | null;
+  /** The AI helper for the whole subscription. */
+  ai?: boolean;
+  /** Per user per month now (paise); 0 on a trial, Free or complimentary. */
+  perUser?: number;
+  /** The older Free plan can still be chosen (companies from before §24.1). */
+  freeAvailable?: boolean;
 }
 
 export type PaymentGatewayName = 'fake' | 'cashfree';
+
+/** The modules sold one by one (PLAN.md §24.1). */
+export type BillingModuleKey = 'tasks' | 'attendance' | 'assets';
+
+/** GET billing/pricing: paise per user per month; GST on top. */
+export interface BillingPricing {
+  gstPercent: number;
+  modules: Array<{ key: BillingModuleKey; name: string; description: string; price: number; aiPrice: number }>;
+  complete: { name: string; description: string; price: number; aiPrice: number };
+  minSeats: number;
+}
+
+/** Kaampilot staff: the trial new companies get (PLAN.md §24.1). */
+export interface TrialDefaults {
+  days: number;
+  maxUsers: number;
+}
 
 /** GET billing/plans. Business data on the server (§21), so the screen reads whatever plans it lists. */
 export interface Plan {
@@ -90,8 +115,11 @@ export interface Plan {
 }
 
 export interface CheckoutInput {
+  /** "modules" (with `modules`) or "complete" (PLAN.md §24.1). */
   plan: string;
-  interval: BillingInterval;
+  modules?: BillingModuleKey[];
+  ai?: boolean;
+  interval?: BillingInterval;
   seats: number;
 }
 
@@ -213,6 +241,11 @@ export interface ConsoleCompany {
   state: SubscriptionState;
   seats: number | { used: number; paid: number; limit?: number | null };
   mrr: number;
+  /** PLAN.md §24.1: picked modules (null = every module) and AI. */
+  modules?: BillingModuleKey[] | null;
+  ai?: boolean;
+  /** Users the trial allows (while trialing; or a stored override). */
+  trialMaxUsers?: number | null;
   trialEndsAt: string | null;
   createdAt: string;
 }
@@ -221,7 +254,7 @@ export interface ConsoleCompany {
 export type SwitchToFreeResult = BillingSummary & { freeFrom: 'now' | 'period_end' };
 
 /** Owner console actions written to the staff audit log (PLAN.md §21.7). */
-export type ConsoleAuditAction = 'trial.extend' | 'plan.set' | 'company.suspend' | 'company.reactivate' | 'view.company' | 'view.user' | 'view.users' | 'view.billing' | 'view.logs';
+export type ConsoleAuditAction = 'trial.extend' | 'trial.set' | 'trial.defaults' | 'plan.set' | 'company.suspend' | 'company.reactivate' | 'view.company' | 'view.user' | 'view.users' | 'view.billing' | 'view.logs';
 
 /** GET console/audit: one staff action. */
 export interface ConsoleAuditRow {
