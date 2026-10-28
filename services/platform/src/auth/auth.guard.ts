@@ -2,7 +2,7 @@ import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable
 import { Reflector } from '@nestjs/core';
 import { and, eq, sql } from 'drizzle-orm';
 import { type AuthedRequest, IS_PUBLIC, NEEDS, READ_ONLY_OK } from '../common/http';
-import { isReadOnly, paymentRequired, READ_ONLY_MESSAGE } from '../billing/seats';
+import { isReadOnly, paymentRequired, readOnlyMessage } from '../billing/seats';
 import { DbService } from '../db/db.service';
 import { companies, people, refreshSessions, subscriptions } from '../db/schema';
 import { TokensService } from '../keys/tokens.service';
@@ -59,7 +59,7 @@ export class AuthGuard implements CanActivate {
     caller.readOnly = isReadOnly(me.billing);
     // Read-only: look and export, change nothing, except billing, sign-out, switching company and one's own password.
     if (caller.readOnly && !SAFE.has(req.method) && !this.reflector.getAllAndOverride<boolean>(READ_ONLY_OK, targets)) {
-      throw paymentRequired(READ_ONLY_MESSAGE);
+      throw paymentRequired(readOnlyMessage(me.billing));
     }
 
     const needs = this.reflector.getAllAndOverride<PlatformPermission[] | undefined>(NEEDS, targets);

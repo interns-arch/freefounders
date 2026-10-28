@@ -74,7 +74,10 @@ export class AccountsController {
   @HttpCode(200)
   async complete(@Body(new ZodPipe(completeSchema)) body: z.infer<typeof completeSchema>, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
     const out = await this.accounts.signupComplete(body, meta(req, body.client));
-    return { ...respondTokens(res, out, body.client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs, setupIncomplete: out.setupIncomplete };
+    // PLAN.md §24.4 "Buy now": the company waits for its first payment; the checkout to open (or why it did not start).
+    const buy = out as { pendingPayment?: boolean; checkout?: unknown; checkoutError?: string | null };
+    const pending = buy.pendingPayment ? { pendingPayment: true, checkout: buy.checkout ?? null, checkoutError: buy.checkoutError ?? null } : {};
+    return { ...respondTokens(res, out, body.client), mustChangePassword: false, companyId: out.companyId, provisionMs: out.provisionMs, setupIncomplete: out.setupIncomplete, ...pending };
   }
 
   /** Sign in with a code instead of a password (PLAN.md §21.8): step 1, a code to the account's email. */

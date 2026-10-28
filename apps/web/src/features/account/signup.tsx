@@ -2,12 +2,15 @@
  * /signup (PLAN.md §20.5, §21.1): work email → 6-digit code → name + username + password (or, for an existing account,
  * just its password) → the company → "Setting up your company…" → Home with the Getting started checklist.
  * One question per screen, a progress bar and a back button; nothing typed is lost going back.
+ * "Buy now" (PLAN.md §24.4, `/signup?buy=…` from the landing calculator / pricing page): the same steps, then the last
+ * one shows the plan and says "Continue to payment": the company is made waiting for its payment and the payment page
+ * opens at once (no trial). Not paid → the app shows "Finish payment" (Pay again or the free trial instead).
  */
-import { ApiError, errorMessage } from '@kaampilot/core';
+import { ApiError, errorMessage, parseBuyNow, type PriceChoice, quotePrice, usePublicPricing } from '@kaampilot/core';
 import { companyNameErrorOf, type CompanyInput, identifierKind, MOBILE_SIGN_IN_OFF, type OtpSent, suggestUsername, useSignupComplete, useSignupStart, useSignupVerify, usernameErrorOf, useUsernameCheck } from '@kaampilot/core/account';
 import { PLATFORM_PASSWORD_MIN } from '@kaampilot/core/admin';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { CompanyForm, EMPTY_COMPANY, SetupScreen } from './company-form';
@@ -19,6 +22,9 @@ const LABELS: Record<Step, string> = { identifier: 'Your email', code: 'Verify',
 
 export function SignupPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // "Buy now": the plan chosen on the landing page (null: the usual free trial).
+  const buy = useMemo(() => parseBuyNow(params), [params]);
   const [step, setStep] = useState<Step>('identifier');
   const [identifier, setIdentifier] = useState('');
   const [otp, setOtp] = useState<(OtpSent & { for: string }) | null>(null);
@@ -128,7 +134,20 @@ export function SignupPage() {
     setStep('setup');
     complete.reset();
     try {
-      const res = await complete.mutateAsync({ signupToken: token!.signupToken, fullName: fullName.trim(), password, company: c, ...(token!.accountExists ? {} : { username: username.trim() }) });
+      const res = await complete.mutateAsync({
+        signupToken: token!.signupToken,
+        fullName: fullName.trim(),
+        password,
+        company: buy ? { ...c, apps: appsOfChoice(buy) } : c,
+        ...(token!.accountExists ? {} : { username: username.trim() }),
+        ...(buy ? { buy: { plan: buy.complete ? 'complete' : 'modules', ...(buy.complete ? {} : { modules: buy.modules }), ai: buy.ai, seats: buy.users } } : {}),
+      });
+      if (res.pendingPayment) {
+        // Straight to the payment page; without one (it could not start), the app shows "Finish payment".
+        if (res.checkout?.checkoutUrl) return navigate(res.checkout.checkoutUrl, { replace: true });
+        if (res.checkoutError) toast.error(res.checkoutError, { duration: 10_000 });
+        return navigate('/?home=1', { replace: true });
+      }
       if (res.setupIncomplete) {
         toast.warning('Your company is created, but part of the app set-up has not finished. It finishes by itself in a few minutes; if an app does not open, sign out and in again later.', { duration: 15_000 });
       }
@@ -152,7 +171,15 @@ export function SignupPage() {
   };
 
   if (step === 'setup') {
-    return <SetupScreen companyName={company.name} apps={company.apps} error={complete.isError ? errorMessage(complete.error) : null} onRetry={() => setStep(isPasswordError(complete.error) ? 'profile' : 'company')} />;
+    return (
+      <SetupScreen
+        companyName={company.name}
+        apps={company.apps}
+        steps={buy ? ['Creating your company', 'Opening the payment page'] : undefined}
+        error={complete.isError ? errorMessage(complete.error) : null}
+        onRetry={() => setStep(isPasswordError(complete.error) ? 'profile' : 'company')}
+      />
+    );
   }
 
   const n = ORDER.indexOf(step) + 1;
@@ -172,7 +199,11 @@ export function SignupPage() {
 
       {step === 'identifier' && (
         <form onSubmit={submitIdentifier} noValidate className="space-y-4">
-          <StepTitle title="Start free">Attendance, tasks and assets for your team. Free trial, no card.</StepTitle>
+          {buy ? (
+            <StepTitle title="Buy Kaampilot">Create your account and company, then pay for your plan. No trial needed.</StepTitle>
+          ) : (
+            <StepTitle title="Start free">Attendance, tasks and assets for your team. Free trial, no card.</StepTitle>
+          )}
           <TextField
             id="signup-identifier"
             label="Work email"
@@ -276,9 +307,19 @@ export function SignupPage() {
               setCompany(c);
             }}
             onSubmit={(c) => void create(c)}
-            submitLabel="Create company"
+            submitLabel={buy ? 'Continue to payment' : 'Create company'}
             nameError={companyNameError}
+            hideApps={!!buy}
+            summary={buy ? <BuySummary choice={buy} /> : undefined}
+            footnote={buy ? 'You pay on the next screen (UPI, card or net banking). Your plan starts as soon as it is paid.' : undefined}
           />
+          {buy && (
+            <p className="mt-3 text-center text-sm">
+              <Link to="/signup" replace className="font-semibold text-primary hover:underline">
+                Start the free trial instead
+              </Link>
+            </p>
+          )}
         </div>
       )}
     </AuthFrame>
@@ -288,4 +329,51 @@ export function SignupPage() {
 /** A wrong password for an existing account sends the person back to that step. */
 function isPasswordError(err: unknown) {
   return /password/i.test(errorMessage(err));
+}
+
+/** The apps a "Buy now" plan opens (Tasks and Attendance live in the Tasks app). */
+function appsOfChoice(c: PriceChoice): Array<'tasks' | 'assets'> {
+  if (c.complete) return ['tasks', 'assets'];
+  const apps: Array<'tasks' | 'assets'> = [];
+  if (c.modules.includes('tasks') || c.modules.includes('attendance')) apps.push('tasks');
+  if (c.modules.includes('assets')) apps.push('assets');
+  return apps;
+}
+
+const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+
+/** "Buy now": the plan, users and the monthly total with GST (the payment page shows the exact GST split). */
+function BuySummary({ choice }: { choice: PriceChoice }) {
+  const { pricing } = usePublicPricing();
+  const q = quotePrice(pricing, choice);
+  const names = choice.complete ? 'Complete' : pricing.modules.filter((m) => choice.modules.includes(m.key)).map((m) => m.name).join(' + ');
+  return (
+    <div className="rounded-md border bg-muted/40 p-3 text-sm" aria-labelledby="buy-summary-title" role="region" data-testid="buy-summary">
+      <p id="buy-summary-title" className="font-semibold">
+        Your plan: {names}
+        {choice.ai ? ' with AI' : ''}
+      </p>
+      <dl className="mt-2 space-y-1">
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">
+            {choice.users} {choice.users === 1 ? 'user' : 'users'} × {rupees(q.perUser)}
+          </dt>
+          <dd className="tabular-nums">{rupees(q.monthly)}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">GST {pricing.gstPercent}%</dt>
+          <dd className="tabular-nums">{rupees(q.gst)}</dd>
+        </div>
+        <div className="flex justify-between gap-3 border-t pt-1 font-semibold">
+          <dt>Total per month</dt>
+          <dd className="tabular-nums">{rupees(q.total)}</dd>
+        </div>
+      </dl>
+      <p className="mt-2 text-xs text-muted-foreground">
+        <Link to="/pricing" className="font-semibold text-primary hover:underline">
+          Change the plan
+        </Link>
+      </p>
+    </div>
+  );
 }

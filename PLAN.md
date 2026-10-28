@@ -3800,7 +3800,7 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
 - Tests: `src/ai/ai.test.ts` (no DB, no network: both request shapes, 503 when off, knowledge in the prompt, errors,
   rate limit).
 
-### 24.4 Buy now, without the trial (planned for 2026-10-28)
+### 24.4 Buy now, without the trial (built 2026-10-28)
 Founder 2026-10-27: "anyone who wants to get started directly, without the free trial, can do that." Build tomorrow:
 - **Landing/pricing**: next to "Start free trial", a **"Buy now"** button on the calculator (and on /pricing). It
   carries the chosen plan into sign-up: `/signup?buy=modules&m=tasks,attendance&ai=0&users=10` (or `buy=complete`).
@@ -3816,3 +3816,60 @@ Founder 2026-10-27: "anyone who wants to get started directly, without the free 
   open Billing with the plan preselected, and paying ends the trial at once.
 - Console: pending-payment companies visible with their chosen plan; staff can mark paid or extend.
 - Tests: platform tests for buy-now sign-up → pending → paid (FakePay) → active, no trial; e2e on the calculator "Buy now".
+
+**Built 2026-10-28** (the plan above, with these choices):
+- **State `pending_payment`** (subscriptions; migration `0020_buy_now_invoice_email`: `subscriptions.setup_pending`,
+  `subscriptions.pay_by`). Counts as read-only (`ro` token claim, writes 402 "Finish the payment to start using
+  Kaampilot."); Billing stays open. No trial clock: `trial_ends_at` stays null, also after payment.
+- **Sign-up**: `POST signup/complete` takes `buy: {plan: 'modules'|'complete', modules?, ai, seats}`; payments must be on
+  (503 first, nothing made). The company is written with the plan's apps but **not set up in the apps yet**
+  (`setup_pending`): sign-up is instant and an unpaid company leaves nothing in Tasks / Assets. The answer adds
+  `pendingPayment: true, checkout: {sessionId, checkoutUrl, gateway} | null, checkoutError`; the web goes straight to
+  `/billing/pay/<id>` (FakePay or Cashfree).
+- **Paid** (FakePay / Cashfree webhook / return look-up, same `applyEvent`): active from now for one month, GST invoice,
+  then `finishSetup`: apps set up (`provisionNew`), the plan's module switches, `setup_pending` off. A failed set-up is
+  retried by the billing clock (`runAll`), never losing the payment.
+- **Finish payment** screen (`features/billing/finish-payment.tsx`, the app frame shows only it while pending): plan,
+  users, total with GST, **Continue to payment / Pay again**, **Start the free trial instead** (`POST
+  billing/start-trial`, only if the company never had a trial; sets the apps up), the removal date.
+- **Clean-up**: the billing clock removes a pending company after `pay_by` (7 days, `PENDING_PAY_DAYS`) only when it has
+  nothing but its owner (apps never set up, one person, no paid payment, no invoice), with the owner's account when it
+  has no other company; anything more is kept and logged (`billing.pending_kept`).
+- **Landing / pricing**: "Buy now" (outline) beside "Start free trial" on the calculator →
+  `/signup?buy=modules&m=tasks,attendance&ai=0&users=10` (`buyNowPath` / `parseBuyNow` in `@kaampilot/core`). Sign-up
+  says "Buy Kaampilot", hides the app choice, shows the plan summary and "Continue to payment", with "Start the free
+  trial instead" (drops `?buy`).
+- **Trial banner**: "Upgrade now" → `/billing?buy=complete&ai=…&users=<trial users>#choose-plan` (plan preselected);
+  paying makes the subscription active at once (the trial ends).
+- **Console**: state "Waiting for payment", `payBy`, Overview tile; company page: **Mark paid** (`POST
+  console/companies/:id/mark-paid`: the chosen plan for one month without a gateway, apps set up, no invoice) and
+  **Extend** (`POST console/companies/:id/pending-extend {days}`); both audited (`pending.mark_paid`,
+  `pending.extend`). Complimentary / grandfathered companies are untouched (never pending).
+- Tests: `services/platform/src/buy-now.test.ts` (sign-up → pending → writes 402 → FakePay → active, apps set up, no
+  trial; failed payment → pay again → trial instead (once); bad plan refused; trial company paying; clean-up after 7
+  days incl. kept-with-data; console list / extend / mark paid / audit). `e2e/web-landing.spec.ts`: Buy now links and the
+  sign-up title (written; not run here, the dev suite was not running).
+
+### 24.5 GST invoice email (built 2026-10-28)
+- After every successful payment (Cashfree webhook / return, FakePay, FakePay renewals) the new GST invoice is emailed
+  with its PDF (`invoice-pdf.ts`) through Resend (`common/resend-mail.ts`: `POST /emails` with
+  `attachments: [{filename, content: base64}]`, same `RESEND_API_KEY` / `RESEND_FROM` / `RESEND_BASE_URL` as the codes).
+  Subject "Kaampilot invoice FF/2026-27/000123 for 28 Oct 2026 – 28 Nov 2026"; text + simple HTML with the Billing link.
+- **Recipients**: the owner(s)' email + the company's **billing email** (the existing `billing_profiles.email`, "Billing
+  email · Invoices are sent here" on Billing → GST details, editable by owner / "Manage billing"; staff edit it on the
+  console company page: `PUT console/companies/:id/billing-email {email|null}`, audited `billing.email`).
+- **Stored on the invoice** (migration 0020): `emailed_at`, `emailed_to`, `email_error`; shown in Billing → Invoices
+  ("Sent …" / "Not sent") and on the console company page. **Send again**: `POST billing/invoices/:id/email` (owner /
+  "Manage billing", own company only) and `POST console/invoices/:id/email` (staff, audited `invoice.email`).
+- **Never fails a payment**: no Resend key → skipped, `email_error` "Email is not set up (RESEND_API_KEY)"; a Resend error
+  → stored; logged as `billing.invoice_email` (never the PDF or the key).
+- **Seller**: `SELLER_NAME`, `SELLER_GSTIN`, `SELLER_STATE`, `SELLER_ADDRESS` (gst.ts, now passed in
+  `infra/deploy/docker-compose.yml`). With `NODE_ENV=production` and SELLER_GSTIN empty / the test value / invalid (or
+  name, address, state missing) invoices are still created but **not emailed**; start-up log and console Overview warn
+  "Seller GST details not set" (`GET billing` and console answers carry `invoiceEmail`: the reason or null). On the
+  server: `infra/deploy/set-seller.sh` (reads the four values normally, checks GSTIN_RE, the test value and that the
+  GSTIN's first two digits are the state's code, writes `/opt/freefounders/.env` quoted, recreates the platform only).
+  No real values are in the repo.
+- Tests: in `buy-now.test.ts` against a local Resend stand-in (no network): sent with the PDF attached (base64 `%PDF-`),
+  subject, recipients incl. billing email; Resend 403 stored, payment stands, Send again works, another company 404; no
+  key → not sent; production + test seller → not sent; `sellerProblem`, recipients, subject / escaping.

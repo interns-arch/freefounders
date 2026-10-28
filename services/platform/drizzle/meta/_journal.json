@@ -141,6 +141,13 @@
       "when": 1793102156419,
       "tag": "0019_module_pricing",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793165189778,
+      "tag": "0020_buy_now_invoice_email",
+      "breakpoints": true
     }
   ]
 }

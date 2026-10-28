@@ -1,5 +1,5 @@
 /**
- * Subscription banners at the top of the app frame (PLAN.md §21.1): trial days left (owner / billing managers),
+ * Subscription banners at the top of the app frame (PLAN.md §21.1): trial days left with "Upgrade now" (owner / billing managers),
  * failed payment and read-only (everyone). Compact; the trial one can be hidden for the day.
  */
 import type { Access } from '@kaampilot/core';
@@ -24,7 +24,8 @@ export function BillingBanners({ access }: { access: Access }) {
   const b = access.billing;
   const cid = access.claims?.cid;
   const [hidden, setHidden] = useState(() => readHidden(cid));
-  if (!b) return null;
+  // A "Buy now" company that has not paid sees only "Finish payment" (PLAN.md §24.4).
+  if (!b || b.state === 'pending_payment') return null;
   const manage = access.canManageBilling;
 
   if (b.state === 'trialing' && manage && !hidden) {
@@ -42,8 +43,9 @@ export function BillingBanners({ access }: { access: Access }) {
         }}
       >
         Trial: {b.daysLeft != null ? `${days(b.daysLeft)} left` : 'ends soon'} ·{' '}
-        <Link to="/billing" className="font-semibold underline underline-offset-2">
-          Choose a plan
+        {/* PLAN.md §24.4: Billing opens with Complete and the trial's users preselected; paying ends the trial at once. */}
+        <Link to={`/billing?buy=complete&ai=${b.ai ? 1 : 0}&users=${Math.max(1, b.maxUsers ?? 1)}#choose-plan`} className="font-semibold underline underline-offset-2">
+          Upgrade now
         </Link>
       </Banner>
     );

@@ -4,7 +4,7 @@
  * invoices, change users, cancel / resume, and the dev tools (billing clock) while BILLING_DEV_TOOLS is on. Owner, or a
  * role with "Manage billing".
  */
-import { errorMessage } from '@kaampilot/core';
+import { errorMessage, parseBuyNow } from '@kaampilot/core';
 import {
   type BillingModuleKey,
   type BillingPricing,
@@ -27,6 +27,7 @@ import {
   useCancelSubscription,
   useDevAdvance,
   useDevRenew,
+  useEmailInvoice,
   billingExports,
   useInvoices,
   usePlans,
@@ -36,9 +37,9 @@ import {
   useStartCheckout,
   useSwitchToFree,
 } from '@kaampilot/core/billing';
-import { CalendarClock, Check, CheckSquare, CreditCard, FileText, Package, Sparkles, Timer, Wrench } from '@/components/icons';
+import { CalendarClock, Check, CheckSquare, CreditCard, FileText, Mail, Package, Sparkles, Timer, Wrench } from '@/components/icons';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
 import { type Column, DataTable } from '@/components/common/data-table';
@@ -48,7 +49,7 @@ import { fileSlug, todayStamp } from '@kaampilot/core/export';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Card, Checkbox, Switch } from '@/components/ui/primitives';
-import { cn, formatDate } from '@/lib/utils';
+import { cn, formatDate, formatDateTime } from '@/lib/utils';
 import { SeatStepper, StateBadge } from './parts';
 
 /** Opens the payment page the server named: our own pages in-app, anything else as a full page. */
@@ -81,7 +82,7 @@ function Billing({ b, plans, plansError }: { b: BillingSummary; plans: Plan[]; p
       {b.devTools && <DevTools b={b} />}
       {plansError ? <ErrorState error={plansError} /> : <ChoosePlan b={b} />}
       <GstDetails profile={b.profile} />
-      <Invoices />
+      <Invoices emailProblem={b.invoiceEmail} />
     </div>
   );
 }
@@ -243,12 +244,19 @@ function ChoosePlan({ b }: { b: BillingSummary }) {
 function PlanPicker({ b, p }: { b: BillingSummary; p: BillingPricing }) {
   const openCheckout = useOpenCheckout();
   const checkout = useStartCheckout();
-  const start = useMemo(() => initialChoice(b), [b]);
+  // "Upgrade now" in the trial banner (PLAN.md §24.4): /billing?buy=complete&users=3#choose-plan preselects the plan.
+  const [params] = useSearchParams();
+  const { hash } = useLocation();
+  const asked = useMemo(() => parseBuyNow(params), [params]);
+  const start = useMemo(() => (asked ? { complete: asked.complete, modules: asked.complete ? (['tasks', 'attendance'] as BillingModuleKey[]) : asked.modules } : initialChoice(b)), [b, asked]);
   const [complete, setComplete] = useState(start.complete);
   const [modules, setModules] = useState<BillingModuleKey[]>(start.modules);
-  const [ai, setAi] = useState(!!b.ai);
+  const [ai, setAi] = useState(asked ? asked.ai : !!b.ai);
   const min = Math.max(p.minSeats, b.seats.used, 1);
-  const [users, setUsers] = useState(() => Math.max(b.seats.paid || 0, min));
+  const [users, setUsers] = useState(() => Math.max(asked?.users ?? (b.seats.paid || 0), min));
+  useEffect(() => {
+    if (hash === '#choose-plan') document.getElementById('choose-plan')?.scrollIntoView({ block: 'start' });
+  }, [hash]);
   useEffect(() => setUsers((u) => Math.max(min, u)), [min]);
   const q = quotePlan(p, { complete, modules, ai, users });
   const name = choiceName(p, { complete, modules, ai });
@@ -543,9 +551,10 @@ function GstDetails({ profile }: { profile: BillingProfile | null }) {
 
 // ─── invoices ───────────────────────────────────────────────────────────────
 
-function Invoices() {
+function Invoices({ emailProblem }: { emailProblem?: string | null }) {
   const navigate = useNavigate();
   const q = useInvoices();
+  const email = useEmailInvoice();
   type Row = NonNullable<typeof q.data>[number];
   const columns: Column<Row>[] = [
     { key: 'number', header: 'Invoice', cell: (r) => <span className="font-mono font-semibold">{r.number}</span> },
@@ -553,6 +562,49 @@ function Invoices() {
     { key: 'period', header: 'Period', hideOnMobile: true, cell: (r) => (r.periodStart ? `${formatDate(r.periodStart)} – ${formatDate(r.periodEnd)}` : '—') },
     { key: 'total', header: 'Total', className: 'text-right', headerClassName: 'text-right', cell: (r) => <span className="font-mono tabular-nums">{formatInr(r.total, true)}</span> },
     { key: 'status', header: 'Status', cell: (r) => <span className="capitalize">{r.status ?? 'paid'}</span> },
+    {
+      // PLAN.md §24.5: the invoice email (PDF attached) to the owner and the billing email.
+      key: 'email',
+      header: 'Email',
+      hideOnMobile: true,
+      cell: (r) =>
+        r.emailedAt ? (
+          <span className="text-sm" title={(r.emailedTo ?? []).join(', ')}>
+            Sent {formatDateTime(r.emailedAt)}
+          </span>
+        ) : r.emailError ? (
+          <span className="text-sm text-destructive" title={r.emailError}>
+            Not sent
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: 'send',
+      header: <span className="sr-only">Send again</span>,
+      className: 'text-right',
+      cell: (r) => (
+        <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            allowReadOnly
+            aria-label={`Email invoice ${r.number} again`}
+            loading={email.isPending && email.variables === r.id}
+            disabled={email.isPending}
+            onClick={() =>
+              email.mutate(r.id, {
+                onSuccess: (res) => (res.sent ? toast.success(`Invoice sent to ${res.to.join(', ')}`) : toast.error(res.error ?? 'The invoice email was not sent')),
+                onError: (e) => toast.error(errorMessage(e)),
+              })
+            }
+          >
+            <Mail /> Send again
+          </Button>
+        </span>
+      ),
+    },
     {
       key: 'pdf',
       header: <span className="sr-only">PDF</span>,
@@ -571,7 +623,11 @@ function Invoices() {
     <Section
       id="invoices"
       title="Invoices"
-      description="GST tax invoices. Open one to print, or download it as PDF."
+      description={
+        emailProblem
+          ? `GST tax invoices. Open one to print, or download it as PDF. Invoices are not emailed right now: ${emailProblem}.`
+          : 'GST tax invoices, emailed with the PDF to the owner and the billing email. Open one to print, or download it as PDF.'
+      }
       actions={<DownloadMenu filename={fileSlug('billing-invoices', todayStamp())} target={billingExports.invoices()} empty={q.data?.length === 0} loading={!q.data} />}
     >
       <DataTable

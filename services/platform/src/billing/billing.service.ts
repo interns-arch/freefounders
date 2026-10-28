@@ -27,16 +27,20 @@ import {
   billingSettings,
   checkoutSessions,
   companies,
+  departments,
+  eventCursors,
   type GstParty,
   invoiceCounters,
   invoiceLines,
   type InvoiceLineInput,
   invoices,
+  invites,
   modulePrices,
   payments,
   people,
   personApps,
   plans,
+  roles,
   seatChanges,
   staffAudit,
   subscriptions,
@@ -54,7 +58,11 @@ import {
   signFake,
 } from './gateway';
 import { CashfreeError, CashfreeGateway, orderIdOf, type OrderCheck } from './cashfree.gateway';
-import { financialYear, gst, GSTIN_RE, invoiceNumber, SAC_SAAS, seller, stateName } from './gst';
+import { financialYear, gst, GSTIN_RE, invoiceNumber, SAC_SAAS, seller, sellerProblem, stateName } from './gst';
+import { resendConfig } from '../accounts/resend.sender';
+import { MailError, sendResendMail } from '../common/resend-mail';
+import { invoiceEmail, invoiceFileName, recipients } from './invoice-mail';
+import { invoicePdf } from './invoice-pdf';
 import {
   companyNow,
   DAY_MS,
@@ -76,6 +84,8 @@ import { platformLog } from '../console/log-sink';
 export const BILLING_LOCK = 4_646_002;
 const CHECKOUT_TTL_MS = 60 * 60 * 1000;
 const MAX_SEATS = 10_000;
+/** PLAN.md §24.4: a "Buy now" company not paid within this many days is cleaned up by the billing clock. */
+export const PENDING_PAY_DAYS = 7;
 
 /** Dev tools (advance the billing clock, simulate renewals): BILLING_DEV_TOOLS=1, never in production. */
 export function billingDevTools(): boolean {
@@ -108,6 +118,19 @@ export const companyTrialSchema = z
   .object({ days: z.number().int().min(1).max(365).optional(), maxUsers: z.number().int().min(1).max(MAX_SEATS).optional() })
   .refine((v) => v.days !== undefined || v.maxUsers !== undefined, 'Give days or maxUsers');
 export const seatsSchema = z.object({ seats: z.number().int().min(1).max(MAX_SEATS) });
+/** PLAN.md §24.4: "Buy now" from the landing calculator / pricing page, carried through sign-up. */
+export const buySchema = z.object({
+  plan: z.enum(['modules', 'complete']),
+  modules: z.array(z.enum(MODULE_KEYS)).max(MODULE_KEYS.length).optional(),
+  ai: z.boolean().default(false),
+  seats: z.number().int().min(1).max(MAX_SEATS),
+});
+export type BuyInput = z.infer<typeof buySchema>;
+/** The billing email on the console (PLAN.md §24.5); null clears it. */
+export const billingEmailSchema = z.object({
+  email: z.preprocess((v) => (typeof v === 'string' && !v.trim() ? null : v), z.string().trim().toLowerCase().email('Enter a valid email').max(200).nullable()),
+});
+export const pendingExtendSchema = z.object({ days: z.number().int().min(1).max(60) });
 export const outcomeSchema = z.object({ outcome: z.enum(['success', 'failure', 'cancel']) });
 export const renewSchema = z.object({ outcome: z.enum(['success', 'failure']).default('success') });
 export const advanceSchema = z.object({ days: z.number().int().min(1).max(400), renewalOutcome: z.enum(['success', 'failure']).default('success') });
@@ -163,6 +186,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     } else if (this.config.problem) {
       this.log.error(`Payments are OFF (checkout answers 503): ${this.config.problem}. Everything else keeps working.`);
     }
+    // PLAN.md §24.5: invoices are still made, but not emailed with the test seller in production.
+    const sellerIssue = sellerProblem();
+    if (sellerIssue) this.log.warn(`${sellerIssue}: invoice emails are NOT sent (invoices are still created). Run infra/deploy/set-seller.sh.`);
   }
 
   onModuleInit() {
@@ -262,6 +288,83 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const trial = await this.trialDefaults(tx);
     await tx.insert(subscriptions).values({ companyId, plan: 'complete', interval: 'month', state: 'trialing', stateSince: now, trialEndsAt: new Date(now.getTime() + trial.days * DAY_MS), trialMaxUsers: trial.maxUsers });
     await tx.insert(billingProfiles).values({ companyId, legalName: buyer.legalName, state: stateName(buyer.state) ?? seller().state, email: buyer.email }).onConflictDoNothing();
+  }
+
+  /**
+   * PLAN.md §24.4 "Buy now": a new company waiting for its first payment: the chosen plan, no trial, apps not set up
+   * (`setup_pending`), cleaned up by the billing clock if not paid within PENDING_PAY_DAYS.
+   */
+  async startPending(tx: Executor, companyId: string, buyer: { legalName: string; state: string | null; email: string | null }, buy: BuyInput) {
+    const sel = normaliseSelection(buy);
+    const now = new Date();
+    await tx.insert(subscriptions).values({
+      companyId,
+      plan: sel.plan,
+      modules: sel.modules,
+      ai: sel.ai,
+      interval: 'month',
+      state: 'pending_payment',
+      stateSince: now,
+      seats: buy.seats,
+      setupPending: true,
+      payBy: new Date(now.getTime() + PENDING_PAY_DAYS * DAY_MS),
+    });
+    await tx.insert(billingProfiles).values({ companyId, legalName: buyer.legalName, state: stateName(buyer.state) ?? seller().state, email: buyer.email }).onConflictDoNothing();
+  }
+
+  /** The apps a "Buy now" choice opens (the company row is written with them). */
+  async appsForBuy(buy: BuyInput): Promise<AppKey[]> {
+    const sel = normaliseSelection(buy);
+    return appsFor(await this.plan(sel.plan), sel.modules);
+  }
+
+  /** Payments must be on before a "Buy now" company is made (503 otherwise; nothing is created). */
+  assertPaymentsOn() {
+    this.gateway();
+  }
+
+  /**
+   * POST billing/start-trial (PLAN.md §24.4): a "Buy now" company that has not paid chooses the free trial instead
+   * (only if it never had one). The apps are set up now.
+   */
+  async startTrialInstead(companyId: string) {
+    await this.dbs.tx(async (tx) => {
+      const sub = await this.lockSub(tx, companyId);
+      if (sub.state !== 'pending_payment') throw new BadRequestException('This company is not waiting for a payment.');
+      if (sub.trialEndsAt) throw new BadRequestException('This company has already had its free trial. Choose a plan to continue.');
+      const trial = await this.trialDefaults(tx);
+      const now = new Date();
+      await tx
+        .update(subscriptions)
+        .set({ plan: 'complete', modules: null, ai: false, interval: 'month', state: 'trialing', stateSince: now, seats: 0, trialEndsAt: new Date(now.getTime() + trial.days * DAY_MS), trialMaxUsers: trial.maxUsers, payBy: null, updatedAt: new Date() })
+        .where(eq(subscriptions.companyId, companyId));
+    });
+    const setupIncomplete = !(await this.finishSetup(companyId));
+    return { ...(await this.view(companyId)), setupIncomplete };
+  }
+
+  /**
+   * A "Buy now" company that is paid (or chose the trial, or staff set a plan): its apps are set up now with the
+   * plan's apps and module switches. True when done (or nothing to do); false = it failed and the billing clock tries
+   * again (runAll), so a slow app never loses a payment.
+   */
+  async finishSetup(companyId: string): Promise<boolean> {
+    const { sub, plan } = await subscriptionOf(this.dbs, companyId);
+    if (!sub.setupPending || sub.state === 'pending_payment') return true;
+    const want = appsFor(plan, sub.modules).filter((a): a is AppKey => (APPS as readonly string[]).includes(a));
+    const [c] = await this.dbs.db.update(companies).set({ enabledApps: want.length ? want : [...APPS], updatedAt: new Date() }).where(eq(companies.id, companyId)).returning();
+    if (!c) return true;
+    try {
+      await this.setup.provisionNew(c, (line) => this.log.log(line.trim()));
+    } catch (err) {
+      this.log.error(`Setting up ${c.code} in the apps after payment: ${(err as Error).message} (the billing clock tries again)`);
+      platformLog({ level: 'error', event: 'billing.setup_failed', message: `App set-up for ${c.code} failed; retried by the billing clock`, companyId });
+      return false;
+    }
+    await this.dbs.db.update(subscriptions).set({ setupPending: false, updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
+    await this.applyEntitlements(companyId, plan, sub.modules);
+    this.log.log(`Company ${c.code}: apps set up (${c.enabledApps.join(', ')})`);
+    return true;
   }
 
   // ─── the Billing page ───────────────────────────────────────────────────
@@ -369,7 +472,28 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       canResume: true,
       /** Cashfree: nothing is charged by itself; the owner pays each period here (past due until then). */
       paysEachPeriod: paysEachPeriod(sub.gateway),
+      /**
+       * PLAN.md §24.4: a "Buy now" company waiting for its first payment: the chosen plan (above), when it is cleaned
+       * up if not paid, and whether it may start the free trial instead (never had one).
+       */
+      pending:
+        sub.state === 'pending_payment'
+          ? { payBy: iso(sub.payBy), canStartTrial: !sub.trialEndsAt, seats: sub.seats, perUser: unitPrice(plan, sub, catalogue, 'month'), openCheckout: await this.openCheckoutOf(companyId) }
+          : null,
+      /** PLAN.md §24.5: why invoice emails are not sent on this server (null = they are). */
+      invoiceEmail: this.invoiceEmailProblem(),
     };
+  }
+
+  /** The newest open, unexpired checkout of the company (the "Finish payment" screen continues it). */
+  private async openCheckoutOf(companyId: string): Promise<{ sessionId: string; checkoutUrl: string } | null> {
+    const [s] = await this.dbs.db
+      .select({ id: checkoutSessions.id })
+      .from(checkoutSessions)
+      .where(and(eq(checkoutSessions.companyId, companyId), eq(checkoutSessions.status, 'open'), sql`${checkoutSessions.expiresAt} > now()`))
+      .orderBy(desc(checkoutSessions.createdAt))
+      .limit(1);
+    return s ? { sessionId: s.id, checkoutUrl: `/billing/pay/${s.id}` } : null;
   }
 
   // ─── checkout ───────────────────────────────────────────────────────────
@@ -661,6 +785,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         currentPeriodEnd: end,
         cancelAtPeriodEnd: false,
         gateway: gatewayName,
+        // PLAN.md §24.4: a "Buy now" company is paid: no longer waiting (its trial, if any, ends here too).
+        payBy: null,
         updatedAt: new Date(),
       })
       .where(eq(subscriptions.companyId, s.companyId));
@@ -669,7 +795,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     if (pending.ids.length) await tx.update(seatChanges).set({ invoiceId: invoice.id }).where(inArray(seatChanges.id, pending.ids));
     await tx.insert(payments).values({ companyId: s.companyId, invoiceId: invoice.id, checkoutSessionId: s.id, gateway: gatewayName, gatewayPaymentId: event.paymentId ?? null, amount: s.total, status: 'captured' });
     const plan = await this.plan(s.plan);
-    after.push(() => this.applyEntitlements(s.companyId, plan, s.modules, prev));
+    // A "Buy now" company gets its apps now (set up with the plan's switches); everyone else: the plan's switches.
+    after.push(() => (sub.setupPending ? this.finishSetup(s.companyId) : this.applyEntitlements(s.companyId, plan, s.modules, prev)));
+    // PLAN.md §24.5: the GST invoice by email (never fails the payment).
+    after.push(() => this.emailInvoice(invoice.id));
   }
 
   /**
@@ -700,6 +829,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       .update(subscriptions)
       .set({ state: 'active', stateSince: sub.state === 'active' ? sub.stateSince : now, seats, nextPeriodSeats: null, currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd: false, updatedAt: new Date() })
       .where(eq(subscriptions.companyId, companyId));
+    return invoice.id;
   }
 
   /** The subscription row, locked for this transaction (created as Complimentary if the company had none). */
@@ -817,7 +947,21 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   async invoices(companyId: string) {
     const rows = await this.invoiceRows(companyId, 200);
-    return rows.map((r) => ({ id: r.id, number: r.number, issuedAt: iso(r.issuedAt), periodStart: iso(r.periodStart), periodEnd: iso(r.periodEnd), subtotal: r.subtotal, tax: r.cgst + r.sgst + r.igst, total: r.total, status: r.status }));
+    return rows.map((r) => ({
+      id: r.id,
+      number: r.number,
+      issuedAt: iso(r.issuedAt),
+      periodStart: iso(r.periodStart),
+      periodEnd: iso(r.periodEnd),
+      subtotal: r.subtotal,
+      tax: r.cgst + r.sgst + r.igst,
+      total: r.total,
+      status: r.status,
+      // PLAN.md §24.5: the invoice email.
+      emailedAt: iso(r.emailedAt),
+      emailedTo: r.emailedTo ?? [],
+      emailError: r.emailError,
+    }));
   }
 
   private invoiceRows(companyId: string, limit: number) {
@@ -956,6 +1100,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       };
 
       if (plan.code === 'complimentary') return false;
+      if (sub.state === 'pending_payment') {
+        // PLAN.md §24.4: not paid in time → cleaned up (only while there is nothing but the owner); never a step more.
+        const due = sub.payBy ?? new Date(sub.stateSince.getTime() + PENDING_PAY_DAYS * DAY_MS);
+        if (due <= now) await this.cleanupPending(tx, sub);
+        return false;
+      }
       if (sub.state === 'trialing') {
         if (!sub.trialEndsAt || sub.trialEndsAt > now) return false;
         await toFreeOrReadOnly(sub.trialEndsAt);
@@ -971,7 +1121,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       const manual = paysEachPeriod(sub.gateway);
       if (sub.state === 'past_due') {
         const until = new Date(sub.stateSince.getTime() + PAST_DUE_DAYS * DAY_MS);
-        if (!manual && opts.forceRenewal) return this.renew(tx, sub, plan, now, opts.renewalOutcome ?? 'success', true);
+        if (!manual && opts.forceRenewal) return this.renew(tx, sub, plan, now, opts.renewalOutcome ?? 'success', true, after);
         if (until > now) return false;
         await set({ state: 'read_only', stateSince: until });
         return true;
@@ -987,7 +1137,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         return true;
       }
       if (sub.state === 'active' && isPaid(plan) && sub.currentPeriodEnd && !manual && (sub.currentPeriodEnd <= now || opts.forceRenewal)) {
-        return this.renew(tx, sub, plan, now, opts.renewalOutcome ?? 'success', !!opts.forceRenewal);
+        return this.renew(tx, sub, plan, now, opts.renewalOutcome ?? 'success', !!opts.forceRenewal, after);
       }
       return false;
     });
@@ -997,7 +1147,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
    * Charges the next period through FakePay. Paid: a new period (seats lowered for it if asked) and an invoice with
    * the pro-rata seat lines. Failed: past_due from the end of the paid period.
    */
-  private async renew(tx: Executor, sub: SubscriptionRow, plan: PlanRow, now: Date, outcome: 'success' | 'failure', forced: boolean): Promise<boolean> {
+  private async renew(tx: Executor, sub: SubscriptionRow, plan: PlanRow, now: Date, outcome: 'success' | 'failure', forced: boolean, after?: After): Promise<boolean> {
     const companyId = sub.companyId;
     const fake = this.fake;
     const start = forced || sub.state === 'past_due' ? now : (sub.currentPeriodEnd ?? now);
@@ -1006,7 +1156,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const tax = gst(lines, (await this.buyer(companyId)).state);
     const charge = await fake.chargeRenewal({ companyId, amount: tax.total, outcome });
     if (!charge.ok) return this.renewalFailed(tx, sub, now, forced, fake.name, charge, tax.total);
-    await this.recordRenewal(tx, sub, plan, now, { gatewayName: fake.name, paymentId: charge.paymentId, forced });
+    const invoiceId = await this.recordRenewal(tx, sub, plan, now, { gatewayName: fake.name, paymentId: charge.paymentId, forced });
+    after?.push(() => this.emailInvoice(invoiceId));
     return true;
   }
 
@@ -1019,6 +1170,115 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       .set({ state: 'past_due', stateSince: forced ? now : (sub.currentPeriodEnd ?? now), updatedAt: new Date() })
       .where(eq(subscriptions.companyId, sub.companyId));
     return true;
+  }
+
+  /**
+   * PLAN.md §24.4: removes a "Buy now" company that was not paid in time. Only while there is nothing but its owner:
+   * apps never set up, one person, no paid payment, no invoice; anything more is kept (logged) for staff to decide.
+   * The owner's account goes too when it has no other company (they can simply sign up again).
+   */
+  private async cleanupPending(tx: Executor, sub: SubscriptionRow): Promise<boolean> {
+    const id = sub.companyId;
+    const [c] = await tx.select({ code: companies.code }).from(companies).where(eq(companies.id, id)).limit(1);
+    if (!c) return false;
+    const count = async (q: Promise<Array<{ n: number }>>) => (await q)[0]?.n ?? 0;
+    const n = sql<number>`count(*)::int`;
+    const members = await tx.select({ id: people.id, accountId: people.accountId }).from(people).where(eq(people.companyId, id));
+    const paid = await count(tx.select({ n }).from(payments).where(and(eq(payments.companyId, id), eq(payments.status, 'captured'))));
+    const issued = await count(tx.select({ n }).from(invoices).where(eq(invoices.companyId, id)));
+    if (!sub.setupPending || members.length > 1 || paid || issued) {
+      this.log.warn(`Pending company ${c.code} was not paid in time but has data (people ${members.length}, payments ${paid}, invoices ${issued}): kept`);
+      platformLog({ level: 'warn', event: 'billing.pending_kept', message: `${c.code}: not paid within ${PENDING_PAY_DAYS} days but has data; kept for staff`, companyId: id });
+      return false;
+    }
+    await tx.delete(payments).where(eq(payments.companyId, id));
+    await tx.delete(checkoutSessions).where(eq(checkoutSessions.companyId, id));
+    await tx.delete(seatChanges).where(eq(seatChanges.companyId, id));
+    await tx.delete(billingProfiles).where(eq(billingProfiles.companyId, id));
+    await tx.delete(invites).where(eq(invites.companyId, id));
+    await tx.delete(eventCursors).where(eq(eventCursors.companyId, id));
+    await tx.delete(roles).where(eq(roles.companyId, id));
+    await tx.delete(people).where(eq(people.companyId, id));
+    await tx.delete(departments).where(eq(departments.companyId, id));
+    await tx.delete(subscriptions).where(eq(subscriptions.companyId, id));
+    await tx.delete(companies).where(eq(companies.id, id));
+    for (const accountId of new Set(members.map((m) => m.accountId).filter((a): a is string => !!a))) {
+      const others = await count(tx.select({ n }).from(people).where(eq(people.accountId, accountId)));
+      if (!others) await tx.delete(accounts).where(eq(accounts.id, accountId));
+    }
+    this.log.log(`Pending company ${c.code} not paid within ${PENDING_PAY_DAYS} days: removed`);
+    platformLog({ level: 'info', event: 'billing.pending_removed', message: `${c.code}: "Buy now" company not paid in time, removed (nothing but the owner)` });
+    return true;
+  }
+
+  // ─── GST invoice email (PLAN.md §24.5) ─────────────────────────────────
+
+  /** Why invoice emails cannot go out on this server; null = they can. */
+  invoiceEmailProblem(): string | null {
+    if (!resendConfig().config) return 'Email is not set up (RESEND_API_KEY)';
+    return sellerProblem();
+  }
+
+  /** Who gets a company's invoices: its owners' emails and the billing email (GST details). */
+  private async invoiceRecipients(companyId: string): Promise<string[]> {
+    const owners = await this.dbs.db
+      .select({ email: people.email, accountEmail: accounts.email })
+      .from(people)
+      .leftJoin(accounts, eq(accounts.id, people.accountId))
+      .where(and(eq(people.companyId, companyId), eq(people.platformRole, 'owner'), eq(people.status, 'active')));
+    const profile = await this.profile(companyId);
+    return recipients([...owners.map((o) => o.accountEmail ?? o.email), profile?.email]);
+  }
+
+  /**
+   * Emails one invoice with its PDF to the owner(s) and the billing email, through Resend. Never throws for a mail
+   * problem: the outcome (sent at / to, or the last error) is stored on the invoice for the Billing page and the console.
+   * Skipped, with the reason stored, when Resend is not set up or (production) the seller's GST details are not set.
+   * Never logs the PDF or the key.
+   */
+  async emailInvoice(invoiceId: string, fetchImpl?: typeof fetch): Promise<{ sent: boolean; to: string[]; error: string | null; emailedAt: string | null }> {
+    const [row] = await this.dbs.db.select({ companyId: invoices.companyId, number: invoices.number }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    if (!row) throw notFound('Invoice');
+    const record = async (error: string | null, to: string[]) => {
+      const at = error ? null : new Date();
+      await this.dbs.db
+        .update(invoices)
+        .set(at ? { emailedAt: at, emailedTo: to, emailError: null } : { emailError: error })
+        .where(eq(invoices.id, invoiceId));
+      return { sent: !!at, to, error, emailedAt: at ? at.toISOString() : null };
+    };
+    const { config } = resendConfig();
+    const problem = !config ? 'Email is not set up (RESEND_API_KEY)' : sellerProblem();
+    if (problem || !config) {
+      this.log.warn(`Invoice ${row.number}: email not sent: ${problem}`);
+      platformLog({ level: 'warn', event: 'billing.invoice_email', message: `${row.number} not emailed: ${problem}`, companyId: row.companyId });
+      return record(problem, []);
+    }
+    const to = await this.invoiceRecipients(row.companyId);
+    if (!to.length) {
+      platformLog({ level: 'warn', event: 'billing.invoice_email', message: `${row.number} not emailed: no owner or billing email`, companyId: row.companyId });
+      return record('No email address: add a billing email in Billing, GST details', []);
+    }
+    try {
+      const inv = await this.invoice(row.companyId, invoiceId);
+      const mail = invoiceEmail(inv, { webUrl: process.env.PUBLIC_WEB_URL });
+      const sent = await sendResendMail(config, { to, ...mail, attachments: [{ filename: invoiceFileName(inv.number), content: invoicePdf(inv) }] }, fetchImpl);
+      this.log.log(`Invoice ${row.number} emailed (Resend ${sent.id}) to ${to.length} address${to.length === 1 ? '' : 'es'}`);
+      platformLog({ level: 'info', event: 'billing.invoice_email', message: `${row.number} emailed to ${to.length} address${to.length === 1 ? '' : 'es'}`, companyId: row.companyId });
+      return record(null, to);
+    } catch (err) {
+      const message = err instanceof MailError ? err.message : `Could not make the email: ${(err as Error).message}`.slice(0, 300);
+      this.log.warn(`Invoice ${row.number}: email failed: ${message}`);
+      platformLog({ level: 'warn', event: 'billing.invoice_email', message: `${row.number} email failed: ${message}`, companyId: row.companyId });
+      return record(message, to);
+    }
+  }
+
+  /** "Send again" (Billing, Invoices): this company's invoice only. */
+  async resendInvoice(companyId: string, invoiceId: string) {
+    const [row] = await this.dbs.db.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId))).limit(1);
+    if (!row) throw notFound('Invoice');
+    return this.emailInvoice(invoiceId);
   }
 
   /** Runs the state machine for one company until nothing changes, then applies plan changes in the apps. */
@@ -1055,6 +1315,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
             this.log.warn(`Billing for company ${s.id}: ${(err as Error).message}`);
           }
         }
+        // PLAN.md §24.4: a paid "Buy now" company whose app set-up failed is set up again.
+        const unfinished = await this.dbs.db.select({ id: subscriptions.companyId }).from(subscriptions).where(and(eq(subscriptions.setupPending, true), ne(subscriptions.state, 'pending_payment')));
+        for (const u of unfinished) await this.finishSetup(u.id).catch((err) => this.log.warn(`App set-up for company ${u.id}: ${(err as Error).message}`));
         changed += await this.sweepCashfree().catch((err) => {
           this.log.warn(`Cashfree order look-ups: ${(err as Error).message}`);
           return 0;
@@ -1174,6 +1437,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         trialMaxUsers: subscriptions.trialMaxUsers,
         trialEndsAt: subscriptions.trialEndsAt,
         currentPeriodEnd: subscriptions.currentPeriodEnd,
+        payBy: subscriptions.payBy,
+        setupPending: sql<boolean>`coalesce(${subscriptions.setupPending}, false)`,
+        billingEmail: sql<string | null>`(select bp.email from ${billingProfiles} bp where bp.company_id = ${companies.id})`,
         clockOffsetDays: sql<number>`coalesce(${subscriptions.clockOffsetDays}, 0)`,
         used: sql<number>`(select count(*)::int from ${people} p where p.company_id = ${companies.id} and p.status = 'active'
           and exists (select 1 from ${personApps} pa where pa.person_id = p.id and pa.app = any(${companies.enabledApps})))`,
@@ -1206,6 +1472,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         trialMaxUsers: r.state === 'trialing' ? (r.trialMaxUsers ?? TRIAL_SEAT_LIMIT) : r.trialMaxUsers,
         trialEndsAt: iso(r.trialEndsAt),
         currentPeriodEnd: iso(r.currentPeriodEnd),
+        /** PLAN.md §24.4: a "Buy now" company waiting for its first payment is cleaned up after this. */
+        payBy: iso(r.payBy),
+        setupPending: r.setupPending,
+        /** PLAN.md §24.5: invoices also go here (besides the owner). */
+        billingEmail: r.billingEmail,
         clockOffsetDays: r.clockOffsetDays,
         createdAt: iso(r.createdAt),
       };
@@ -1226,7 +1497,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       readOnly: count((c) => c.state === 'read_only'),
       suspended: count((c) => c.state === 'suspended'),
       cancelled: count((c) => c.state === 'cancelled'),
+      pendingPayment: count((c) => c.state === 'pending_payment'),
       seatsUsed: list.reduce((s, c) => s + c.seats.used, 0),
+      /** PLAN.md §24.5: why invoice emails are not sent on this server (null = they are). */
+      invoiceEmail: this.invoiceEmailProblem(),
     };
   }
 
@@ -1255,10 +1529,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           currentPeriodStart: null,
           currentPeriodEnd: null,
           cancelAtPeriodEnd: false,
+          payBy: null,
           updatedAt: new Date(),
         })
         .where(eq(subscriptions.companyId, companyId));
     });
+    await this.finishSetup(companyId); // a "Buy now" company that staff put on a trial gets its apps now
     return (await this.consoleCompanies()).find((c) => c.id === companyId);
   }
 
@@ -1293,8 +1569,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const sel = ['modules', 'complete'].includes(planCode) ? normaliseSelection({ plan: planCode, modules: picked?.modules, ai: picked?.ai }) : { plan: planCode, modules: null, ai: !!picked?.ai };
     const plan = await this.plan(sel.plan);
     let prev: { plan: PlanRow; modules: string[] | null } | undefined;
+    let setupPending = false;
     await this.dbs.tx(async (tx) => {
       const sub = await this.lockSub(tx, companyId);
+      setupPending = sub.setupPending;
       prev = { plan: await this.plan(sub.plan), modules: sub.modules };
       const now = companyNow(sub);
       const paid = isPaid(plan);
@@ -1313,12 +1591,63 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           currentPeriodEnd: paid ? addInterval(now, sub.interval) : null,
           cancelAtPeriodEnd: false,
           gateway: null,
+          payBy: null,
           updatedAt: new Date(),
         })
         .where(eq(subscriptions.companyId, companyId));
     });
-    await this.applyEntitlements(companyId, plan, sel.modules, prev);
+    // A "Buy now" company gets its apps now (PLAN.md §24.4); everyone else: the plan's apps and switches.
+    if (setupPending) await this.finishSetup(companyId);
+    else await this.applyEntitlements(companyId, plan, sel.modules, prev);
     return (await this.consoleCompanies()).find((c) => c.id === companyId);
+  }
+
+  /**
+   * POST console/companies/:id/mark-paid (PLAN.md §24.4): a "Buy now" company paid outside the gateway (bank transfer):
+   * the plan it chose starts now for one period, without a gateway; its apps are set up.
+   */
+  async consoleMarkPaid(companyId: string) {
+    await this.assertCompany(companyId);
+    const { sub } = await subscriptionOf(this.dbs, companyId);
+    if (sub.state !== 'pending_payment') throw new BadRequestException('This company is not waiting for a payment.');
+    return this.consolePlan(companyId, sub.plan, sub.seats, { modules: sub.modules ?? undefined, ai: sub.ai });
+  }
+
+  /** POST console/companies/:id/pending-extend: more days before an unpaid "Buy now" company is cleaned up. */
+  async consoleExtendPending(companyId: string, days: number) {
+    await this.assertCompany(companyId);
+    await this.dbs.tx(async (tx) => {
+      const sub = await this.lockSub(tx, companyId);
+      if (sub.state !== 'pending_payment') throw new BadRequestException('This company is not waiting for a payment.');
+      const now = companyNow(sub);
+      const from = sub.payBy && sub.payBy > now ? sub.payBy : now;
+      await tx.update(subscriptions).set({ payBy: new Date(from.getTime() + days * DAY_MS), updatedAt: new Date() }).where(eq(subscriptions.companyId, companyId));
+    });
+    return (await this.consoleCompanies()).find((c) => c.id === companyId);
+  }
+
+  /** PUT console/companies/:id/billing-email (PLAN.md §24.5): where invoices go besides the owner; null clears it. */
+  async consoleBillingEmail(companyId: string, email: string | null) {
+    await this.assertCompany(companyId);
+    const existing = await this.profile(companyId);
+    if (existing) await this.dbs.db.update(billingProfiles).set({ email, updatedAt: new Date() }).where(eq(billingProfiles.companyId, companyId));
+    else {
+      const [c] = await this.dbs.db.select({ name: companies.name }).from(companies).where(eq(companies.id, companyId)).limit(1);
+      await this.dbs.db.insert(billingProfiles).values({ companyId, legalName: c?.name ?? 'Customer', state: seller().state, email });
+    }
+    return { email };
+  }
+
+  /** POST console/invoices/:id/email: "Send again" from the console (any company). */
+  async consoleEmailInvoice(invoiceId: string) {
+    return this.emailInvoice(invoiceId);
+  }
+
+  /** The company an invoice belongs to (for the staff audit row). */
+  async invoiceCompany(invoiceId: string): Promise<string> {
+    const [r] = await this.dbs.db.select({ companyId: invoices.companyId }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    if (!r) throw notFound('Invoice');
+    return r.companyId;
   }
 
   /** Suspends a company (only owners can sign in, read-only) or reactivates it (a paid period that ended restarts now). */
@@ -1474,7 +1803,7 @@ export interface StaffActor {
   email: string | null;
 }
 /** Every mutating owner-console action (each writes one staff_audit row). */
-export const CONSOLE_ACTIONS = ['trial.extend', 'trial.set', 'trial.defaults', 'plan.set', 'company.suspend', 'company.reactivate'] as const;
+export const CONSOLE_ACTIONS = ['trial.extend', 'trial.set', 'trial.defaults', 'plan.set', 'company.suspend', 'company.reactivate', 'pending.mark_paid', 'pending.extend', 'billing.email', 'invoice.email'] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
 /** Read-only console views of a company's or person's data, also in the staff audit log (PLAN.md §21.9). */
 export const VIEW_ACTIONS = ['view.company', 'view.user', 'view.users', 'view.billing', 'view.logs'] as const;

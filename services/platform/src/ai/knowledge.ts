@@ -34,8 +34,9 @@ What a person sees depends on what their company switched on and on their roles.
   - Example: Tasks + Attendance = ₹198, or ₹258 with AI.
 - **Complete** (all modules, including Visitors, Payroll and everything else) is **₹349**, or **₹449 with AI**.
 - AI is chosen for the whole subscription. Either every module you pick has AI, or none does.
-- **Free trial**: by default **3 users for 10 days**.
-- **Billing**: Admin › Billing (the owner, or someone whose role has "Manage billing"). Here you choose plan and seats, enter your GST details and pay online through Cashfree. GST invoices can be downloaded as PDF.
+- **Free trial**: by default **3 users for 10 days**. During the trial, "Upgrade now" in the banner opens Billing with the plan chosen; paying ends the trial at once.
+- **Buy now** (no trial): on the pricing calculator, choose modules, AI and users, then "Buy now": sign up and pay straight away; the plan starts as soon as it is paid. Not paid yet: the app shows "Finish payment" (pay again, or start the free trial instead). Unpaid sign-ups are removed after 7 days.
+- **Billing**: Admin › Billing (the owner, or someone whose role has "Manage billing"). Here you choose plan and seats, enter your GST details and pay online through Cashfree. GST invoices can be downloaded as PDF; each invoice is also emailed (PDF attached) to the owner and the billing email from GST details, and Billing › Invoices has "Send again".
   - Nothing is charged automatically. When a paid period ends, the banner says to pay for the next period in Billing.
   - If you don't pay: after 7 days past due the company becomes **read-only**. Everyone can still view and download, but nobody can change anything.
   - Cancelling stops the plan at the end of the paid period.

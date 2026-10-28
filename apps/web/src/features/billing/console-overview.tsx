@@ -1,5 +1,6 @@
 /** Kaampilot console → Overview (PLAN.md §21.9): totals, sign-ups per day, health of every service. */
 import { type ConsoleHealthService, type ConsoleOverview, formatInr, useConsoleHealth, useConsoleOverview } from '@kaampilot/core/billing';
+import { AlertTriangle } from '@/components/icons';
 import { ErrorState } from '@/components/common/page';
 import { Badge } from '@/components/ui/primitives';
 import { cn, formatDateTime, formatNumber } from '@/lib/utils';
@@ -14,14 +15,22 @@ export function ConsoleOverviewTab({ enabled }: { enabled: boolean }) {
   return (
     <div className="space-y-6">
       <HealthStrip enabled={enabled} />
+      {o?.invoiceEmail && (
+        // PLAN.md §24.5: invoices are still made, but not emailed (e.g. the seller's GST details are the test values).
+        <p role="alert" className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+          Invoice emails are not sent: {o.invoiceEmail}. On the server: infra/deploy/set-seller.sh (seller) or set-resend.sh (email).
+        </p>
+      )}
       <Section id="console-companies-totals" title="Companies">
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <StatTile label="All companies" value={c?.total} loading={loading} />
           <StatTile label="Paid, active" value={c?.active} loading={loading} />
           <StatTile label="On trial" value={c?.trialing} loading={loading} />
           <StatTile label="Free" value={c?.free} loading={loading} hint={c ? `${c.complimentary} complimentary` : undefined} />
           <StatTile label="Past due / read-only" value={c ? `${c.pastDue} / ${c.readOnly}` : undefined} loading={loading} tone={c && c.pastDue + c.readOnly > 0 ? 'warning' : undefined} />
           <StatTile label="Suspended" value={c?.suspended} loading={loading} tone={c && c.suspended > 0 ? 'danger' : undefined} />
+          <StatTile label="Waiting for payment" value={c?.pendingPayment ?? 0} loading={loading} hint="Buy now, not paid yet" />
         </dl>
       </Section>
       <Section id="console-people-totals" title="People">

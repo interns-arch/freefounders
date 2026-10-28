@@ -18,8 +18,10 @@ import type {
   FakeOutcome,
   FakeResult,
   Invoice,
+  InvoiceEmailResult,
   InvoiceSummary,
   Plan,
+  StartTrialResult,
   SwitchToFreeResult,
   TrialDefaults,
 } from './types';
@@ -56,6 +58,10 @@ export const billingApi = {
   switchToFree: () => platformApi.post<SwitchToFreeResult>('/billing/free'),
   invoices: () => platformApi.get<InvoiceSummary[]>('/billing/invoices'),
   invoice: (id: string) => platformApi.get<Invoice>(`/billing/invoices/${encodeURIComponent(id)}`),
+  /** PLAN.md §24.5: "Send again": the invoice with its PDF to the owner and the billing email. */
+  emailInvoice: (id: string) => platformApi.post<InvoiceEmailResult>(`/billing/invoices/${encodeURIComponent(id)}/email`),
+  /** PLAN.md §24.4: a "Buy now" company that has not paid starts the free trial instead. */
+  startTrial: () => platformApi.post<StartTrialResult>('/billing/start-trial'),
   devAdvance: (days: number) => platformApi.post<unknown>('/billing/dev/advance', { days }),
   devRenew: (outcome: 'success' | 'failure') => platformApi.post<unknown>('/billing/dev/renew', { outcome }),
 
@@ -77,6 +83,12 @@ export const billingApi = {
   trialDefaults: () => platformApi.get<TrialDefaults>('/console/trial-defaults'),
   setTrialDefaults: (body: TrialDefaults) => platformApi.put<TrialDefaults>('/console/trial-defaults', body),
   consoleStatus: (id: string, status: string) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/status`, { status }),
+  /** PLAN.md §24.4: a "Buy now" company paid outside the gateway; more days before an unpaid one is cleaned up. */
+  consoleMarkPaid: (id: string) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/mark-paid`),
+  consoleExtendPending: (id: string, days: number) => platformApi.post<unknown>(`/console/companies/${encodeURIComponent(id)}/pending-extend`, { days }),
+  /** PLAN.md §24.5: the billing email (null clears it) and "Send again" for any invoice. */
+  consoleBillingEmail: (id: string, email: string | null) => platformApi.put<{ email: string | null }>(`/console/companies/${encodeURIComponent(id)}/billing-email`, { email }),
+  consoleEmailInvoice: (invoiceId: string) => platformApi.post<InvoiceEmailResult>(`/console/invoices/${encodeURIComponent(invoiceId)}/email`),
 };
 
 /**
@@ -167,6 +179,16 @@ export function useSwitchToFree() {
   const after = useAfterBillingChange();
   return useMutation({ mutationFn: billingApi.switchToFree, onSuccess: after });
 }
+/** "Send again" (Billing → Invoices). */
+export function useEmailInvoice() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: billingApi.emailInvoice, onSuccess: () => qc.invalidateQueries({ queryKey: billingKeys.all }) });
+}
+/** "Start the free trial instead" (PLAN.md §24.4): the apps are set up, then the session is renewed (it gets the apps). */
+export function useStartTrialInstead() {
+  const after = useAfterBillingChange();
+  return useMutation({ mutationFn: billingApi.startTrial, onSuccess: after });
+}
 export function useResumeSubscription() {
   const after = useAfterBillingChange();
   return useMutation({ mutationFn: billingApi.resume, onSuccess: after });
@@ -203,15 +225,31 @@ export function useConsoleAction() {
         | { kind: 'trialOverride'; days?: number; maxUsers?: number }
         | { kind: 'plan'; plan: string; seats: number; modules?: BillingModuleKey[]; ai?: boolean }
         | { kind: 'status'; status: 'suspended' | 'active' | string }
+        | { kind: 'markPaid' }
+        | { kind: 'extendPending'; days: number }
+        | { kind: 'billingEmail'; email: string | null }
+        | { kind: 'emailInvoice'; invoiceId: string }
       ),
-    ) =>
-      a.kind === 'trial'
-        ? billingApi.consoleTrial(a.id, a.days)
-        : a.kind === 'trialOverride'
-          ? billingApi.consoleTrialOverride(a.id, { days: a.days, maxUsers: a.maxUsers })
-          : a.kind === 'plan'
-            ? billingApi.consolePlan(a.id, a.plan, a.seats, { modules: a.modules, ai: a.ai })
-            : billingApi.consoleStatus(a.id, a.status),
+    ): Promise<unknown> => {
+      switch (a.kind) {
+        case 'trial':
+          return billingApi.consoleTrial(a.id, a.days);
+        case 'trialOverride':
+          return billingApi.consoleTrialOverride(a.id, { days: a.days, maxUsers: a.maxUsers });
+        case 'plan':
+          return billingApi.consolePlan(a.id, a.plan, a.seats, { modules: a.modules, ai: a.ai });
+        case 'markPaid':
+          return billingApi.consoleMarkPaid(a.id);
+        case 'extendPending':
+          return billingApi.consoleExtendPending(a.id, a.days);
+        case 'billingEmail':
+          return billingApi.consoleBillingEmail(a.id, a.email);
+        case 'emailInvoice':
+          return billingApi.consoleEmailInvoice(a.invoiceId);
+        default:
+          return billingApi.consoleStatus(a.id, a.status);
+      }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: billingKeys.console }),
   });
 }

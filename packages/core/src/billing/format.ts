@@ -120,6 +120,7 @@ export const STATE_LABELS: Record<SubscriptionState, string> = {
   read_only: 'Read-only',
   suspended: 'Suspended',
   cancelled: 'Cancelled',
+  pending_payment: 'Waiting for payment',
 };
 
 export const INTERVAL_LABELS: Record<BillingInterval, string> = { month: 'Monthly', year: 'Yearly' };

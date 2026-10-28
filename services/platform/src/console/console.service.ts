@@ -137,7 +137,10 @@ export class ConsoleDashboardService {
         readOnly: summary.readOnly,
         suspended: summary.suspended,
         cancelled: summary.cancelled,
+        pendingPayment: summary.pendingPayment,
       },
+      /** PLAN.md §24.5: why invoice emails are not sent on this server (e.g. "Seller GST details not set"); null = fine. */
+      invoiceEmail: summary.invoiceEmail,
       people: { total: people.people, active: people.active_people, accounts: people.accounts, adminLogins: people.logins, staff: people.staff },
       activeUsers: { today: active.today, d7: active.d7, d30: active.d30 },
       signups,
@@ -188,7 +191,7 @@ export class ConsoleDashboardService {
        order by (p.platform_role = 'owner') desc, p.full_name`);
     const [sub] = await this.rows<Record<string, unknown>>(sql`select * from platform.subscriptions where company_id = ${id}`);
     const invoices = await this.rows<Record<string, unknown>>(sql`
-      select id, number, issued_at, period_start, period_end, subtotal, cgst + sgst + igst as tax, total, status
+      select id, number, issued_at, period_start, period_end, subtotal, cgst + sgst + igst as tax, total, status, emailed_at, emailed_to, email_error
         from platform.invoices where company_id = ${id} order by issued_at desc limit 200`);
     const payments = await this.rows<Record<string, unknown>>(sql`
       select id, created_at, gateway, gateway_payment_id, amount, status, reason
@@ -202,7 +205,7 @@ export class ConsoleDashboardService {
       select id, at, action, staff_email, details, ip from platform.staff_audit where company_id = ${id} order by at desc limit 100`);
     const [errors] = await this.rows<{ n: number }>(sql`
       select coalesce(sum(count), 0)::int as n from platform.service_logs where company_id = ${id} and level = 'error' and at >= now() - interval '7 days'`);
-    const [profile] = await this.rows<Record<string, unknown>>(sql`select legal_name, gstin, state from platform.billing_profiles where company_id = ${id}`);
+    const [profile] = await this.rows<Record<string, unknown>>(sql`select legal_name, gstin, state, email from platform.billing_profiles where company_id = ${id}`);
     return {
       company,
       people: people.map((p) => ({
@@ -232,8 +235,24 @@ export class ConsoleDashboardService {
             gateway: sub.gateway ?? null,
           }
         : null,
-      billingProfile: profile ? { legalName: profile.legal_name, gstin: profile.gstin, state: profile.state } : null,
-      invoices: invoices.map((r) => ({ id: r.id, number: r.number, issuedAt: iso(r.issued_at), periodStart: iso(r.period_start), periodEnd: iso(r.period_end), subtotal: r.subtotal, tax: Number(r.tax), total: r.total, status: r.status })),
+      billingProfile: profile ? { legalName: profile.legal_name, gstin: profile.gstin, state: profile.state, email: (profile.email as string | null) ?? null } : null,
+      invoices: invoices.map((r) => ({
+        id: r.id,
+        number: r.number,
+        issuedAt: iso(r.issued_at),
+        periodStart: iso(r.period_start),
+        periodEnd: iso(r.period_end),
+        subtotal: r.subtotal,
+        tax: Number(r.tax),
+        total: r.total,
+        status: r.status,
+        // PLAN.md §24.5: the invoice email.
+        emailedAt: iso(r.emailed_at),
+        emailedTo: (r.emailed_to as string[] | null) ?? [],
+        emailError: (r.email_error as string | null) ?? null,
+      })),
+      /** Why invoice emails are not sent on this server (null = they are). */
+      invoiceEmail: this.billing.invoiceEmailProblem(),
       payments: payments.map((r) => ({ id: r.id, at: iso(r.created_at), gateway: r.gateway, gatewayPaymentId: r.gateway_payment_id, amount: r.amount, status: r.status, reason: r.reason })),
       planChanges: [
         ...checkouts.map((r) => ({ at: iso(r.completed_at ?? r.created_at), kind: 'checkout', text: `${String(r.plan)} · ${String(r.interval)} · ${String(r.seats)} users · ${String(r.gateway)}`, status: r.status as string, amount: r.total as number })),

@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, HttpExcepti
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthService, hashPassword, type Issued, type Meta } from '../auth/auth.service';
-import { BillingService } from '../billing/billing.service';
+import { BillingService, type BuyInput, buySchema } from '../billing/billing.service';
 import { stateName } from '../billing/gst';
 import { badRequest, type Caller } from '../common/http';
 import { CompanySetupService } from '../company/setup.service';
@@ -38,6 +38,8 @@ export const completeSchema = z.object({
   username: z.string().trim().max(60).optional(),
   company: companySchema,
   client: z.enum(['web', 'mobile']).default('web'),
+  /** PLAN.md §24.4 "Buy now": pay for this plan straight away, without the free trial. */
+  buy: buySchema.optional(),
 });
 export const forgotSchema = z.object({ identifier: identifierSchema });
 /** Sign in with a code (PLAN.md §21.8). */
@@ -203,15 +205,39 @@ export class AccountsService {
     return account;
   }
 
-  /** POST signup/complete: account + company + owner + 14-day Suite trial, set up in the apps, signed in. */
+  /**
+   * POST signup/complete: account + company + owner + the free trial, set up in the apps, signed in.
+   * With `buy` (PLAN.md §24.4): no trial; the company waits for its first payment (pending_payment, apps not set up
+   * yet) and the answer carries the checkout of the chosen plan (FakePay / Cashfree). The apps are set up when it is
+   * paid, or when the owner starts the free trial instead.
+   */
   async signupComplete(input: z.infer<typeof completeSchema>, meta: Meta) {
+    // Payments must be on before anything is made for "Buy now" (503 "Payments are not set up yet").
+    if (input.buy) this.billing.assertPaymentsOn();
     const checked = await this.checkSignup(input.signupToken, input.password, meta.ip, input.fullName, input.username);
     if (checked.existing) await this.assertCompanyQuota(checked.existing.id);
     const { account, ids } = await this.dbs.tx(async () => {
       const account = await this.takeSignup(input.signupToken, checked, input.fullName, input.password);
-      return { account, ids: await this.insertCompany(account, input.company) };
+      return { account, ids: await this.insertCompany(account, input.company, input.buy) };
     });
+    if (input.buy) return this.signInToPay(account, ids, input.buy, meta);
     return this.provisionAndSignIn(account, ids, meta);
+  }
+
+  /** "Buy now": signed in to the new (pending) company, with its checkout opened; nothing is set up in the apps yet. */
+  private async signInToPay(account: AccountRow, ids: { companyId: string; ownerId: string; company: typeof companies.$inferSelect }, buy: BuyInput, meta: Meta) {
+    const tokens = await this.auth.issueFor(ids.ownerId, meta);
+    let checkout: { sessionId: string; checkoutUrl: string; gateway: string } | null = null;
+    let checkoutError: string | null = null;
+    try {
+      checkout = await this.billing.checkout({ companyId: ids.companyId, personId: ids.ownerId } as Caller, { ...buy, interval: 'month' });
+    } catch (err) {
+      // The company stays waiting for its payment: the "Finish payment" screen lets the owner try again.
+      checkoutError = err instanceof HttpException ? errorText(err) : 'The payment could not be started. Try again from the next screen.';
+      this.log.warn(`Buy now for ${ids.company.code}: checkout not started: ${checkoutError}`);
+    }
+    this.log.log(`Company ${ids.company.code} for account ${account.id}: waiting for its first payment (Buy now)`);
+    return { ...tokens, companyId: ids.companyId, provisionMs: 0, setupIncomplete: false, pendingPayment: true, checkout, checkoutError };
   }
 
   // ─── new company for an account ─────────────────────────────────────────
@@ -237,17 +263,20 @@ export class AccountsService {
     if ((r?.n ?? 0) >= COMPANIES_PER_DAY) throw new HttpException({ statusCode: 429, message: 'Too many new companies today. Try again tomorrow.' }, 429);
   }
 
-  /** The rows: company (code from its name), its owner (the account's membership), the trial. */
-  private async insertCompany(account: AccountRow, input: CompanyInput) {
+  /** The rows: company (code from its name), its owner (the account's membership), the trial (or, with `buy`, the plan waiting for payment). */
+  private async insertCompany(account: AccountRow, input: CompanyInput, buy?: BuyInput) {
     // Unique across the product (409 on the field; the lock is held until this transaction ends).
     const name = await assertCompanyNameFree(this.dbs.db, input.name);
     const code = await this.setup.freeCode(name);
-    const [company] = await this.dbs.db.insert(companies).values({ name, code, enabledApps: [...new Set(input.apps)] }).returning();
+    const apps = buy ? await this.billing.appsForBuy(buy) : [...new Set(input.apps)];
+    const [company] = await this.dbs.db.insert(companies).values({ name, code, enabledApps: apps }).returning();
     const [owner] = await this.dbs.db
       .insert(people)
       .values({ companyId: company.id, fullName: account.fullName, email: account.email, mobile: account.mobile, platformRole: 'owner', accountId: account.id })
       .returning({ id: people.id });
-    await this.billing.startTrial(this.dbs.db, company.id, { legalName: name, state: input.state ?? null, email: account.email });
+    const buyer = { legalName: name, state: input.state ?? null, email: account.email };
+    if (buy) await this.billing.startPending(this.dbs.db, company.id, buyer, buy);
+    else await this.billing.startTrial(this.dbs.db, company.id, buyer);
     if (input.teamSize || input.industry) this.log.log(`New company ${code}: team ${input.teamSize ?? '?'}, industry ${input.industry ?? '?'}`);
     return { companyId: company.id, ownerId: owner.id, company };
   }
@@ -388,4 +417,11 @@ export class AccountsService {
     await this.auth.revokeAccount(account.id);
     return { ok: true };
   }
+}
+
+/** The message of an HTTP error for the person (Nest keeps it in the response body). */
+function errorText(err: HttpException): string {
+  const r = err.getResponse();
+  const m = typeof r === 'string' ? r : (r as { message?: unknown }).message;
+  return Array.isArray(m) ? String(m[0]) : typeof m === 'string' ? m : err.message;
 }

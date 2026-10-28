@@ -2,14 +2,15 @@
  * The pricing calculator (PLAN.md §24): pick modules one by one or Complete, AI on or off (for the whole subscription),
  * the number of users → the monthly total before GST, with the GST shown separately. Prices come from
  * GET /api/platform/public/pricing (usePublicPricing), else the §24 prices built into @kaampilot/core.
+ * "Buy now" (PLAN.md §24.4) carries the choice into sign-up (`/signup?buy=…`) to pay at once, without the trial.
  * Touch screens get 44 px controls; on phones and tablets a small total bar sticks to the bottom of the screen while the
  * choices are on screen, so the price is visible while changing them with one thumb.
  */
-import { type PricedModuleKey, type PublicPricing, quotePrice } from '@kaampilot/core';
+import { buyNowPath, type PricedModuleKey, type PublicPricing, quotePrice } from '@kaampilot/core';
 import { useAiStatus } from '@kaampilot/core/ai';
 import { useId, useState } from 'react';
 import { Link } from 'react-router';
-import { Check, ListChecks, MapPin, Minus, Package, Plus, Sparkles } from '@/components/icons';
+import { Check, CreditCard, ListChecks, MapPin, Minus, Package, Plus, Sparkles } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
@@ -181,10 +182,23 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
           Prices are per user per month; GST is added on the invoice. Free for {pricing.trial.days} days with up to {pricing.trial.maxUsers} users, no card needed.
         </p>
-        <div className="mt-auto pt-5">
+        <div className="mt-auto grid gap-2 pt-5">
           <Button variant="cta" size="lg" className="w-full pointer-coarse:min-h-[44px]" asChild>
             <Link to="/signup">Start free trial</Link>
           </Button>
+          {/* PLAN.md §24.4: pay straight away, without the trial; the choice goes into sign-up. */}
+          {nothing ? (
+            <Button variant="outline" size="lg" className="w-full pointer-coarse:min-h-[44px]" disabled>
+              <CreditCard /> Buy now
+            </Button>
+          ) : (
+            <Button variant="outline" size="lg" className="w-full pointer-coarse:min-h-[44px]" asChild>
+              <Link to={buyNowPath({ complete, modules, ai, users })} data-testid="pricing-buy-now">
+                <CreditCard /> Buy now
+              </Link>
+            </Button>
+          )}
+          <p className="text-center text-xs text-muted-foreground">Buy now: pay for this plan today, no trial. Starts at once.</p>
         </div>
       </div>
     </div>

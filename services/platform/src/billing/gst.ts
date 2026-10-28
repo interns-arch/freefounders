@@ -22,14 +22,32 @@ export const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 export const SAC_SAAS = '997331';
 export const GST_RATE = 18;
 
+/** The seller GSTIN printed while SELLER_GSTIN is not set (a test value, never a real business). */
+export const TEST_SELLER_GSTIN = '27AAAAA0000A1Z5';
+
 /** Who sells (env, with clearly fake defaults for testing). */
 export function seller(): GstParty {
   return {
     name: process.env.SELLER_NAME?.trim() || 'Kaampilot (test)',
-    gstin: process.env.SELLER_GSTIN?.trim() || '27AAAAA0000A1Z5',
+    gstin: process.env.SELLER_GSTIN?.trim() || TEST_SELLER_GSTIN,
     state: stateName(process.env.SELLER_STATE) ?? 'Maharashtra',
     address: process.env.SELLER_ADDRESS?.trim() || 'Test address, Pune, Maharashtra 411001 (not a real business)',
   };
+}
+
+/**
+ * PLAN.md §24.5: in production the invoice email needs the real seller (SELLER_NAME, SELLER_GSTIN, SELLER_STATE,
+ * SELLER_ADDRESS; infra/deploy/set-seller.sh). Null when fine; else why invoice emails are not sent (invoices are still
+ * created). Outside production the test seller is fine.
+ */
+export function sellerProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.NODE_ENV !== 'production') return null;
+  const gstin = env.SELLER_GSTIN?.trim().toUpperCase() ?? '';
+  if (!gstin || gstin === TEST_SELLER_GSTIN) return 'Seller GST details not set (SELLER_GSTIN is empty or the test value)';
+  if (!GSTIN_RE.test(gstin)) return 'Seller GST details not set (SELLER_GSTIN is not a valid GSTIN)';
+  if (!env.SELLER_NAME?.trim() || !env.SELLER_ADDRESS?.trim()) return 'Seller GST details not set (SELLER_NAME or SELLER_ADDRESS is empty)';
+  if (!stateName(env.SELLER_STATE)) return 'Seller GST details not set (SELLER_STATE is not an Indian state)';
+  return null;
 }
 
 export interface Tax {

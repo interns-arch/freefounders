@@ -71,6 +71,34 @@ export interface BillingSummary {
   perUser?: number;
   /** The older Free plan can still be chosen (companies from before §24.1). */
   freeAvailable?: boolean;
+  /** PLAN.md §24.4: a "Buy now" company waiting for its first payment (state pending_payment); null otherwise. */
+  pending?: PendingPayment | null;
+  /** PLAN.md §24.5: why invoice emails are not sent on this server; null = they are. */
+  invoiceEmail?: string | null;
+}
+
+/** GET billing → pending: the plan chosen with "Buy now", not paid yet. */
+export interface PendingPayment {
+  /** Cleaned up after this if still not paid. */
+  payBy: string | null;
+  /** Never had a trial: "Start the free trial instead" is offered. */
+  canStartTrial: boolean;
+  seats: number;
+  /** Per user per month (paise, before GST). */
+  perUser: number;
+  /** The payment started last, still open (continue it). */
+  openCheckout: { sessionId: string; checkoutUrl: string } | null;
+}
+
+/** POST billing/start-trial. */
+export type StartTrialResult = BillingSummary & { setupIncomplete?: boolean };
+
+/** POST billing/invoices/:id/email (and the console's): what happened to the invoice email. */
+export interface InvoiceEmailResult {
+  sent: boolean;
+  to: string[];
+  error: string | null;
+  emailedAt: string | null;
 }
 
 export type PaymentGatewayName = 'fake' | 'cashfree';
@@ -194,6 +222,10 @@ export interface InvoiceSummary {
   status?: string;
   periodStart?: string | null;
   periodEnd?: string | null;
+  /** PLAN.md §24.5: the invoice email: last sent (to whom), or the last error. */
+  emailedAt?: string | null;
+  emailedTo?: string[];
+  emailError?: string | null;
 }
 
 /** GET billing/invoices/:id: every field of a GST tax invoice. */
@@ -228,6 +260,10 @@ export interface ConsoleSummary {
   readOnly: number;
   suspended: number;
   companies: number;
+  /** PLAN.md §24.4: "Buy now" companies waiting for their first payment. */
+  pendingPayment?: number;
+  /** PLAN.md §24.5: why invoice emails are not sent on this server; null = they are. */
+  invoiceEmail?: string | null;
 }
 
 /** GET console/companies: one row. */
@@ -248,13 +284,32 @@ export interface ConsoleCompany {
   trialMaxUsers?: number | null;
   trialEndsAt: string | null;
   createdAt: string;
+  /** PLAN.md §24.4: a "Buy now" company waiting for payment is cleaned up after this. */
+  payBy?: string | null;
+  /** PLAN.md §24.5: invoices also go here (besides the owner). */
+  billingEmail?: string | null;
 }
 
 /** POST billing/free: the Billing view plus when Free starts (PLAN.md §21.7). */
 export type SwitchToFreeResult = BillingSummary & { freeFrom: 'now' | 'period_end' };
 
 /** Owner console actions written to the staff audit log (PLAN.md §21.7). */
-export type ConsoleAuditAction = 'trial.extend' | 'trial.set' | 'trial.defaults' | 'plan.set' | 'company.suspend' | 'company.reactivate' | 'view.company' | 'view.user' | 'view.users' | 'view.billing' | 'view.logs';
+export type ConsoleAuditAction =
+  | 'trial.extend'
+  | 'trial.set'
+  | 'trial.defaults'
+  | 'plan.set'
+  | 'company.suspend'
+  | 'company.reactivate'
+  | 'pending.mark_paid'
+  | 'pending.extend'
+  | 'billing.email'
+  | 'invoice.email'
+  | 'view.company'
+  | 'view.user'
+  | 'view.users'
+  | 'view.billing'
+  | 'view.logs';
 
 /** GET console/audit: one staff action. */
 export interface ConsoleAuditRow {

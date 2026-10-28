@@ -20,7 +20,8 @@ export interface MeAccount {
   isStaff: boolean;
 }
 
-export type SubscriptionState = 'trialing' | 'active' | 'past_due' | 'read_only' | 'suspended' | 'cancelled';
+/** pending_payment (PLAN.md §24.4): a "Buy now" company before its first payment (apps closed, "Finish payment"). */
+export type SubscriptionState = 'trialing' | 'active' | 'past_due' | 'read_only' | 'suspended' | 'cancelled' | 'pending_payment';
 
 /** The company's subscription, as everyone sees it (banners, read-only). Null when billing is not in use. */
 export interface MeBilling {

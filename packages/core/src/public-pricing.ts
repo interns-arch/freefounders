@@ -76,3 +76,32 @@ export function usePublicPricing(): { pricing: PublicPricing; live: boolean; isL
   const ok = !!q.data && Array.isArray(q.data.modules) && !!q.data.complete && !!q.data.trial;
   return { pricing: ok ? { ...FALLBACK_PRICING, ...q.data } : FALLBACK_PRICING, live: ok, isLoading: q.isLoading };
 }
+
+/**
+ * "Buy now" (PLAN.md §24.4): the calculator's choice carried into sign-up as
+ * `/signup?buy=modules&m=tasks,attendance&ai=0&users=10` (or `buy=complete&ai=1&users=10`).
+ */
+export function buyNowPath(c: PriceChoice): string {
+  const q = new URLSearchParams();
+  q.set('buy', c.complete ? 'complete' : 'modules');
+  if (!c.complete) q.set('m', c.modules.join(','));
+  q.set('ai', c.ai ? '1' : '0');
+  q.set('users', String(Math.max(1, Math.floor(c.users || 1))));
+  return `/signup?${q.toString().replace(/%2C/g, ',')}`;
+}
+
+const MODULE_KEYS: PricedModuleKey[] = ['tasks', 'attendance', 'assets'];
+const MAX_BUY_USERS = 10_000;
+
+/** The choice in a `?buy=…` link, or null when there is none or it makes no sense (then the free trial is offered). */
+export function parseBuyNow(search: string | URLSearchParams): PriceChoice | null {
+  const q = typeof search === 'string' ? new URLSearchParams(search) : search;
+  const buy = q.get('buy');
+  if (buy !== 'modules' && buy !== 'complete') return null;
+  const users = Math.floor(Number(q.get('users') ?? '1'));
+  if (!Number.isFinite(users) || users < 1 || users > MAX_BUY_USERS) return null;
+  const picked = (q.get('m') ?? '').split(',').map((s) => s.trim());
+  const modules = MODULE_KEYS.filter((k) => picked.includes(k));
+  if (buy === 'modules' && !modules.length) return null;
+  return { complete: buy === 'complete', modules: buy === 'complete' ? [] : modules, ai: q.get('ai') === '1' || q.get('ai') === 'true', users };
+}

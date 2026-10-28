@@ -32,6 +32,27 @@ test('pricing calculator: modules, AI and Complete for 10 users', async ({ page 
   await expect(total).toHaveText('₹3,490');
 });
 
+test('Buy now (PLAN.md §24.4): the calculator carries the plan into sign-up, which ends with the plan and "Continue to payment"', async ({ page }) => {
+  await page.goto('/pricing');
+  await page.getByRole('spinbutton').fill('10');
+  const buy = page.getByTestId('pricing-buy-now');
+  await expect(buy).toHaveAttribute('href', '/signup?buy=modules&m=tasks,attendance&ai=0&users=10');
+  await page.getByRole('switch', { name: 'Add AI' }).click();
+  await page.getByRole('checkbox', { name: /^Complete/ }).click();
+  await expect(buy).toHaveAttribute('href', '/signup?buy=complete&ai=1&users=10');
+  // Nothing picked: no Buy now link.
+  await page.getByRole('checkbox', { name: /^Complete/ }).click();
+  await page.getByRole('checkbox', { name: /^Tasks/ }).click();
+  await page.getByRole('checkbox', { name: /^Attendance/ }).click();
+  await expect(page.getByTestId('pricing-buy-now')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Buy now' })).toBeDisabled();
+  // Sign-up knows it is a purchase from the first step.
+  await page.goto('/signup?buy=complete&ai=0&users=10');
+  await expect(page.getByRole('heading', { name: 'Buy Kaampilot' })).toBeVisible();
+  await page.goto('/signup');
+  await expect(page.getByRole('heading', { name: 'Start free' })).toBeVisible();
+});
+
 test('signed in, `/` is still Home', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Email, username or employee ID').fill(OWNER.login);

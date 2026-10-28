@@ -37,12 +37,26 @@ export interface SignupCompleteInput {
   /** Required for a new account (PLAN.md §21.5); ignored for an existing one. */
   username?: string;
   company: CompanyInput;
+  /** PLAN.md §24.4 "Buy now": pay for this plan straight away, without the free trial. */
+  buy?: BuyChoice;
+}
+
+/** "Buy now" from the landing calculator or /pricing (`/signup?buy=…`). */
+export interface BuyChoice {
+  plan: 'modules' | 'complete';
+  modules?: Array<'tasks' | 'attendance' | 'assets'>;
+  ai: boolean;
+  seats: number;
 }
 
 export interface SignupComplete extends SignInTokens {
   companyId: string;
   /** The company exists and the person is signed in, but an app could not be set up yet (retried by the server). */
   setupIncomplete?: boolean;
+  /** "Buy now": the company waits for its first payment; open `checkout` (or show why it did not start). */
+  pendingPayment?: boolean;
+  checkout?: { sessionId: string; checkoutUrl: string; gateway?: string } | null;
+  checkoutError?: string | null;
 }
 
 /** GET auth/companies: every company this account belongs to. */

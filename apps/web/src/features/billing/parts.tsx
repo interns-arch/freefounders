@@ -13,6 +13,7 @@ const STATE_TONE: Record<SubscriptionState, BadgeTone> = {
   read_only: 'red',
   suspended: 'red',
   cancelled: 'neutral',
+  pending_payment: 'amber',
 };
 
 export function StateBadge({ state }: { state: SubscriptionState }) {

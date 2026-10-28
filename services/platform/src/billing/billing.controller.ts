@@ -6,11 +6,13 @@ import { type Caller, CurrentCaller, Needs, Public, ReadOnlyOk, uuidParam, ZodPi
 import {
   advanceSchema,
   auditQuerySchema,
+  billingEmailSchema,
   BillingService,
   cashfreeCheckSchema,
   checkoutSchema,
   companyTrialSchema,
   outcomeSchema,
+  pendingExtendSchema,
   profileSchema,
   renewSchema,
   seatsSchema,
@@ -140,6 +142,13 @@ export class BillingController {
     return this.billing.resume(caller.companyId);
   }
 
+  /** PLAN.md §24.4: a "Buy now" company that has not paid starts the free trial instead (if it never had one). */
+  @Post('start-trial')
+  @HttpCode(200)
+  startTrial(@CurrentCaller() caller: Caller) {
+    return this.billing.startTrialInstead(caller.companyId);
+  }
+
   @Get('invoices')
   async invoices(@CurrentCaller() caller: Caller, @Query('export') exp?: string) {
     // ?export=xlsx|csv: every invoice of the company as a file (PLAN.md §19.31)
@@ -162,6 +171,13 @@ export class BillingController {
     const inv = await this.billing.invoice(caller.companyId, uuidParam(id));
     const name = `invoice-${inv.number.replace(/[^A-Za-z0-9-]+/g, '-')}.pdf`;
     return new StreamableFile(invoicePdf(inv), { type: 'application/pdf', disposition: `attachment; filename="${name}"` });
+  }
+
+  /** PLAN.md §24.5: "Send again": the invoice with its PDF to the owner and the billing email. */
+  @Post('invoices/:id/email')
+  @HttpCode(200)
+  emailInvoice(@CurrentCaller() caller: Caller, @Param('id') id: string) {
+    return this.billing.resendInvoice(caller.companyId, uuidParam(id));
   }
 
   /** Dev tools (BILLING_DEV_TOOLS=1): 404 otherwise. */
@@ -247,6 +263,42 @@ export class ConsoleController {
   async setTrialDefaults(@CurrentCaller() caller: Caller, @Req() req: Request, @Body(new ZodPipe(trialSettingsSchema)) body: z.infer<typeof trialSettingsSchema>) {
     const staff = await this.billing.assertStaff(caller);
     return this.billing.consoleAction(staff, req.ip, 'trial.defaults', null, body, () => this.billing.setTrialDefaults(body));
+  }
+
+  /** PLAN.md §24.4: a "Buy now" company paid outside the gateway: its chosen plan starts now. */
+  @Post('companies/:id/mark-paid')
+  @HttpCode(200)
+  async markPaid(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string) {
+    const staff = await this.billing.assertStaff(caller);
+    const companyId = uuidParam(id);
+    return this.billing.consoleAction(staff, req.ip, 'pending.mark_paid', companyId, {}, () => this.billing.consoleMarkPaid(companyId));
+  }
+
+  /** PLAN.md §24.4: more days before an unpaid "Buy now" company is cleaned up. */
+  @Post('companies/:id/pending-extend')
+  @HttpCode(200)
+  async extendPending(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string, @Body(new ZodPipe(pendingExtendSchema)) body: z.infer<typeof pendingExtendSchema>) {
+    const staff = await this.billing.assertStaff(caller);
+    const companyId = uuidParam(id);
+    return this.billing.consoleAction(staff, req.ip, 'pending.extend', companyId, body, () => this.billing.consoleExtendPending(companyId, body.days));
+  }
+
+  /** PLAN.md §24.5: the company's billing email (invoices go there besides the owner). */
+  @Put('companies/:id/billing-email')
+  async billingEmail(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string, @Body(new ZodPipe(billingEmailSchema)) body: z.infer<typeof billingEmailSchema>) {
+    const staff = await this.billing.assertStaff(caller);
+    const companyId = uuidParam(id);
+    return this.billing.consoleAction(staff, req.ip, 'billing.email', companyId, { email: body.email }, () => this.billing.consoleBillingEmail(companyId, body.email));
+  }
+
+  /** PLAN.md §24.5: "Send again" for any company's invoice. */
+  @Post('invoices/:id/email')
+  @HttpCode(200)
+  async emailInvoice(@CurrentCaller() caller: Caller, @Req() req: Request, @Param('id') id: string) {
+    const staff = await this.billing.assertStaff(caller);
+    const invoiceId = uuidParam(id);
+    const companyId = await this.billing.invoiceCompany(invoiceId);
+    return this.billing.consoleAction(staff, req.ip, 'invoice.email', companyId, { invoiceId }, () => this.billing.consoleEmailInvoice(invoiceId));
   }
 
   @Post('companies/:id/status')

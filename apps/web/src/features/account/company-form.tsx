@@ -6,7 +6,7 @@ import { type CompanyInput, INDUSTRIES, TEAM_SIZES, type TeamSize, useCompanyNam
 import { INDIAN_STATES } from '@kaampilot/core/billing';
 import type { AppKey } from '@kaampilot/core';
 import { CheckCircle2, ClipboardList, Loader2, Package } from '@/components/icons';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label, NativeSelect } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/primitives';
@@ -30,6 +30,9 @@ export function CompanyForm({
   submitLabel = 'Create company',
   busy,
   nameError,
+  hideApps = false,
+  summary,
+  footnote = 'Free trial of every module. No card needed.',
 }: {
   value: CompanyInput;
   onChange: (v: CompanyInput) => void;
@@ -39,6 +42,11 @@ export function CompanyForm({
   busy?: boolean;
   /** The server refused the name at submit (409: another company has it); shown on the field until it is changed. */
   nameError?: string | null;
+  /** "Buy now" (PLAN.md §24.4): the plan decides the apps, so the app choice is not asked. */
+  hideApps?: boolean;
+  /** Shown above the button (the plan summary for "Buy now"). */
+  summary?: ReactNode;
+  footnote?: ReactNode;
 }) {
   const [errors, setErrors] = useState<Errors>(() => ({ name: nameError ?? undefined }));
   useEffect(() => {
@@ -59,7 +67,7 @@ export function CompanyForm({
       name: value.name.trim().length < 2 ? 'Enter your company’s name.' : errors.name,
       industry: value.industry ? undefined : 'Choose an industry.',
       state: value.state ? undefined : 'Choose the state (needed for GST invoices).',
-      apps: value.apps.length ? undefined : 'Choose at least one app.',
+      apps: value.apps.length || hideApps ? undefined : 'Choose at least one app.',
     };
     setErrors(next);
     const first = (['name', 'industry', 'state'] as const).find((k) => next[k]);
@@ -143,6 +151,7 @@ export function CompanyForm({
           )}
         </div>
       </div>
+      {!hideApps && (
       <fieldset aria-describedby={errors.apps ? 'company-apps-error' : undefined}>
         <legend className="mb-1.5 text-sm font-medium">Apps</legend>
         <div className="space-y-2">
@@ -166,11 +175,13 @@ export function CompanyForm({
           </p>
         )}
       </fieldset>
+      )}
+      {summary}
       <FormError>{error}</FormError>
       <Button type="submit" size="lg" className="h-11 w-full" loading={busy} disabled={nameBlocked}>
         {submitLabel}
       </Button>
-      <p className="text-center text-xs text-muted-foreground">Free trial of every module. No card needed.</p>
+      {footnote && <p className="text-center text-xs text-muted-foreground">{footnote}</p>}
     </form>
   );
 }
@@ -188,8 +199,21 @@ function setupSteps(apps: string[]) {
 }
 
 /** Full screen while the company is being provisioned (often 10–15 seconds; after 20 s a "still working" line). */
-export function SetupScreen({ companyName, apps = ['tasks', 'assets'], error, onRetry }: { companyName: string; apps?: string[]; error?: string | null; onRetry?: () => void }) {
-  const steps = setupSteps(apps);
+export function SetupScreen({
+  companyName,
+  apps = ['tasks', 'assets'],
+  error,
+  onRetry,
+  steps: given,
+}: {
+  companyName: string;
+  apps?: string[];
+  error?: string | null;
+  onRetry?: () => void;
+  /** Other steps than the app set-up (e.g. "Buy now": create the company, open the payment). */
+  steps?: string[];
+}) {
+  const steps = given ?? setupSteps(apps);
   const [i, setI] = useState(0);
   const [slow, setSlow] = useState(false);
   useEffect(() => {

@@ -30,6 +30,7 @@ Postgres and the APIs are on an `internal` Docker network: no host ports, no int
 | `bootstrap.sh` | once: first company + owner + `/console` staff account, then `company sync` |
 | `set-cashfree.sh` | switches payments to Cashfree: asks for the App ID, the Secret Key (hidden) and production/sandbox, writes `.env`, recreates the platform only |
 | `set-resend.sh` | switches email codes to Resend: asks for the API key (hidden) and the From address, writes `.env`, recreates the platform only |
+| `set-seller.sh` | the seller on GST invoices: asks for the legal name, GSTIN, state and address (not secret), checks the GSTIN and that it belongs to the state, writes `.env`, recreates the platform only |
 | `set-msg91.sh` | switches one-time codes to MSG91: asks for the authkey (hidden) and the SMS and/or email template IDs (email only is fine), writes `.env`, recreates the platform only |
 | `backup.sh` | nightly backup: all databases + uploaded files into `FF_HOME/backups`, 14 days kept (see **Backups**) |
 
@@ -103,6 +104,7 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 | `TASKS_SECRET_KEY`, `TASKS_SETTINGS_KEY` | Django secret key; per-company settings encryption key |
 | `POSTGRES_PASSWORD`, `*_DB_PASSWORD` | database superuser and per-service roles (read at first Postgres start only) |
 | `FF_COMPANY_*`, `FF_OWNER_*`, `FF_STAFF_*` | first company, owner login and staff account (`bootstrap.sh`) |
+| `SELLER_NAME`, `SELLER_GSTIN`, `SELLER_STATE`, `SELLER_ADDRESS` | who sells on the GST invoices (PLAN.md §24.5). Set them only with `set-seller.sh` (below). Unset = the test seller "Kaampilot (test)": invoices are still made, but they are **not emailed** and the platform log and the console say "Seller GST details not set" |
 | `MOBILE_MIN_VERSION` | phone app update banner (PLAN.md §19.40). Empty (default) = off. Set it to the newest APK's version (e.g. `1.2.2`) after putting that APK at `FF_HOME/web/download/kaampilot.apk`: every installed app older than it shows a non-blocking banner "A new version of Kaampilot is available" with a link that downloads https://kaampilot.com/download/kaampilot.apk in the phone's browser. Then `ff.sh up -d platform`. |
 | `MOBILE_APK_URL` | where that link goes: a path on this site (default `/download/kaampilot.apk`) or a full https:// address |
 | `LOG_SINK_TOKEN` | optional: the shared token Tasks / Assets must send to the Platform's log sink (`/internal/logs`, PLAN.md §21.9). Empty (default) = internal network only |
@@ -165,6 +167,17 @@ Sign-in with a mobile number is not available." everywhere, `DEMO_MODE` or not. 
    address (= `Kaampilot <otp@kaampilot.com>`). It recreates the platform only.
 4. The platform log shows `One-time codes: Resend email from Kaampilot <otp@kaampilot.com> …`. Try "Forgot password"
    with your email address. Back to the fake sender: `set-resend.sh --off`.
+
+## Seller GST details and invoice emails
+PLAN.md §24.5: after every payment (Cashfree or FakePay) the GST invoice is emailed with its PDF, through Resend (the
+same `RESEND_API_KEY` / `RESEND_FROM` as the codes), to the owner and the company's billing email (Billing → GST
+details, or the console). Billing → Invoices and the console show when it was sent (or why not) and have **Send again**.
+A problem never stops a payment. Two things must be set on the server:
+1. Resend (above).
+2. The seller: `sudo /opt/freefounders/app/infra/deploy/set-seller.sh` → legal name, GSTIN, state, address (as on the
+   GST certificate). It checks the GSTIN (15 characters, first two digits = the state's code), writes `.env` and
+   recreates the platform only. Until then the platform log says `Seller GST details not set: invoice emails are NOT
+   sent` and the console Overview shows the same warning. Invoices made before keep the seller they were made with.
 
 ## Switching on MSG91 codes
 Sign-up, forgot password and "Sign in with a code" (PLAN.md §21.8) send a 6-digit code. Our server makes and checks the

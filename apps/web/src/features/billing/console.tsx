@@ -369,6 +369,10 @@ export const ACTION_LABELS: Record<ConsoleAuditAction, string> = {
   'plan.set': 'Set plan',
   'company.suspend': 'Suspended',
   'company.reactivate': 'Reactivated',
+  'pending.mark_paid': 'Marked paid',
+  'pending.extend': 'Extended payment time',
+  'billing.email': 'Billing email',
+  'invoice.email': 'Emailed invoice',
   'view.company': 'Viewed company',
   'view.user': 'Viewed user',
   'view.users': 'Downloaded users',
@@ -391,6 +395,10 @@ export function auditSummary(r: Pick<ConsoleAuditRow, 'action' | 'details'>): st
     return [input.days !== undefined ? `${String(input.days)} days from the start` : '', input.maxUsers !== undefined ? `${String(input.maxUsers)} users` : '', after?.trialEndsAt ? `ends ${formatDate(after.trialEndsAt as string)}` : '']
       .filter(Boolean)
       .join(' · ');
+  if (r.action === 'pending.extend') return `+${String(input.days ?? '?')} days to pay`;
+  if (r.action === 'billing.email') return input.email ? String(input.email) : 'Cleared';
+  if (r.action === 'invoice.email') return `Invoice ${String(input.invoiceId ?? '').slice(0, 8)}`;
+  if (r.action === 'pending.mark_paid') return `${String(before?.state ?? '—')} → ${String(after?.state ?? '—')} (${String(after?.plan ?? '—')})`;
   if (r.action === 'plan.set') {
     const mods = Array.isArray(after?.modules) ? ` (${(after.modules as string[]).join(', ')})` : '';
     return `${String(before?.plan ?? '—')} → ${String(after?.plan ?? input.plan ?? '—')}${mods}${after?.ai ? ' with AI' : ''}${after?.seats ? `, ${String(after.seats)} users` : ''}`;

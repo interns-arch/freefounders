@@ -393,7 +393,10 @@ export const billingSettings = platform.table('billing_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** One per company. States: trialing, active, cancelled, past_due, read_only, suspended (PLAN.md §21.1). */
+/**
+ * One per company. States: trialing, active, cancelled, past_due, read_only, suspended (PLAN.md §21.1), and
+ * pending_payment (PLAN.md §24.4: "Buy now" without the trial; apps closed until the first payment).
+ */
 export const subscriptions = platform.table('subscriptions', {
   companyId: uuid('company_id')
     .primaryKey()
@@ -428,6 +431,10 @@ export const subscriptions = platform.table('subscriptions', {
   trialMaxUsers: integer('trial_max_users'),
   /** A company from before §24.1: a trial or cancelled plan may still end on the Free plan (else read-only). */
   freeFallback: boolean('free_fallback').notNull().default(false),
+  /** PLAN.md §24.4: the company's apps are not set up yet (a "Buy now" company before its first payment or trial). */
+  setupPending: boolean('setup_pending').notNull().default(false),
+  /** PLAN.md §24.4: a pending_payment company not paid by then is cleaned up by the billing clock (staff can extend it). */
+  payBy: timestamp('pay_by', { withTimezone: true }),
   ...timestamps,
 });
 
@@ -512,6 +519,10 @@ export const invoices = platform.table(
     total: integer('total').notNull(),
     status: text('status').notNull().default('paid'),
     checkoutSessionId: uuid('checkout_session_id').references(() => checkoutSessions.id),
+    /** PLAN.md §24.5: the invoice email (PDF attached) — when it was last sent, to whom, and the last error. */
+    emailedAt: timestamp('emailed_at', { withTimezone: true }),
+    emailedTo: text('emailed_to').array(),
+    emailError: text('email_error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('invoices_fy_seq_uq').on(t.financialYear, t.seq), index('invoices_company_idx').on(t.companyId)],

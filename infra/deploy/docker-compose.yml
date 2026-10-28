@@ -88,6 +88,12 @@ services:
       MSG91_EMAIL_DOMAIN: ${MSG91_EMAIL_DOMAIN:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
+      # Who sells on the GST invoices (PLAN.md §24.5; set-seller.sh). Unset = the test seller: invoices are still made,
+      # but in production they are not emailed and the log says "Seller GST details not set".
+      SELLER_NAME: ${SELLER_NAME:-}
+      SELLER_GSTIN: ${SELLER_GSTIN:-}
+      SELLER_STATE: ${SELLER_STATE:-}
+      SELLER_ADDRESS: ${SELLER_ADDRESS:-}
       # "Ask Kaampilot" AI helper (PLAN.md §24.3): off until AI_API_KEY is set (infra/deploy/set-ai.sh); the key lives
       # only in FF_HOME/.env. AI_PROVIDER anthropic | openai; AI_MODEL empty = the provider's default.
       AI_PROVIDER: ${AI_PROVIDER:-anthropic}

@@ -6,8 +6,12 @@ import { planModules } from './pricing';
 
 /** Seats while an older trial runs (PLAN.md §21; trials started before §24.1 have no trial_max_users). */
 export const TRIAL_SEAT_LIMIT = 50;
-export const READ_ONLY_STATES = ['read_only', 'suspended'] as const;
+/** pending_payment (PLAN.md §24.4): a "Buy now" company before its first payment: apps closed, Billing open. */
+export const READ_ONLY_STATES = ['read_only', 'suspended', 'pending_payment'] as const;
 export const READ_ONLY_MESSAGE = "Your company's subscription is read-only. The owner can renew it in Billing.";
+export const PENDING_MESSAGE = 'Finish the payment to start using Kaampilot.';
+/** The 402 message for a refused change in this state. */
+export const readOnlyMessage = (state: string | null | undefined) => (state === 'pending_payment' ? PENDING_MESSAGE : READ_ONLY_MESSAGE);
 export const SUSPENDED_MESSAGE = "Your company's subscription is suspended. Ask the owner to renew it in Billing.";
 
 export type SubscriptionRow = typeof subscriptions.$inferSelect;
@@ -24,7 +28,7 @@ export async function subscriptionOf(dbs: DbService, companyId: string): Promise
   if (row) return row;
   const now = new Date();
   return {
-    sub: { companyId, plan: 'complimentary', interval: 'month', state: 'active', stateSince: now, seats: 0, nextPeriodSeats: null, trialEndsAt: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, clockOffsetDays: 0, gateway: null, modules: null, ai: false, trialMaxUsers: null, freeFallback: false, createdAt: now, updatedAt: now },
+    sub: { companyId, plan: 'complimentary', interval: 'month', state: 'active', stateSince: now, seats: 0, nextPeriodSeats: null, trialEndsAt: null, currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, clockOffsetDays: 0, gateway: null, modules: null, ai: false, trialMaxUsers: null, freeFallback: false, setupPending: false, payBy: null, createdAt: now, updatedAt: now },
     plan: { code: 'complimentary', name: 'Complimentary', description: '', apps: ['tasks', 'assets'], priceMonthly: 0, priceYearly: 0, minSeats: 1, maxSeats: null, offered: false, sort: 9, aiPriceMonthly: 0, kind: 'plan' },
   };
 }
@@ -77,7 +81,7 @@ export async function assertSeatFor(dbs: DbService, companyId: string, personId:
 /** One more seat is about to be used (a new person with apps, or someone with apps switched back on). */
 export async function assertNewSeat(dbs: DbService, companyId: string) {
   const { sub, plan } = await subscriptionOf(dbs, companyId);
-  if (isReadOnly(sub.state)) throw paymentRequired(READ_ONLY_MESSAGE);
+  if (isReadOnly(sub.state)) throw paymentRequired(readOnlyMessage(sub.state));
   const limit = seatLimit(sub, plan);
   if (limit === null) return;
   if ((await seatsUsed(dbs, companyId)) + 1 > limit) throw paymentRequired(seatsFullMessage(limit, plan, sub.state));
@@ -102,6 +106,7 @@ export async function billingSummary(dbs: DbService, companyId: string) {
   else if (sub.state === 'past_due') until = new Date(sub.stateSince.getTime() + PAST_DUE_DAYS * DAY_MS);
   else if (sub.state === 'cancelled') until = sub.currentPeriodEnd;
   else if (sub.state === 'read_only') until = new Date(sub.stateSince.getTime() + READ_ONLY_DAYS * DAY_MS);
+  else if (sub.state === 'pending_payment') until = sub.payBy;
   return {
     plan: sub.plan,
     state: sub.state,

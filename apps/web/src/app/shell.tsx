@@ -15,6 +15,7 @@ import { ADMIN_NAV } from '@/features/admin/nav';
 import { SwitchingOverlay } from '@/features/account/switcher';
 import { AppUpdateBanner, AppUpdateDialog } from './app-update';
 import { BillingBanners } from '@/features/billing/banners';
+import { FinishPayment } from '@/features/billing/finish-payment';
 import { AiHelper } from '@/features/ai-helper';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
@@ -329,7 +330,10 @@ export function AppShell() {
         <BillingBanners key={access.claims?.cid} access={access} />
         <AppUpdateBanner />
         <main id="content" ref={mainRef} tabIndex={-1} className="mx-auto w-full max-w-[1400px] flex-1 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none lg:p-6 lg:pb-8 [&_h1:focus]:outline-none">
-          {access.ready && notInPlan ? (
+          {access.ready && access.billing?.state === 'pending_payment' ? (
+            // PLAN.md §24.4: a "Buy now" company that has not paid: only "Finish payment" until it does.
+            <FinishPayment canManage={access.canManageBilling} />
+          ) : access.ready && notInPlan ? (
             <NotInPlan area={notInPlan} access={access} />
           ) : access.ready ? (
             <ReadOnlyContext.Provider value={access.readOnly}>

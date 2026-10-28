@@ -10,7 +10,9 @@ import type { ConsoleCompany, SubscriptionState } from './types';
 // ─── types ──────────────────────────────────────────────────────────────────
 
 export interface ConsoleOverview {
-  companies: { total: number; active: number; trialing: number; free: number; complimentary: number; pastDue: number; readOnly: number; suspended: number; cancelled: number };
+  companies: { total: number; active: number; trialing: number; free: number; complimentary: number; pastDue: number; readOnly: number; suspended: number; cancelled: number; pendingPayment?: number };
+  /** PLAN.md §24.5: why invoice emails are not sent on this server (e.g. "Seller GST details not set"); null = fine. */
+  invoiceEmail?: string | null;
   people: { total: number; active: number; accounts: number; adminLogins: number; staff: number };
   activeUsers: { today: number; d7: number; d30: number };
   /** 30 days, oldest first: new accounts and new companies per day. */
@@ -82,8 +84,24 @@ export interface DashboardCompanyDetail {
     cancelAtPeriodEnd: boolean;
     gateway: string | null;
   } | null;
-  billingProfile: { legalName: string; gstin: string | null; state: string } | null;
-  invoices: Array<{ id: string; number: string; issuedAt: string | null; periodStart: string | null; periodEnd: string | null; subtotal: number; tax: number; total: number; status: string }>;
+  billingProfile: { legalName: string; gstin: string | null; state: string; email?: string | null } | null;
+  invoices: Array<{
+    id: string;
+    number: string;
+    issuedAt: string | null;
+    periodStart: string | null;
+    periodEnd: string | null;
+    subtotal: number;
+    tax: number;
+    total: number;
+    status: string;
+    /** PLAN.md §24.5: the invoice email. */
+    emailedAt?: string | null;
+    emailedTo?: string[];
+    emailError?: string | null;
+  }>;
+  /** Why invoice emails are not sent on this server; null = they are. */
+  invoiceEmail?: string | null;
   payments: ConsolePayment[];
   planChanges: Array<{ at: string | null; kind: 'checkout' | 'seats'; text: string; status: string; amount: number }>;
   audit: Array<{ id: string; at: string | null; action: string; staffEmail: string | null; details: Record<string, unknown>; ip: string | null }>;
