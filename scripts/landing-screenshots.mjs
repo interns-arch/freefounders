@@ -40,6 +40,9 @@ const SHOTS = [
   { name: 'assets', view: 'desktop', url: '/assets/assets' },
   { name: 'visitors', view: 'desktop', url: '/visitors/today' },
   { name: 'admin', view: 'desktop', url: '/people' },
+  { name: 'team', view: 'desktop', url: '/team' },
+  { name: 'hr-reports', view: 'desktop', url: '/attendance/reports' },
+  { name: 'team-person', view: 'desktop', url: '/team', prepare: openSecondPerson },
   { name: 'billing', view: 'desktop', url: '/billing', prepare: hideDevTools },
   { name: 'phone-attendance', view: 'phone', url: '/attendance' },
   { name: 'phone-home', view: 'phone', url: '/?home=1' },
@@ -63,6 +66,15 @@ async function hideDevTools(page) {
     for (const el of document.querySelectorAll('main [class*="border-dashed"]')) if (/Dev tools/.test(el.textContent ?? '')) el.style.display = 'none';
   });
   await page.waitForTimeout(300);
+}
+
+/** Team 360 → one person (the second tile: the first is usually the owner herself). */
+async function openSecondPerson(page) {
+  const tiles = page.locator('main a[href^="/team/"]');
+  const tile = (await tiles.count()) > 1 ? tiles.nth(1) : tiles.first();
+  await tile.click();
+  await page.waitForURL(/\/team\/\d+/);
+  await settle(page);
 }
 
 /** Tasks → Chains: open the first chain (its tree: who gave which part to whom). */

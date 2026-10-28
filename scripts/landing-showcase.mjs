@@ -216,4 +216,41 @@ for (const p of PEOPLE.slice(0, 6)) {
 }
 token = ownerToken;
 
+// 7. A little history for Team 360 (PLAN.md §25): the month's earlier working days marked by HR (Sundays off, a
+// half day here and there, one absence), and two finished tasks per person, so the tiles and the one-person view show
+// a believable month instead of a company created today. Marking again overwrites the same day (safe to repeat).
+const today = new Date();
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const pastDays = [];
+for (let d = new Date(today.getFullYear(), today.getMonth(), 1); d.getDate() < today.getDate(); d.setDate(d.getDate() + 1)) {
+  if (d.getDay() !== 0) pastDays.push(ymd(d));
+}
+const history = [...PEOPLE.map((p) => p.fullName), OWNER.name];
+let marked = 0;
+for (const [pi, name] of history.entries()) {
+  for (const [di, date] of pastDays.entries()) {
+    const status = (di + pi) % 17 === 5 ? 'absent' : (di * 3 + pi) % 11 === 4 ? 'half_day' : 'present';
+    try {
+      await api('POST', '/tasks/api/attendance/manual_mark/', { user: uid(name), date, status, reason: 'Showcase history' });
+      marked++;
+    } catch (e) {
+      console.warn(`  mark ${name} ${date}: ${e.message}`);
+      break;
+    }
+  }
+}
+console.log(`✔ ${marked} past attendance days marked`);
+for (const p of PEOPLE) {
+  for (const n of [1, 2]) {
+    const title = `${p.designation} weekly report #${n}`;
+    if (titles.has(title)) continue;
+    try {
+      const t = await task(title, p.fullName, day(2 + n), { effort_minutes: 45 });
+      await api('POST', `/tasks/api/tasks/${t.id}/complete/`, { remarks: 'Done and shared.', actual_minutes: 40 });
+    } catch (e) {
+      console.warn(`  finished task ${title}: ${e.message}`);
+    }
+  }
+}
+
 console.log(`\nShowcase ready: sign in as ${OWNER.login} / ${OWNER.password}`);

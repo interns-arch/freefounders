@@ -14,6 +14,7 @@ import { Check, CreditCard, ListChecks, MapPin, Minus, Package, Plus, Sparkles }
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
+import { useTween } from './motion';
 
 const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const MODULE_ICON: Record<PricedModuleKey, typeof MapPin> = { tasks: ListChecks, attendance: MapPin, assets: Package };
@@ -27,6 +28,8 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
   const usersId = useId();
   const aiId = useId();
   const quote = quotePrice(pricing, { complete, modules, ai, users });
+  // The big total and the sticky bar count to the new price (a short tween; exact at the end, instant with less motion).
+  const shownMonthly = useTween(quote.monthly);
   const toggle = (k: PricedModuleKey) => {
     setComplete(false);
     setModules((m) => (m.includes(k) ? m.filter((x) => x !== k) : [...m, k]));
@@ -112,7 +115,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
             3. Number of users
           </label>
           <div className="flex items-center gap-3">
-            <Button type="button" variant="outline" size="icon" className="pointer-coarse:size-[44px]" aria-label="One user less" onClick={() => setUserCount(users - 1)} disabled={users <= 1}>
+            <Button type="button" variant="outline" size="icon" className="kp-press pointer-coarse:size-[44px]" aria-label="One user less" onClick={() => setUserCount(users - 1)} disabled={users <= 1}>
               <Minus />
             </Button>
             <input
@@ -125,7 +128,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
               onChange={(e) => setUserCount(Number(e.target.value))}
               className="h-9 w-20 rounded-md border border-input bg-card px-2 text-center text-base font-semibold tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 max-sm:h-[2.75rem] pointer-coarse:h-[44px]"
             />
-            <Button type="button" variant="outline" size="icon" className="pointer-coarse:size-[44px]" aria-label="One user more" onClick={() => setUserCount(users + 1)}>
+            <Button type="button" variant="outline" size="icon" className="kp-press pointer-coarse:size-[44px]" aria-label="One user more" onClick={() => setUserCount(users + 1)}>
               <Plus />
             </Button>
           </div>
@@ -152,16 +155,17 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
             {nothing ? 'Pick a module' : `${users} ${users === 1 ? 'user' : 'users'}, per month`}
             <span className="block text-xs">before GST</span>
           </span>
-          <span className="text-xl font-extrabold tracking-tight tabular-nums">{rupees(quote.monthly)}</span>
+          <span className="text-xl font-extrabold tracking-tight tabular-nums">{rupees(shownMonthly === quote.monthly ? quote.monthly : Math.round(shownMonthly))}</span>
         </div>
       </div>
 
       {/* Total */}
       <div className="flex flex-col rounded-xl border bg-card p-5 shadow-card sm:p-6" aria-live="polite">
         <p className="text-sm font-semibold text-muted-foreground">Your monthly price</p>
-        <p className="mt-2 text-[2.6rem] leading-none font-extrabold tracking-tight tabular-nums" data-testid="pricing-total">
-          {rupees(quote.monthly)}
+        <p className="mt-2 text-[2.6rem] leading-none font-extrabold tracking-tight tabular-nums" data-testid="pricing-total" aria-hidden>
+          {rupees(shownMonthly === quote.monthly ? quote.monthly : Math.round(shownMonthly))}
         </p>
+        <p className="sr-only">{rupees(quote.monthly)} per month before GST</p>
         <p className="mt-2 text-sm text-muted-foreground">
           {nothing ? 'Pick at least one module.' : `${rupees(quote.perUser)} per user × ${users} ${users === 1 ? 'user' : 'users'}, per month`}
         </p>
@@ -183,7 +187,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
           Prices are per user per month; GST is added on the invoice. Free for {pricing.trial.days} days with up to {pricing.trial.maxUsers} users, no card needed.
         </p>
         <div className="mt-auto grid gap-2 pt-5">
-          <Button variant="cta" size="lg" className="w-full pointer-coarse:min-h-[44px]" asChild>
+          <Button variant="cta" size="lg" className="kp-press w-full pointer-coarse:min-h-[44px]" asChild>
             <Link to="/signup">Start free trial</Link>
           </Button>
           {/* PLAN.md §24.4: pay straight away, without the trial; the choice goes into sign-up. */}
@@ -192,7 +196,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
               <CreditCard /> Buy now
             </Button>
           ) : (
-            <Button variant="outline" size="lg" className="w-full pointer-coarse:min-h-[44px]" asChild>
+            <Button variant="outline" size="lg" className="kp-press w-full pointer-coarse:min-h-[44px]" asChild>
               <Link to={buyNowPath({ complete, modules, ai, users })} data-testid="pricing-buy-now">
                 <CreditCard /> Buy now
               </Link>

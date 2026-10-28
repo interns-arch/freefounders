@@ -77,3 +77,23 @@ test('inside the phone app, signed out `/` goes straight to sign-in (never the l
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await ctx.close();
 });
+
+test('landing v3: day story (sticky on desktop, click-through on phones), Team 360, comparison and security', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'From the first punch to the month-end payroll' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Every employee, one tile/ })).toBeVisible();
+  await expect(page.getByRole('table', { name: /compared with a paper register/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your company’s data stays yours' })).toBeVisible();
+  // Desktop: the step in the middle of the screen becomes the current one.
+  await page.getByRole('heading', { name: 'A visitor at the gate, without the paper book' }).scrollIntoViewIfNeeded();
+  await page.mouse.wheel(0, 200);
+  await expect(page.locator('li[aria-current="step"]')).toHaveCount(1);
+  // Phones: Back / Next through the moments.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('heading', { name: 'From the first punch to the month-end payroll' }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('heading', { name: 'Punch in with a selfie, at the office' })).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('heading', { name: 'The manager sees the whole team, live' })).toBeVisible();
+  await page.getByRole('button', { name: '18:30' }).click();
+  await expect(page.getByRole('heading', { name: 'Every person, one tile' })).toBeVisible();
+});

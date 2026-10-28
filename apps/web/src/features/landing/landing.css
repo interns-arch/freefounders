@@ -1,0 +1,137 @@
+/* The landing page's motion (PLAN.md §24.2 v3). Loaded with the landing chunk only. Transform and opacity only;
+   index.css switches every transition and animation off for people who ask for less motion, and the page sets
+   html[data-motion] only when motion is allowed, so nothing here can hide content otherwise. Theme colours only. */
+
+html[data-site] {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+/* Reveal on scroll (motion.tsx <Reveal>): hidden only while html[data-motion] is set and the element is not shown yet. */
+.kp-reveal {
+  transition:
+    opacity 0.6s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+html[data-motion] .kp-reveal:not([data-shown]) {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+}
+
+/* Hero: in at once, short (the first screen is readable well under 300 ms). */
+@keyframes kp-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+}
+@keyframes kp-in-right {
+  from {
+    opacity: 0;
+    transform: translate3d(28px, 0, 0);
+  }
+}
+@keyframes kp-in-left {
+  from {
+    opacity: 0;
+    transform: translate3d(-28px, 0, 0);
+  }
+}
+@keyframes kp-fade {
+  from {
+    opacity: 0;
+  }
+}
+.kp-hero-in {
+  animation: kp-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.kp-hero-in-late {
+  animation: kp-rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) 0.08s both;
+}
+.kp-in-right {
+  animation: kp-in-right 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.kp-in-left {
+  animation: kp-in-left 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+/* Children rise one after another (set --i on each). */
+.kp-stagger > * {
+  animation: kp-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms + 60ms);
+}
+.kp-fade {
+  animation: kp-fade 0.3s ease-out both;
+}
+
+/* Picture stage: every picture in one grid cell, the active one crossfades in (opacity + a small scale). */
+.kp-stage {
+  display: grid;
+}
+.kp-stage > * {
+  grid-area: 1 / 1;
+  transition:
+    opacity 0.5s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.kp-stage > [data-off] {
+  opacity: 0;
+  transform: scale(0.975);
+  pointer-events: none;
+}
+
+/* Hover tilt (desktop with a mouse): CSS variables written by motion.tsx <Tilt>. */
+.kp-tilt {
+  transform: perspective(1600px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.kp-tilt[data-tilt] {
+  transform: perspective(1600px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translate3d(0, -6px, 0);
+  transition: transform 0.15s linear;
+}
+
+/* Small lifts and presses. */
+.kp-lift {
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 0.2s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .kp-lift:hover {
+    transform: translate3d(0, -3px, 0);
+  }
+}
+.kp-press {
+  transition: transform 0.15s ease;
+}
+.kp-press:active {
+  transform: scale(0.97);
+}
+
+/* Sliding tab marker (feature tour) and progress fills. */
+.kp-marker {
+  transition:
+    transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1),
+    opacity 0.2s;
+}
+.kp-progress,
+.kp-fill {
+  transition: transform 0.12s linear;
+}
+.kp-seg {
+  /* Tailwind scale-x-* sets the `scale` property, so both are listed. */
+  transition:
+    scale 0.45s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* FAQ: the answer slides in when opened. */
+details[open] > .kp-answer {
+  animation: kp-rise 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media print {
+  .kp-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

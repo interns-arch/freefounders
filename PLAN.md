@@ -3768,6 +3768,30 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
   buttons. Touch screens (`pointer-coarse`) get ≥ 44 px buttons, steppers, number field and slider; on phones and
   tablets a small total bar (aria-hidden) sticks to the bottom of the calculator's choices card so the price stays in
   sight while choosing (it stops short of the Ask Kaampilot button when that is on).
+- **§24.2 v3 (2026-10-28)** (founder: "more attractive, more about the application, beautiful explanations, very good
+  transitions and effects"). New sections: **numbers strip** (facts only: 5 modules, 2 min set-up, trial days and lowest
+  price from the pricing endpoint; no customer counts, testimonials or logos); **A day with Kaampilot** (`day-story.tsx`,
+  six moments: 09:28 punch → 10:00 live team + reminders → 11:30 task chain → 15:10 visitor at the gate → 18:30 Team →
+  month-end payroll and Excel, each a real screen; from 1024 px a sticky scroll story with a filling line and a
+  crossfading picture, below that a click-through with time buttons, Back / Next and swipe); **Team 360** spotlight
+  (tiles + one-person screenshots); **And everything else** (16 cards: regularization, punch-in reminders, task chains,
+  change-request ranking, Excel, badges + bell, asset tickets, QR self check-in, vehicle / parcel log, roles, several
+  companies, GST invoice email, trial or Buy now, Android app, email codes, Ask Kaampilot = "Coming soon" while the
+  pricing endpoint's `aiHelper` is false); **Why Kaampilot** (paper register / WhatsApp / Excel vs Kaampilot: a table
+  from 768 px, cards on phones, Yes / Partly / No as icon + word); **Security & data** (India, per-company separation,
+  signed photo links, hashed passwords, access by role, backups + Excel export); FAQ 7 → 14; top-bar links with
+  scroll-spy. Motion (`motion.tsx` + `landing.css`, no library): one shared IntersectionObserver for staggered reveals,
+  one rAF-batched scroll listener (reading-progress bar, story line, hero parallax from 1024 px), counters, a marker
+  that slides under the chosen feature-tour tab + panel slide from the side moved to + staggered points + picture
+  crossfade (`ShotStage`), hover tilt / lift on mouse screens only, button press scale, FAQ answer rise, the price total
+  tweens (exact at the end; screen readers get the exact value), smooth anchor scrolling. Transform / opacity only;
+  `html[data-motion]` is set only when motion is allowed, so content never waits (hero ≈ 0.98 opacity at 250 ms) and
+  with `prefers-reduced-motion` everything is simply there. New screenshots `team.webp`, `team-person.webp`,
+  `hr-reports.webp` (`landing-screenshots.mjs`); `landing-showcase.mjs` now also marks the month's earlier working days
+  (HR manual mark) and finishes two tasks per person, so Team 360 shows a believable month. Landing chunk 33.7 kB /
+  9.9 kB gzip → 65.2 kB / 18.1 kB gzip + 0.65 kB CSS. e2e `web-landing` + 1 test (story on desktop + phone, Team 360,
+  comparison, security). No `knowledge.ts` change (no new facts). **Before go-live**: the security card says records
+  and files are backed up, so `infra/deploy/backup.sh` must be on the server's cron (§19.41 says not run yet).
 
 ### 24.3 AI helper "Ask Kaampilot" (built 2026-10-27)
 
