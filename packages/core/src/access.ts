@@ -78,6 +78,8 @@ export interface TasksMe {
   /** Module switches (Settings Center); missing = on. */
   modules?: Record<string, boolean>;
   brand?: { name: string; short_name: string; colour: string | null; logo_url: string | null } | null;
+  /** May open Team 360 (PLAN.md §25): owners, admins, HR and anyone with a team. */
+  team360?: boolean;
 }
 
 export interface AssetsMe {

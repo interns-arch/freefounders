@@ -3,6 +3,7 @@ import { adminRoutes } from '@/features/admin/routes';
 import { assetsRoutes } from '@/features/assets/routes';
 import { attendanceRoutes, hrRoutes } from '@/features/hr/routes';
 import { tasksRoutes } from '@/features/tasks/routes';
+import { teamRoutes } from '@/features/team/routes';
 import { oldVisitorRoutes, visitorsRoutes } from '@/features/visitors/routes';
 import { AccountPage } from './pages/account';
 import { HomePage } from './pages/home';
@@ -59,6 +60,8 @@ export const router = createBrowserRouter([
           { path: 'console/:tab', lazy: async () => ({ Component: (await import('@/features/billing/console')).ConsolePage }) },
           // Every notification of every app, grouped by area (PLAN.md §19.37); the bell's "All notifications".
           { path: 'notifications', lazy: async () => ({ Component: (await import('@/features/tasks/general/notifications')).NotificationsPage }) },
+          // Team 360 (PLAN.md §25): employee tiles and one person's whole picture.
+          { path: 'team', children: teamRoutes },
           { path: 'attendance', children: attendanceRoutes },
           { path: 'tasks', children: area([...tasksRoutes, ...hrRoutes, ...oldVisitorRoutes]) },
           { path: 'visitors', children: area(visitorsRoutes) },

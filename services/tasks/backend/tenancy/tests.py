@@ -104,6 +104,18 @@ class MultiCompanyTests(SimpleTestCase):
         res = self.api(access(BETA_ID, self.beta_user)).get("/api/tasks/")
         self.assertEqual(self.titles(res), {"Beta roadmap"})
 
+    def test_team360_lists_only_its_own_company(self):
+        # Team 360 (PLAN.md §25): the tiles and a person come from the token's company only.
+        with schemas.use(BETA):
+            beta_only = make_user("beta_only_t360", first_name="Bina")
+        res = self.api(access(ACME_ID, self.acme_user)).get("/api/team360/")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertNotIn("Bina", {r["name"] for r in res.json()["rows"]})
+        self.assertIn("asha", {r["username"] for r in res.json()["rows"]})
+        self.assertNotIn("beta_only_t360", {r["username"] for r in res.json()["rows"]})
+        res = self.api(access(ACME_ID, self.acme_user)).get(f"/api/team360/{beta_only.pk}/")
+        self.assertIn(res.status_code, (403, 404))
+
     def test_another_company_cannot_open_a_task_by_id(self):
         res = self.api(access(BETA_ID, self.beta_user)).get(f"/api/tasks/{self.acme_task.pk}/")
         if res.status_code == 200:  # same id can exist in Beta; it must be Beta's own task

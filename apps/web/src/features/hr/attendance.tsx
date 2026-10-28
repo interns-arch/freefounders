@@ -264,7 +264,7 @@ function MyRegularizations() {
   );
 }
 
-function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceDay[]; year: number; month: number; selected: AttendanceDay | null; onSelect: (d: AttendanceDay) => void }) {
+export function Calendar({ days, year, month, selected, onSelect }: { days: AttendanceDay[]; year: number; month: number; selected: AttendanceDay | null; onSelect: (d: AttendanceDay) => void }) {
   const lead = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Monday first
   const now = new Date();
   const pad = (x: number) => String(x).padStart(2, '0');

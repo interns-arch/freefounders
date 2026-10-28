@@ -3873,3 +3873,95 @@ Founder 2026-10-27: "anyone who wants to get started directly, without the free 
 - Tests: in `buy-now.test.ts` against a local Resend stand-in (no network): sent with the PDF attached (base64 `%PDF-`),
   subject, recipients incl. billing email; Resend 403 stored, payment stands, Send again works, another company 404; no
   key → not sent; production + test seller → not sent; `sellerProblem`, recipients, subject / escaping.
+
+## 25. Team 360: employee tiles + one-person view (founder 2026-10-28)
+Founder: "the owner and higher authority get a tab with tiles showing all the employees; they can select any employee
+and from there check the complete performance, complete attendance and everything of that particular employee."
+
+### 25.1 What already exists (reused, not rebuilt)
+| Piece | Where | Used for |
+|---|---|---|
+| People directory (department, designation, reports-to, employee code, active) pushed to Tasks | §17.1, `accounts/internal.py` | tile + header facts, the reports-to team |
+| Scopes Own / Team / Department / Company, `scope_of`, `widest`, `hr/team.py people_in_scope` | §15.2, §19.19 | who sees whom |
+| Day classification (stored row, holiday, week-off, absent, not checked in) `team.month_statuses`, `totals_for`, `services.monthly_report` | §19.15 | today's status, month %, the calendar |
+| Attendance KPI rule (present + late + half day ÷ working days so far) `TaskViewSet._attendance_kpis` | §17.5 | attendance % (same rule) |
+| Task score + counts `TaskViewSet._task_buckets` / `_person_rows` (= `/tasks/employees_report/?user=`) | §19.41 | tasks assigned / done / on-time % / overdue / score |
+| Change-request ranking (requests that move a due date) | §19.30, §19.41 | the person's rank |
+| Task chains `crm/chain.py` (`depth_of`, `root_of`) | §19.41 | chains they are part of |
+| Person Excel report `GET /tasks/person_export/` (8 sheets, `tasks.view_all`) + `tasksExports.personReport` | §19.41 | the download button |
+| Leave balances `services.leave_balances`, regularization records `AttendanceCorrection` | §19.33, §19.38 | Attendance tab |
+| Punch photos `GET /attendance/:id/photo/in|out` (checked against `managed_users`) + `PunchPhoto` | §19.15 | selfie link, only where already allowed |
+| Assets employee profile (held assets) `GET /employees/:id`, tickets `GET /tickets` (Assets API, its own permissions) | Assets | Assets tab |
+| Visits with `host` | §22 | Visitors tab |
+| Chart.js + `charts.ts` (theme colours read at run time, value labels) | Tasks screens | trend bars |
+
+### 25.2 What is new
+- **Tasks API** (one small package `team360/`, no new tables; not under a plan-area prefix, so it answers for every plan
+  and leaves out the areas the plan lacks itself):
+  - `GET /api/team360/` — the tiles, one batched answer for everyone in scope (≈ 6 queries whatever the head count):
+    person facts, today's status (+ check-in time), this month's attendance % / late days / leave days, tasks open /
+    done this month / overdue. `{scope, areas: {tasks, attendance}, today, month, departments, rows}`.
+  - `GET /api/team360/<id>/?range=this_week|this_month|last_month|this_quarter|custom&start&end` — header (name,
+    designation, department, roles, manager, join date, email, phone, employee code) + period KPIs (attendance %,
+    present / late / half / absent / leave days, avg hours, regularizations, leave balances; tasks assigned / completed /
+    on-time % / overdue / score; change-request rank "n of m") + trend buckets (weeks; months beyond 120 days).
+  - `GET /api/team360/<id>/attendance/?year&month` — the month day by day (same shape as `/attendance/monthly/`), the
+    month's regularizations with outcome, leave requests touching the month, leave balances, `can_see_photos`, and the
+    check-in office / map point per day only when the viewer may see photos.
+  - `GET /api/team360/<id>/tasks/?range…` — open (overdue first), completed in the period, chains they are in (main
+    task, level), on-time %.
+  - `GET /api/team360/<id>/visitors/?range…` — visits they hosted (no visitor mobile / ID numbers), when Visitors is on.
+  - `/api/auth/me` adds `team360: true|false` (the menu entry).
+- **Join date**: `User.join_date` (migration `accounts 0024`), filled from the People push (`joinDate`, already sent).
+- **Web**: `features/team/` — `/team` (tiles) and `/team/:id` (one person, tabs Overview · Attendance · Tasks · Assets ·
+  Visitors); core hooks in `packages/core/src/team/` (`@kaampilot/core/team`).
+
+### 25.3 Who sees whom (enforced by the Tasks API on every endpoint)
+- Scope = the widest of: **Company** for the Owner and admins (level 3); the role's scopes of the people-facing
+  permissions Live / Daily / Dashboard / Reports attendance and Approve leave (`hr.*`), and See tasks at Team or wider;
+  **Team** for anyone people report to. Team = me + my direct reports (§15.2, the existing rule); Department = my
+  department + my team; Company = everyone active.
+- The tab is for Company / Department scope, or a manager with at least one active report. Members: no menu entry and
+  403 on every endpoint. A person outside the viewer's scope: 403. Inactive people are not listed.
+- Inside a person: punch photos and check-in places only where the viewer already may see them (`managed_users`), the
+  Excel report only with `tasks.view_all` (as on Team performance), the Assets tab only with the Assets permissions
+  (`employee:view`; tickets with `ticket:manage`) — the Assets API checks again.
+- One company only: everything runs in the request's company schema (§14); no registry or other schema is read.
+
+### 25.4 Plan areas and modules (§24.1)
+`areas.attendance` / `areas.tasks` follow `plan_has`; an area not in the plan is left out of the tiles and the person
+(its numbers are `null`, its tab hidden, its endpoint 403 "… is not in your plan"). Assets tab: the person's company has
+the Assets app; Visitors tab: the Visitors module is on.
+
+### 25.5 Screens
+- **Menu**: "Team" right under Home in the sidebar (its own entry, not inside Admin: managers without Admin permissions
+  get it too); on phones it is in More (the sidebar drawer). Header title "Team".
+- **`/team`**: search (name, code, phone), department filter, status filter (Present / Late / On leave / Absent / Not
+  punched in / Week off-holiday), sort (name, attendance %, overdue, tasks done, late days); counts per status as a filter
+  row. Tiles: avatar, name, designation · department, today's status as a text label (rounded-sm, tone colour, no dots),
+  check-in time, month attendance %, tasks done / overdue. 2 columns on phones, up to 4 on wide screens; 60 drawn at a
+  time with "Show more" (weak phones; 500 people stay fast).
+- **`/team/:id`**: back link, header card (avatar, name, designation, department, roles, manager link, joined, email /
+  phone links, code); period picker (week / month / last month / quarter / custom) shared by the tabs.
+  - Overview: KPI tiles (attendance %, late days, avg hours, leave taken + balance, tasks assigned / completed, on-time %,
+    overdue, score, change-request rank) and two bar charts (attendance % per week; tasks completed on time / late per
+    week) with a one-line text summary under each.
+  - Attendance: month calendar (the existing colours and tags), a day's punches (photos where allowed), regularizations
+    with outcome, leave requests, balances.
+  - Tasks: open / overdue / completed lists with links to the task, chains, on-time rate, **Excel report** (admins).
+  - Assets: held assets + tickets they raised (Assets permissions). Visitors: visits they hosted.
+
+### 25.6 Tests
+Tasks `team360/tests.py`: owner sees all, HR (company attendance scope) sees all, manager sees self + reports only and
+gets 403 for anyone else, member 403 (tiles and person), numbers (today's status, month %, tasks done / overdue, rank),
+plan area off → numbers null + endpoint 403, inactive not listed, `/auth/me` flag, join date push. Tenancy (Postgres): a
+token for one company lists only that company's people. e2e `e2e/web-team-360.spec.ts` (owner: tiles → a person → tabs;
+member: no menu, `/team` refused).
+
+### 25.7 Status (built 2026-10-28)
+Built as above. `npm run quick-check -- --tests tasks` green (new `team360/tests.py`, 14 tests); tenancy on Postgres 66 / 66
+incl. the new "Team 360 lists only its own company"; `npm run web:build` clean; e2e `web-team-360` 2 / 2 against the
+local dev suite (owner desktop + 390 px phone, member refused). Tiles answer in ~0.17 s for the demo company.
+**Deploy**: Tasks API (migration `accounts 0024` via `migrate_companies`) + website; then
+`npm --prefix services/platform run company -- sync` (or any People change) fills join dates; Platform only for the
+AI helper text (`knowledge.ts`). No new APK.

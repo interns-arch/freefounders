@@ -142,6 +142,12 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
 
 **Counters**: red count badges show what waits for you: My Tasks, To accept and Requests.
 
+**Team 360 (menu "Team", under Home; on phones in More)**
+- For the Owner, admins, HR and managers. Owner/admins/HR (company-wide attendance roles) see everyone; a manager sees themself and the people who report to them. Members do not get it.
+- **Team** shows a tile per person: today's status (Present, Late, On leave, Absent, Not punched in), this month's attendance %, tasks done and overdue. Search, filter by department or status, and sort.
+- Tap a tile for the person's page: header (role, manager, join date, contact) and tabs **Overview** (attendance %, late days, average hours, leave, tasks, on-time %, score, date-change rank, weekly charts), **Attendance** (month calendar, punches, regularizations, leave), **Tasks** (open, overdue, completed, task chains, **Excel report** for admins), **Assets** and **Visitors** when those are on.
+- Pick the period at the top: this week, this month, last month, this quarter or custom.
+
 ### Assets (sidebar group "Assets")
 - **Who sees what**:
   - Staff and IT see Dashboard, Assets, Employees, New joiners, Exits, Requests, Tickets, Maintenance, Activity log, Scan and settings.
@@ -248,4 +254,5 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
 36. **Set a punch-in alarm on my phone**: in the app, Attendance › Today › Punch-in reminder › switch on › time and days › **Save reminder**.
 37. **Reset my own password**: sign-in page › **Forgot your password?** › email › code › new password.
 38. **Upgrade or pay**: Admin › Billing.
+39. **See everything about one employee**: **Team** (under Home) › tap their tile › Overview / Attendance / Tasks tabs.
 `;

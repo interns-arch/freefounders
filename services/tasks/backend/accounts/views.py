@@ -22,7 +22,10 @@ def me(request):
     from .access import level
     # Which modules are on, and the company's names/colour/logo (None in a standalone install); the role level
     # (1 member, 2 manager, 3 admin: an administrator in Tasks, PLAN.md §19.19).
-    return Response({**UserSerializer(request.user).data, "modules": modules(), "brand": brand(), "level": level(request.user)})
+    from team360.service import may_open
+    # team360: the "Team" menu entry (PLAN.md §25); the Team 360 API checks again.
+    return Response({**UserSerializer(request.user).data, "modules": modules(), "brand": brand(), "level": level(request.user),
+                     "team360": may_open(request.user)})
 
 
 @api_view(["GET", "POST"])

@@ -19,6 +19,7 @@ import { FinishPayment } from '@/features/billing/finish-payment';
 import { AiHelper } from '@/features/ai-helper';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
+import { TEAM_LINK } from '@/features/team/nav';
 import { TASKS_NAV } from '@/features/tasks/nav';
 import { VISITORS_NAV } from '@/features/visitors/nav';
 import { isWorkspace, type NavItem, type Workspace, WORKSPACE_BADGE, WORKSPACE_HOME, WORKSPACE_NAMES, workspaceOf } from './nav';
@@ -138,7 +139,9 @@ export function AppShell() {
   const here = workspaceOf(loc.pathname);
   const open = here ? extra : homeOpen;
   const look = here ? WORKSPACE_LOOK[here] : null;
-  const title = here ? WORKSPACE_NAMES[here] : 'Home';
+  // Team 360 (PLAN.md §25) belongs to no group: its own entry under Home.
+  const onTeam = loc.pathname === '/team' || loc.pathname.startsWith('/team/');
+  const title = here ? WORKSPACE_NAMES[here] : onTeam ? 'Team' : 'Home';
 
   // Close the phone drawer after following a link; in an area, only that area's group stays open.
   useEffect(() => {
@@ -220,6 +223,12 @@ export function AppShell() {
           <Home className="size-4 shrink-0" aria-hidden />
           <span className="flex-1 truncate">Home</span>
         </NavLink>
+        {TEAM_LINK.show?.(access) && (
+          <NavLink to={TEAM_LINK.to} className={({ isActive }) => cn(itemClass, isActive && activeClass)}>
+            <TEAM_LINK.icon className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 truncate">{TEAM_LINK.label}</span>
+          </NavLink>
+        )}
         {groups.map(({ w, items }) => {
           const expanded = w === here || open.includes(w);
           const gl = WORKSPACE_LOOK[w];
@@ -289,7 +298,7 @@ export function AppShell() {
   // Phones: Attendance first (marking attendance is the priority), then Home, Tasks, Assets; Admin lives in More.
   const tabs: Array<{ to: string; label: string; icon: typeof Home; active: boolean; count?: number }> = [
     ...(workspaces.includes('attendance') ? [{ to: '/attendance', label: 'Attendance', icon: WORKSPACE_LOOK.attendance.icon, active: here === 'attendance', count: WORKSPACE_BADGE.attendance(badges) }] : []),
-    { to: '/?home=1', label: 'Home', icon: Home, active: here === null },
+    { to: '/?home=1', label: 'Home', icon: Home, active: here === null && !onTeam },
     ...(workspaces.includes('tasks') ? [{ to: '/tasks', label: 'Tasks', icon: WORKSPACE_LOOK.tasks.icon, active: here === 'tasks', count: WORKSPACE_BADGE.tasks(badges) }] : []),
     ...(workspaces.includes('assets') ? [{ to: '/assets', label: 'Assets', icon: WORKSPACE_LOOK.assets.icon, active: here === 'assets', count: WORKSPACE_BADGE.assets(badges) }] : []),
   ];
@@ -318,7 +327,7 @@ export function AppShell() {
         <header className="sticky top-0 z-20 flex h-14 items-center gap-1.5 border-b bg-card px-3 sm:gap-2 lg:px-6">
           <span className="flex min-w-0 items-center gap-2 rounded-md border bg-background py-1 pr-3 pl-1 text-[13px] font-semibold">
             <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', look ? look.soft : 'bg-primary/8 text-primary')} aria-hidden>
-              {look ? <look.icon className="size-3.5" /> : <Home className="size-3.5" />}
+              {look ? <look.icon className="size-3.5" /> : onTeam ? <TEAM_LINK.icon className="size-3.5" /> : <Home className="size-3.5" />}
             </span>
             <span className="truncate">{title}</span>
           </span>

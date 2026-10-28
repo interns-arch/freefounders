@@ -48,6 +48,7 @@ urlpatterns = [
     path("api/", include("payroll.urls")),
     path("api/", include("mistakes.urls")),
     path("api/", include("visitors.urls")),
+    path("api/", include("team360.urls")),   # Team 360 (PLAN.md §25)
     # uploaded files (works in dev and on Render; Render's disk is ephemeral)
     re_path(r"^media/(?P<path>.*)$", media),
     # everything else that isn't API/admin/static -> the React app

@@ -145,6 +145,8 @@ class User(AbstractUser):
     # reports, and how an attendance import finds the person. Blank on a standalone install.
     employee_code = models.CharField(max_length=40, blank=True, default="", db_index=True)
     designation = models.CharField(max_length=120, blank=True, default="")
+    # Join date from the People directory (PLAN.md §25): shown on Team 360. Null on a standalone install.
+    join_date = models.DateField(null=True, blank=True)
 
     @property
     def is_admin_role(self) -> bool:

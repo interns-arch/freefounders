@@ -6,6 +6,7 @@ username) or creates one, links it, and returns its id. Authenticated by a
 60-second Platform service token with audience "tasks-internal".
 """
 import re
+from datetime import date
 import uuid
 
 from django.contrib.auth.models import AnonymousUser
@@ -262,6 +263,14 @@ def _import_people(data):
                     value = _clean(p.get(key))[:size]
                     if getattr(user, field) != value:
                         fields[field] = value
+            # Join date (PLAN.md §25, Team 360); only when the Platform sends it.
+            if "joinDate" in p:
+                try:
+                    joined = date.fromisoformat(str(p.get("joinDate"))[:10]) if p.get("joinDate") else None
+                except ValueError:
+                    joined = None
+                if user.join_date != joined:
+                    fields["join_date"] = joined
             active = p.get("status", "active") == "active"
             if user.is_active != active:
                 fields["is_active"] = active
