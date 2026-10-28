@@ -1,5 +1,5 @@
 /**
- * "Ask Kaampilot" AI helper (PLAN.md §24.3). Provider-neutral: AI_PROVIDER = anthropic (default) | openai, AI_API_KEY,
+ * "Ask Kaampilot" AI helper (PLAN.md §24.3). Provider-neutral: AI_PROVIDER = anthropic (default) | openai | gemini, AI_API_KEY,
  * optional AI_MODEL. Off (503 "The AI helper isn't set up yet.") until a key is set. Plain fetch, no SDK, 20 s per
  * provider call. Signed out the model sees only the knowledge text, the question, up to 6 earlier turns and the page path.
  * Signed in it also gets the person's name, level and company name, and read-only data tools (tools.ts) that read the
@@ -10,7 +10,7 @@ import { HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableExcept
 import { KNOWLEDGE } from './knowledge';
 import { type DataTool, istToday, makeReader, runTool, type ToolCallLog, toIst, toolsFor, type ToolUser } from './tools';
 
-export type AiProvider = 'anthropic' | 'openai';
+export type AiProvider = 'anthropic' | 'openai' | 'gemini';
 
 export interface AiConfig {
   provider: AiProvider;
@@ -44,14 +44,21 @@ export const MAX_HISTORY = 6;
 /** Answer cap. Anthropic's Haiku thinks (adaptive, low effort) inside the same cap, so it gets more room. */
 export const MAX_ANSWER_TOKENS = 600;
 const ANTHROPIC_MAX_TOKENS = 1024;
+/** Gemini counts its (default-on) thinking inside maxOutputTokens too, so it gets more room. */
+export const GEMINI_MAX_TOKENS = 2048;
 /** Signed in: at most 4 rounds of data look-ups and 8 look-ups per question, all within 30 s. */
 export const MAX_TOOL_ROUNDS = 4;
 export const MAX_TOOL_CALLS = 8;
 export const AI_TOTAL_MS = 30_000;
 export const OFF_MESSAGE = "The AI helper isn't set up yet.";
 export const FAILED_MESSAGE = "The AI helper couldn't answer right now. Please try again in a minute.";
-export const DEFAULT_MODELS: Record<AiProvider, string> = { anthropic: 'claude-haiku-5-5', openai: 'gpt-4o-mini' };
-const BASE_URLS: Record<AiProvider, string> = { anthropic: 'https://api.anthropic.com', openai: 'https://api.openai.com' };
+/** Gemini: Google limits gemini-2.5-* to projects that already used them and points new projects to 3.8 Flash. */
+export const DEFAULT_MODELS: Record<AiProvider, string> = { anthropic: 'claude-haiku-5-5', openai: 'gpt-4o-mini', gemini: 'gemini-3.8-flash' };
+const BASE_URLS: Record<AiProvider, string> = {
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com',
+  gemini: 'https://generativelanguage.googleapis.com',
+};
 /** The Messages API version (anthropic-version header). */
 export const ANTHROPIC_VERSION = '2026-10-21';
 
@@ -59,7 +66,8 @@ export const ANTHROPIC_VERSION = '2026-10-21';
 export function aiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig | null {
   const apiKey = env.AI_API_KEY?.trim();
   if (!apiKey) return null;
-  const provider: AiProvider = env.AI_PROVIDER?.trim().toLowerCase() === 'openai' ? 'openai' : 'anthropic';
+  const name = env.AI_PROVIDER?.trim().toLowerCase();
+  const provider: AiProvider = name === 'openai' || name === 'gemini' ? name : 'anthropic';
   return {
     provider,
     apiKey,
@@ -168,11 +176,73 @@ export function startMessages(history: AiTurn[], question: string): Obj[] {
   return [...history, { role: 'user' as const, text: question }].map((t) => ({ role: t.role, content: t.text }));
 }
 
+/** Schema keywords Gemini's function declarations accept (an OpenAPI subset); the rest (additionalProperties, $schema,
+ * pattern, …) is dropped. Types are written in capitals (STRING, OBJECT, …) as in the API's Type enum. */
+const GEMINI_SCHEMA_KEYS = new Set(['type', 'format', 'description', 'nullable', 'enum', 'items', 'properties', 'required', 'minimum', 'maximum', 'minItems', 'maxItems']);
+
+export function geminiSchema(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+  const out: Obj = {};
+  for (const [k, v] of Object.entries(schema as Obj)) {
+    if (!GEMINI_SCHEMA_KEYS.has(k)) continue;
+    if (k === 'type' && typeof v === 'string') out.type = v.toUpperCase();
+    else if (k === 'properties' && v && typeof v === 'object') out.properties = Object.fromEntries(Object.entries(v as Obj).map(([p, s]) => [p, geminiSchema(s)]));
+    else if (k === 'items') out.items = geminiSchema(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+/** A conversation entry as Gemini Content: our {role, content: text} turns become user / model text parts; Gemini's own
+ * entries (model turns sent back unchanged, function responses) already have parts. */
+function geminiContent(m: Obj): Obj {
+  if (Array.isArray(m.parts)) return m;
+  return { role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.content ?? '') }] };
+}
+
+/** Finish reasons that mean the answer was blocked (no text is shown, like Anthropic's refusal). */
+const GEMINI_BLOCKED = new Set(['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'LANGUAGE', 'OTHER']);
+
+/** Gemini's first candidate, or null when the question or the answer was blocked. */
+function geminiCandidate(d: Obj): Obj | null {
+  if (d.promptFeedback?.blockReason) return null;
+  const c = (d.candidates as Obj[] | undefined)?.[0];
+  if (!c || GEMINI_BLOCKED.has(c.finishReason)) return null;
+  return c;
+}
+
 /**
  * One provider request. With tools (signed in only) the model may ask for data; `final` = no more look-ups allowed
  * (tool_choice none), so it answers from what it has.
  */
 export function requestFor(config: AiConfig, sys: { stable: string; context: string }, messages: Obj[], tools: DataTool[] = [], final = false): ProviderRequest {
+  if (config.provider === 'gemini') {
+    // Generative Language API generateContent. The key goes in the x-goog-api-key header, never in the URL (URLs get logged).
+    const declarations = tools.map((t) => {
+      const parameters = geminiSchema(t.parameters) as Obj;
+      // An OBJECT without properties is refused: a tool without input is declared without parameters.
+      return { name: t.name, description: t.description, ...(Object.keys(parameters.properties ?? {}).length ? { parameters } : {}) };
+    });
+    return {
+      url: `${config.baseUrl}/v1beta/models/${encodeURIComponent(config.model)}:generateContent`,
+      init: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': config.apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sys.stable }, ...(sys.context ? [{ text: sys.context }] : [])] },
+          contents: messages.map(geminiContent),
+          ...(declarations.length
+            ? { tools: [{ functionDeclarations: declarations }], toolConfig: { functionCallingConfig: { mode: final ? 'NONE' : 'AUTO' } } }
+            : {}),
+          generationConfig: {
+            maxOutputTokens: GEMINI_MAX_TOKENS,
+            // Low for 1.x / 2.x; Google advises keeping Gemini 3 and later at their default temperature.
+            ...(/^gemini-[12]\./.test(config.model) ? { temperature: 0.2 } : {}),
+          },
+        }),
+      },
+    };
+  }
   if (config.provider === 'openai') {
     return {
       url: `${config.baseUrl}/v1/chat/completions`,
@@ -223,6 +293,16 @@ export function providerRequest(config: AiConfig, system: string, history: AiTur
 export function answerFrom(provider: AiProvider, data: unknown): string | null {
   const d = data as Record<string, unknown> | null;
   if (!d || typeof d !== 'object') return null;
+  if (provider === 'gemini') {
+    // MAX_TOKENS keeps the text that was written; thought parts are never shown.
+    const parts = (geminiCandidate(d)?.content?.parts ?? []) as Obj[];
+    const text = parts
+      .filter((p) => typeof p.text === 'string' && !p.thought)
+      .map((p) => p.text as string)
+      .join('')
+      .trim();
+    return text || null;
+  }
   if (provider === 'openai') {
     const choices = d.choices as Array<{ message?: { content?: unknown } }> | undefined;
     const text = choices?.[0]?.message?.content;
@@ -242,12 +322,28 @@ export interface ToolCallRequest {
   id: string;
   name: string;
   input: unknown;
+  /** Gemini: the call's own id, when it gave one (echoed in the functionResponse). */
+  callId?: string;
 }
 
 /** One provider reply: its text, the tool calls it asks for, and the assistant message to send back as it came. */
 export function parseTurn(provider: AiProvider, data: unknown): { text: string | null; calls: ToolCallRequest[]; assistant: Obj | null } {
   const d = data as Obj | null;
   if (!d || typeof d !== 'object') return { text: null, calls: [], assistant: null };
+  if (provider === 'gemini') {
+    const content = geminiCandidate(d)?.content as Obj | undefined;
+    if (!content) return { text: null, calls: [], assistant: null };
+    const parts = (content.parts ?? []) as Obj[];
+    const calls = parts
+      .filter((p) => typeof p.functionCall?.name === 'string')
+      .map((p, i) => {
+        const fc = p.functionCall as Obj;
+        const callId = typeof fc.id === 'string' && fc.id ? fc.id : undefined;
+        return { id: callId ?? `call_${i}`, name: fc.name as string, input: fc.args ?? {}, ...(callId ? { callId } : {}) };
+      });
+    // Sent back unchanged (thoughtSignature parts included), as the API expects when function calling.
+    return { text: answerFrom('gemini', d), calls, assistant: { role: 'model', parts } };
+  }
   if (provider === 'openai') {
     const msg = (d.choices as Obj[] | undefined)?.[0]?.message as Obj | undefined;
     if (!msg) return { text: null, calls: [], assistant: null };
@@ -272,7 +368,21 @@ export function parseTurn(provider: AiProvider, data: unknown): { text: string |
 }
 
 /** The tool results as the provider's next message(s). */
-export function toolResultMessages(provider: AiProvider, results: Array<{ id: string; text: string; ok: boolean }>): Obj[] {
+export function toolResultMessages(provider: AiProvider, results: Array<{ id: string; text: string; ok: boolean; name?: string; callId?: string }>): Obj[] {
+  if (provider === 'gemini') {
+    // Content roles are only user / model: the function responses go back in one user turn, in the order of the calls.
+    const parts = results.map((r) => {
+      let value: unknown;
+      try {
+        value = JSON.parse(r.text);
+      } catch {
+        value = r.text;
+      }
+      const response = !r.ok ? { error: value } : value && typeof value === 'object' && !Array.isArray(value) ? value : { result: value };
+      return { functionResponse: { ...(r.callId ? { id: r.callId } : {}), name: r.name ?? '', response } };
+    });
+    return [{ role: 'user', parts }];
+  }
   if (provider === 'openai') return results.map((r) => ({ role: 'tool', tool_call_id: r.id, content: r.text }));
   return [{ role: 'user', content: results.map((r) => ({ type: 'tool_result', tool_use_id: r.id, content: r.text, ...(r.ok ? {} : { is_error: true }) })) }];
 }
@@ -336,12 +446,12 @@ export class AiService {
         turn.calls.map(async (c) => {
           if (calls++ >= MAX_TOOL_CALLS) {
             log.push({ name: c.name, status: 'bad_input', ms: 0 });
-            return { id: c.id, ok: false, text: JSON.stringify({ error: 'limit', message: 'No more data look-ups for this question; answer with what you have.' }) };
+            return { id: c.id, name: c.name, callId: c.callId, ok: false, text: JSON.stringify({ error: 'limit', message: 'No more data look-ups for this question; answer with what you have.' }) };
           }
           const t0 = Date.now();
           const r = await runTool(reader, tools, c.name, c.input);
           log.push({ name: c.name, status: r.status, ms: Date.now() - t0 });
-          return { id: c.id, ok: r.status === 'ok', text: r.text };
+          return { id: c.id, name: c.name, callId: c.callId, ok: r.status === 'ok', text: r.text };
         }),
       );
       messages.push(...toolResultMessages(config.provider, results));
@@ -359,8 +469,15 @@ export class AiService {
       throw new AiProviderError(timeout ? 'timeout' : 'network', timeout ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY);
     }
     if (!res.ok) {
-      // 401/403 = a wrong key: worth an error line (never the key or the body, which may echo the prompt).
-      if (res.status === 401 || res.status === 403) this.log.error(`${config.provider} refused the AI key (HTTP ${res.status})`);
+      // 401/403 = a wrong key: worth an error line (never the key or the body, which may echo the prompt). Gemini answers
+      // a wrong key with 400 API_KEY_INVALID and an unknown model with 404: only the error's reason code is read.
+      let keyRefused = res.status === 401 || res.status === 403;
+      if (config.provider === 'gemini' && res.status === 400) {
+        const err = ((await res.json().catch(() => null)) as Obj | null)?.error;
+        keyRefused = Array.isArray(err?.details) && (err.details as Obj[]).some((x) => x?.reason === 'API_KEY_INVALID');
+      }
+      if (keyRefused) this.log.error(`${config.provider} refused the AI key (HTTP ${res.status})`);
+      else if (config.provider === 'gemini' && res.status === 404) this.log.error(`gemini does not offer the model "${config.model}" to this key (HTTP 404; check AI_MODEL)`);
       throw new AiProviderError(res.status, res.status === 429 ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.BAD_GATEWAY);
     }
     return res.json().catch(() => null);

@@ -3801,7 +3801,8 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
   (owner/admin/member) and company name to the prompt. Since 2026-10-28 it also adds their name and the read-only data tools ("Data answers" below).
 - **Provider-neutral, plain fetch** (20 s timeout): `AI_PROVIDER` = `anthropic` (default; Messages API,
   `anthropic-version 2026-10-21`, model `claude-haiku-5-5`, effort low, system prompt cached) | `openai` (Chat
-  Completions, `gpt-4o-mini`); `AI_MODEL` overrides; `AI_API_KEY` switches it on. No key = `/ai/status` false (button
+  Completions, `gpt-4o-mini`) | `gemini` (added 2026-10-28, founder wants Google Gemini; see "Gemini" below);
+  `AI_MODEL` overrides; `AI_API_KEY` switches it on. No key = `/ai/status` false (button
   hidden) and `/ai/ask` 503 "The AI helper isn't set up yet.". Provider errors → 502/504 (429 → 503) "The AI helper
   couldn't answer right now…", never the provider's body; a refused key is an error line in the log. Startup line
   "AI helper: ON (provider, model)" / "OFF", never the key.
@@ -3871,6 +3872,24 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
   - Tests: `src/ai/ai-tools.test.ts` (no DB, no network): tool loop for both providers, the user token forwarded with GET
     only (every tool, any input), 403 → `not_allowed` (`is_error`) in the answer flow, signed out = no tools and no app
     call, round / look-up caps, trimming and IST. Deploy: **Platform** + **website** only (no Tasks / Assets change).
+- **Gemini (2026-10-28)**: `AI_PROVIDER=gemini`, Gemini API `generateContent`
+  (`POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`, ref.
+  https://ai.google.dev/api/generate-content), key **only** in the `x-goog-api-key` header (never `?key=` in a URL).
+  Default model **`gemini-3.8-flash`**: Google now limits `gemini-2.5-*` to projects that already used them and points new
+  projects to 3.8 Flash (models page, 2026-10-22); `AI_MODEL=gemini-2.5-flash` still works for keys that have it.
+  Request: `systemInstruction` (stable part, then who / when / page), `contents` (roles `user` / `model`, text parts),
+  `tools: [{ functionDeclarations }]` from the same tool list (JSON Schema → Gemini's OpenAPI subset: capital types,
+  `additionalProperties` / `$schema` / `pattern` dropped, tools without input declared without `parameters`),
+  `toolConfig.functionCallingConfig.mode` AUTO (NONE on the last round), `generationConfig.maxOutputTokens` 2048 (thinking
+  counts inside it), temperature 0.2 only for 1.x / 2.x models (Google advises the default for Gemini 3+). Loop: the
+  model turn goes back unchanged (`thoughtSignature` kept), then one `user` turn of `functionResponse {id?, name,
+  response}` parts (refusals as `response.error`). Blocked answers (`promptFeedback.blockReason`, finishReason SAFETY /
+  RECITATION / PROHIBITED_CONTENT / …) and empty candidates → 502; MAX_TOKENS keeps the text written. Errors as the
+  others (429 → 503, else 502, timeout 504); 400 `API_KEY_INVALID` / 401 / 403 log "refused the AI key", 404 logs the
+  unknown model (reason codes only, never the body). Same limits and privacy rules. `set-ai.sh` offers gemini, accepts
+  any key format (quotes / `$` / control characters refused) and checks it with `GET /v1beta/models` (header via
+  `curl -K -`). Tests: `ai.test.ts` (shape, key only in the header, errors, blocked, schema conversion), `ai-tools.test.ts`
+  (functionCall → functionResponse loop, round cap → NONE).
 
 ### 24.4 Buy now, without the trial (built 2026-10-28)
 Founder 2026-10-27: "anyone who wants to get started directly, without the free trial, can do that." Build tomorrow:

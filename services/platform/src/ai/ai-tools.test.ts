@@ -34,11 +34,11 @@ function world(providerReplies: Reply[], apps: Record<string, Reply | ((url: URL
   return { provider, app, fetchImpl, bodies: () => provider.map((c) => JSON.parse(String(c.init.body))) };
 }
 
-function setEnv(provider: 'anthropic' | 'openai') {
+function setEnv(provider: 'anthropic' | 'openai' | 'gemini') {
   Object.assign(process.env, {
     AI_API_KEY: KEY,
     AI_PROVIDER: provider,
-    AI_BASE_URL: provider === 'openai' ? 'https://openai.ai.test' : 'https://anthropic.ai.test',
+    AI_BASE_URL: `https://${provider}.ai.test`,
     TASKS_INTERNAL_URL: 'http://tasks.test:8000/api/internal',
     ASSETS_INTERNAL_URL: 'http://assets.test:3000/api/internal',
     PLATFORM_SELF_URL: 'http://platform.test:4000/api/platform',
@@ -143,6 +143,83 @@ describe('AI data answers', () => {
     const data = JSON.parse(tool.content);
     assert.equal(data.counts.overdue, 1);
     assert.equal(data.rows[0].due_at, '2026-10-27 18:00 IST');
+  });
+
+  test('Gemini function calling: functionCall → functionResponse in a user turn (signature kept) → answer', async () => {
+    setEnv('gemini');
+    const w = world(
+      [
+        {
+          body: {
+            candidates: [
+              {
+                content: {
+                  role: 'model',
+                  parts: [
+                    { functionCall: { id: 'fc_1', name: 'my_leave', args: {} }, thoughtSignature: 'sig-abc' },
+                    { functionCall: { name: 'team_today', args: { status: 'late' } } },
+                  ],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+        },
+        { body: { candidates: [{ content: { role: 'model', parts: [{ text: 'You have **8** casual leaves left.' }] }, finishReason: 'STOP' }] } },
+      ],
+      {
+        'tasks.test:8000/api/leaves/balances/': LEAVE_BALANCES,
+        'tasks.test:8000/api/leaves/': LEAVE_REQUESTS,
+        'tasks.test:8000/api/attendance/team_day/': { status: 403, body: { detail: 'You do not have permission to perform this action.' } },
+      },
+    );
+    const r = await service(w.fetchImpl).ask({ question: 'How many leaves do I have left?' }, { role: 'member', user: USER });
+    assert.equal(r.answer, 'You have **8** casual leaves left.');
+    // Look-ups run in parallel: the log is in finishing order, the responses below in the order of the calls.
+    assert.deepEqual(r.tools.map((t) => [t.name, t.status]).sort(), [['my_leave', 'ok'], ['team_today', 'not_allowed']]);
+    for (const c of w.provider) {
+      assert.equal((c.init.headers as Record<string, string>)['x-goog-api-key'], KEY);
+      assert.ok(!c.url.includes(KEY), 'the key is never in the URL');
+      assert.match(c.url, /^https:\/\/gemini\.ai\.test\/v1beta\/models\/[^/]+:generateContent$/);
+    }
+    for (const c of w.app) assert.equal((c.init.headers as Record<string, string>).authorization, `Bearer ${USER_TOKEN}`);
+
+    const [first, second] = w.bodies();
+    const decl = first.tools[0].functionDeclarations as Array<{ name: string; parameters?: { type: string; properties: Record<string, { type: string }> } }>;
+    assert.ok(decl.some((d) => d.name === 'team_today'));
+    assert.equal(decl.find((d) => d.name === 'my_leave')?.parameters, undefined, 'a tool without input has no parameters');
+    const team = decl.find((d) => d.name === 'team_today')?.parameters;
+    assert.equal(team?.type, 'OBJECT');
+    assert.equal(team?.properties.status.type, 'STRING');
+    assert.doesNotMatch(JSON.stringify(first.tools), /additionalProperties|pattern/);
+    assert.deepEqual(first.toolConfig, { functionCallingConfig: { mode: 'AUTO' } });
+    assert.match(first.systemInstruction.parts[0].text, /answer ONLY from what the tools return/);
+
+    // The model turn goes back unchanged (thoughtSignature included), then one user turn with the function responses.
+    assert.equal(second.contents.length, 3);
+    assert.deepEqual(second.contents[1], { role: 'model', parts: [{ functionCall: { id: 'fc_1', name: 'my_leave', args: {} }, thoughtSignature: 'sig-abc' }, { functionCall: { name: 'team_today', args: { status: 'late' } } }] });
+    const turn = second.contents[2];
+    assert.equal(turn.role, 'user');
+    const [leave, denied] = turn.parts.map((p: { functionResponse: { id?: string; name: string; response: Record<string, unknown> } }) => p.functionResponse);
+    assert.equal(leave.id, 'fc_1');
+    assert.equal(leave.name, 'my_leave');
+    assert.equal((leave.response as { balances: Array<{ balance: number }> }).balances[0].balance, 8);
+    assert.doesNotMatch(JSON.stringify(leave.response), /secret|9999999999|https:/);
+    assert.equal(denied.id, undefined, 'no id is invented for a call that had none');
+    assert.equal(denied.name, 'team_today');
+    assert.equal((denied.response.error as { error: string }).error, 'not_allowed');
+  });
+
+  test('Gemini: after 4 rounds the last call has function calling NONE', async () => {
+    setEnv('gemini');
+    const call = { body: { candidates: [{ content: { role: 'model', parts: [{ functionCall: { name: 'my_profile', args: {} } }] }, finishReason: 'STOP' }] } };
+    const w = world([call, call, call, call, { body: { candidates: [{ content: { parts: [{ text: 'Done.' }] }, finishReason: 'STOP' }] } }], {
+      'tasks.test:8000/api/auth/me': { body: { username: 'asha' } },
+    });
+    const r = await service(w.fetchImpl).ask({ question: 'Who am I?' }, { user: USER });
+    assert.equal(r.answer, 'Done.');
+    assert.equal(w.provider.length, MAX_TOOL_ROUNDS + 1);
+    assert.deepEqual(w.bodies().at(-1).toolConfig, { functionCallingConfig: { mode: 'NONE' } });
   });
 
   test('a 403 from an app becomes "not allowed" for the model (is_error), never data', async () => {

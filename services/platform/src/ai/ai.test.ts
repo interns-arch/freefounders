@@ -15,6 +15,8 @@ import {
   cleanPage,
   describeAi,
   FAILED_MESSAGE,
+  GEMINI_MAX_TOKENS,
+  geminiSchema,
   OFF_MESSAGE,
 } from './ai.service';
 import { KNOWLEDGE } from './knowledge';
@@ -107,6 +109,101 @@ describe('AI helper', () => {
     assert.equal(aiConfig()?.model, 'gpt-test-model');
     assert.match(describeAi(), /ON \(openai, gpt-test-model\)/);
     assert.ok(!describeAi().includes(KEY), 'the startup line never shows the key');
+  });
+
+  test('Gemini: generateContent shape, key only in x-goog-api-key (never the URL), model/model roles, default model', async () => {
+    Object.assign(process.env, { AI_API_KEY: KEY, AI_PROVIDER: 'Gemini', AI_BASE_URL: 'https://gemini.test/' });
+    delete process.env.AI_MODEL;
+    const { calls, fetchImpl } = stub(200, {
+      candidates: [{ content: { role: 'model', parts: [{ text: 'thinking…', thought: true }, { text: ' Attendance › Today › ' }, { text: 'Check in. ' }] }, finishReason: 'STOP' }],
+    });
+    const r = await service(fetchImpl).ask(
+      { question: 'How do I punch in?', history: [{ role: 'user', text: 'Hi' }, { role: 'assistant', text: 'Hello!' }], page: '/attendance/today' },
+      { role: 'member', companyName: 'Acme Traders' },
+    );
+    assert.equal(r.answer, 'Attendance › Today › Check in.', 'thought parts are not shown');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://gemini.test/v1beta/models/gemini-3.8-flash:generateContent');
+    assert.ok(!calls[0].url.includes(KEY) && !calls[0].url.includes('key='), 'the key is never in the URL');
+    const h = calls[0].init.headers as Record<string, string>;
+    assert.equal(h['x-goog-api-key'], KEY);
+    assert.equal(h.authorization, undefined);
+    assert.equal(h['x-api-key'], undefined);
+    assert.equal(calls[0].init.method, 'POST');
+    const body = JSON.parse(String(calls[0].init.body));
+    assert.ok(!String(calls[0].init.body).includes(KEY), 'the key is not in the body either');
+    assert.equal(body.model, undefined);
+    assert.ok(body.systemInstruction.parts[0].text.includes(KNOWLEDGE));
+    assert.match(body.systemInstruction.parts[1].text, /Acme Traders/);
+    assert.equal(body.generationConfig.maxOutputTokens, GEMINI_MAX_TOKENS);
+    assert.equal(body.generationConfig.temperature, undefined, 'Gemini 3+ keeps its default temperature');
+    assert.equal(body.tools, undefined);
+    assert.deepEqual(body.contents, [
+      { role: 'user', parts: [{ text: 'Hi' }] },
+      { role: 'model', parts: [{ text: 'Hello!' }] },
+      { role: 'user', parts: [{ text: 'How do I punch in?' }] },
+    ]);
+    assert.match(describeAi(), /ON \(gemini, gemini-3\.8-flash\)/);
+
+    process.env.AI_MODEL = 'gemini-2.5-flash';
+    const s2 = stub(200, { candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'MAX_TOKENS' }] });
+    assert.equal((await service(s2.fetchImpl).ask({ question: 'x' })).answer, 'ok', 'MAX_TOKENS keeps the text written');
+    assert.equal(s2.calls[0].url, 'https://gemini.test/v1beta/models/gemini-2.5-flash:generateContent');
+    assert.equal(JSON.parse(String(s2.calls[0].init.body)).generationConfig.temperature, 0.2, 'low temperature for 2.x');
+  });
+
+  test('Gemini problems: same friendly errors; blocked answers and bad keys never shown', async () => {
+    Object.assign(process.env, { AI_API_KEY: KEY, AI_PROVIDER: 'gemini', AI_BASE_URL: 'https://gemini.test' });
+    const badKey = { error: { code: 400, message: 'API key not valid. secret upstream detail', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } };
+    for (const [status, body, ours] of [
+      [400, badKey, 502],
+      [400, { error: { code: 400, status: 'INVALID_ARGUMENT' } }, 502],
+      [403, { error: { code: 403, status: 'PERMISSION_DENIED' } }, 502],
+      [404, { error: { code: 404, status: 'NOT_FOUND' } }, 502],
+      [429, { error: { code: 429, status: 'RESOURCE_EXHAUSTED' } }, 503],
+      [500, { error: { code: 500 } }, 502],
+      [503, { error: { code: 503, status: 'UNAVAILABLE' } }, 502],
+    ] as const) {
+      const { fetchImpl } = stub(status, body);
+      await assert.rejects(service(fetchImpl).ask({ question: 'x' }), (e: HttpException) => e.getStatus() === ours && e.message === FAILED_MESSAGE);
+    }
+    for (const blocked of [
+      { candidates: [{ content: { parts: [{ text: 'partial' }] }, finishReason: 'SAFETY' }] },
+      { promptFeedback: { blockReason: 'SAFETY' } },
+      { candidates: [{ finishReason: 'MALFORMED_FUNCTION_CALL' }] },
+      { candidates: [] },
+    ]) {
+      const { fetchImpl } = stub(200, blocked);
+      await assert.rejects(service(fetchImpl).ask({ question: 'x' }), (e: HttpException) => e.getStatus() === 502 && e.message === FAILED_MESSAGE);
+    }
+    const timeout = (async () => {
+      throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+    }) as unknown as typeof fetch;
+    await assert.rejects(service(timeout).ask({ question: 'x' }), (e: HttpException) => e.getStatus() === 504);
+  });
+
+  test('Gemini schema conversion: OpenAPI subset, capital types, unsupported keywords dropped', () => {
+    const converted = geminiSchema({
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        month: { type: 'string', pattern: '^\\d{4}-\\d{2}$', description: 'YYYY-MM' },
+        status: { type: 'string', enum: ['present', 'late'] },
+        ids: { type: 'array', items: { type: 'integer', additionalProperties: false } },
+      },
+      required: ['month'],
+      additionalProperties: false,
+    });
+    assert.deepEqual(converted, {
+      type: 'OBJECT',
+      properties: {
+        month: { type: 'STRING', description: 'YYYY-MM' },
+        status: { type: 'STRING', enum: ['present', 'late'] },
+        ids: { type: 'ARRAY', items: { type: 'INTEGER' } },
+      },
+      required: ['month'],
+    });
+    assert.doesNotMatch(JSON.stringify(converted), /additionalProperties|\$schema|pattern/);
   });
 
   test('provider problems: friendly 502/504/503, never the provider body', async () => {
