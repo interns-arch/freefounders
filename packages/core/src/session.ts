@@ -91,6 +91,18 @@ async function post(path: string, body: Record<string, unknown> = {}) {
   });
 }
 
+/**
+ * One renewal at a time across every tab of this browser. Each renewal replaces the refresh cookie; two tabs renewing
+ * at once could leave the browser holding the older token, and presenting it later looks like a stolen token, so the
+ * Platform ends the session (people were signed out with several tabs open). Tabs queue on a Web Lock, so each one
+ * sends the cookie the previous one just received. Without the Locks API (old browsers, React Native) it runs as before.
+ */
+function withRefreshLock<T>(run: () => Promise<T>): Promise<T> {
+  const locks = (globalThis as { navigator?: { locks?: { request: (name: string, cb: () => Promise<T>) => Promise<T> } } }).navigator?.locks;
+  if (!locks || config.refreshStore) return run();
+  return locks.request('kaampilot-refresh', run).catch(() => run());
+}
+
 export const session = {
   token: () => accessToken,
   claims: () => claims,
@@ -99,7 +111,7 @@ export const session = {
 
   /** Renews the access token. False when the person is signed out. */
   refresh(): Promise<boolean> {
-    renewing ??= (async () => {
+    renewing ??= withRefreshLock(async () => {
       try {
         const store = config.refreshStore;
         const stored = store ? await store.get() : null;
@@ -124,7 +136,7 @@ export const session = {
       } catch {
         return false;
       }
-    })().finally(() => setTimeout(() => (renewing = null), 0));
+    }).finally(() => setTimeout(() => (renewing = null), 0));
     return renewing;
   },
 
