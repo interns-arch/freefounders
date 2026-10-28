@@ -169,7 +169,7 @@ export function TeamPage() {
         </div>
       ) : rows.length === 0 ? (
         data.rows.length === 0 ? (
-          <EmptyState icon={UsersRound} title="Nobody to show yet." description="People appear here once they are added in People & access." />
+          <EmptyState icon={UsersRound} title="Nobody to show yet." description="People appear here once they are added in Admin → People." />
         ) : (
           <EmptyState icon={SearchX} title="Nobody matches." description="Try another name, department or status." />
         )

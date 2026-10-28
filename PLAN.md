@@ -4096,3 +4096,110 @@ local dev suite (owner desktop + 390 px phone, member refused). Tiles answer in 
 **Deploy**: Tasks API (migration `accounts 0024` via `migrate_companies`) + website; then
 `npm --prefix services/platform run company -- sync` (or any People change) fills join dates; Platform only for the
 AI helper text (`knowledge.ts`). No new APK.
+
+---
+
+## 26. One place for people (2026-10-28)
+Founder, looking at Assets → Dashboard ("Add employee"): "Employees should be added only once, at the time of adding people and
+assigning roles. It should be consistent and feel like a single app, not different apps inside one app."
+
+**Rule.** With Platform sign-in on (the live setup: `PLATFORM_JWKS_URL`, `TENANCY=schemas`), a person is **added, edited,
+imported, switched off, deleted and given roles only in Admin → People** (Add person, Invite link, Import, Edit, Change roles,
+Start exit, Deactivate, Delete; §17.1, §19.12, §19.28, §19.40, §21.1). Everywhere else the person is shown read-only with a
+small **Manage in People** link (only for those who may open People; everyone else sees nothing) that opens
+`/people?person=<id>` (their form) or `/people?q=<email / code / name>` (a search) when the app does not know the Platform id.
+Each area keeps editing **its own data** about a person. Standalone installs (flags off) behave exactly as before.
+
+### 26.1 Audit: every place a person was created, edited, imported, switched off or given a role
+| Place | Before | Now |
+|---|---|---|
+| Admin → People (Add / Invite / Import / Edit / Change roles / Reset password / Start exit / Deactivate / Delete) | the intended place | **kept, the only place**; menu and title renamed "People & access" → **People**; `?person=` / `?q=` deep links |
+| Admin → Roles → "Add Guard role" (Visitors) | makes the role; guards are given it in People | **kept** (creating a guard = a person in People with the Guard role) |
+| Getting started checklist → "Invite your team" | opens `/people?invite=1` | kept |
+| Assets → Dashboard → "Add employee" quick action | adds an employee | **removed** |
+| Assets → Employees → "Add employee" | adds an employee (+ optional login) | **removed**; screen renamed **People & assets** ("who holds what") with a link to Admin → People |
+| Assets "+ Add" menu, command palette, `N` shortcuts → Employee / New joiner / Department | adds them | **removed** from the menu (Asset, Asset type, Category, Vendor, Request, Ticket, Maintenance stay) |
+| Assets → person → "Edit details" (name, ID, official email / phone, designation, department, manager, joining date, notes) | all editable | **"Edit Assets details"**: identity read-only + Manage in People; **work location, personal phone / email, notes** stay editable |
+| Assets → person → "Change status / notice period" (active, on leave, notice) | changes lifecycle | **removed**; notice / exit = People → Start exit (the Assets exit case for asset recovery still runs, §17.4) |
+| Assets → person → "Portal login" (give login, change password, turn off) | Assets login | **read-only "Sign-in" card** (status, role, last sign-in) + Manage in People |
+| Assets → New joiners → "New joiner" | adds an employee in Joining status | **removed**; "Add joiner in People" (a person with a joining date opens their onboarding case, §17.4); the case itself (kit, IT, approve, joined) stays in Assets |
+| Assets → Settings → Users (add / edit logins, roles, active) | Assets logins | **removed** from the menu; `/assets/settings/users` → `/people` |
+| Assets → Settings → Departments | a second departments list | **removed** from the menu; `/assets/settings/departments` → `/settings` (Admin → Settings → Departments, pushed to the apps) |
+| Assets → Settings → Roles | — | already `/roles` (§19.28) |
+| Tasks → My team (users.manage): Edit (name, email, mobile, password), Activate / Deactivate, Delete permanently | Tasks user | **read-only** list with workloads + Manage in People per row; "Add person in People" for People admins |
+| Tasks → My team (everyone else) | read-only directory | kept |
+| Tasks → Task settings → Departments | already a link to Admin → Settings | kept |
+| Team (Team 360) person page | read-only | kept + Manage in People |
+| HR / Attendance (shifts, face enrolment, leave balances and quotas, approvals), Payroll (salary structures, advances, payslips) | per-area data about a person | **kept in their area** (not identity) |
+| Visitors (hosts, guards, guard activity) | read-only lists of people | kept |
+| Mobile app | the web app in a shell | follows the web app |
+
+### 26.2 Who owns which field
+| Field | Owner | Shown in |
+|---|---|---|
+| Full name, email, mobile, employee ID | **People** (pushed) | Assets (name, official email / phone, employee ID), Tasks (name, email, WhatsApp number, employee code), Team |
+| Department, designation, reports to, joining date | **People** (pushed, §17.1) | Assets, Tasks, Team |
+| Active / inactive, login, password, roles / access level, exit | **People** | everywhere (switched off = signed out everywhere) |
+| Assets: work location, company (legal entity), personal phone / email, notes, assets held, ID card / QR, exit checklist, onboarding kit | Assets | Assets |
+| Tasks: workload, task settings, groups | Tasks | Tasks |
+| HR: shift, attendance rules, face, leave quota / balances, regularizations | Tasks (HR) | Attendance |
+| Payroll: salary structure, advances, payslips | Tasks (Payroll) | Payroll |
+
+### 26.3 What changed in the services
+- **People push carries who they are**: `PUT /internal/people` now also sends `fullName`, `email`, `mobile` (employee code was
+  already sent). Assets updates the login's name / email and the employee's first / last name, official email / phone and
+  employee ID (holder names on held assets follow); Tasks updates first / last name, email and WhatsApp number. An **empty**
+  value in People never wipes what an app has (WhatsApp alerts and mails keep working for people not filled in yet); an
+  email / employee ID another record in the app already uses is left as it is; the same phone written another way
+  ("98765 43210" vs "919876543210") is not rewritten in Tasks.
+- **Creation**: giving a person an app (a role with that app's permission, e.g. the Member role) provisions their Assets login
+  **and employee record** (existing, §13); now the push also adds the employee record for any Assets login that has none
+  (leadership logins excepted), so nothing depends on Assets' "Add employee" any more. Tasks users are created by provision
+  (existing).
+- **The apps refuse people changes** (403 `People are managed in Admin → People`) while Platform sign-in is on, so old clients
+  and shortcuts cannot make duplicates:
+  - Assets: `POST /employees`, `PATCH /employees/:id` that changes an identity field (employee ID, name, official email /
+    phone, designation, department, manager, joining date; Assets' own fields still save, and the same values sent back by an
+    older form are fine), `POST /employees/:id/status`, `POST /employees/:id/access`, `POST /onboarding` (adds a joiner),
+    `POST /users`, `PATCH /users/:id`, `POST|PATCH|DELETE /roles`.
+  - Tasks: `POST /users/`, `PUT|PATCH /users/:id/`, `POST /users/:id/deactivate|activate|purge/` (the purge preview `GET`
+    stays). `GET /users/` now includes `platform_person_id` (the Manage in People link).
+  - Flags off (standalone): unchanged (Assets integration tests and the new Tasks standalone test add and switch off people).
+- **Assets employee profile** returns `login.platformPersonId`.
+
+### 26.4 Assets dashboard: "Total assets 0" vs "1 in the register"
+Cause: the "Assets by status" card computed its own total with `… || 1` (to avoid dividing by zero in the bar widths) and
+**displayed** it, so an empty register read "1 in the register (excluding disposed)" next to "Total assets 0". Fix: every
+count on the dashboard uses the server's one definition, **every asset except disposed** (`totals.assets` = the status
+breakdown without Disposed = the category counts); the "1" is only used as the bar divisor. The "Total assets" hint now says
+"(excluding disposed)" too, because the asset list's "All" tab also counts disposed ones. Test: `dashboard counts` in
+Assets `integration.test.ts`.
+
+### 26.5 One app: words and seams
+Done now: **People** (not "People & access" / employees / users) for the directory: Admin menu, page title, Home shortcut,
+Team / Roles / AI helper texts; Assets "Employees" → **People & assets** (menu, title, back links, search palette group,
+shortcut help, "Person" column); "1 person / N people on notice".
+Follow-ups (bigger, not done here):
+1. Tasks has its own **Notifications** screen (`/tasks/notifications`) next to the one bell + `/notifications`: fold it in.
+2. Assets departments: the server still accepts `POST/PATCH/DELETE` on its departments (the web no longer offers them);
+   refuse them in Platform mode as for people, and the same for Tasks `departments/` writes.
+3. Assets exit case **cancel** and onboarding **"did not join"** change the employee only in Assets; they should go through
+   People (cancel the exit there / remove the joiner) via the event outbox (§17.4).
+4. Two searches: the Assets command palette searches Assets only; one search across People, tasks and assets.
+5. Dead client hooks for the removed actions (`useGrantEmployeeAccess`, `useDisableLogin`, `useSaveAssetsUser`,
+   `useCreateOnboarding`, `useSetManagedUserActive`, `usePurgeManagedUser`, `useUpdateManagedUser`) can go in the next clean-up.
+6. "My team" (Tasks) and "Team" (Team 360) are two team screens; Team 360 could take the workload view and "My team" retire.
+
+### 26.6 Tests and status (built 2026-10-28)
+- Assets `platform.test.ts` "one place for people": the push renames / re-codes / re-contacts the employee and login, adds a
+  missing employee record, never wipes with blanks, switches the login off; every refused endpoint answers 403 with the
+  message; Assets' own fields still save. `integration.test.ts` "dashboard counts". Standalone add / edit: existing tests.
+- Tasks `accounts/tests_people_sync.py`: name / email / mobile follow People (no wipe, same number kept); users endpoints 403
+  with Platform sign-in on, list carries `platform_person_id`; standalone add + deactivate still work.
+- Platform `integration.test.ts`: the push carries `fullName`, `email`, `mobile`.
+- e2e `e2e/web-one-people.spec.ts` (API refusals, People → Assets / Tasks creation and rename, Assets screens read-only with
+  Manage in People → People form, "+ Add" menu); `web-assets`, `web-tasks-general`, `web-admin`, `single-login` specs updated
+  for the new names.
+**Deploy**: Platform API (push fields + AI helper text), Assets API, Tasks API, website. No migrations. After deploy run
+`npm --prefix services/platform run company -- sync` (or any People change) so names / emails / mobiles and the missing
+Assets employee records arrive. No new APK.

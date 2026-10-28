@@ -1,16 +1,16 @@
 import { ONBOARDING_STATUS_LABELS } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { Plus, UserPlus } from '@/components/icons';
+import { UserPlus } from '@/components/icons';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { EnumBadge } from '@/components/common/badges';
 import { type Column, DataTable, Pagination } from '@/components/common/data-table';
 import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Avatar, Card, Progress } from '@/components/ui/primitives';
-import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
+import { ADMIN_SCREENS } from '@/features/admin/nav';
+import { useAccess } from '@kaampilot/core';
 import { useOnboardingList } from '@kaampilot/core/assets';
-import { useAuth } from '@/features/assets/lib/auth';
 import { ONBOARDING_TONE } from '@/lib/status';
 import type { OnboardingListItem } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
@@ -141,18 +141,25 @@ export function OnboardingDownload({ defaultStatus }: { defaultStatus: string })
   );
 }
 
-/** HR's page: add joiners and follow them until they join. */
+/**
+ * HR's page: follow joiners until they join. A joiner is added once, in Admin → People with a joining date, which opens
+ * their onboarding case here (PLAN.md §17.4, §26).
+ */
 export default function OnboardingPage() {
-  const quickAdd = useQuickAdd();
-  const { can } = useAuth();
-  const newJoiner = can('onboarding:manage') && (
-    <Button variant="cta" size="sm" onClick={() => quickAdd.open('onboarding')}>
-      <Plus /> New joiner
+  const canPeople = ADMIN_SCREENS.people(useAccess());
+  const newJoiner = canPeople && (
+    <Button asChild variant="cta" size="sm">
+      <Link to="/people">
+        <UserPlus /> Add joiner in People
+      </Link>
     </Button>
   );
   return (
     <div>
-      <PageHeader title="New joiners" description="Tell IT who is joining and what they need. IT approves it, assigns everything, and you mark them as joined on day 1." actions={
+      <PageHeader
+        title="New joiners"
+        description="Add the person in Admin → People with their joining date; their case appears here. Tell IT what they need, IT assigns everything, and you mark them as joined on day 1."
+        actions={
           <>
             <OnboardingDownload defaultStatus="DRAFT,SUBMITTED,APPROVED" />
             {newJoiner}
@@ -169,7 +176,7 @@ export default function OnboardingPage() {
           { value: 'COMPLETED', label: 'Joined' },
           { value: 'CANCELLED', label: 'Cancelled' },
         ]}
-        empty={<EmptyState icon={UserPlus} title="No one joining soon" description="Add a new joiner to get their things ready before day 1." action={newJoiner || undefined} />}
+        empty={<EmptyState icon={UserPlus} title="No one joining soon" description="Add a new joiner in Admin → People with a joining date to get their things ready before day 1." action={newJoiner || undefined} />}
       />
     </div>
   );

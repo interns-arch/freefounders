@@ -3,12 +3,16 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type AuthedRequest, Public, ZodPipe } from '../../common/http';
 import { DbService } from '../../db/db.service';
-import { departments, employees, sessions, syncState, users } from '../../db/schema';
+import { HistoryService } from '../../core/history.service';
+import { SequenceService } from '../../core/sequence.service';
+import { allocations, assets, departments, employees, sessions, syncState, users } from '../../db/schema';
 import { DeleteOptionsError, deletePerson, parseDeleteOptions, removeFiles } from './person-delete';
 import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-token';
+import { addStaffEmployee, splitName } from './staff-employee';
 
 const PEOPLE_VERSION_KEY = 'ff_people_version';
 
+const blank = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
 const peopleSchema = z.object({
   version: z.number().int().min(0),
   departments: z.array(z.object({ code: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(120), active: z.boolean().optional() })),
@@ -20,6 +24,11 @@ const peopleSchema = z.object({
       designation: z.string().max(120).nullable().optional(),
       reportsTo: z.string().uuid().nullable().optional(),
       joinDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      // Who they are (PLAN.md §26): People is the one place these change, so they follow every push.
+      fullName: z.string().trim().min(1).max(120).optional(),
+      email: z.preprocess(blank, z.string().trim().toLowerCase().email().nullable().optional()),
+      mobile: z.preprocess(blank, z.string().trim().max(30).nullable().optional()),
+      employeeCode: z.preprocess(blank, z.string().trim().max(40).nullable().optional()),
     }),
   ),
 });
@@ -32,12 +41,17 @@ const slug = (s: string) =>
     .slice(0, 20);
 
 /**
- * The People directory from the Kaampilot Platform (PLAN.md §17.1): the company's departments, and each linked
- * person's department, manager, designation, join date and active/inactive. Internal: Platform service token only.
+ * The People directory from the Kaampilot Platform (PLAN.md §17.1, §26): the company's departments, and each linked
+ * person's name, email, phone, employee code, department, manager, designation, join date and active/inactive. A login
+ * without an employee record (other than leadership) gets one here. Internal: Platform service token only.
  */
 @Controller('internal/people')
 export class InternalPeopleController {
-  constructor(private readonly dbs: DbService) {}
+  constructor(
+    private readonly dbs: DbService,
+    private readonly sequences: SequenceService,
+    private readonly history: HistoryService,
+  ) {}
 
   private async requireService(req: AuthedRequest) {
     const token = bearerToken(req.headers.authorization);
@@ -103,10 +117,29 @@ export class InternalPeopleController {
 
       const ids = [...new Set(input.people.flatMap((p) => [p.personId, ...(p.reportsTo ? [p.reportsTo] : [])]))];
       const linked = ids.length
-        ? await db.select({ id: users.id, personId: users.platformPersonId, employeeId: users.employeeId, isActive: users.isActive }).from(users).where(inArray(users.platformPersonId, ids))
+        ? await db
+            .select({
+              id: users.id,
+              personId: users.platformPersonId,
+              employeeId: users.employeeId,
+              isActive: users.isActive,
+              name: users.name,
+              email: users.email,
+              leadership: sql<boolean>`'insights:leadership' = any(user_permissions(${users.id}))`,
+            })
+            .from(users)
+            .where(inArray(users.platformPersonId, ids))
         : [];
       const byPerson = new Map(linked.map((u) => [u.personId!, u]));
       const missingPeople: string[] = [];
+      // Employee records first (a login that has none, leadership aside), so a manager made in this push is linked below.
+      for (const p of input.people) {
+        const user = byPerson.get(p.personId);
+        if (!user || user.employeeId || !p.fullName || user.leadership) continue;
+        const employeeId = await addStaffEmployee({ dbs: this.dbs, sequences: this.sequences, history: this.history }, { ...p, fullName: p.fullName });
+        await db.update(users).set({ employeeId, updatedAt: new Date() }).where(eq(users.id, user.id));
+        user.employeeId = employeeId;
+      }
       for (const p of input.people) {
         const user = byPerson.get(p.personId);
         if (!user) {
@@ -114,22 +147,54 @@ export class InternalPeopleController {
           continue;
         }
         const active = (p.status ?? 'active') === 'active';
-        if (user.isActive !== active) {
-          await db.update(users).set({ isActive: active, updatedAt: new Date() }).where(eq(users.id, user.id));
-          if (!active) await db.delete(sessions).where(eq(sessions.userId, user.id)); // signed out at once
+        const login: Partial<typeof users.$inferInsert> = {};
+        if (user.isActive !== active) login.isActive = active;
+        if (p.fullName && p.fullName !== user.name) login.name = p.fullName;
+        // An empty email / mobile in People never wipes what is here; an address another record uses is left as it is.
+        if (p.email && p.email !== user.email?.toLowerCase()) {
+          const [taken] = await db.select({ id: users.id }).from(users).where(and(sql`lower(${users.email}) = lower(${p.email})`, sql`${users.id} <> ${user.id}`)).limit(1);
+          if (!taken) login.email = p.email;
+        }
+        if (Object.keys(login).length) {
+          await db.update(users).set({ ...login, updatedAt: new Date() }).where(eq(users.id, user.id));
+          if (login.isActive === false) await db.delete(sessions).where(eq(sessions.userId, user.id)); // signed out at once
         }
         if (!user.employeeId) continue; // e.g. Leadership logins have no employee record
+        const [emp] = await db.select().from(employees).where(eq(employees.id, user.employeeId)).limit(1);
+        if (!emp) continue;
         const manager = p.reportsTo ? byPerson.get(p.reportsTo) : undefined;
-        await db
+        const who: Partial<typeof employees.$inferInsert> = {};
+        if (p.fullName) {
+          const { firstName, lastName } = splitName(p.fullName);
+          if (firstName !== emp.firstName || (lastName ?? null) !== (emp.lastName ?? null)) Object.assign(who, { firstName, lastName });
+        }
+        if (p.mobile && p.mobile !== emp.phone) who.phone = p.mobile;
+        if (p.email && p.email !== emp.email?.toLowerCase()) {
+          const [taken] = await db.select({ id: employees.id }).from(employees).where(and(sql`lower(${employees.email}) = lower(${p.email})`, sql`${employees.id} <> ${emp.id}`)).limit(1);
+          if (!taken) who.email = p.email;
+        }
+        if (p.employeeCode && p.employeeCode.toLowerCase() !== emp.employeeCode.toLowerCase()) {
+          const [taken] = await db.select({ id: employees.id }).from(employees).where(and(sql`lower(${employees.employeeCode}) = lower(${p.employeeCode})`, sql`${employees.id} <> ${emp.id}`)).limit(1);
+          if (!taken) who.employeeCode = p.employeeCode.toUpperCase();
+        }
+        const [row] = await db
           .update(employees)
           .set({
+            ...who,
             ...(p.departmentCode !== undefined ? { departmentId: p.departmentCode ? (deptId.get(p.departmentCode) ?? null) : null } : {}),
             ...(p.designation !== undefined ? { designation: p.designation } : {}),
             ...(p.joinDate ? { joinDate: p.joinDate } : {}),
             ...(p.reportsTo !== undefined ? { managerId: manager?.employeeId && manager.employeeId !== user.employeeId ? manager.employeeId : null } : {}),
             updatedAt: new Date(),
           })
-          .where(and(eq(employees.id, user.employeeId)));
+          .where(eq(employees.id, emp.id))
+          .returning({ fullName: employees.fullName, employeeCode: employees.employeeCode });
+        if (row && (row.fullName !== emp.fullName || row.employeeCode !== emp.employeeCode)) {
+          // What they hold shows the new name (same as editing the employee).
+          const name = `${row.fullName} (${row.employeeCode})`;
+          await db.update(assets).set({ holderName: name }).where(and(eq(assets.holderType, 'EMPLOYEE'), eq(assets.holderId, emp.id)));
+          await db.update(allocations).set({ holderName: name }).where(and(eq(allocations.employeeId, emp.id), eq(allocations.status, 'ACTIVE')));
+        }
       }
       await db
         .insert(syncState)

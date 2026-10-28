@@ -1,4 +1,4 @@
-/** Platform admin types: People & access, Roles (with duties), Settings Center (PLAN.md §13–§17). */
+/** Platform admin types: People, Roles (with duties), Settings Center (PLAN.md §13–§17). */
 import type { AppKey } from '../session';
 
 export type PlatformRole = 'owner' | 'admin' | 'member';
@@ -10,9 +10,9 @@ export const APP_NAMES: Record<AppKey, string> = { tasks: 'Tasks', assets: 'Asse
 export type GrantApp = AppKey | 'platform';
 export const GRANT_APP_NAMES: Record<GrantApp, string> = { ...APP_NAMES, platform: 'Admin' };
 
-/** The Admin workspace permissions (People & access, Roles, Settings). Owners and admins have them all. */
+/** The Admin workspace permissions (People, Roles, Settings). Owners and admins have them all. */
 export type AdminPermission = 'people.manage' | 'people.passwords' | 'people.exit' | 'people.delete' | 'roles.manage' | 'company.settings';
-/** Any of these opens People & access. */
+/** Any of these opens People. */
 export const PEOPLE_SCREEN: AdminPermission[] = ['people.manage', 'people.passwords', 'people.exit', 'people.delete', 'roles.manage'];
 
 export interface AppInfo {

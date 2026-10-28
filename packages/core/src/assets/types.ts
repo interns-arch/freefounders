@@ -305,7 +305,7 @@ export interface EmployeeDetail extends Omit<Employee, 'assetCount' | 'openExitC
   createdAt: string;
   assets: HeldAsset[];
   given: HeldAsset[];
-  login: { id: string; email: string | null; username: string | null; isActive: boolean; roleId: string; roleName: string; lastLoginAt: string | null } | null;
+  login: { id: string; email: string | null; username: string | null; isActive: boolean; roleId: string; roleName: string; lastLoginAt: string | null; /** The People directory person (PLAN.md §26). */ platformPersonId?: string | null } | null;
   openExitCase: { id: string; caseNumber: string; lastWorkingDate: string } | null;
   onboarding: { id: string; caseNumber: string; status: OnboardingStatus; joinDate: string } | null;
   exitCases: { id: string; caseNumber: string; status: ExitCaseStatus; lastWorkingDate: string }[];

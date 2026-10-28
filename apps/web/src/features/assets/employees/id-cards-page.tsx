@@ -33,7 +33,7 @@ export default function IdCardsPage() {
     <div className="print-sheet">
       <div className="no-print">
         <Link to="/assets/employees" className={`mb-2 ${BACK_LINK}`}>
-          <ArrowLeft /> Employees
+          <ArrowLeft /> People &amp; assets
         </Link>
         <PageHeader
           title="ID cards"

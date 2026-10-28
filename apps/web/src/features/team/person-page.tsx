@@ -55,6 +55,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Avatar, Card, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
+import { ManageInPeople } from '../admin/manage-in-people';
 import { Calendar } from '../hr/attendance';
 import { AttendanceChip, PunchPhoto, hrs } from '../hr/parts';
 import { RegularizedTag } from '../hr/regularize';
@@ -230,6 +231,7 @@ function Header({ data }: { data: Team360Summary }) {
               <Phone className="size-4 shrink-0" aria-hidden /> {p.phone}
             </a>
           )}
+          <ManageInPeople query={p.email || p.employee_code || p.name} />
         </div>
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3 text-sm sm:grid-cols-4">

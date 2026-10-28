@@ -3,7 +3,7 @@ import type { ExportTarget, SheetCell, SheetData } from '../export';
 import { type AppCatalogue, GRANT_APP_NAMES, LEVEL_LABELS, type Role, SCOPE_LABELS, type Scope } from './types';
 
 export const adminExports = {
-  /** People & access: everyone matching the search (GET /people?export=xlsx|csv). */
+  /** People: everyone matching the search (GET /people?export=xlsx|csv). */
   people: (search = ''): ExportTarget => ({ api: 'platform', path: '/people', query: { search: search || undefined } }),
 };
 

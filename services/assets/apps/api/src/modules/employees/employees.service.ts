@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { EMPLOYEE_STATUS_LABELS, EMPLOYEE_STATUSES, type EmployeeAccessInput, type EmployeeCreateInput, type EmployeeInput, type EmployeeStatusInput } from '@eam/shared';
@@ -9,6 +9,7 @@ import { DbService } from '../../db/db.service';
 import { allocations, assetCategories, assets, assetTypes, companies, departments, employees, exitCases, locations, onboardingCases, roles, users } from '../../db/schema';
 import { diffChanges, HistoryService } from '../../core/history.service';
 import { AuthService } from '../auth/auth.service';
+import { PEOPLE_MANAGED_MESSAGE } from '../auth/platform-token';
 import { ExitService } from '../exit/exit.service';
 
 const manager = alias(employees, 'manager');
@@ -29,6 +30,12 @@ const LABELS: Record<string, string> = {
   joinDate: 'Join date',
   notes: 'Notes',
 };
+
+/**
+ * Who the person is, owned by the Platform's People directory when Platform sign-in is on (PLAN.md §26). The rest
+ * (company, location, personal contacts, notes) stays Assets' own.
+ */
+export const IDENTITY_FIELDS = ['employeeCode', 'firstName', 'lastName', 'email', 'phone', 'designation', 'departmentId', 'managerId', 'joinDate'] as const;
 
 
 /** Active SIM-card allocations of the employee in the outer query (for connection numbers). */
@@ -151,7 +158,7 @@ export class EmployeesService {
     const [heldAssets, [login], exitCase, reports] = await Promise.all([
       this.assets(actor, id),
       db
-        .select({ id: users.id, email: users.email, username: users.username, isActive: users.isActive, roleId: users.roleId, roleName: roles.name, lastLoginAt: users.lastLoginAt })
+        .select({ id: users.id, email: users.email, username: users.username, isActive: users.isActive, roleId: users.roleId, roleName: roles.name, lastLoginAt: users.lastLoginAt, platformPersonId: users.platformPersonId })
         .from(users)
         .innerJoin(roles, eq(roles.id, users.roleId))
         .where(eq(users.employeeId, id)),
@@ -334,11 +341,17 @@ export class EmployeesService {
     });
   }
 
-  async update(actor: Actor, id: string, input: EmployeeInput) {
+  async update(actor: Actor, id: string, input: Partial<EmployeeInput>, { identityLocked = false } = {}) {
     await this.assertManager(id, input.managerId);
     return this.dbs.tx(async (db) => {
       const [before] = await db.select().from(employees).where(eq(employees.id, id)).for('update');
       if (!before) throw notFound('Employee');
+      if (identityLocked) {
+        // Sent unchanged (an older full form) is fine; a different value belongs to People (PLAN.md §26).
+        const norm = (v: unknown) => (v === undefined || v === null || v === '' ? null : String(v));
+        const changed = IDENTITY_FIELDS.filter((k) => k in input && norm(input[k]) !== norm(before[k]));
+        if (changed.length) throw new ForbiddenException(PEOPLE_MANAGED_MESSAGE);
+      }
       const changes = diffChanges(before, input, LABELS);
       if (!changes.length) return before;
       const [row] = await db.update(employees).set({ ...input, updatedAt: new Date() }).where(eq(employees.id, id)).returning();

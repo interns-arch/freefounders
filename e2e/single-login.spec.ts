@@ -25,7 +25,7 @@ test('one sign-in opens Tasks and Assets, switch between them, sign out', async 
   await expect(page.getByRole('region', { name: 'Attendance & Shifts' })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Open Tasks/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Open Assets/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /People & access/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /People, roles, passwords/ })).toBeVisible();
   await shot(page, '2-home');
 
   // One web app (Phase 6): one menu for the whole product; its group headers move between Tasks and Assets, no second sign-in.
@@ -89,8 +89,8 @@ test('a phone lands on Attendance after sign-in, a desktop on Home; /?home=1 ope
 test('admins manage people', async ({ page }) => {
   await page.goto('/?choose');
   await signIn(page);
-  await page.getByRole('button', { name: /People & access/ }).click();
-  await expect(page.getByRole('heading', { name: 'People & access' })).toBeVisible();
+  await page.getByRole('button', { name: /People, roles, passwords/ }).click();
+  await expect(page.getByRole('heading', { name: 'People', exact: true })).toBeVisible();
   await expect(page.getByRole('row', { name: /Demo Owner/ })).toBeVisible();
   // The owner holds the built-in Admin role; Owner is a mark on the person, not a listed role (PLAN.md §19.28).
   await expect(page.getByRole('cell', { name: 'Roles of Demo Owner' })).toContainText('Admin');
@@ -139,7 +139,7 @@ test('a second company sees none of the first company\'s tasks or people', async
   await page.getByLabel('Email, username or employee ID').fill(BETA.email);
   await page.getByLabel('Password').fill(BETA.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.getByRole('button', { name: /People & access/ }).click();
+  await page.getByRole('button', { name: /People, roles, passwords/ }).click();
   await expect(page.getByText('Beta Owner').first()).toBeVisible();
   await expect(page.getByText('Demo Owner')).toHaveCount(0);
 
@@ -180,7 +180,7 @@ test('admins build a role and give it to someone; it reaches Tasks', async ({ pa
   });
   expect(created.status()).toBe(201);
 
-  await page.getByRole('navigation', { name: 'Admin menu' }).getByRole('link', { name: 'People & access' }).click();
+  await page.getByRole('navigation', { name: 'Admin menu' }).getByRole('link', { name: 'People', exact: true }).click();
   await page.getByLabel('Search people').fill(`E2E Person ${stamp}`);
   const row = page.getByRole('row', { name: new RegExp(`E2E Person ${stamp}`) });
   await row.getByRole('button', { name: 'Change roles' }).click();

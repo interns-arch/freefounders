@@ -89,7 +89,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
               </CommandGroup>
             )}
             {!!r?.employees.length && (
-              <CommandGroup heading="Employees">
+              <CommandGroup heading="People">
                 {r.employees.map((e) => (
                   <CommandItem key={e.id} value={`emp ${e.id} ${e.fullName}`} onSelect={() => go(`/assets/employees/${e.id}`)}>
                     <Avatar name={e.fullName} className="size-6" />

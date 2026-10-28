@@ -23,6 +23,7 @@ import { CurrentActor, RequirePermissions, ZodPipe } from '../../common/http';
 import { AssetsModule } from '../assets/assets.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { OnboardingService } from './onboarding.service';
+import { assertPeopleManagedHere } from '../auth/platform-token';
 import { Exportable } from '../../common/export';
 import { EXPORTS } from '../../common/export-specs';
 
@@ -40,7 +41,11 @@ export class OnboardingController {
   }
 
   @Post()
-  create(@CurrentActor() actor: Actor, @Body(new ZodPipe(onboardingCreateSchema)) body: OnboardingCreateInput) {
+  create(@CurrentActor() actor: Actor, @Body() raw: unknown) {
+    // Adds a new employee: with Platform sign-in on, a new joiner is added in Admin → People (with a join date), which
+    // opens their onboarding case here (PLAN.md §17.4, §26).
+    assertPeopleManagedHere();
+    const body: OnboardingCreateInput = new ZodPipe(onboardingCreateSchema).transform(raw);
     return this.onboarding.create(actor, body);
   }
 

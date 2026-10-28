@@ -36,6 +36,8 @@ export interface ManagedUser {
   is_active: boolean;
   date_joined: string;
   last_login: string | null;
+  /** The People directory person (PLAN.md §26), when signed in through Kaampilot. */
+  platform_person_id?: string | null;
 }
 
 export function useManagedUsers(enabled = true) {

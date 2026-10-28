@@ -51,6 +51,14 @@ def _clean(value) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _same_number(a: str, b: str) -> bool:
+    """Same phone written two ways ("98765 43210" / "919876543210"): compared as WhatsApp sends it."""
+    def digits(v: str) -> str:
+        d = "".join(ch for ch in (v or "") if ch.isdigit())
+        return "91" + d if len(d) == 10 else d
+    return digits(a) == digits(b)
+
+
 def _free_username(*candidates: str) -> str:
     for raw in candidates:
         base = re.sub(r"[^\w.@+-]", "", raw)[:140]
@@ -263,6 +271,18 @@ def _import_people(data):
                     value = _clean(p.get(key))[:size]
                     if getattr(user, field) != value:
                         fields[field] = value
+            # Who they are (PLAN.md §26): People is the one place name, email and mobile change. An empty value in People
+            # never wipes what Tasks has (mails and WhatsApp alerts keep working for people not filled in yet).
+            if _clean(p.get("fullName")):
+                first, _, last = _clean(p.get("fullName")).partition(" ")
+                if (user.first_name, user.last_name) != (first[:150], last.strip()[:150]):
+                    fields["first_name"], fields["last_name"] = first[:150], last.strip()[:150]
+            email = _clean(p.get("email")).lower()[:254]
+            if email and user.email != email:
+                fields["email"] = email
+            mobile = re.sub(r"[^\d+]", "", _clean(p.get("mobile")))[:20]
+            if mobile and _same_number(mobile, user.whatsapp_phone) is False:
+                fields["whatsapp_phone"] = mobile
             # Join date (PLAN.md §25, Team 360); only when the Platform sends it.
             if "joinDate" in p:
                 try:

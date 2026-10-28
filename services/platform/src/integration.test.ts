@@ -1002,7 +1002,20 @@ describe('people directory (Phase 5)', () => {
     assert.equal(pushed.cid, ids.acme);
     assert.deepEqual(pushed.body.departments.map((d: { code: string }) => d.code).sort(), ['operations', 'sales-marketing']);
     const mia = pushed.body.people.find((p: { personId: string }) => p.personId === ids.member);
-    assert.deepEqual(mia, { personId: ids.member, status: 'active', departmentCode: 'sales-marketing', designation: 'Senior Sales Executive', reportsTo: ids.admin, joinDate: '2026-04-01', employeeCode: 'SHARED1' });
+    const [miaRow] = await app.get(DbService).db.select().from(people).where(eq(people.id, ids.member));
+    // Name, email and mobile travel too (PLAN.md §26: People is the one place they change).
+    assert.deepEqual(mia, {
+      personId: ids.member,
+      status: 'active',
+      departmentCode: 'sales-marketing',
+      designation: 'Senior Sales Executive',
+      reportsTo: ids.admin,
+      joinDate: '2026-04-01',
+      employeeCode: 'SHARED1',
+      fullName: miaRow.fullName,
+      email: miaRow.email,
+      mobile: miaRow.mobile,
+    });
     for (const p of pushed.body.people) {
       const [has] = await app.get(DbService).db.select().from(personApps).where(eq(personApps.personId, p.personId));
       assert.ok(has, 'only people who have Tasks are sent to Tasks');

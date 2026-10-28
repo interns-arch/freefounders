@@ -18,6 +18,7 @@ import { DbService } from '../../db/db.service';
 import { employees, roles, users } from '../../db/schema';
 import { diffChanges, HistoryService } from '../../core/history.service';
 import { AuthService } from '../auth/auth.service';
+import { assertPeopleManagedHere } from '../auth/platform-token';
 import { Exportable } from '../../common/export';
 import { EXPORTS } from '../../common/export-specs';
 
@@ -196,12 +197,16 @@ export class UsersController {
   }
 
   @Post()
-  create(@CurrentActor() actor: Actor, @Body(new ZodPipe(userCreateSchema)) body: UserCreateInput) {
+  create(@CurrentActor() actor: Actor, @Body() raw: unknown) {
+    assertPeopleManagedHere(); // logins, roles and switching people off: Admin → People (PLAN.md §26)
+    const body: UserCreateInput = new ZodPipe(userCreateSchema).transform(raw);
     return this.admin.createUser(actor, body);
   }
 
   @Patch(':id')
-  update(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(userUpdateSchema)) body: UserUpdateInput) {
+  update(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Body() raw: unknown) {
+    assertPeopleManagedHere();
+    const body: UserUpdateInput = new ZodPipe(userUpdateSchema).transform(raw);
     return this.admin.updateUser(actor, id, body);
   }
 }
@@ -219,18 +224,21 @@ export class RolesController {
   @Post()
   @RequirePermissions('user:manage')
   create(@CurrentActor() actor: Actor, @Body(new ZodPipe(roleSchema)) body: RoleInput) {
+    assertPeopleManagedHere(); // roles: Admin → Roles
     return this.admin.createRole(actor, body);
   }
 
   @Patch(':id')
   @RequirePermissions('user:manage')
   update(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(roleSchema)) body: RoleInput) {
+    assertPeopleManagedHere();
     return this.admin.updateRole(actor, id, body);
   }
 
   @Delete(':id')
   @RequirePermissions('user:manage')
   remove(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    assertPeopleManagedHere();
     return this.admin.deleteRole(actor, id);
   }
 }

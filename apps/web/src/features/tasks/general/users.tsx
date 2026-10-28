@@ -1,35 +1,25 @@
 /**
  * /tasks/users — "My team" (old pages/Users.jsx): a read-only directory with workloads for everyone, and the team
- * list for users.manage. Kaampilot: people, departments and "reports to" belong to the Platform's People directory
- * (PLAN.md §17.1), so they are shown read-only here with a link to People & access.
+ * list for users.manage. People, roles, departments and "reports to" belong to the Platform's People directory
+ * (PLAN.md §17.1, §26), so they are shown read-only here with a "Manage in People" link.
  */
 import { errorMessage, useAccess } from '@kaampilot/core';
 import { SearchField } from '@/components/common/search-field';
-import {
-  type ManagedUser,
-  useManagedUsers,
-  useMemberWorkload,
-  usePurgeInfo,
-  usePurgeManagedUser,
-  useSetManagedUserActive,
-  useTaskPeople,
-  useTaskRoleOptions,
-  useTeamDirectory,
-  useUpdateManagedUser,
-} from '@kaampilot/core/tasks';
-import { BarChart3, ExternalLink, UserPlus, UsersRound } from '@/components/icons';
+import { type ManagedUser, useManagedUsers, useMemberWorkload, useTaskPeople, useTaskRoleOptions, useTeamDirectory } from '@kaampilot/core/tasks';
+import { ADMIN_SCREENS } from '@/features/admin/nav';
+import { ManageInPeople } from '@/features/admin/manage-in-people';
+import { BarChart3, UserPlus, UsersRound } from '@/components/icons';
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
 import { ShowMore, useShowMore } from '@/components/common/show-more';
 import { Button } from '@/components/ui/button';
-import { Input, Label, NativeSelect } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/overlays';
+import { NativeSelect } from '@/components/ui/input';
 import { Card, Skeleton } from '@/components/ui/primitives';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { fmtEffort } from '../shared/format';
-import { Chip, ErrorNote } from './parts';
+import { Chip } from './parts';
 
 const PEOPLE = '/people';
 const profileHref = (id: number) => `/tasks/tasks?tab=employees&user=${id}`;
@@ -137,7 +127,7 @@ function Directory() {
         title="My Team"
         description={`${isManager ? 'Reporting to you' : 'Your department'} · ${rows.length} member${rows.length === 1 ? '' : 's'}`}
       />
-      {isManager && rows.length === 0 && <p className="text-sm text-muted-foreground">No one reports to you yet — ask Admin/HR to set "Reports to" on your team members in People &amp; access.</p>}
+      {isManager && rows.length === 0 && <p className="text-sm text-muted-foreground">No one reports to you yet — ask Admin/HR to set "Reports to" on your team members in Admin → People.</p>}
       <div className="flex flex-wrap gap-2">
         <SearchBox value={search} onChange={setSearch} />
         <NativeSelect aria-label="Role" className="w-auto" value={role} onChange={(e) => setRole(e.target.value)}>
@@ -206,22 +196,22 @@ function useTaskPeopleIds() {
 
 const fullName = (u: ManagedUser) => `${u.first_name || u.username} ${u.last_name || ''}`.trim();
 
+/**
+ * The whole team for users.manage: read-only (PLAN.md §26). Adding people, their name, email, mobile, department,
+ * "reports to", role and switching them off or deleting them happen only in Admin → People ("Manage in People").
+ */
 function ManageTeam() {
   const access = useAccess();
-  const me = access.tasks.me;
   const q = useManagedUsers();
   const roleQ = useTaskRoleOptions();
   const roles = roleQ.data ?? [];
   const managerRoles = roles.filter((r) => r.is_manager).map((r) => r.value);
   const peopleIds = useTaskPeopleIds();
   const viewable = useMemo(() => new Set(peopleIds ?? []), [peopleIds]);
-  const setActive = useSetManagedUserActive();
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('');
   const [manager, setManager] = useState('');
   const [wl, setWl] = useState<number | null>(null);
-  const [editing, setEditing] = useState<ManagedUser | null>(null);
-  const [purging, setPurging] = useState<ManagedUser | null>(null);
   const rows = q.data ?? [];
 
   const managers = useMemo(() => rows.filter((u) => managerRoles.includes(u.role) && u.is_active), [rows, managerRoles]);
@@ -245,13 +235,15 @@ function ManageTeam() {
       <PageHeader
         className="mb-0"
         title="My Team"
-        description="New people, departments and “reports to” are managed in People & access."
+        description="Who is on the team and their workload. People, roles, departments and “reports to” are managed in Admin → People."
         actions={
-          <Button asChild>
-            <Link to={PEOPLE}>
-              <UserPlus /> Add person in People &amp; access
-            </Link>
-          </Button>
+          ADMIN_SCREENS.people(access) ? (
+            <Button asChild variant="outline">
+              <Link to={PEOPLE}>
+                <UserPlus /> Add person in People
+              </Link>
+            </Button>
+          ) : undefined
         }
       />
       <div className="flex flex-wrap items-center gap-2">
@@ -276,7 +268,6 @@ function ManageTeam() {
           {shown.length}/{rows.length} members
         </span>
       </div>
-      {setActive.error && <ErrorNote>{errorMessage(setActive.error)}</ErrorNote>}
       {rows.length === 0 ? (
         <Card>
           <EmptyState icon={UsersRound} title="No team members yet" />
@@ -310,25 +301,13 @@ function ManageTeam() {
                     </TD>
                     <TD>{u.is_active ? <Chip tone="success">Active</Chip> : <Chip>Deactivated</Chip>}</TD>
                     <TD>
-                      <div className="flex flex-wrap justify-end gap-1.5">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                         {u.is_active && (
                           <Button size="xs" variant="outline" aria-expanded={wl === u.id} aria-label={`Workload of ${fullName(u)}`} title="Open tasks & pending effort" onClick={() => setWl(wl === u.id ? null : u.id)}>
                             <BarChart3 /> {wl === u.id ? 'Hide' : 'Workload'}
                           </Button>
                         )}
-                        <Button size="xs" variant="outline" aria-label={`Edit ${fullName(u)}`} onClick={() => setEditing(u)}>
-                          Edit
-                        </Button>
-                        {u.id !== me?.id && (
-                          <Button size="xs" variant="outline" aria-label={`${u.is_active ? 'Deactivate' : 'Activate'} ${fullName(u)}`} onClick={() => setActive.mutate({ id: u.id, active: !u.is_active })}>
-                            {u.is_active ? 'Deactivate' : 'Activate'}
-                          </Button>
-                        )}
-                        {!u.is_active && u.id !== me?.id && (
-                          <Button size="xs" variant="destructive" aria-label={`Delete ${fullName(u)}`} onClick={() => setPurging(u)}>
-                            Delete
-                          </Button>
-                        )}
+                        <ManageInPeople personId={u.platform_person_id} query={u.email || fullName(u)} label={`Manage ${fullName(u)} in People`} />
                       </div>
                     </TD>
                   </TR>
@@ -346,165 +325,6 @@ function ManageTeam() {
           <ShowMore {...more.footer} noun="members" className="border-t" />
         </Card>
       )}
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-w-xl">{editing && <EditUser user={editing} onClose={() => setEditing(null)} />}</DialogContent>
-      </Dialog>
-      <Dialog open={!!purging} onOpenChange={(o) => !o && setPurging(null)}>
-        <DialogContent className="max-w-md">{purging && <PurgeUser user={purging} onClose={() => setPurging(null)} />}</DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function EditUser({ user, onClose }: { user: ManagedUser; onClose: () => void }) {
-  const save = useUpdateManagedUser();
-  // The role is not edited here: roles are given in Admin → People & access (PLAN.md §19.28).
-  const [f, setF] = useState({ email: user.email, first_name: user.first_name, last_name: user.last_name, whatsapp_phone: user.whatsapp_phone, password: '' });
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const { password, ...rest } = f;
-    save.mutate({ id: user.id, ...rest, ...(password ? { password } : {}) }, { onSuccess: onClose });
-  };
-  return (
-    <form onSubmit={submit} className="grid gap-4">
-      <DialogHeader>
-        <DialogTitle>Edit {user.username}</DialogTitle>
-        <DialogDescription>Task and approval mails go to the email below; WhatsApp alerts to the number.</DialogDescription>
-      </DialogHeader>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
-          <Label htmlFor="u-username">Username</Label>
-          <Input id="u-username" value={user.username} disabled />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="u-email">Email</Label>
-          <Input id="u-email" type="email" value={f.email} onChange={set('email')} />
-          <p className="text-xs text-muted-foreground">Leave blank if their mailbox does not exist yet — otherwise every mail bounces back.</p>
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="u-first">First name</Label>
-          <Input id="u-first" value={f.first_name} onChange={set('first_name')} />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="u-last">Last name</Label>
-          <Input id="u-last" value={f.last_name} onChange={set('last_name')} />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="u-role">Role</Label>
-          <Input id="u-role" value={user.role_display} disabled />
-          <p className="text-xs text-muted-foreground">Roles are given in People &amp; access.</p>
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="u-phone">WhatsApp / Mobile</Label>
-          <Input id="u-phone" type="tel" value={f.whatsapp_phone} onChange={set('whatsapp_phone')} placeholder="9876543210" />
-          <p className="text-xs text-muted-foreground">No number means no WhatsApp alerts.</p>
-        </div>
-      </div>
-      <div className="rounded-lg border bg-muted/40 p-3">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <div className="text-xs text-muted-foreground">Department</div>
-            <div className="text-sm font-medium">{user.department_display || '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Reports to</div>
-            <div className="text-sm font-medium">{user.reporting_manager_name || 'NA'}</div>
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Department and “reports to” come from the company’s People directory. “Reports to” decides who approves this person’s change requests.
-        </p>
-        <Button asChild size="sm" variant="outline" className="mt-2">
-          <Link to={PEOPLE}>
-            Edit in People &amp; access <ExternalLink />
-          </Link>
-        </Button>
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="u-pass">New Tasks password (blank = keep)</Label>
-        <Input id="u-pass" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} />
-        <p className="text-xs text-muted-foreground">Only for signing in to a standalone Tasks install; Kaampilot sign-in passwords are reset in People &amp; access.</p>
-      </div>
-      {save.error && <ErrorNote>{errorMessage(save.error)}</ErrorNote>}
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" loading={save.isPending}>
-          Save changes
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-
-/** Permanent delete of a deactivated person: shows what goes with them and asks for their username. */
-function PurgeUser({ user, onClose }: { user: ManagedUser; onClose: () => void }) {
-  const info = usePurgeInfo(user.id);
-  const purge = usePurgeManagedUser();
-  const [typed, setTyped] = useState('');
-  const d = info.data;
-  const error = info.error ?? purge.error;
-  return (
-    <div className="grid gap-4">
-      <DialogHeader>
-        <DialogTitle>Delete {fullName(user)} permanently?</DialogTitle>
-        <DialogDescription>This removes the person and cannot be undone.</DialogDescription>
-      </DialogHeader>
-      {!d && !info.error && <Skeleton className="h-24" />}
-      {d && (
-        <>
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            <li>
-              <strong>{d.tasks_total}</strong> tasks assigned to them
-              {d.tasks_total > 0 && (
-                <span className="text-muted-foreground">
-                  {' '}
-                  ({d.tasks_open} open, {d.tasks_overdue} overdue, {d.tasks_done} done)
-                </span>
-              )}{' '}
-              — deleted with their files and comments
-            </li>
-            {d.mistakes > 0 && (
-              <li>
-                <strong>{d.mistakes}</strong> mistake records — deleted
-              </li>
-            )}
-            <li>Their notifications, requests and history — deleted</li>
-            {d.tasks_given_to_others > 0 && (
-              <li className="text-success">
-                <strong>{d.tasks_given_to_others}</strong> tasks they gave to others — <strong>kept</strong>, just without “given by”
-              </li>
-            )}
-            {d.reports > 0 && (
-              <li className="text-success">
-                <strong>{d.reports}</strong> people report to them — they’ll show no reporting manager
-              </li>
-            )}
-          </ul>
-          <div className="grid gap-1.5">
-            <Label htmlFor="purge-confirm">
-              Type <code className="rounded bg-muted px-1">{d.username}</code> to confirm
-            </Label>
-            <Input id="purge-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus />
-          </div>
-        </>
-      )}
-      {error && <ErrorNote>{errorMessage(error)}</ErrorNote>}
-      <DialogFooter>
-        <Button variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          disabled={!d || typed.trim().toLowerCase() !== d.username.toLowerCase()}
-          loading={purge.isPending}
-          onClick={() => purge.mutate({ id: user.id, confirm: typed.trim() }, { onSuccess: onClose })}
-        >
-          Delete permanently
-        </Button>
-      </DialogFooter>
     </div>
   );
 }

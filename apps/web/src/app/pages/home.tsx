@@ -121,7 +121,7 @@ export function HomePage() {
 
       {access.apps.length === 0 && (
         <p role="status" className="rounded-xl border border-warning/30 bg-warning/8 p-4 text-sm">
-          You don’t have access to any app yet. {access.isAdmin ? 'Give yourself a role under People & access.' : 'Ask your company admin for access.'}
+          You don’t have access to any app yet. {access.isAdmin ? 'Give yourself a role under Admin → People.' : 'Ask your company admin for access.'}
         </p>
       )}
 
@@ -512,7 +512,7 @@ function AdminRow({ onOpen }: { onOpen: (to: string) => void }) {
   const access = useAccess();
   // Only the Admin screens this person's permissions open (PLAN.md §19.19).
   const items = [
-    { name: 'People & access', blurb: 'People, roles, passwords', to: '/people', icon: Users, show: ADMIN_SCREENS.people },
+    { name: 'People', blurb: 'People, roles, passwords', to: '/people', icon: Users, show: ADMIN_SCREENS.people },
     { name: 'Roles', blurb: 'Permissions and duties', to: '/roles', icon: ShieldCheck, show: ADMIN_SCREENS.roles },
     { name: 'Settings', blurb: 'Company, modules, departments', to: '/settings', icon: Settings2, show: ADMIN_SCREENS.settings },
     // Only where billing is in use (self-serve companies), so installs without it keep their three shortcuts.

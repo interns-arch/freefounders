@@ -53,7 +53,7 @@ test('People & access: list, search, add with department / manager / join date, 
 
   try {
     await openSignedIn(page, '/people');
-    await expect(page.getByRole('heading', { name: 'People & access' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'People', exact: true })).toBeVisible();
     // The list shows the owner.
     await expect(page.getByRole('cell', { name: new RegExp(me.person.fullName) }).first()).toBeVisible();
 
@@ -276,7 +276,7 @@ test('people who are not admins cannot open the admin screens', async ({ page, r
 
     await openSignedIn(page, '/people', login, password);
     await expect(page).toHaveURL((url) => url.pathname === '/');
-    await expect(page.getByRole('heading', { name: 'People & access' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'People', exact: true })).toHaveCount(0);
     await page.goto('/settings');
     await expect(page).toHaveURL((url) => url.pathname === '/');
   } finally {
@@ -552,7 +552,7 @@ test('Roles: any role from blank — only Live attendance and Notices; they see 
     for (const hidden of ['Notifications', 'Team performance', 'Task settings', 'Mistakes', 'Links']) {
       await expect(tasks.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
     }
-    await expect(page.getByRole('link', { name: 'People & access' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'People', exact: true })).toHaveCount(0);
 
     // The API agrees.
     const theirs = await token(request, who.login, who.password);
@@ -584,11 +584,11 @@ test('Admin permissions: a member with only "Manage people" gets People & access
     await openSignedIn(page, '/roles', who.login, who.password);
     // Roles is not theirs: they land on the Admin screen they may open.
     await expect(page).toHaveURL((url) => url.pathname === '/people');
-    await expect(page.getByRole('heading', { name: 'People & access' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'People', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add person' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Change roles/ })).toHaveCount(0);
     const admin = page.getByRole('navigation', { name: 'Admin menu' });
-    await expect(admin.getByRole('link', { name: 'People & access' })).toBeVisible();
+    await expect(admin.getByRole('link', { name: 'People', exact: true })).toBeVisible();
     await expect(admin.getByRole('link', { name: 'Roles' })).toHaveCount(0);
     await expect(admin.getByRole('link', { name: 'Settings' })).toHaveCount(0);
     await page.goto('/settings');

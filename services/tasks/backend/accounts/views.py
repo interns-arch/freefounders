@@ -11,6 +11,16 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from .models import DepartmentOption, Role, User
 from .access import is_admin, is_super_admin, level, listed_roles
 from .permissions import HasCapability
+from . import platform_auth
+
+# PLAN.md §26: with Platform sign-in on, people are added, edited, switched off, deleted and given roles only in People.
+PEOPLE_MANAGED_MESSAGE = "People are managed in Admin → People"
+
+
+def assert_people_managed_here():
+    """Refuses a people change made in Tasks while the Platform owns the People directory (standalone: unchanged)."""
+    if platform_auth.enabled():
+        raise PermissionDenied(PEOPLE_MANAGED_MESSAGE)
 from .serializers import ChangePasswordSerializer, UserSerializer, UserWriteSerializer
 
 
@@ -209,6 +219,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
     def create(self, request, *args, **kwargs):
+        assert_people_managed_here()
         # Authority first, then input: checking the role AFTER validation let
         # a missing field mask a 403 as a 400.
         self._guard_role(request.data.get("role"))
@@ -220,6 +231,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         target = self.get_object()
+        assert_people_managed_here()
         self._guard_role(request.data.get("role"), target)
         write = self.get_serializer(target, data=request.data, partial=partial)
         write.is_valid(raise_exception=True)
@@ -235,6 +247,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def deactivate(self, request, pk=None):
         user = self.get_object()
+        assert_people_managed_here()
         if user == request.user:
             return Response({"detail": "You cannot deactivate yourself."}, status=400)
         self._guard_role(None, user)
@@ -283,6 +296,7 @@ class UserViewSet(viewsets.ModelViewSet):
         self._guard_role(None, user)
         if request.method == "GET":
             return Response(self._purge_summary(user))
+        assert_people_managed_here()
         if user.is_active:
             raise ValidationError({"detail": "Deactivate this person first, then delete."})
         if str(request.data.get("confirm", "")).strip().lower() != user.username.lower():
@@ -309,6 +323,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
         user = self.get_object()
+        assert_people_managed_here()
         self._guard_role(None, user)  # same authority as deactivating them
         user.is_active = True
         user.save()

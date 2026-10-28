@@ -140,19 +140,17 @@ test('notifications open their task inside the new app', async ({ page }) => {
   await shot(page, 'web-tasks-notifications');
 });
 
-test('my team lists people with workloads; department and reports-to are edited in People & access', async ({ page }) => {
+test('my team lists people with workloads; people are managed only in Admin → People (PLAN.md §26)', async ({ page }) => {
   await signIn(page, '/tasks/users');
   await expect(page.getByRole('heading', { name: 'My Team' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Add person in People & access' })).toHaveAttribute('href', '/people');
+  await expect(page.getByRole('link', { name: 'Add person in People' })).toHaveAttribute('href', '/people');
   await page.getByRole('button', { name: 'Workload of Demo Owner' }).click();
   await expect(page.getByText(/Demo Owner’s pipeline:/)).toBeVisible();
-  await page.getByRole('button', { name: 'Edit Demo Owner' }).click();
-  const dialog = page.getByRole('dialog', { name: /^Edit / });
-  await expect(dialog.getByText('Reports to', { exact: true })).toBeVisible();
-  await expect(dialog.getByRole('link', { name: /Edit in People & access/ })).toHaveAttribute('href', '/people');
-  await expect(dialog.getByLabel('Department')).toHaveCount(0); // read-only, not a field
+  // Read-only here: no edit, switch-off or delete; the person opens in People.
+  await expect(page.getByRole('button', { name: 'Edit Demo Owner' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^(Deactivate|Delete) / })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /Manage Demo Owner in People/ })).toHaveAttribute('href', /^\/people\?(person|q)=/);
   await shot(page, 'web-tasks-my-team');
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
 test('task settings: a notification rule is switched off and on again', async ({ page, request }) => {

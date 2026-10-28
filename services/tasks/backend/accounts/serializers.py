@@ -33,8 +33,10 @@ class UserSerializer(serializers.ModelSerializer):
             "role", "role_display", "department", "department_display",
             "whatsapp_phone", "reporting_manager", "reporting_manager_name",
             "is_active", "date_joined", "last_login", "capabilities",
+            # The People directory person (PLAN.md §26: "Manage in People" opens them there).
+            "platform_person_id",
         ]
-        read_only_fields = ["date_joined", "last_login"]
+        read_only_fields = ["date_joined", "last_login", "platform_person_id"]
 
     def to_representation(self, obj):
         data = super().to_representation(obj)

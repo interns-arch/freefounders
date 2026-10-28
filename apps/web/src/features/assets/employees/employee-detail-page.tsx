@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Gift,
-  KeyRound,
   LogOut,
   Mail,
   MoreHorizontal,
@@ -13,9 +12,7 @@ import {
   Phone,
   Plus,
   Printer,
-  ShieldOff,
   Undo2,
-  UserCog,
   UserPlus,
 } from '@/components/icons';
 import { type ReactNode, useState } from 'react';
@@ -23,7 +20,6 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { AssetStatusBadge, EmployeeStatusBadge, EnumBadge } from '@/components/common/badges';
 import { LocalQrWarning, QRCode, useQrLinks } from '@/components/common/codes';
-import { useConfirm } from '@/components/common/confirm';
 import { DetailList, EmptyState, ErrorState, PageLoader, BACK_LINK } from '@/components/common/page';
 import { EntityPicker } from '@/features/assets/components/pickers';
 import { Timeline } from '@/features/assets/components/timeline';
@@ -43,26 +39,21 @@ import {
 import { Avatar, Badge, Card, CardContent, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives';
 import { AssetActionDialog, type AssetDialog } from '@/features/assets/inventory/asset-actions';
 import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
+import { ManageInPeople } from '@/features/admin/manage-in-people';
 import { errorMessage } from '@kaampilot/core';
 import { useAuth } from '@/features/assets/lib/auth';
 import { AssetIcon } from '@/lib/icons';
-import { fetchAsset, useAssetsCache, useDisableLogin, useEmployee, useEmployeeHistory, useGrantEmployeeAccess, useVerifyEmployeeAssets } from '@kaampilot/core/assets';
+import { fetchAsset, useAssetsCache, useEmployee, useEmployeeHistory, useVerifyEmployeeAssets } from '@kaampilot/core/assets';
 import { EXIT_CASE_TONE } from '@/lib/status';
 import type { Allocation, AssetDetail, EmployeeDetail, HeldAsset } from '@kaampilot/core/assets';
 import { cn, daysUntil, formatDate, formatDateTime, relativeTime } from '@/lib/utils';
-import { AccessDialog, type Credentials, CredentialsDialog } from './access';
-import { StatusDialog } from './status-dialog';
 
 export default function EmployeeDetailPage() {
   const { id } = useParams();
   const { can, me } = useAuth();
   const quickAdd = useQuickAdd();
-  const confirm = useConfirm();
-  const [statusOpen, setStatusOpen] = useState(false);
   const [dialog, setDialog] = useState<AssetDialog | null>(null);
   const [pickAsset, setPickAsset] = useState(false);
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
-  const [accessOpen, setAccessOpen] = useState(false);
   const cache = useAssetsCache();
   const q = useEmployee(id);
   const history = useEmployeeHistory(id, !!q.data);
@@ -72,20 +63,6 @@ export default function EmployeeDetailPage() {
     onSuccess: async () => {
       await refresh();
       toast.success('Marked as checked today');
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  });
-  const access = useGrantEmployeeAccess({
-    onSuccess: async (r) => {
-      await Promise.all([refresh(), cache.invalidate('users')]);
-      setAccessOpen(false);
-      setCredentials(r);
-    },
-  });
-  const disable = useDisableLogin({
-    onSuccess: async () => {
-      await refresh();
-      toast.success('Login turned off');
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
@@ -102,20 +79,8 @@ export default function EmployeeDetailPage() {
 
   const idCard = <IdCardPanel employee={e} self={self} />;
   const contact = <ContactPanel employee={e} />;
-  const login = (can('user:manage') || e.login) && !self && (
-    <LoginPanel
-      employee={e}
-      busy={access.isPending || disable.isPending}
-      onGrant={() => {
-        access.reset();
-        setAccessOpen(true);
-      }}
-      onDisable={async () => {
-        const r = await confirm({ title: `Turn off ${e.fullName}’s login?`, description: 'They will be signed out and can’t sign in until you give access again.', confirmText: 'Turn off', destructive: true });
-        if (r.confirmed && e.login) disable.mutate(e.login.id);
-      }}
-    />
-  );
+  // Sign-in, roles, notice and switching off are Admin → People's (PLAN.md §26): shown here, changed there.
+  const login = (can('user:manage') || e.login) && !self && <LoginPanel employee={e} />;
   const profile = (
     <Card>
       <CardHeader>
@@ -158,7 +123,7 @@ export default function EmployeeDetailPage() {
     <div className="space-y-4 sm:space-y-5">
       {can('employee:view') && (
         <Link to="/assets/employees" className={BACK_LINK}>
-          <ArrowLeft /> Employees
+          <ArrowLeft /> People &amp; assets
         </Link>
       )}
 
@@ -179,6 +144,7 @@ export default function EmployeeDetailPage() {
                 {[e.managerName ? `Reports to ${e.managerName}` : null, e.joinDate ? `Joined ${formatDate(e.joinDate)}` : null].filter(Boolean).join(' · ')}
               </p>
             )}
+            {!self && <ManageInPeople className="mt-1.5" personId={e.login?.platformPersonId} query={e.email || e.employeeCode} />}
           </div>
           {canAssign && !exited && (
             <div className="hidden items-center gap-2 sm:flex">
@@ -190,7 +156,7 @@ export default function EmployeeDetailPage() {
               </Button>
             </div>
           )}
-          {(can('employee:status') || can('employee:manage')) && (
+          {can('employee:manage') && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="icon-sm" variant="ghost" aria-label="More actions">
@@ -198,16 +164,9 @@ export default function EmployeeDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {can('employee:manage') && (
-                  <DropdownMenuItem onSelect={() => quickAdd.open('employee', { record: e })}>
-                    <Pencil /> Edit details
-                  </DropdownMenuItem>
-                )}
-                {can('employee:status') && e.status !== 'JOINING' && (
-                  <DropdownMenuItem onSelect={() => setStatusOpen(true)}>
-                    <UserCog /> Change status / notice period
-                  </DropdownMenuItem>
-                )}
+                <DropdownMenuItem onSelect={() => quickAdd.open('employee', { record: e })}>
+                  <Pencil /> Edit Assets details
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -387,7 +346,6 @@ export default function EmployeeDetailPage() {
         </div>
       </div>
 
-      {statusOpen && <StatusDialog employee={e} open={statusOpen} onOpenChange={setStatusOpen} />}
       <AssetActionDialog dialog={dialog} onClose={() => setDialog(null)} onDone={() => void cache.invalidateAssetData()} />
       <PickAssetDialog
         open={pickAsset}
@@ -407,8 +365,6 @@ export default function EmployeeDetailPage() {
           });
         }}
       />
-      <CredentialsDialog employee={e} credentials={credentials} onClose={() => setCredentials(null)} />
-      {accessOpen && <AccessDialog employee={e} saving={access.isPending} error={access.error} onSave={(body) => access.mutate({ id: e.id, body })} onClose={() => setAccessOpen(false)} />}
     </div>
   );
 }
@@ -480,54 +436,21 @@ function ContactPanel({ employee: e }: { employee: EmployeeDetail }) {
   );
 }
 
-function LoginPanel({ employee: e, busy, onGrant, onDisable }: { employee: EmployeeDetail; busy: boolean; onGrant: () => void; onDisable: () => void }) {
-  const { can } = useAuth();
-  const manage = can('user:manage');
+function LoginPanel({ employee: e }: { employee: EmployeeDetail }) {
   const active = !!e.login?.isActive;
   return (
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Portal login</CardTitle>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {active ? (
-              <>
-                Signs in with{' '}
-                {[e.login?.username, e.employeeCode, e.login?.email]
-                  .filter(Boolean)
-                  .map((v, i, all) => (
-                    <span key={v}>
-                      <span className="font-mono font-medium text-foreground">{v}</span>
-                      {i < all.length - 1 ? ' or ' : ''}
-                    </span>
-                  ))}
-              </>
-            ) : e.login ? (
-              'Login is turned off'
-            ) : (
-              'No login yet'
-            )}
-          </p>
+          <CardTitle>Sign-in</CardTitle>
+          <p className="mt-0.5 text-xs text-muted-foreground">{active ? 'Signs in with Kaampilot' : e.login ? 'Switched off' : 'No login yet'}</p>
         </div>
         {e.login && <Badge tone={active ? 'green' : 'neutral'}>{active ? e.login.roleName : 'Off'}</Badge>}
       </CardHeader>
-      <CardContent className="space-y-3">
-        {e.login && (
-          <p className="text-xs text-muted-foreground">Last sign-in: {e.login.lastLoginAt ? relativeTime(e.login.lastLoginAt) : 'never'}</p>
-        )}
-        {manage && e.status !== 'EXITED' && (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            <Button variant={active ? 'outline' : 'default'} onClick={onGrant} loading={busy} className="h-11 sm:h-9">
-              <KeyRound /> {active ? 'Change login / password' : e.login ? 'Turn login back on' : 'Give login (view only)'}
-            </Button>
-            {active && (
-              <Button variant="ghost" onClick={onDisable} disabled={busy} className="h-11 sm:h-9">
-                <ShieldOff /> Turn off
-              </Button>
-            )}
-          </div>
-        )}
-        {!e.login && manage && <p className="text-xs text-muted-foreground">They’ll only see their own assets and QR. You choose the login ID and password.</p>}
+      <CardContent className="space-y-2">
+        {e.login && <p className="text-xs text-muted-foreground">Last sign-in: {e.login.lastLoginAt ? relativeTime(e.login.lastLoginAt) : 'never'}</p>}
+        <p className="text-xs text-muted-foreground">Logins, roles, notice and switching off are managed in Admin → People.</p>
+        <ManageInPeople personId={e.login?.platformPersonId} query={e.email || e.employeeCode} />
       </CardContent>
     </Card>
   );

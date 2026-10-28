@@ -34,7 +34,7 @@ export function RolesPage() {
     !(roles.data ?? []).some((r) => r.name.trim().toLowerCase() === 'guard');
   const addGuard = () => {
     setError('');
-    saveRole.mutate(GUARD_ROLE_PRESET, { onError, onSuccess: () => toast.success('Guard role added. Give it to your guards under People & access.') });
+    saveRole.mutate(GUARD_ROLE_PRESET, { onError, onSuccess: () => toast.success('Guard role added. Give it to your guards under Admin → People.') });
   };
 
   const columns: Column<Role>[] = [

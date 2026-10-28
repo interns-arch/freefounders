@@ -14,7 +14,7 @@ export const ADMIN_SCREENS = {
 
 /** Admin workspace (shown to anyone with at least one Admin permission). */
 export const ADMIN_NAV: NavItem[] = [
-  { label: 'People & access', to: '/people', icon: Users, show: ADMIN_SCREENS.people },
+  { label: 'People', to: '/people', icon: Users, show: ADMIN_SCREENS.people },
   { label: 'Roles', to: '/roles', icon: ShieldCheck, show: ADMIN_SCREENS.roles },
   { label: 'Settings', to: '/settings', icon: Settings2, show: ADMIN_SCREENS.settings },
   { label: 'Billing', to: '/billing', icon: CreditCard, show: ADMIN_SCREENS.billing },

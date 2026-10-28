@@ -30,7 +30,7 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl / ⌘ + K', 'Search & command palette'],
   ['/', 'Search'],
   ['N', 'Quick add menu'],
-  ['G then D / A / E / X', 'Dashboard / Assets / Employees / Exits'],
+  ['G then D / A / E / X', 'Dashboard / Assets / People & assets / Exits'],
   ['G then Q / R / T / M / S', 'Priority queue / Requests / Tickets / Maintenance / Scan'],
   ['J / K', 'Move down / up in a table'],
   ['Enter', 'Open the highlighted row'],

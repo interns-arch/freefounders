@@ -768,6 +768,21 @@ describe('leadership overview', () => {
   });
 });
 
+describe('dashboard counts (PLAN.md §26)', () => {
+  test('total assets, the status breakdown and the category counts use one definition: every asset except disposed', async () => {
+    const r = await call('GET', '/dashboard');
+    assert.equal(r.status, 200);
+    const d = r.body;
+    const byStatus = Object.entries(d.byStatus as Record<string, number>).reduce((n, [s, c]) => n + (s === 'DISPOSED' ? 0 : c), 0);
+    const byCategory = (d.byCategory as Array<{ count: number }>).reduce((n, c) => n + c.count, 0);
+    assert.ok(d.totals.assets > 0, 'the test register has assets');
+    assert.equal(d.totals.assets, byStatus);
+    assert.equal(d.totals.assets, byCategory);
+    const list = await call('GET', '/assets?pageSize=1');
+    assert.equal(list.body.total - (list.body.statusCounts.DISPOSED ?? 0), d.totals.assets, 'the asset list agrees once disposed ones are left out');
+  });
+});
+
 describe('reconciliation', () => {
   test('an Airtel dump is matched to SIM records by connection or SIM number', async () => {
     const cat = await call('POST', '/categories', { name: 'Telecom', code: 'TEL' });

@@ -40,8 +40,11 @@ const EMPTY: Person[] = [];
 /** Everyone at the company: their login, level, roles and the apps the roles open (PLAN.md §13, §15, §17). */
 export function PeoplePage() {
   const me = usePlatformMe().data;
-  const [search, setSearch] = useState('');
-  const [query, setQuery] = useState('');
+  // Invite links (PLAN.md §21.1); /people?invite=1 (Getting started) opens them at once. "Manage in People" elsewhere in
+  // the app (PLAN.md §26) opens /people?person=<id> (that person's form) or /people?q=<name or email>.
+  const [params, setParams] = useSearchParams();
+  const [search, setSearch] = useState(() => params.get('q') ?? '');
+  const [query, setQuery] = useState(() => (params.get('q') ?? '').trim());
   useEffect(() => {
     const t = setTimeout(() => setQuery(search.trim()), search ? 250 : 0);
     return () => clearTimeout(t);
@@ -53,11 +56,20 @@ export function PeoplePage() {
   const update = useUpdatePerson();
   const confirm = useConfirm();
   const [open, setOpen] = useState<Open | null>(null);
-  // Invite links (PLAN.md §21.1); /people?invite=1 (Getting started) opens them at once.
-  const [params, setParams] = useSearchParams();
   const [inviting, setInviting] = useState(() => params.has('invite'));
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
+  const wanted = params.get('person');
+  useEffect(() => {
+    if (!wanted || !people.data) return;
+    const p = people.data.find((x) => x.id === wanted);
+    if (p) setOpen({ kind: 'edit', person: p });
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('person');
+      return next;
+    }, { replace: true });
+  }, [wanted, people.data, setParams]);
   const roleById = useMemo(() => new Map((roles.data ?? []).map((r) => [r.id, r])), [roles.data]);
   const loadError = people.error ?? roles.error ?? apps.error;
   // The counts use everyone; the table draws the first 50 (weak phones), "Load more" adds the next.
@@ -224,7 +236,7 @@ export function PeoplePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="People & access"
+        title="People"
         description={`Everyone at ${me?.company.name ?? 'your company'}: their login and their roles. Roles decide which apps they can open.`}
         actions={
           <>

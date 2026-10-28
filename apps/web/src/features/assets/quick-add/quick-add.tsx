@@ -13,8 +13,7 @@ type QuickAddKind =
   | 'company'
   | 'request'
   | 'ticket'
-  | 'maintenance'
-  | 'onboarding';
+  | 'maintenance';
 
 interface OpenState {
   kind: QuickAddKind;
@@ -40,7 +39,6 @@ const OrgForm = lazy(() => import('@/features/assets/org/org-form'));
 const RequestForm = lazy(() => import('@/features/assets/service/request-form'));
 const TicketForm = lazy(() => import('@/features/assets/service/ticket-form'));
 const MaintenanceForm = lazy(() => import('@/features/assets/service/maintenance-form'));
-const OnboardingForm = lazy(() => import('@/features/assets/onboarding/onboarding-form'));
 
 /** One place that can open any "+ Add" form from anywhere (menu, palette, shortcuts, pages). */
 export function QuickAddProvider({ children }: { children: ReactNode }) {
@@ -74,7 +72,6 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
         {state?.kind === 'request' && <RequestForm key={`request-${state.seq}`} {...props} />}
         {state?.kind === 'ticket' && <TicketForm key={`ticket-${state.seq}`} {...props} />}
         {state?.kind === 'maintenance' && <MaintenanceForm key={`maintenance-${state.seq}`} {...props} />}
-        {state?.kind === 'onboarding' && <OnboardingForm key={`onboarding-${state.seq}`} {...props} />}
       </Suspense>
     </QuickAddContext.Provider>
   );
@@ -104,14 +101,14 @@ interface QuickAddItem {
   show?: (can: Can) => boolean;
 }
 
-/** The universal "+ Add" menu, in the order from the brief. */
+/**
+ * The universal "+ Add" menu, in the order from the brief. People, new joiners and departments are not here: they are
+ * added once, in Admin → People / Settings (PLAN.md §26).
+ */
 const QUICK_ADD: QuickAddItem[] = [
-  { kind: 'employee', label: 'Employee', perms: ['employee:manage'] },
-  { kind: 'onboarding', label: 'New joiner', perms: ['onboarding:manage'] },
   { kind: 'asset', label: 'Asset', perms: ['asset:create'] },
   { kind: 'assetType', label: 'Asset type', perms: ['catalog:manage'] },
   { kind: 'category', label: 'Category', perms: ['catalog:manage'] },
-  { kind: 'department', label: 'Department', perms: ['org:manage'] },
   { kind: 'vendor', label: 'Vendor', perms: ['org:manage'] },
   { kind: 'request', label: 'Request', perms: ['request:create'], show: (can) => isIT(can) || isEmployeeOnly(can) || can('request:approve') },
   { kind: 'ticket', label: 'Ticket', perms: ['ticket:create'], show: (can) => isIT(can) || isEmployeeOnly(can) },

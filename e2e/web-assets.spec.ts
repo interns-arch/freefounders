@@ -63,7 +63,8 @@ test('every Assets screen opens under /assets with its menu', async ({ page }) =
   await openSignedIn(page, '/assets');
   await expect(page.getByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening)/ })).toBeVisible();
   const menu = page.getByRole('navigation', { name: 'Assets menu' });
-  for (const name of ['Dashboard', 'Assets', 'Employees', 'Requests', 'Tickets', 'Asset catalogue', 'Departments']) {
+  // People are added once, in Admin → People; departments live in Admin → Settings (PLAN.md §26).
+  for (const name of ['Dashboard', 'Assets', 'People & assets', 'Requests', 'Tickets', 'Asset catalogue']) {
     // a count badge (PLAN.md §19.42) adds ", N pending" to Requests / Tickets when something waits
     await expect(menu.getByRole('link', { name: new RegExp(`^${name}( ?, \\d+ pending)?$`) })).toBeVisible();
   }
@@ -72,7 +73,7 @@ test('every Assets screen opens under /assets with its menu', async ({ page }) =
 
   const screens: Array<[string, string | RegExp]> = [
     ['/assets/assets', 'Assets'],
-    ['/assets/employees', 'Employees'],
+    ['/assets/employees', 'People & assets'],
     ['/assets/exits', 'Employee exits'],
     ['/assets/requests', 'Asset requests'],
     ['/assets/requests?view=joiners', 'Requests'],
@@ -84,9 +85,9 @@ test('every Assets screen opens under /assets with its menu', async ({ page }) =
     ['/assets/activity', 'Activity log'],
     ['/assets/scan', 'Scan'],
     ['/assets/settings/catalog', 'Asset catalog'],
-    ['/assets/settings/departments', 'Departments'],
+    ['/assets/settings/departments', 'Settings'], // Admin → Settings → Departments (PLAN.md §26)
     ['/assets/settings/vendors', 'Vendors'],
-    ['/assets/settings/users', 'Users'],
+    ['/assets/settings/users', 'People'], // logins and people: Admin → People (PLAN.md §26)
     ['/assets/settings/roles', 'Roles'], // one role builder: Admin → Roles (PLAN.md §19.28)
   ];
   for (const [path, heading] of screens) {
@@ -189,7 +190,7 @@ test('add an asset with a photo from the Add menu, then open it: details, photo 
 
 test('employees list and profile (QR card)', async ({ page }) => {
   await openSignedIn(page, '/assets/employees');
-  await expect(page.getByRole('heading', { level: 1, name: 'Employees' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'People & assets' })).toBeVisible();
   await page.getByPlaceholder(/Search/).first().fill('Demo Owner');
   await page.getByRole('main').getByRole('row').filter({ hasText: 'Demo Owner' }).first().click();
   await expect(page).toHaveURL(/\/assets\/employees\/[0-9a-f-]{36}$/);
@@ -275,8 +276,8 @@ test('exits, joiners, departments and activity lists load', async ({ page }) => 
   await expect(page.getByRole('heading', { level: 1, name: 'New joiners' })).toBeVisible();
   await noLoadError(page);
 
-  await page.goto('/assets/settings/departments');
-  await expect(page.getByRole('heading', { level: 1, name: 'Departments' })).toBeVisible();
+  await page.goto('/assets/settings/departments'); // one departments list: Admin → Settings (PLAN.md §26)
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await noLoadError(page);
 
   await page.goto('/assets/activity');

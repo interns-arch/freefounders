@@ -436,6 +436,88 @@ describe('people directory (Phase 5)', () => {
   });
 });
 
+describe('one place for people (PLAN.md §26)', () => {
+  test('the People push updates who they are, adds a missing employee record and switches the login off', async () => {
+    const res = await provision({ email: 'op-asha@t.test', fullName: 'Asha Old', mobile: '9000000001', employeeCode: 'OP-001' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const [u] = await dbs.root.select().from(users).where(eq(users.id, res.body.userId));
+    assert.ok(u.employeeId, 'provision makes the employee record');
+    // A login that has no employee record yet (e.g. matched to an old login): the push adds it.
+    const [role] = await dbs.root.select().from(roles).where(eq(roles.name, 'Employee'));
+    const lonePerson = randomUUID();
+    const [lone] = await dbs.root
+      .insert(users)
+      .values({ email: 'op-lone@t.test', name: 'Lone Login', passwordHash: await hashPassword('Test@12345'), roleId: role.id, platformPersonId: lonePerson })
+      .returning();
+    const version = Math.floor(Date.now() / 1000) + 50;
+    const push = await call('PUT', '/internal/people', await service(), {
+      version,
+      departments: [],
+      people: [
+        { personId: u.platformPersonId, status: 'active', fullName: 'Asha New Name', email: 'op-asha.new@t.test', mobile: '9000000002', employeeCode: 'op-002' },
+        { personId: lonePerson, status: 'active', fullName: 'Lone Person', email: 'op-lone@t.test', mobile: '9000000003', employeeCode: 'OP-003' },
+      ],
+    });
+    assert.equal(push.status, 200, JSON.stringify(push.body));
+    assert.deepEqual(push.body.missingPeople, []);
+    const [emp] = await dbs.root.select().from(employees).where(eq(employees.id, u.employeeId!));
+    assert.equal(emp.fullName, 'Asha New Name');
+    assert.equal(emp.email, 'op-asha.new@t.test');
+    assert.equal(emp.phone, '9000000002');
+    assert.equal(emp.employeeCode, 'OP-002');
+    const [login] = await dbs.root.select().from(users).where(eq(users.id, u.id));
+    assert.equal(login.name, 'Asha New Name');
+    assert.equal(login.email, 'op-asha.new@t.test');
+    const [loneAfter] = await dbs.root.select().from(users).where(eq(users.id, lone.id));
+    assert.ok(loneAfter.employeeId, 'the push made the missing employee record');
+    const [loneEmp] = await dbs.root.select().from(employees).where(eq(employees.id, loneAfter.employeeId!));
+    assert.equal(loneEmp.fullName, 'Lone Person');
+    assert.equal(loneEmp.employeeCode, 'OP-003');
+
+    // An empty email / mobile in People never wipes what Assets has.
+    await call('PUT', '/internal/people', await service(), { version: version + 1, departments: [], people: [{ personId: u.platformPersonId, status: 'active', email: null, mobile: '' }] });
+    const [kept] = await dbs.root.select().from(employees).where(eq(employees.id, u.employeeId!));
+    assert.equal(kept.email, 'op-asha.new@t.test');
+    assert.equal(kept.phone, '9000000002');
+
+    // Switched off in People: the login stops (the employee record stays for the exit / asset recovery).
+    await call('PUT', '/internal/people', await service(), { version: version + 2, departments: [], people: [{ personId: u.platformPersonId, status: 'inactive' }] });
+    const [off] = await dbs.root.select().from(users).where(eq(users.id, u.id));
+    assert.equal(off.isActive, false);
+  });
+
+  test('with Platform sign-in on, people are not added, edited, given logins or switched off in Assets (403)', async () => {
+    const [adminRole] = await dbs.root.select().from(roles).where(eq(roles.name, 'Admin'));
+    const [emp] = await dbs.root.insert(employees).values({ employeeCode: 'OP-ADM', firstName: 'Op', lastName: 'Admin' }).returning();
+    const [admin] = await dbs.root
+      .insert(users)
+      .values({ email: 'op-admin@t.test', name: 'Op Admin', passwordHash: await hashPassword('Test@12345'), roleId: adminRole.id, platformPersonId: randomUUID(), employeeId: emp.id })
+      .returning();
+    const token = await access(admin.platformPersonId!, admin.id);
+    const refused = (r: { status: number; body: { message?: string } }, what: string) => {
+      assert.equal(r.status, 403, `${what}: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body.message, 'People are managed in Admin → People', what);
+    };
+    refused(await call('POST', '/employees', token, { employeeCode: 'OP-NEW', firstName: 'New' }), 'add employee');
+    refused(await call('PATCH', `/employees/${emp.id}`, token, { firstName: 'Renamed' }), 'rename');
+    refused(await call('PATCH', `/employees/${emp.id}`, token, { employeeCode: 'OP-ADM', firstName: 'Op', lastName: 'Admin', designation: 'Boss' }), 'designation');
+    refused(await call('POST', `/employees/${emp.id}/status`, token, { status: 'ON_LEAVE' }), 'status');
+    refused(await call('POST', `/employees/${emp.id}/access`, token, { username: 'op.admin2', password: 'Test@12345!' }), 'login');
+    refused(await call('POST', '/users', token, { name: 'X', email: 'op-x@t.test', password: 'Test@12345!', roleId: adminRole.id }), 'add user');
+    refused(await call('PATCH', `/users/${admin.id}`, token, { isActive: false }), 'switch off');
+    refused(await call('POST', '/onboarding', token, { employeeCode: 'OP-J', firstName: 'Joiner', joinDate: '2026-11-01' }), 'new joiner');
+    assert.equal((await call('POST', '/employees', token, {})).status, 403, 'refused before the form is checked');
+
+    // Assets' own fields stay editable here; an older full form that sends the same identity values is fine.
+    const ok = await call('PATCH', `/employees/${emp.id}`, token, { employeeCode: 'OP-ADM', firstName: 'Op', lastName: 'Admin', notes: 'Keeps the spare keys', personalPhone: '9111111111' });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    const [after] = await dbs.root.select().from(employees).where(eq(employees.id, emp.id));
+    assert.equal(after.notes, 'Keeps the spare keys');
+    assert.equal(after.personalPhone, '9111111111');
+    assert.equal(after.firstName, 'Op');
+  });
+});
+
 describe('asset requests: the manager decides (Phase 5)', () => {
   test('a manager without the approver permission sees and decides their team’s requests only', async () => {
     const mk = async (email: string, fullName: string) => {

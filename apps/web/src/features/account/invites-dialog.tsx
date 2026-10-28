@@ -1,5 +1,5 @@
 /**
- * People & access → "Invite link" (PLAN.md §20.5 step 4, §21.1): a link with the role(s) and apps chosen, an expiry and
+ * People → "Invite link" (PLAN.md §20.5 step 4, §21.1): a link with the role(s) and apps chosen, an expiry and
  * an optional use limit; copy it or share it on WhatsApp; the company's open links, each can be switched off.
  */
 import { errorMessage, type AppKey } from '@kaampilot/core';

@@ -1,5 +1,5 @@
 import { ASSET_STATUS_LABELS, ASSET_STATUSES, HOLDER_TYPE_LABELS, type HolderType } from '@eam/shared';
-import { Activity, AlertTriangle, ArrowRight, Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, PackageCheck, Plus, ScanLine, ShieldAlert, UserPlus, Wrench } from '@/components/icons';
+import { Activity, AlertTriangle, ArrowRight, Boxes, CheckCircle2, ClipboardList, LifeBuoy, LogOut, PackageCheck, Plus, ScanLine, ShieldAlert, Wrench } from '@/components/icons';
 import { Link, useNavigate } from 'react-router';
 import { EnumBadge, HOLDER_ICONS } from '@/components/common/badges';
 import { EmptyState, ErrorState, PageHeader, PageLoader } from '@/components/common/page';
@@ -39,7 +39,6 @@ function QuickActions() {
   const { can } = useAuth();
   const actions = [
     can('asset:create') && { label: 'Add asset', icon: Plus, onClick: () => quickAdd.open('asset') },
-    can('employee:manage') && { label: 'Add employee', icon: UserPlus, onClick: () => quickAdd.open('employee') },
     { label: 'Scan', icon: ScanLine, onClick: () => navigate('/assets/scan') },
     can('request:create') && { label: 'Request', icon: ClipboardList, onClick: () => quickAdd.open('request') },
     can('maintenance:manage') && { label: 'Maintenance', icon: Wrench, onClick: () => quickAdd.open('maintenance') },
@@ -57,7 +56,9 @@ function QuickActions() {
 
 function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
   const t = data.totals;
-  const statusTotal = ASSET_STATUSES.reduce((n, s) => n + (s === 'DISPOSED' ? 0 : data.byStatus[s] ?? 0), 0) || 1;
+  // One definition for every count here (PLAN.md §26): the register = every asset except disposed, as the server counts
+  // it. The old "|| 1" (against dividing by zero) showed "1 in the register" next to "Total assets 0".
+  const barTotal = Math.max(t.assets, 1);
   const utilisation = t.assets ? Math.round((t.assigned / t.assets) * 100) : 0;
   const { can } = useAuth();
 
@@ -66,13 +67,13 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
       <PageHeader title={`${greeting()}${name ? `, ${name}` : ''}`} description="Here’s what’s happening with your assets today." actions={<QuickActions />} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Total assets" value={formatNumber(t.assets)} hint="In the register" icon={Boxes} tone="indigo" to="/assets/assets" />
+        <StatTile label="Total assets" value={formatNumber(t.assets)} hint="In the register (excluding disposed)" icon={Boxes} tone="indigo" to="/assets/assets" />
         <StatTile label="Assigned" value={formatNumber(t.assigned)} hint={`${utilisation}% in use`} icon={PackageCheck} tone="violet" to="/assets/assets?status=ASSIGNED" />
         <StatTile label="Available" value={formatNumber(t.available)} hint="Ready to assign" icon={CheckCircle2} tone="green" to="/assets/assets?status=AVAILABLE" />
         <StatTile
           label="Pending exit recoveries"
           value={formatNumber(t.exitPendingItems)}
-          hint={`${plural(t.onNotice, 'employee')} on notice`}
+          hint={`${t.onNotice === 1 ? '1 person' : `${formatNumber(t.onNotice)} people`} on notice`}
           icon={LogOut}
           tone={t.exitPendingItems ? 'amber' : 'default'}
           to="/assets/exits"
@@ -93,13 +94,13 @@ function OrgView({ data, name }: { data: OrgDashboard; name?: string }) {
           <CardHeader>
             <div>
               <CardTitle>Assets by status</CardTitle>
-              <CardDescription>{formatNumber(statusTotal)} in the register (excluding disposed)</CardDescription>
+              <CardDescription>{formatNumber(t.assets)} in the register (excluding disposed)</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex h-3.5 gap-px overflow-hidden rounded-full bg-muted">
               {ASSET_STATUSES.filter((s) => s !== 'DISPOSED' && data.byStatus[s]).map((s) => (
-                <div key={s} className={cn('h-full transition-all', ASSET_STATUS_BAR[s])} style={{ width: `${((data.byStatus[s] ?? 0) / statusTotal) * 100}%` }} title={`${ASSET_STATUS_LABELS[s]}: ${data.byStatus[s]}`} />
+                <div key={s} className={cn('h-full transition-all', ASSET_STATUS_BAR[s])} style={{ width: `${((data.byStatus[s] ?? 0) / barTotal) * 100}%` }} title={`${ASSET_STATUS_LABELS[s]}: ${data.byStatus[s]}`} />
               ))}
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">

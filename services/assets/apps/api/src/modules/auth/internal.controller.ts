@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { and, asc, eq, isNotNull, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { ADMIN_PERMISSIONS, ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSIONS } from '@eam/shared';
 import { z } from 'zod';
-import { type Actor, SYSTEM_ACTOR } from '../../common/actor';
+import { SYSTEM_ACTOR } from '../../common/actor';
 import { type AuthedRequest, badRequest, Public, ZodPipe } from '../../common/http';
 import { HistoryService } from '../../core/history.service';
 import { SequenceService } from '../../core/sequence.service';
@@ -19,6 +19,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { OrgService } from '../org/org.service';
 import { PERMISSION_HINTS } from './permission-hints';
 import { bearerToken, SERVICE_AUDIENCE, verifyPlatformToken } from './platform-token';
+import { addStaffEmployee, PLATFORM_ACTOR } from './staff-employee';
 
 const blank = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
 const provisionSchema = z.object({
@@ -54,7 +55,6 @@ const companySchema = z.object({
   name: z.string().trim().min(1).max(200),
 });
 
-const PLATFORM_ACTOR: Actor = { userId: null, name: 'Kaampilot Platform', email: null, employeeId: null, roleName: 'System', permissions: new Set() };
 
 /**
  * Internal API the Kaampilot Platform calls; not for browsers. Authenticated by a 60-second Platform
@@ -376,35 +376,7 @@ export class InternalController {
     return { userId: row.id, created: true };
   }
 
-  private async addStaffEmployee(input: ProvisionInput): Promise<string> {
-    const db = this.dbs.db;
-    let code = input.employeeCode ?? null;
-    if (code) {
-      const [taken] = await db.select({ id: employees.id }).from(employees).where(sql`lower(${employees.employeeCode}) = lower(${code})`).limit(1);
-      if (taken) code = null; // used by an employee who already has a login: give this person a staff code
-    }
-    const employeeCode = code ?? (await this.sequences.next('STAFF', 3));
-    const [emailTaken] = input.email ? await db.select({ id: employees.id }).from(employees).where(sql`lower(${employees.email}) = lower(${input.email})`).limit(1) : [];
-    const [firstName, ...rest] = input.fullName.trim().split(/\s+/);
-    const [emp] = await db
-      .insert(employees)
-      .values({
-        employeeCode,
-        firstName,
-        lastName: rest.join(' ') || null,
-        email: emailTaken ? null : (input.email ?? null),
-        phone: input.mobile ?? null,
-        companyId: await this.dbs.defaultCompanyId(),
-      })
-      .returning({ id: employees.id, fullName: employees.fullName });
-    await this.history.record(PLATFORM_ACTOR, {
-      entityType: 'EMPLOYEE',
-      entityId: emp.id,
-      entityLabel: emp.fullName,
-      employeeId: emp.id,
-      action: 'CREATED',
-      summary: `${emp.fullName} (${employeeCode}) added with their Kaampilot login`,
-    });
-    return emp.id;
+  private addStaffEmployee(input: ProvisionInput): Promise<string> {
+    return addStaffEmployee({ dbs: this.dbs, sequences: this.sequences, history: this.history }, input);
   }
 }

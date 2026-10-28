@@ -1,6 +1,6 @@
 import { EMPLOYEE_STATUS_LABELS, type EmployeeStatus } from '@eam/shared';
 import { SearchField } from '@/components/common/search-field';
-import { Plus, Printer, Users } from '@/components/icons';
+import { Printer, Users } from '@/components/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { EmployeeStatusBadge } from '@/components/common/badges';
@@ -9,9 +9,10 @@ import { EmptyState, PageHeader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/input';
 import { Avatar, Card } from '@/components/ui/primitives';
-import { useQuickAdd } from '@/features/assets/quick-add/quick-add';
 import { useEmployees } from '@kaampilot/core/assets';
-import { useAuth } from '@/features/assets/lib/auth';
+import { ADMIN_SCREENS } from '@/features/admin/nav';
+import { useAccess } from '@kaampilot/core';
+import { Link } from 'react-router';
 import { useDepartments } from '@kaampilot/core/assets';
 import type { Employee } from '@kaampilot/core/assets';
 import { useSearchBox, useUrlFilters } from '@/lib/url-state';
@@ -32,8 +33,7 @@ const TABS: { value: string; label: string }[] = [
 
 export default function EmployeesPage() {
   const navigate = useNavigate();
-  const quickAdd = useQuickAdd();
-  const { can } = useAuth();
+  const canPeople = ADMIN_SCREENS.people(useAccess());
   const { values: f, set, clear } = useUrlFilters({ page: '1', pageSize: '25', sort: 'name', dir: 'asc' });
   const [search, setSearch] = useSearchBox(f.search ?? '', (v) => set({ search: v }));
   const departments = useDepartments();
@@ -43,7 +43,7 @@ export default function EmployeesPage() {
   const contactsView = f.view === 'contacts';
   const nameColumn: Column<Employee> = {
     key: 'name',
-    header: 'Employee',
+    header: 'Person',
     sortKey: 'name',
     cell: (e) => (
       <div className="flex min-w-48 items-center gap-3">
@@ -81,7 +81,7 @@ export default function EmployeesPage() {
   const detailColumns: Column<Employee>[] = [
     {
       key: 'name',
-      header: 'Employee',
+      header: 'Person',
       sortKey: 'name',
       cell: (e) => (
         <div className="flex min-w-52 items-center gap-3">
@@ -130,8 +130,21 @@ export default function EmployeesPage() {
   return (
     <div>
       <PageHeader
-        title="Employees"
-        description={q.data ? `${formatNumber(q.data.total)} ${f.status ? EMPLOYEE_STATUS_LABELS[f.status as EmployeeStatus]?.toLowerCase() : 'current'} employees` : 'People who can hold company assets.'}
+        title="People & assets"
+        description={
+          <>
+            {q.data ? `${formatNumber(q.data.total)} ${f.status ? EMPLOYEE_STATUS_LABELS[f.status as EmployeeStatus]?.toLowerCase() : 'current'} · who holds what.` : 'Who holds which company assets.'}{' '}
+            People are added and edited in{' '}
+            {canPeople ? (
+              <Link to="/people" className="font-medium text-primary hover:underline">
+                Admin → People
+              </Link>
+            ) : (
+              'Admin → People'
+            )}
+            .
+          </>
+        }
         actions={
           <>
             <DownloadMenu
@@ -143,11 +156,6 @@ export default function EmployeesPage() {
             {!!q.data?.items.length && (
               <Button size="sm" variant="outline" onClick={() => navigate(`/assets/id-cards?ids=${(selected.size ? [...selected] : q.data!.items.map((x) => x.id)).join(',')}`)}>
                 <Printer /> {selected.size ? `Print ${selected.size} ID cards` : 'Print ID cards'}
-              </Button>
-            )}
-            {can('employee:manage') && (
-              <Button variant="cta" size="sm" onClick={() => quickAdd.open('employee')}>
-                <Plus /> Add employee
               </Button>
             )}
           </>
@@ -228,7 +236,7 @@ export default function EmployeesPage() {
           empty={
             <EmptyState
               icon={Users}
-              title="No employees found"
+              title="No people found"
               action={
                 f.search || f.departmentId ? (
                   <Button variant="outline" size="sm" onClick={() => clear(['status'])}>

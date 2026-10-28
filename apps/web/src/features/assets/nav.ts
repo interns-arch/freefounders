@@ -1,5 +1,5 @@
 import type { Access } from '@kaampilot/core';
-import { Activity, Boxes, Briefcase, CardSim, ClipboardList, GitCompareArrows, LayoutDashboard, LifeBuoy, LineChart, ListOrdered, LogOut, QrCode, ScanLine, Shapes, Truck, UserPlus, Users, UsersRound, Wrench } from '@/components/icons';
+import { Activity, Boxes, CardSim, ClipboardList, GitCompareArrows, LayoutDashboard, LifeBuoy, LineChart, ListOrdered, LogOut, QrCode, ScanLine, Shapes, Truck, UserPlus, Users, Wrench } from '@/components/icons';
 import type { NavItem } from '@/app/nav';
 
 // Same rules as the Assets app: IT hands out assets; staff (HR, managers, CEO) see people; plain employees see their own.
@@ -15,7 +15,8 @@ export const ASSETS_NAV: NavItem[] = [
   { label: 'Priority queue', to: '/assets/queue', icon: ListOrdered, show: isIT },
   { label: 'Assets', to: '/assets/assets', icon: Boxes, show: (a) => staff(a) && isIT(a) },
   { label: 'My assets', to: '/assets/assets', icon: Boxes, show: isEmployeeOnly },
-  { label: 'Employees', to: '/assets/employees', icon: Users, show: (a) => a.assets.can('employee:view') },
+  // Who holds what; the people themselves are added and edited in Admin → People (PLAN.md §26).
+  { label: 'People & assets', to: '/assets/employees', icon: Users, show: (a) => a.assets.can('employee:view') },
   { label: 'New joiners', to: '/assets/onboarding', icon: UserPlus, show: (a) => a.assets.can('onboarding:manage') && !isIT(a) },
   { label: 'Exits', to: '/assets/exits', icon: LogOut, show: (a) => a.assets.can('exit:manage', 'employee:status'), badge: (b) => b.assets.exits },
   { label: 'Requests', to: '/assets/requests', icon: ClipboardList, show: (a) => staff(a) && a.assets.can('request:approve', 'request:fulfil'), badge: (b) => b.assets.requests },
@@ -29,9 +30,7 @@ export const ASSETS_NAV: NavItem[] = [
   { label: 'SIM cards', to: '/assets/sims', icon: CardSim, group: 'More', show: (a) => isIT(a) && a.assets.module('sims') },
   { label: 'Reconciliation', to: '/assets/reconciliation', icon: GitCompareArrows, group: 'More', show: (a) => isIT(a) && a.assets.module('sims') },
   { label: 'Asset catalogue', to: '/assets/settings/catalog', icon: Shapes, group: 'Settings', show: (a) => a.assets.can('catalog:manage') },
-  { label: 'Departments', to: '/assets/settings/departments', icon: Briefcase, group: 'Settings', show: (a) => a.assets.can('org:manage') },
   { label: 'Vendors', to: '/assets/settings/vendors', icon: Truck, group: 'Settings', show: (a) => a.assets.can('org:manage') },
-  { label: 'Users', to: '/assets/settings/users', icon: UsersRound, group: 'Settings', show: (a) => a.assets.can('user:manage') },
 ];
 
 /** Keyboard shortcuts (G then …) for the Assets screens. */

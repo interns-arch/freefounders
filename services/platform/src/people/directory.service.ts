@@ -172,6 +172,10 @@ export class DirectoryService {
             joinDate: p.joinDate,
             // Attendance lists, reports and the attendance import match on it (PLAN.md §19.15).
             employeeCode: p.employeeCode,
+            // Who they are (PLAN.md §26): People is the one place these change; the apps follow.
+            fullName: p.fullName,
+            email: p.email,
+            mobile: p.mobile,
           })),
         });
         result[app] = res.applied ? 'ok' : 'stale';

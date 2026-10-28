@@ -1,5 +1,6 @@
 // Kaampilot Platform sign-in: verifies the Platform's EdDSA (Ed25519) tokens against its published keys.
 // Off unless PLATFORM_JWKS_URL (or PLATFORM_JWKS, the key set inline as JSON) is set.
+import { ForbiddenException } from '@nestjs/common';
 import { createLocalJWKSet, createRemoteJWKSet, decodeProtectedHeader, type JWTPayload, jwtVerify } from 'jose';
 
 export const PLATFORM_ISSUER = 'kaampilot-platform';
@@ -11,6 +12,14 @@ let cached: { source: string; keys: KeySet } | undefined;
 
 export function platformEnabled(): boolean {
   return Boolean(process.env.PLATFORM_JWKS?.trim() || process.env.PLATFORM_JWKS_URL?.trim());
+}
+
+/** PLAN.md §26: with Platform sign-in on, people are added, edited, imported, switched off and given roles only in People. */
+export const PEOPLE_MANAGED_MESSAGE = 'People are managed in Admin → People';
+
+/** Refuses a people change made here while the Platform owns the People directory (standalone installs are unchanged). */
+export function assertPeopleManagedHere(): void {
+  if (platformEnabled()) throw new ForbiddenException(PEOPLE_MANAGED_MESSAGE);
 }
 
 function keySet(): KeySet {

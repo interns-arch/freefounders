@@ -25,7 +25,6 @@ const MaintenancePage = lazy(() => import('./service/maintenance-page'));
 const ActivityPage = lazy(() => import('./activity/activity-page'));
 const CatalogPage = lazy(() => import('./catalog/catalog-page'));
 const OrgPage = lazy(() => import('./org/org-page'));
-const UsersPage = lazy(() => import('./admin/users-page'));
 const SimsPage = lazy(() => import('./sims/sims-page'));
 const ReconciliationPage = lazy(() => import('./reconciliation/reconciliation-page'));
 const ReconRunPage = lazy(() => import('./reconciliation/run-page'));
@@ -86,11 +85,12 @@ export const assetsRoutes: RouteObject[] = [
       { path: 'reconciliation', element: <ReconciliationPage /> },
       { path: 'reconciliation/:id', element: <ReconRunPage /> },
       { path: 'settings/catalog', element: <CatalogPage /> },
-      { path: 'settings/departments', element: <OrgPage kind="department" /> },
       { path: 'settings/vendors', element: <OrgPage kind="vendor" /> },
-      { path: 'settings/users', element: <UsersPage /> },
-      // Roles live in Admin → Roles (one role builder, PLAN.md §15 / §19.28).
+      // Roles live in Admin → Roles (one role builder, PLAN.md §15 / §19.28); logins and people in Admin → People and
+      // departments in Admin → Settings (one place for people, PLAN.md §26). Old links still land there.
       { path: 'settings/roles', element: <Navigate to="/roles" replace /> },
+      { path: 'settings/users', element: <Navigate to="/people" replace /> },
+      { path: 'settings/departments', element: <Navigate to="/settings" replace /> },
     ],
   },
 ];

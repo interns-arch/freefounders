@@ -8,7 +8,7 @@ export const KNOWLEDGE = `# Kaampilot knowledge base (for "Ask Kaampilot")
 ## 1. What Kaampilot is
 Kaampilot (kaampilot.com) is one app for Indian small and medium businesses (about 5 to 500 people). It covers attendance and HR (selfie + GPS punch-in, leave, regularization, payroll), tasks with approvals, company assets (with new joiners and exits), and visitor and gate security. It works on the web and in an Android app, and the app shows the same screens. Made in India. Data stays in India. Support: support@kaampilot.com. Public pages: /contact, /terms, /privacy, /refunds.
 
-What a person sees depends on what their company switched on and on their roles. If a menu item is missing, the company admin can give access (Admin › People & access) or switch the module on (Admin › Settings › Modules).
+What a person sees depends on what their company switched on and on their roles. If a menu item is missing, the company admin can give access (Admin › People) or switch the module on (Admin › Settings › Modules).
 
 **Layout**
 - Desktop: a left sidebar with Home, then the groups **Attendance**, **Tasks**, **Assets**, **Visitors** and **Admin**. Each group appears only if the person has it.
@@ -22,7 +22,7 @@ What a person sees depends on what their company switched on and on their roles.
 - **Sign in** (/login): fill in "Email, username or employee ID" and "Password", then tap **Sign in**. You can also tap **Sign in with a code instead**: enter your email, tap **Send code**, then enter the code.
 - **Several companies**: after signing in you choose one. You can switch later from the account menu.
 - **Forgot password**: on the sign-in page tap **Forgot your password?**, enter your email, then the code, then choose a new password. Your other devices are signed out.
-- **Logins your admin made** (username or employee ID): only the admin can reset these. The admin goes to Admin › People & access › ⋯ › **Reset password**, types or generates a password and shares it (Copy or WhatsApp). The new password is shown once, and by default you choose your own at the next sign-in.
+- **Logins your admin made** (username or employee ID): only the admin can reset these. The admin goes to Admin › People › ⋯ › **Reset password**, types or generates a password and shares it (Copy or WhatsApp). The new password is shown once, and by default you choose your own at the next sign-in.
 - **Change password**: account menu › Change password.
 - **Joining a company**: open the invite link your admin shared, then sign in or sign up with your email.
 - Passwords are stored hashed only. Nobody, admins included, can see your password. They can only set a new one.
@@ -150,7 +150,7 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
 
 ### Assets (sidebar group "Assets")
 - **Who sees what**:
-  - Staff and IT see Dashboard, Assets, Employees, New joiners, Exits, Requests, Tickets, Maintenance, Activity log, Scan and settings.
+  - Staff and IT see Dashboard, Assets, People & assets, New joiners, Exits, Requests, Tickets, Maintenance, Activity log, Scan and settings.
   - Employees see Home, **My assets**, **My requests**, **My tickets** and **My QR & profile**.
 - **Assets list**:
   - **Add asset** opens a form. Afterwards you can add up to 6 photos (Take photo / Choose from gallery).
@@ -180,10 +180,11 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
 - Admin › Roles › **Add Guard role** makes a guard role (punch in/out + gate).
 
 ### Admin (sidebar group "Admin")
-- **People & access**:
+- **People**:
   - **Add person** asks for name, email, employee ID, mobile, access level, department, designation, reports to and joining date, with an optional login.
   - **Invite link** makes a link people join with their email.
   - **Import** adds people from an Excel or CSV template.
+  - People are added, edited, switched off and given roles only here. Assets (People & assets), Tasks (My team) and Team show them read-only with a **Manage in People** link for admins; a new joiner is added here with a joining date, which opens their Assets onboarding.
   - **Edit**, **Change roles**, and the ⋯ menu: Reset password / Create login, Start exit, Deactivate / Activate, Delete permanently.
 - **Roles**:
   - The built-in roles are **Admin** and **Member**. The **Owner** (company creator) always has full access.
@@ -234,13 +235,13 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
 16. **Change a task's due date**: open the task › **Request change** (admins: **Edit**).
 17. **Give part of a task to someone**: open the task › Sub-tasks › **Give a part to someone**.
 18. **Get a person's task report**: Tasks › Team performance › a name › Open full profile › **Excel report**.
-19. **Add a person**: Admin › People & access › **Add person** › **Save**, then share the login shown.
-20. **Invite people with a link**: Admin › People & access › **Invite link**.
-21. **Import many people**: Admin › People & access › **Import** › download the template › **Check file** › **Import N people**.
-22. **Give someone a role or make them admin**: Admin › People & access › **Change roles** › tick roles, or **Make Admin** › **Save roles**.
+19. **Add a person**: Admin › People › **Add person** › **Save**, then share the login shown.
+20. **Invite people with a link**: Admin › People › **Invite link**.
+21. **Import many people**: Admin › People › **Import** › download the template › **Check file** › **Import N people**.
+22. **Give someone a role or make them admin**: Admin › People › **Change roles** › tick roles, or **Make Admin** › **Save roles**.
 23. **Create a custom role**: Admin › Roles › **New role** › name, permissions and scopes › **Save role**.
-24. **Reset someone's password**: Admin › People & access › ⋯ › **Reset password**.
-25. **Remove an employee who left**: Admin › People & access › ⋯ › **Start exit** (or **Deactivate**).
+24. **Reset someone's password**: Admin › People › ⋯ › **Reset password**.
+25. **Remove an employee who left**: Admin › People › ⋯ › **Start exit** (or **Deactivate**).
 26. **Change company logo or colour**: Admin › Settings › Company › Brand colour / Logo › **Save company**.
 27. **Switch a module on or off** (e.g. Visitors, Payroll): Admin › Settings › Modules.
 28. **Add an asset**: Assets › Assets › **Add asset**, then add photos.

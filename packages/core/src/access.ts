@@ -143,7 +143,7 @@ export interface Access {
   apps: AppKey[];
   /** Owner or admin access level (everything in the Admin workspace). For what a person may do there, use `admin`. */
   isAdmin: boolean;
-  /** The Admin workspace (People & access, Roles, Settings): each action is its own permission (PLAN.md §19.19). */
+  /** The Admin workspace (People, Roles, Settings): each action is its own permission (PLAN.md §19.19). */
   admin: {
     /** Has at least one Admin permission (the Admin menu shows). */
     any: boolean;
