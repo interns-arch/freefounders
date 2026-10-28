@@ -39,6 +39,7 @@ test('app header: Ask AI opens the side panel beside the page, answers render as
   await expect(panel).toBeVisible();
   // Tasks suggestions, and the page moves aside from 1280 px (nothing covered).
   await expect(panel.getByRole('button', { name: 'How do I add a task?' })).toBeVisible();
+  await expect(panel.getByText('AI answers can be wrong')).toHaveCount(0);
   const box = (await panel.boundingBox())!;
   expect(box.height).toBeGreaterThan(850);
   expect(await page.evaluate(() => getComputedStyle(document.body).paddingRight)).toBe(`${Math.round(box.width)}px`);
@@ -73,8 +74,8 @@ test('helper off: the panel says coming soon and a question gets "isn\'t set up 
   await page.locator('header').getByRole('button', { name: 'Ask AI' }).click();
   const panel = page.getByRole('dialog', { name: 'Ask Kaampilot' });
   await expect(panel.getByTestId('ask-ai-coming-soon')).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'How do I punch in?' })).toBeVisible();
-  await panel.getByRole('button', { name: 'How do I punch in?' }).click();
+  await expect(panel.getByRole('button', { name: 'How do I fix a missed punch?' })).toBeVisible();
+  await panel.getByRole('button', { name: 'How do I fix a missed punch?' }).click();
   await expect(panel.getByRole('alert')).toHaveText("The AI helper isn't set up yet.");
   await expect(panel.getByRole('button', { name: 'Retry' })).toHaveCount(0);
   await ctx.close();

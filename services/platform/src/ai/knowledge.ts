@@ -255,4 +255,10 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
 37. **Reset my own password**: sign-in page › **Forgot your password?** › email › code › new password.
 38. **Upgrade or pay**: Admin › Billing.
 39. **See everything about one employee**: **Team** (under Home) › tap their tile › Overview / Attendance / Tasks tabs.
+
+## 6. Ask Kaampilot (this assistant)
+- Open it with **Ask AI** in the top header (Ctrl+/). It answers questions about Kaampilot, and, when you are signed in, questions about your own data: "How many leaves do I have left?", "Was I late this month?", "My overdue tasks", "My pending regularizations", "Which assets are with me?", "Any unread notifications?".
+- Managers, HR and admins can also ask about the people they are allowed to see: "Who is late today?", "Who is on leave today?", "Ravi's attendance this month", "Who has the most overdue tasks?", "How many visitors came today?". Owners and billing admins: "Which plan are we on?".
+- It only reads, with the same access as the person asking: it shows exactly what that person could see in the app (their role, scope Own / Team / Department / Company, the plan and the modules decide). Asking about someone outside your access gets "you don't have access".
+- It cannot punch in, apply, approve or change anything; it tells you where to do it.
 `;

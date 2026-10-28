@@ -76,8 +76,11 @@ describe('AI helper', () => {
     assert.equal(body.system[0].type, 'text');
     assert.ok(body.system[0].text.includes(KNOWLEDGE), 'the knowledge is in the system prompt');
     assert.match(body.system[0].text, /support@kaampilot\.com/);
-    assert.match(body.system[0].text, /Acme Traders/);
-    assert.match(body.system[0].text, /\/attendance\/today\./, 'page path without its query string');
+    const context = body.system.map((b: { text: string }) => b.text).join(' ');
+    assert.match(context, /Acme Traders/);
+    assert.match(context, /\/attendance\/today\./, 'page path without its query string');
+    assert.equal(body.system.at(-1).cache_control, undefined, 'who / where comes after the cached part');
+    assert.equal(body.tools, undefined, 'no data tools without the person and their token');
     assert.deepEqual(body.messages, [
       { role: 'user', content: 'Hi' },
       { role: 'assistant', content: 'Hello!' },

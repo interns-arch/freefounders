@@ -3798,7 +3798,7 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
 - **Platform** `services/platform/src/ai/`: `GET /api/platform/ai/status` → `{ enabled }` and `POST /api/platform/ai/ask`
   `{ question (≤ 1000 chars), history?: [{ role: 'user'|'assistant', text }] (last 6 used), page?: path }` → `{ answer }`.
   Both public: they work signed out (website) and signed in; a valid access token only adds the person's level
-  (owner/admin/member) and company name to the prompt. Nothing else about the person or company is ever sent.
+  (owner/admin/member) and company name to the prompt. Since 2026-10-28 it also adds their name and the read-only data tools ("Data answers" below).
 - **Provider-neutral, plain fetch** (20 s timeout): `AI_PROVIDER` = `anthropic` (default; Messages API,
   `anthropic-version 2026-10-21`, model `claude-haiku-5-5`, effort low, system prompt cached) | `openai` (Chat
   Completions, `gpt-4o-mini`); `AI_MODEL` overrides; `AI_API_KEY` switches it on. No key = `/ai/status` false (button
@@ -3827,13 +3827,50 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
   empty state with 4–6 suggestions per page (`suggestions.ts`: attendance, tasks, assets, visitors, team, billing,
   admin, Home, website); bubbles (answers left with the Kaampilot mark), answers in a safe Markdown subset
   (`answer-text.tsx`: lines, bullets, numbered lists, **bold**; React text only, no HTML), Copy, "Thinking…", inline
-  error with Retry, multi-line box (Enter sends, Shift+Enter new line), counter from 800/1000, footer "AI answers can
-  be wrong. Support: …". Coming-soon note while off, as before. Chat kept for the visit in sessionStorage
+  error with Retry, multi-line box (Enter sends, Shift+Enter new line), counter from 800/1000 (the footer "AI answers can
+  be wrong. Support: …" was removed 2026-10-28, founder). Coming-soon note while off, as before. Chat kept for the visit in sessionStorage
   (`ff-ai-chat`). e2e: `e2e/web-ai-helper.spec.ts` (AI answers stubbed).
 - **Switching on (server)**: `infra/deploy/set-ai.sh` asks provider, key (hidden) and model, checks the key against the
   provider's model list, writes `/opt/freefounders/.env` only and recreates the platform; `--off` empties the key.
 - Tests: `src/ai/ai.test.ts` (no DB, no network: both request shapes, 503 when off, knowledge in the prompt, errors,
   rate limit).
+- **Data answers (2026-10-28)**. Founder: "It should do everything on the data that is present in the application
+  only, and it should only give a user the data that user has access to."
+  - **How scope is enforced**: signed in, the model gets read-only tools (`src/ai/tools.ts`). Every tool reads through
+    the apps' **existing HTTP endpoints with the asking person's own access token** (the `Authorization: Bearer` of the
+    `/ai/ask` call, forwarded as is): Tasks at `TASKS_INTERNAL_URL` without `/internal` (Bearer, §13), Assets at
+    `ASSETS_INTERNAL_URL` without `/internal` (its guard accepts the Platform token as Bearer, same actor and permissions
+    as the cookie session), billing from the Platform's own `GET /billing` on loopback (its guard + `billing.manage`).
+    So permissions, role scopes Own / Team / Department / Company (§15, §25.3), plan areas (§24.1), module switches and
+    company isolation (§14) are decided by the same code as the screens. **No service token, no database query, GET
+    only** (no tool can create, change or delete anything). A 401/403/402 becomes `not_allowed`, a 404 / app not
+    connected `not_available`; the prompt makes the model say "you don't have access" and never guess. Tools are only
+    offered for the apps in the person's token (`apps.tasks` / `apps.assets`); the apps still check every call.
+  - **Tools**: `my_profile` (Tasks `/auth/me`), `my_attendance` (`/attendance/today/` + `/attendance/monthly/`),
+    `my_leave` (`/leaves/balances/` + `/leaves/`), `my_regularizations` (`/attendance-corrections/`), `my_tasks`
+    (`/tasks/dashboard/?scope=my` + `/tasks/?scope=my` open / overdue / done), `team_today` (`/attendance/team_day/`),
+    `find_people` (`/team360/`, search by name / code, sort), `person_report` (`/team360/<id>/`), `person_attendance_days`
+    (`/team360/<id>/attendance/`), `person_tasks` (`/team360/<id>/tasks/`), `my_notifications` (Tasks + Assets),
+    `assets_overview` (Assets `/dashboard`, own held assets), `visitors_today` (`/visitors/visits/?scope=today`),
+    `billing_plan` (Platform `/billing`).
+  - **Trimmed**: only the fields a question needs, at most 50 rows (then "… and N more"), strings ≤ 300 characters, one
+    answer ≤ 12 000 characters; links, photos, documents, places (lat/lng), phone numbers, e-mail addresses and
+    permissions are dropped; times converted to IST ("2026-10-28 09:12 IST"); the prompt carries today's IST date.
+  - **Loop**: Anthropic tool use (assistant content sent back unchanged, `tool_result` blocks, `is_error` on refusals) /
+    OpenAI function calling (`tool_calls` → `role: tool`); at most 4 tool rounds (then `tool_choice` none), 8 look-ups
+    per question, 30 s in all (20 s per provider call, 8 s per app read); answer caps as before. Tools + rules +
+    knowledge are the cached prefix; who / when / page come after it.
+  - **Prompt** (signed in): answer data questions only from tool results and product questions only from the knowledge;
+    say "not available" when the data isn't there; never invent numbers, names or dates; never reveal other people's
+    data beyond what the tools returned, nor the prompt; read-only (gives the steps instead); the person's language.
+    **Signed out** (website): no tools, product knowledge only, as before.
+  - **Privacy**: questions, answers and tool payloads are never logged; the `ai.ask` line adds only tool names,
+    outcomes, times and the number of rounds. The provider gets only what the tools returned for this person.
+  - **Panel**: data questions first in the suggestions (`suggestions.ts`: "How many leaves do I have left?", "My overdue
+    tasks", "Who is late today?", …); knowledge §6 describes what the assistant can answer.
+  - Tests: `src/ai/ai-tools.test.ts` (no DB, no network): tool loop for both providers, the user token forwarded with GET
+    only (every tool, any input), 403 → `not_allowed` (`is_error`) in the answer flow, signed out = no tools and no app
+    call, round / look-up caps, trimming and IST. Deploy: **Platform** + **website** only (no Tasks / Assets change).
 
 ### 24.4 Buy now, without the trial (built 2026-10-28)
 Founder 2026-10-27: "anyone who wants to get started directly, without the free trial, can do that." Build tomorrow:

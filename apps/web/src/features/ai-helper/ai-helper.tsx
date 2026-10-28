@@ -415,23 +415,19 @@ function Panel({ id, open, onClose, site }: { id: string; open: boolean; onClose
               rows={1}
               maxLength={AI_MAX_QUESTION}
               placeholder="Ask a question…"
-              aria-describedby={`${id}-hint`}
               className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-base outline-none placeholder:text-muted-foreground sm:text-sm"
             />
             <Button type="submit" size="icon-sm" disabled={!draft.trim() || ask.isPending} aria-label="Send question">
               <Send />
             </Button>
           </div>
-          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-            <p id={`${id}-hint`} className="min-w-0 flex-1">
-              AI answers can be wrong. Support: support@kaampilot.com
-            </p>
-            {draft.length >= COUNT_FROM && (
-              <span aria-live="polite" className={cn('shrink-0 tabular-nums', draft.length >= AI_MAX_QUESTION && 'font-semibold text-destructive')}>
+          {draft.length >= COUNT_FROM && (
+            <div className="mt-1.5 flex justify-end text-[11px] text-muted-foreground">
+              <span aria-live="polite" className={cn('tabular-nums', draft.length >= AI_MAX_QUESTION && 'font-semibold text-destructive')}>
                 {draft.length}/{AI_MAX_QUESTION}
               </span>
-            )}
-          </div>
+            </div>
+          )}
         </form>
       </section>
     </>
