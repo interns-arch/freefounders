@@ -1,7 +1,8 @@
 /**
  * "Ask Kaampilot" (PLAN.md §24.3): a round help button bottom-right that opens a small chat panel. Answers come from the
- * Platform's AI helper (knowledge about Kaampilot only). The chat lives in memory for this visit only. The button is
- * hidden while the helper is switched off (GET /ai/status → enabled false).
+ * Platform's AI helper (knowledge about Kaampilot only). The chat lives in memory for this visit only. While the helper
+ * is switched off (GET /ai/status → enabled false) the button still shows (founder 2026-10-28: "so I can check the
+ * frontend") and the panel says it is coming soon.
  *
  * Phones: in the app frame it sits above the bottom bar (Attendance · Home · …), never over it; the Punch button is in
  * the page flow at the top of Home / Attendance, so it is never covered. On a page without the bottom bar (website),
@@ -46,7 +47,8 @@ export function AiHelper({ aboveBottomBar = true }: { aboveBottomBar?: boolean }
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns, ask.isPending, error]);
 
-  if (!status.data?.enabled) return null;
+  if (status.isLoading) return null;
+  const off = !status.data?.enabled;
 
   const close = () => {
     setOpen(false);
@@ -132,6 +134,11 @@ export function AiHelper({ aboveBottomBar = true }: { aboveBottomBar?: boolean }
           </header>
 
           <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-3" aria-live="polite" aria-busy={ask.isPending}>
+            {off && turns.length === 0 && (
+              <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                The AI helper is coming soon. Until then, write to support@kaampilot.com and we will help.
+              </p>
+            )}
             {turns.length === 0 && (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Ask how to do something in Kaampilot. Try:</p>
