@@ -17,7 +17,7 @@ import { ArrowRight, Check, Download, Minus, Moon, Smartphone, Sun, X } from '@/
 import { BrandLockup, BrandMark } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { LEGAL_LINKS } from '@/features/account/legal-links';
-import { AiHelper } from '@/features/ai-helper';
+import { AskAi } from '@/features/ai-helper';
 import { cn } from '@/lib/utils';
 import { BookDemoButton } from './book-demo';
 import { AI_FEATURE, APP_APK, COMPARE, COMPARE_TOOLS, FAQ, HIGHLIGHTS, type Mark, MORE, SECURITY, STEPS, TEAM360, TRUST } from './content';
@@ -65,7 +65,6 @@ export function LandingPage({ only }: { only?: 'pricing' }) {
         Skip to content
       </a>
       <TopBar />
-      <AiHelper aboveBottomBar={false} />
       <main id="main">
         {only === 'pricing' ? (
           <PricingSection pricing={pricing} standalone />
@@ -185,6 +184,7 @@ function TopBar() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <AskAi site />
           <Button variant="ghost" size="icon" onClick={theme.toggle} aria-label={theme.dark ? 'Light mode' : 'Dark mode'} title={theme.dark ? 'Light mode' : 'Dark mode'}>
             {theme.dark ? <Sun /> : <Moon />}
           </Button>

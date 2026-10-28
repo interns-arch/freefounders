@@ -16,7 +16,7 @@ import { SwitchingOverlay } from '@/features/account/switcher';
 import { AppUpdateBanner, AppUpdateDialog } from './app-update';
 import { BillingBanners } from '@/features/billing/banners';
 import { FinishPayment } from '@/features/billing/finish-payment';
-import { AiHelper } from '@/features/ai-helper';
+import { AskAi } from '@/features/ai-helper';
 import { ASSETS_NAV } from '@/features/assets/nav';
 import { ATTENDANCE_NAV } from '@/features/hr/nav';
 import { TEAM_LINK } from '@/features/team/nav';
@@ -332,6 +332,7 @@ export function AppShell() {
             <span className="truncate">{title}</span>
           </span>
           <div className="flex-1" />
+          <AskAi className="sm:max-md:size-11 md:max-lg:h-11" />
           <ThemeToggle />
           <NotificationsBell />
           <UserMenu access={access} onShortcuts={() => setHelp(true)} />
@@ -381,7 +382,6 @@ export function AppShell() {
       </div>
       <SwitchingOverlay />
       <AppUpdateDialog />
-      <AiHelper />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent className="max-w-md">
           <DialogHeader>

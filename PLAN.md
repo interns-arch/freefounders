@@ -3815,10 +3815,21 @@ selectors moved from Suite / Yearly to Complete / monthly, and their companies n
   whose adaptive thinking shares the cap). Every call is logged (`ai.ask`: lengths, signed in/out, status, time; never
   the question or the answer).
 - **Core** `@kaampilot/core/ai`: `useAiStatus()`, `useAskAi()`, `isAiOff()`. **Web** `apps/web/src/features/ai-helper`:
-  `<AiHelper />`, a round Sparkles button bottom-right (above the phone bottom bar; Punch stays in the page flow, never
-  covered) opening a chat panel: suggested questions, chat for this visit only, "Thinking…", errors inline. Mounted in
-  the app frame (`app/shell.tsx`); the website mounts it with `aboveBottomBar={false}` (left to the main session after
-  §24.2).
+  first built as a round button bottom-right with a small chat box; replaced by UI v2 below.
+- **UI v2 (2026-10-28, founder: no floating button)**: `<AskAi />` = an **"Ask AI"** button in the top header next to
+  the bell (app frame) / next to the theme switch (website `TopBar`, `site` prop), icon-only under 768 px, tooltip
+  "Ask Kaampilot (Ctrl+/)", Ctrl+/ (⌘/) toggles. It opens a **full-height panel from the right** (440 px, 480 px from
+  1536 px): from 1280 px the page moves aside (`html[data-ai-panel]` pads the body, index.css), nothing is covered and
+  the page stays usable; 640–1279 px it lies over the page with a light scrim (no blur, Tab kept inside); phones
+  **full screen** above the bottom bar with Back at the top, safe-area padding and sized to `visualViewport` so the
+  keyboard never hides the box (phone app WebView too). Slide/fade with transform/opacity, off with reduced motion;
+  Esc closes, focus goes into the panel and back to the button. Content: "Ask Kaampilot" + subtitle, New chat, close;
+  empty state with 4–6 suggestions per page (`suggestions.ts`: attendance, tasks, assets, visitors, team, billing,
+  admin, Home, website); bubbles (answers left with the Kaampilot mark), answers in a safe Markdown subset
+  (`answer-text.tsx`: lines, bullets, numbered lists, **bold**; React text only, no HTML), Copy, "Thinking…", inline
+  error with Retry, multi-line box (Enter sends, Shift+Enter new line), counter from 800/1000, footer "AI answers can
+  be wrong. Support: …". Coming-soon note while off, as before. Chat kept for the visit in sessionStorage
+  (`ff-ai-chat`). e2e: `e2e/web-ai-helper.spec.ts` (AI answers stubbed).
 - **Switching on (server)**: `infra/deploy/set-ai.sh` asks provider, key (hidden) and model, checks the key against the
   provider's model list, writes `/opt/freefounders/.env` only and recreates the platform; `--off` empties the key.
 - Tests: `src/ai/ai.test.ts` (no DB, no network: both request shapes, 503 when off, knowledge in the prompt, errors,

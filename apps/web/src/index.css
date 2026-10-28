@@ -134,6 +134,21 @@
     @apply bg-background text-foreground antialiased;
     line-height: 1.5;
   }
+  /* "Ask Kaampilot" side panel (features/ai-helper, PLAN.md §24.3 UI v2): its width, and from 1280 px the page moves
+     aside while it is open (`html[data-ai-panel]`) so the panel never covers content. */
+  :root {
+    --kp-ai-w: 440px;
+  }
+  @media (min-width: 1536px) {
+    :root {
+      --kp-ai-w: 480px;
+    }
+  }
+  @media (min-width: 1280px) {
+    html[data-ai-panel] body {
+      padding-right: var(--kp-ai-w);
+    }
+  }
   h1, h2, h3, h4 {
     @apply tracking-tight;
     line-height: 1.25;
