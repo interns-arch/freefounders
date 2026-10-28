@@ -728,3 +728,54 @@ test('People: Make Admin / Make Member, and extra access + a responsibility for 
     await request.patch(`/api/platform/people/${who.personId}`, { headers: auth(owner), data: { status: 'inactive' } });
   }
 });
+
+test('Add person: Level and Roles are saved together; Edit changes the roles (PLAN.md §26.7)', async ({ page, request }) => {
+  const owner = await token(request);
+  const s = stamp();
+  const name = `E2E Roles Person ${s}`;
+  const roles = (await (await request.get('/api/platform/roles', { headers: auth(owner) })).json()) as Array<{ id: string; code: string }>;
+  const member = roles.find((r) => r.code === 'ff_member')!;
+  const role = (await (
+    await request.post('/api/platform/roles', {
+      headers: auth(owner),
+      data: { name: `E2E Gate role ${s}`, level: 1, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'own' }] },
+    })
+  ).json()) as { id: string; name: string };
+  let personId: string | undefined;
+  const find = async () => ((await (await request.get('/api/platform/people', { headers: auth(owner), params: { search: s } })).json()) as PersonRow[])[0];
+
+  try {
+    await openSignedIn(page, '/people');
+    await page.getByRole('button', { name: 'Add person' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Add person' });
+    await sheet.getByLabel('Full name').fill(name);
+    await sheet.getByLabel('Email').fill(`e2e-roles-${s}@kaampilot.test`);
+    // "Role" is now "Level" (Owner / Admin / Member); the job roles are their own field.
+    await expect(sheet.getByLabel('Level')).toHaveValue('member');
+    await expect(sheet.getByText('Owner and Admin manage the company; most people are Members.')).toBeVisible();
+    const pick = sheet.getByRole('group', { name: 'Roles' }).getByRole('checkbox', { name: role.name, exact: true });
+    await pick.focus();
+    await page.keyboard.press('Space');
+    await expect(pick).toBeChecked();
+    await sheet.getByLabel('Create a login now').click();
+    await sheet.getByRole('button', { name: 'Save' }).click();
+    await expect(sheet).toBeHidden();
+
+    await expect.poll(async () => (await find())?.roleIds.slice().sort().join(',')).toBe([member.id, role.id].sort().join(','));
+    personId = (await find()).id;
+
+    const row = page.getByRole('row', { name: new RegExp(name) });
+    await page.getByLabel('Search people').fill(s);
+    await row.getByRole('button', { name: 'Edit' }).click();
+    const edit = page.getByRole('dialog', { name: `Edit ${name}` });
+    const again = edit.getByRole('group', { name: 'Roles' }).getByRole('checkbox', { name: role.name, exact: true });
+    await expect(again).toBeChecked();
+    await again.click();
+    await edit.getByRole('button', { name: 'Save' }).click();
+    await expect(edit).toBeHidden();
+    await expect.poll(async () => (await find())?.roleIds.join(',')).toBe(member.id);
+  } finally {
+    if (personId) await request.patch(`/api/platform/people/${personId}`, { headers: auth(owner), data: { status: 'inactive' } });
+    await request.delete(`/api/platform/roles/${role.id}`, { headers: auth(owner) });
+  }
+});

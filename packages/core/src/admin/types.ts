@@ -53,6 +53,11 @@ export interface PersonFields {
   designation: string | null;
   reportsTo: string | null;
   joinDate: string | null;
+  /**
+   * Job roles (Guard, roles from the role builder) saved in the same request (PLAN.md §26.7); Admin / Member follow
+   * `platformRole`. Left out: roles are not changed.
+   */
+  roleIds?: string[];
 }
 
 export interface NewPerson extends PersonFields {

@@ -4203,3 +4203,32 @@ Follow-ups (bigger, not done here):
 **Deploy**: Platform API (push fields + AI helper text), Assets API, Tasks API, website. No migrations. After deploy run
 `npm --prefix services/platform run company -- sync` (or any People change) so names / emails / mobiles and the missing
 Assets employee records arrive. No new APK.
+
+### 26.7 Add person: Level + Roles in one Save (2026-10-28)
+Founder (Admin → People → Add person): "Role" offered only Member / Admin / Owner; they expected **Guard** there.
+- **Form** (Add and Edit person): "Role" is renamed **Level** (hint "Owner and Admin manage the company; most people are
+  Members."). Under it, **Roles**: a checkbox list of the company's job roles (every role except the built-in Admin /
+  Member, which follow the Level). Roles outside the signed-in person's own powers are disabled with the reason (R1,
+  §19.24). With Visitors on (Tasks module + the `visitors.gate` permission offered), "Manage roles" and no role named
+  Guard: **Create Guard role** posts `GUARD_ROLE_PRESET` to `POST /roles` (the same as Admin → Roles → Add Guard role) and
+  ticks it. Ticking Guard with Level Admin / Owner shows "Guards are usually Members" + "Set Level to Member" (not forced).
+- **API**: `POST /people` and `PATCH /people/:id` take an optional `roleIds` (job roles). Create: the roles are checked
+  **before** the person is saved (403 / 400 = nobody added; same R1 rule as invite links, under "Manage people"), then
+  the person gets them plus Admin (checked like Make Admin) or Member (everyone's starting role, as an invite link gives
+  it, without a separate call); a refused seat removes the person again (nothing half-made). The web no longer makes a
+  second "Make Member" call. Edit: the job roles replace the others and Admin / Member follow a Level change in one
+  `setPersonRoles` (same checks as Change roles). `roleIds` left out = roles untouched (older clients).
+- **Import**: the Role column also takes job role names (any case; several separated by `,` `;` `|`), e.g.
+  "Member, Guard". An unknown name, or a role the importer may not give, is a **warning**: the row is added without it,
+  and the import result lists it ("Added without some roles"). Before, anything but Admin / Member failed the row.
+- **Roles → People count** was 0 for every role: the holder count was a correlated subquery inside the roles select
+  whose `${roles.id}` did not bind to the outer row. Now one grouped count of active holders, merged in code.
+- Branding: no seed or script creates "FreeFounders …" names any more (the dev staff is "Kaampilot Staff (dev)", the
+  demo company "Demo Company"). The live "FreeFounders Demo" / "FreeFounders Staff" are data from older seeding:
+  rename them in Admin → Settings / People (not done from the repo). The live demo also has a "Guard (copy)" role (a
+  Duplicate): archive it in Admin → Roles if not wanted.
+- **Tests**: Platform `integration.test.ts` "Add person with roles in one request" (Guard made via `POST /roles`, given
+  in the same create, Admin + role, permission refusal and unknown role add nobody, Edit roles + level, role holder
+  count incl. an inactive holder); `people-import.test.ts` role names + unknown name warning. e2e `web-admin.spec.ts`
+  "Add person: Level and Roles…" (written; needs the dev suite).
+**Deploy**: Platform API + website. No migrations, no new APK.

@@ -1,4 +1,4 @@
-import { ApiError, type AppKey, errorMessage, usePlatformMe } from '@kaampilot/core';
+import { ApiError, type AppKey, errorMessage, useAccess, usePlatformMe } from '@kaampilot/core';
 import {
   APP_NAMES,
   ADMIN_ROLE,
@@ -6,6 +6,7 @@ import {
   type DeleteOptions,
   type ExitResult,
   GRANT_APP_NAMES,
+  GUARD_ROLE_PRESET,
   MEMBER_ROLE,
   type Person,
   type PlatformRole,
@@ -22,12 +23,14 @@ import {
   usePersonAccess,
   useResetLogin,
   useRoleCatalogue,
+  useRoles,
+  useSaveRole,
   useSetPersonLevel,
   useSetPersonRoles,
   useStartExit,
   useUpdatePerson,
 } from '@kaampilot/core/admin';
-import { Check, Copy, Eye, EyeOff, Share2 } from '@/components/icons';
+import { Check, Copy, Eye, EyeOff, Share2, ShieldCheck } from '@/components/icons';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { Field, FormSection } from '@/components/common/form';
@@ -84,7 +87,13 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
   const [error, setError] = useState('');
   const create = useCreatePerson();
   const update = useUpdatePerson();
-  const setLevel = useSetPersonLevel();
+  // Job roles (Guard, roles from the role builder) are saved with the person (PLAN.md §26.7); Admin / Member = Level.
+  const allRoles = useRoles();
+  const isJobRole = (r: Role) => r.code !== ADMIN_ROLE && r.code !== MEMBER_ROLE;
+  const jobRoleIds = (ids: string[]) => ids.filter((id) => allRoles.data?.some((r) => r.id === id && isJobRole(r)));
+  const [chosen, setChosen] = useState<string[] | null>(null);
+  const initialRoles = allRoles.data ? jobRoleIds(person?.roleIds ?? []) : [];
+  const roleIds = chosen ?? initialRoles;
   // People directory (PLAN.md §17.1): the company's departments, and who this person can report to.
   const depts = useDepartments();
   const everyone = usePeople('');
@@ -101,6 +110,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
     if (!f.fullName.trim()) return setErrors({ fullName: 'Enter their full name' });
     setError('');
     setErrors({});
+    const rolesChanged = chosen !== null && (chosen.length !== initialRoles.length || chosen.some((id) => !initialRoles.includes(id)));
     const fields = {
       fullName: f.fullName,
       email: f.email,
@@ -113,17 +123,13 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
       joinDate: f.joinDate || null,
     };
     if (person) {
-      update.mutate({ id: person.id, ...fields }, { onSuccess: onClose, onError: fail });
+      update.mutate({ id: person.id, ...fields, ...(rolesChanged ? { roleIds } : {}) }, { onSuccess: onClose, onError: fail });
     } else {
+      // One request: the person, their login, Admin or Member, and the roles ticked (a refused role adds nobody).
       create.mutate(
-        { ...fields, ...(f.withLogin ? { login: { username: f.username || undefined, password: f.password || undefined } } : {}) },
+        { ...fields, roleIds, ...(f.withLogin ? { login: { username: f.username || undefined, password: f.password || undefined } } : {}) },
         {
-          onSuccess: (res) => {
-            const done = () => onCreated({ person: res.person, username: f.username || null, generatedPassword: res.generatedPassword });
-            // Everyone starts with a built-in role (PLAN.md §19.28): Admin is given by the API, Member here.
-            if (f.platformRole !== 'member') return done();
-            setLevel.mutate({ id: res.person.id, level: 'member' }, { onSettled: done, onError: (err) => toast.error(`Added, but not given Member: ${errorMessage(err)}`) });
-          },
+          onSuccess: (res) => onCreated({ person: res.person, username: f.username || null, generatedPassword: res.generatedPassword }),
           onError: fail,
         },
       );
@@ -141,9 +147,9 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
       title={person ? `Edit ${person.fullName}` : 'Add person'}
       description={person ? undefined : 'They can sign in with their email, employee ID or username.'}
       onSubmit={submit}
-      submitting={create.isPending || update.isPending || setLevel.isPending}
+      submitting={create.isPending || update.isPending}
       errors={errors}
-      errorLabels={{ fullName: 'Full name', email: 'Email', employeeCode: 'Employee ID', mobile: 'Mobile', platformRole: 'Role', departmentId: 'Department', designation: 'Designation', reportsTo: 'Reports to', joinDate: 'Joining date', 'login.username': 'Username', 'login.password': 'Password' }}
+      errorLabels={{ fullName: 'Full name', email: 'Email', employeeCode: 'Employee ID', mobile: 'Mobile', platformRole: 'Level', roleIds: 'Roles', departmentId: 'Department', designation: 'Designation', reportsTo: 'Reports to', joinDate: 'Joining date', 'login.username': 'Username', 'login.password': 'Password' }}
     >
       <FormSection title="Who they are">
         <Field label="Full name" required htmlFor="pf-name" error={errors.fullName}>
@@ -159,12 +165,7 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
           <Field label="Mobile" htmlFor="pf-mobile" error={errors.mobile}>
             <Input id="pf-mobile" name="mobile" type="tel" value={f.mobile} onChange={set('mobile')} />
           </Field>
-          <Field
-            label="Role"
-            htmlFor="pf-level"
-            error={errors.platformRole}
-            hint={levelLocked ? undefined : 'Admin: everything except billing. Member: their own tasks, attendance, leave and requests. Fine-tune in Access.'}
-          >
+          <Field label="Level" htmlFor="pf-level" error={errors.platformRole} hint={levelLocked ? undefined : 'Owner and Admin manage the company; most people are Members.'}>
             <NativeSelect id="pf-level" name="platformRole" value={f.platformRole} onChange={set('platformRole')} disabled={levelLocked}>
               {levelOptions.map((l) => (
                 <option key={l} value={l}>
@@ -174,6 +175,18 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
             </NativeSelect>
           </Field>
         </div>
+        <JobRolesField
+          roles={(allRoles.data ?? []).filter(isJobRole)}
+          loading={allRoles.isLoading}
+          chosen={roleIds}
+          held={initialRoles}
+          locked={person?.platformRole === 'owner' && myRole !== 'owner'}
+          error={errors.roleIds}
+          onChange={setChosen}
+          level={f.platformRole}
+          levelLocked={levelLocked}
+          onUseMember={() => setF((p) => ({ ...p, platformRole: 'member' }))}
+        />
       </FormSection>
       <FormSection title="At work" description="Department, manager and joining date reach every app.">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -239,6 +252,116 @@ function PersonForm({ person, myRole, myId, onClose, onCreated }: SheetProps) {
         <ErrorNote>{error}</ErrorNote>
       </div>
     </FormSheet>
+  );
+}
+
+const isGuard = (r: Pick<Role, 'name'>) => r.name.trim().toLowerCase() === 'guard';
+
+/**
+ * "Roles" on Add / Edit person (PLAN.md §26.7): the company's job roles as a checkbox list, saved with the person. Only
+ * roles within the signed-in person's own powers can be ticked (R1, the Platform checks the same). With Visitors on and
+ * no Guard role yet, "Create Guard role" makes it as Admin → Roles → Add Guard role does, and ticks it.
+ */
+function JobRolesField({
+  roles,
+  loading,
+  chosen,
+  held,
+  locked,
+  error,
+  onChange,
+  level,
+  levelLocked,
+  onUseMember,
+}: {
+  roles: Role[];
+  loading: boolean;
+  chosen: string[];
+  held: string[];
+  locked: boolean;
+  error?: string;
+  onChange: (ids: string[]) => void;
+  level: PlatformRole;
+  levelLocked: boolean;
+  onUseMember: () => void;
+}) {
+  const access = useAccess();
+  const catalogue = useRoleCatalogue();
+  const limits = roleLimits(usePlatformMe().data, catalogue.data);
+  const saveRole = useSaveRole();
+  const [guardError, setGuardError] = useState('');
+  const canGuard =
+    access.admin.can('roles.manage') &&
+    access.tasks.module('visitors') &&
+    !!catalogue.data?.some((a) => a.app === 'tasks' && a.permissions.some((p) => p.key === 'visitors.gate')) &&
+    !loading &&
+    !roles.some(isGuard);
+  const guardChosen = roles.some((r) => isGuard(r) && chosen.includes(r.id));
+  const toggle = (id: string, on: boolean) => onChange(on ? [...new Set([...chosen, id])] : chosen.filter((x) => x !== id));
+  const addGuard = () => {
+    setGuardError('');
+    saveRole.mutate(GUARD_ROLE_PRESET, {
+      onSuccess: (role) => onChange([...new Set([...chosen, role.id])]),
+      onError: (err) => setGuardError(errorMessage(err)),
+    });
+  };
+
+  return (
+    <fieldset className="grid gap-2" aria-describedby="pf-roles-hint" aria-invalid={!!error || undefined}>
+      <legend className="mb-2 text-sm font-medium">Roles</legend>
+      <p id="pf-roles-hint" className="-mt-1 text-xs text-muted-foreground">
+        What they do on top of their level, e.g. Guard at the gate. Permissions of all their roles add up.
+      </p>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading roles…</p>
+      ) : roles.length ? (
+        <ul className="max-h-56 divide-y overflow-y-auto rounded-md border scrollbar-thin">
+          {roles.map((r) => {
+            const problem = held.includes(r.id) ? null : limits.roleProblem(r, 'give');
+            const disabled = locked || !!problem;
+            const id = `pf-role-${r.id}`;
+            const on = chosen.includes(r.id);
+            return (
+              <li key={r.id} className={cn('flex items-center gap-3 px-3 py-2', on && 'bg-accent/40')}>
+                <Checkbox id={id} checked={on} disabled={disabled} onCheckedChange={(v) => toggle(r.id, v === true)} aria-describedby={problem ? `${id}-why` : undefined} />
+                <Label htmlFor={id} className={cn('flex-1 cursor-pointer font-medium', disabled && 'cursor-not-allowed')}>
+                  {r.name}
+                  {problem && (
+                    <span id={`${id}-why`} className="block text-xs font-normal text-muted-foreground">
+                      {problem}
+                    </span>
+                  )}
+                </Label>
+                <span className="flex gap-1">
+                  {roleApps(r).map((a) => (
+                    <AppChip key={a} app={a} />
+                  ))}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">No roles yet besides Admin and Member. Make them in Admin → Roles.</p>
+      )}
+      {canGuard && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={addGuard} loading={saveRole.isPending}>
+            <ShieldCheck /> Create Guard role
+          </Button>
+          <span className="text-xs text-muted-foreground">Visitors and vehicles at the gate, and their own attendance.</span>
+        </div>
+      )}
+      {guardChosen && level !== 'member' && !levelLocked && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" role="note">
+          Guards are usually Members.
+          <Button type="button" variant="link" size="xs" className="h-auto px-0 max-sm:h-auto" onClick={onUseMember}>
+            Set Level to Member
+          </Button>
+        </p>
+      )}
+      <ErrorNote>{error || guardError}</ErrorNote>
+    </fieldset>
   );
 }
 

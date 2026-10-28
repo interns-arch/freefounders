@@ -148,7 +148,7 @@ describe('people import: preview and import', () => {
     assert.match(by.get(5).errors.join(' '), /also on line 3/);
     assert.match(by.get(6).errors.join(' '), /Department "Marketing" does not exist/);
     assert.match(by.get(7).errors.join(' '), /signs in someone else/);
-    assert.match(by.get(8).errors.join(' '), /Role "Boss"/);
+    assert.match(by.get(8).warnings.join(' '), /Role "Boss" does not exist/, 'an unknown role is reported, not an error (§26.7)');
     assert.match(by.get(8).errors.join(' '), /nobody with this employee ID or email/);
     assert.match(by.get(9).errors.join(' '), /Free plan is for up to 3 users/, 'owner + 2 imported fill the plan');
     assert.deepEqual([res.body.ready, res.body.seats.limit, res.body.seats.used], [2, 3, 1]);
@@ -179,6 +179,41 @@ describe('people import: preview and import', () => {
     const again = await call('POST', '/people/import', { token, body: { rows: res.body.rows.slice(0, 2) } });
     assert.equal(again.body.added, 0);
     assert.match(again.body.results[0].error, /already in People/);
+  });
+
+  test('Role column: job role names (any case) are given with the person; unknown names are reported, the row still added (§26.7)', async () => {
+    await dbs.db.update(subscriptions).set({ plan: 'complimentary', state: 'active', trialEndsAt: null }).where(eq(subscriptions.companyId, companyId));
+    const guard = await call('POST', '/roles', { token, body: { name: 'Guard', level: 1, grants: [] } });
+    assert.equal(guard.status, 201, JSON.stringify(guard.body));
+    const content = csv([
+      ['Name', 'Role'],
+      ['Gopal Gate', 'guard'],
+      ['Ana Admin', 'Admin, GUARD'],
+      ['Uma Unknown', 'Member; Night Watch'],
+    ]);
+    const res = await call('POST', '/people/import/preview', { token, body: { fileName: 'roles.csv', content } });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const by = new Map<number, any>(res.body.rows.map((r: any) => [r.line, r]));
+    assert.deepEqual([by.get(2).level, by.get(2).roles], ['member', ['Guard']]);
+    assert.deepEqual([by.get(3).level, by.get(3).roles], ['admin', ['Guard']]);
+    assert.deepEqual(by.get(4).errors, []);
+    assert.match(by.get(4).warnings.join(' '), /Role "Night Watch" does not exist/);
+    assert.equal(by.get(2).roleIds, undefined, 'ids stay on the server');
+
+    const done = await call('POST', '/people/import', { token, body: { rows: res.body.rows } });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.equal(done.body.added, 3);
+    const uma = done.body.results.find((r: any) => r.line === 4);
+    assert.match(uma.warnings.join(' '), /Night Watch/, 'reported in the import result');
+    const list = (await call('GET', '/people', { token })).body as Array<{ id: string; roleIds: string[]; platformRole: string }>;
+    const rolesList = (await call('GET', '/roles', { token })).body as Array<{ id: string; code: string; people: number }>;
+    const code = (id: string) => rolesList.find((r) => r.id === id)?.code;
+    const of = (line: number) => list.find((p) => p.id === done.body.results.find((r: any) => r.line === line).personId)!;
+    assert.deepEqual(of(2).roleIds.map(code).sort(), ['ff_member', guard.body.code].sort());
+    assert.deepEqual(of(3).roleIds.map(code).sort(), ['ff_admin', guard.body.code].sort());
+    assert.equal(of(3).platformRole, 'admin');
+    assert.deepEqual(of(4).roleIds.map(code), ['ff_member']);
+    assert.equal(rolesList.find((r) => r.id === guard.body.id)!.people, 2, 'Roles shows who holds it');
   });
 
   test('without signing in nothing is read', async () => {

@@ -890,6 +890,79 @@ describe('every feature is a permission (§19.19)', () => {
   });
 });
 
+describe('Add person with roles in one request (§26.7)', () => {
+  const made: Record<string, string> = {};
+  const listed = async (token: string) => (await call('GET', '/people', { token })).body as Array<{ id: string; email: string | null; roleIds: string[]; platformRole: string; apps: string[] }>;
+  const roleList = async (token: string) => (await call('GET', '/roles', { token })).body as Array<{ id: string; code: string; name: string; people: number }>;
+
+  test('the Guard role is made like Admin → Roles → Add Guard role, then given in the same Save as the person', async () => {
+    const admin = await login('admin@acme.test');
+    // The web's "Create Guard role" posts the same preset to POST /roles (only what this fake app offers here).
+    const guard = await call('POST', '/roles', { token: admin.token, body: { name: 'Guard', level: 1, grants: [{ app: 'tasks', permission: 'tasks.view', scope: 'own' }] } });
+    assert.equal(guard.status, 201, JSON.stringify(guard.body));
+    made.guard = guard.body.id;
+    const roles = await roleList(admin.token);
+    made.admin = roles.find((r) => r.code === 'ff_admin')!.id;
+    made.member = roles.find((r) => r.code === 'ff_member')!.id;
+    assert.equal(roles.find((r) => r.id === made.guard)!.people, 0);
+
+    const res = await call('POST', '/people', { token: admin.token, body: { fullName: 'Gita Guard', email: 'gita26@acme.test', roleIds: [made.guard] } });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    made.gita = res.body.person.id;
+    const gita = (await listed(admin.token)).find((p) => p.id === made.gita)!;
+    assert.deepEqual([...gita.roleIds].sort(), [made.guard, made.member].sort(), 'Guard plus the starting Member role');
+    assert.equal(gita.platformRole, 'member');
+    assert.deepEqual(gita.apps, ['tasks'], 'the roles open their apps at once');
+    assert.ok(accessPushes.at(-1)!.body.people.find((p: { personId: string }) => p.personId === made.gita).roleIds.includes(made.guard), 'the apps got the role');
+
+    const boss = await call('POST', '/people', { token: admin.token, body: { fullName: 'Arun Admin', email: 'arun26@acme.test', platformRole: 'admin', roleIds: [made.guard] } });
+    assert.equal(boss.status, 201, JSON.stringify(boss.body));
+    made.arun = boss.body.person.id;
+    const arun = (await listed(admin.token)).find((p) => p.id === made.arun)!;
+    assert.deepEqual([...arun.roleIds].sort(), [made.admin, made.guard].sort());
+    assert.equal(arun.platformRole, 'admin');
+  });
+
+  test('roles the caller may not give are refused before anyone is added (Manage roles only what you hold, §19.24)', async () => {
+    // Pam has only "Manage people": she adds people, but cannot give Guard (it sees tasks she cannot see).
+    const pam = await login('pam');
+    const refused = await call('POST', '/people', { token: pam.token, body: { fullName: 'Not Added', email: 'notadded26@acme.test', roleIds: [made.guard] } });
+    assert.equal(refused.status, 403, JSON.stringify(refused.body));
+    assert.match(refused.body.message, /Guard/);
+    const unknown = await call('POST', '/people', { token: pam.token, body: { fullName: 'Not Added', email: 'notadded26@acme.test', roleIds: ['00000000-0000-4000-8000-000000000000'] } });
+    assert.equal(unknown.status, 400);
+    const admin = await login('admin@acme.test');
+    assert.equal((await listed(admin.token)).some((p) => p.email === 'notadded26@acme.test'), false, 'nobody half-made');
+    const plain = await call('POST', '/people', { token: pam.token, body: { fullName: 'Pia Plain', email: 'pia26@acme.test', roleIds: [] } });
+    assert.equal(plain.status, 201, JSON.stringify(plain.body));
+    assert.deepEqual((await listed(admin.token)).find((p) => p.id === plain.body.person.id)!.roleIds, [made.member], 'Member, as an invite link gives it');
+  });
+
+  test('Edit person saves the job roles and the level together', async () => {
+    const admin = await login('admin@acme.test');
+    const cleared = await call('PATCH', `/people/${made.gita}`, { token: admin.token, body: { designation: 'Gate', roleIds: [] } });
+    assert.equal(cleared.status, 200, JSON.stringify(cleared.body));
+    assert.deepEqual((await listed(admin.token)).find((p) => p.id === made.gita)!.roleIds, [made.member], 'Member stays when the level does not change');
+    const both = await call('PATCH', `/people/${made.gita}`, { token: admin.token, body: { platformRole: 'admin', roleIds: [made.guard] } });
+    assert.equal(both.status, 200, JSON.stringify(both.body));
+    const gita = (await listed(admin.token)).find((p) => p.id === made.gita)!;
+    assert.deepEqual([...gita.roleIds].sort(), [made.admin, made.guard].sort());
+    assert.equal(gita.platformRole, 'admin');
+    const pam = await login('pam');
+    assert.equal((await call('PATCH', `/people/${made.gita}`, { token: pam.token, body: { roleIds: [] } })).status, 403, 'a member with Manage people cannot change an admin');
+  });
+
+  test('Roles counts the active people holding each role (an inactive holder is not counted)', async () => {
+    const admin = await login('admin@acme.test');
+    const count = async () => (await roleList(admin.token)).find((r) => r.id === made.guard)!.people;
+    assert.equal(await count(), 2, 'Gita and Arun');
+    assert.equal((await call('PATCH', `/people/${made.arun}`, { token: admin.token, body: { status: 'inactive' } })).status, 200);
+    assert.equal(await count(), 1, 'Arun is switched off');
+    const all = await roleList(admin.token);
+    assert.ok(all.find((r) => r.id === made.admin)!.people >= 2, 'Admin is held by the admins too');
+  });
+});
+
 describe('settings center (Phase 4)', () => {
   const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex');
 

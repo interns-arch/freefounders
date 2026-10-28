@@ -109,7 +109,7 @@ function useInvalidateRoles() {
 }
 
 export function useCreatePerson() {
-  const invalidate = useInvalidateAdmin();
+  const invalidate = useInvalidateRoles();
   return useMutation({ mutationFn: adminApi.createPerson, onSuccess: invalidate });
 }
 
@@ -128,6 +128,8 @@ export interface PeopleImportRow {
   joinDate: string;
   role: string;
   level: 'admin' | 'member';
+  /** Job roles named in the Role column that will be given (PLAN.md §26.7). */
+  roles?: string[];
   /** A login with a generated password is made (they have an email or employee ID). */
   login: boolean;
   errors: string[];
@@ -142,7 +144,7 @@ export interface PeopleImportPreview {
 export interface PeopleImportResult {
   added: number;
   skipped: number;
-  results: Array<{ line: number; fullName: string; status: 'added' | 'skipped'; error?: string; personId?: string; signIn?: string | null; password?: string | null }>;
+  results: Array<{ line: number; fullName: string; status: 'added' | 'skipped'; error?: string; warnings?: string[]; personId?: string; signIn?: string | null; password?: string | null }>;
 }
 
 async function fileToBase64(file: Blob): Promise<string> {
@@ -176,7 +178,7 @@ export function useImportPeople() {
   });
 }
 export function useUpdatePerson() {
-  const invalidate = useInvalidateAdmin();
+  const invalidate = useInvalidateRoles();
   return useMutation({
     mutationFn: ({ id, ...body }: Partial<PersonFields> & { id: string; status?: Person['status'] }) => adminApi.updatePerson(id, body),
     onSuccess: invalidate,

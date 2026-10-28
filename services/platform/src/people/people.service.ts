@@ -50,6 +50,11 @@ const personFields = {
   designation: optional(z.string().trim().max(80)),
   reportsTo: optional(z.string().uuid()),
   joinDate: optional(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-08')),
+  /**
+   * Job roles (Guard, roles from the role builder) saved with the person (PLAN.md §26.7). Admin / Member follow the level.
+   * Left out: roles are not touched (older clients).
+   */
+  roleIds: z.array(z.string().uuid()).max(50).optional(),
 };
 
 export const personCreateSchema = z.object({
@@ -330,6 +335,8 @@ export class PeopleService {
     await this.assertIdentifiersFree(null, input.login?.username, input.employeeCode);
     await this.directory.assertDepartment(caller.companyId, input.departmentId);
     await this.directory.assertReportsTo(caller.companyId, null, input.reportsTo);
+    // Roles chosen on the form are checked before anything is saved (403 = nobody is added).
+    const giving = input.roleIds ? await this.rolesSvc.planNewPersonRoles(caller, input.roleIds, input.platformRole ?? 'member') : null;
     const created = await this.dbs.tx(async (tx) => {
       const [p] = await tx
         .insert(people)
@@ -362,16 +369,17 @@ export class PeopleService {
       }
       return { person: this.view(p), generatedPassword };
     });
-    if (input.platformRole === 'admin') {
+    if (giving || input.platformRole === 'admin') {
       try {
-        await this.rolesSvc.setLevel(caller, created.person.id, 'admin');
+        if (giving) await this.rolesSvc.giveNewPersonRoles(caller.companyId, created.person.id, giving);
+        else await this.rolesSvc.setLevel(caller, created.person.id, 'admin');
       } catch (err) {
         // Nothing half-made: without the Admin role (e.g. no free seat) the person is not added.
         await this.dbs.db.delete(logins).where(eq(logins.personId, created.person.id));
         await this.dbs.db.delete(people).where(eq(people.id, created.person.id));
         throw err;
       }
-      return { ...created, person: { ...created.person, platformRole: 'admin' } };
+      return { ...created, person: { ...created.person, platformRole: input.platformRole ?? 'member' }, roleIds: giving ?? undefined };
     }
     return created;
   }
@@ -400,7 +408,13 @@ export class PeopleService {
 
     // Admin / Member is the built-in role (PLAN.md §19.28): changing the level gives or takes the Admin role.
     const level = input.platformRole && input.platformRole !== current.platformRole ? input.platformRole : undefined;
-    if (level && level !== 'owner' && current.platformRole !== 'owner') await this.rolesSvc.setLevel(caller, id, level);
+    const ownerChange = !!level && (level === 'owner' || current.platformRole === 'owner');
+    const plainLevel = level && !ownerChange ? (level as 'admin' | 'member') : undefined;
+    if (input.roleIds && !ownerChange) {
+      // Job roles and the level in one change (PLAN.md §26.7); same checks as "Change roles".
+      const next = await this.rolesSvc.rolesForEdit(caller.companyId, id, input.roleIds, plainLevel);
+      if (next) await this.rolesSvc.setPersonRoles(caller, id, next);
+    } else if (plainLevel) await this.rolesSvc.setLevel(caller, id, plainLevel);
     const [p] = await this.dbs.db
       .update(people)
       .set({
@@ -423,6 +437,10 @@ export class PeopleService {
       // An owner made or unmade: the Owner role follows; a former owner keeps (or gets) the role of their new level.
       if (level !== 'owner') await this.rolesSvc.setLevel({ ...caller, role: 'owner' }, id, level);
       else await this.rolesSvc.push(caller.companyId);
+      if (input.roleIds) {
+        const next = await this.rolesSvc.rolesForEdit(caller.companyId, id, input.roleIds);
+        if (next) await this.rolesSvc.setPersonRoles(caller, id, next);
+      }
     }
     // Department, manager, active/inactive reach the apps (deactivated people are switched off there too).
     const sync = await this.directory.push(caller.companyId);
@@ -631,7 +649,7 @@ export class PeopleService {
       throw badRequest(err instanceof Error ? err.message : 'This file could not be read');
     }
     const plan = await this.planImport(caller, rows);
-    return { ...plan, rows: plan.rows.map(({ departmentId: _d, reportsToId: _r, reportsToLine: _l, ...r }) => r) };
+    return { ...plan, rows: plan.rows.map(({ departmentId: _d, reportsToId: _r, reportsToLine: _l, roleIds: _i, ...r }) => r) };
   }
 
   /**
@@ -642,7 +660,16 @@ export class PeopleService {
   async importPeople(caller: Caller, input: z.infer<typeof importRowsSchema>) {
     const plan = await this.planImport(caller, input.rows.map((r, i) => ({ ...emptyRow(), ...r, line: r.line ?? i + 2 })));
     const created = new Map<number, string>();
-    const results: Array<{ line: number; fullName: string; status: 'added' | 'skipped'; error?: string; personId?: string; signIn?: string | null; password?: string | null }> = [];
+    const results: Array<{
+      line: number;
+      fullName: string;
+      status: 'added' | 'skipped';
+      error?: string;
+      warnings?: string[];
+      personId?: string;
+      signIn?: string | null;
+      password?: string | null;
+    }> = [];
     for (const r of plan.rows) {
       if (r.errors.length) {
         results.push({ line: r.line, fullName: r.fullName, status: 'skipped', error: r.errors.join(' ') });
@@ -659,20 +686,21 @@ export class PeopleService {
           designation: r.designation || null,
           reportsTo: r.reportsToId,
           joinDate: r.joinDate || null,
+          // Admin or Member plus the job roles named in the Role column; nothing half-made when a role or seat is refused.
+          roleIds: r.roleIds,
           ...(r.login ? { login: {} } : {}),
         });
-        if (r.level === 'member') {
-          try {
-            await this.rolesSvc.setLevel(caller, res.person.id, 'member');
-          } catch (err) {
-            // Nothing half-made (e.g. the last seat was taken meanwhile): the person is not added.
-            await this.dbs.db.delete(logins).where(eq(logins.personId, res.person.id));
-            await this.dbs.db.delete(people).where(eq(people.id, res.person.id));
-            throw err;
-          }
-        }
         created.set(r.line, res.person.id);
-        results.push({ line: r.line, fullName: r.fullName, status: 'added', personId: res.person.id, signIn: r.login ? r.email || r.employeeCode : null, password: res.generatedPassword ?? null });
+        const roleWarnings = r.warnings.filter((w) => w.startsWith('Role "'));
+        results.push({
+          line: r.line,
+          fullName: r.fullName,
+          status: 'added',
+          personId: res.person.id,
+          signIn: r.login ? r.email || r.employeeCode : null,
+          password: res.generatedPassword ?? null,
+          ...(roleWarnings.length ? { warnings: roleWarnings } : {}),
+        });
       } catch (err) {
         results.push({ line: r.line, fullName: r.fullName, status: 'skipped', error: problemText(err) });
       }
@@ -698,6 +726,38 @@ export class PeopleService {
     const limit = seatLimit(sub, plan);
     const used = await seatsUsed(this.dbs, cid);
     const depts = await db.select({ id: departments.id, name: departments.name, code: departments.code }).from(departments).where(eq(departments.companyId, cid));
+    // Job roles by name for the Role column (PLAN.md §26.7): Admin / Member are the level, any other name a role.
+    const { adminId, memberId } = await this.rolesSvc.builtInIds(cid);
+    const jobRoles = (await db.select({ id: roles.id, name: roles.name }).from(roles).where(and(eq(roles.companyId, cid), eq(roles.kind, 'role'), eq(roles.archived, false)))).filter(
+      (r) => r.id !== adminId && r.id !== memberId,
+    );
+    const givable = new Map<string, boolean>();
+    const mayGive = async (id: string) => {
+      if (!givable.has(id)) givable.set(id, await this.rolesSvc.assertCanGiveRoles(caller, [id]).then(() => true, () => false));
+      return givable.get(id)!;
+    };
+    const roleCells = new Map<number, { level: 'admin' | 'member' | null; roleIds: string[]; names: string[]; warnings: string[] }>();
+    for (const r of rows) {
+      let level: 'admin' | 'member' | null = null;
+      const roleIds: string[] = [];
+      const names: string[] = [];
+      const warnings: string[] = [];
+      for (const part of r.role.split(/[,;|]/).map((x) => x.trim()).filter(Boolean)) {
+        const asLevel = parseRole(part);
+        if (asLevel) {
+          if (level !== 'admin') level = asLevel;
+          continue;
+        }
+        const found = jobRoles.find((j) => j.name.trim().toLowerCase() === part.toLowerCase());
+        if (!found) warnings.push(`Role "${part}" does not exist; added without it (create it in Admin → Roles).`);
+        else if (!(await mayGive(found.id))) warnings.push(`Role "${found.name}": you cannot give it; added without it.`);
+        else if (!roleIds.includes(found.id)) {
+          roleIds.push(found.id);
+          names.push(found.name);
+        }
+      }
+      roleCells.set(r.line, { level: level ?? 'member', roleIds, names, warnings });
+    }
     const existing = await db.select({ id: people.id, email: people.email, employeeCode: people.employeeCode }).from(people).where(eq(people.companyId, cid));
     const lower = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
     const inCompanyEmail = new Map(existing.filter((e) => e.email).map((e) => [lower(e.email), e.id]));
@@ -750,9 +810,12 @@ export class PeopleService {
       else if (email && accountEmails.has(email)) errors.push(`${r.email} has a Kaampilot account; invite them with a link instead.`);
       if (code && inCompanyCode.has(code)) errors.push(`Employee ID ${r.employeeCode} is already in People.`);
       else if (code && takenNames.has(code)) errors.push(`Employee ID ${r.employeeCode} is someone else's username; use another.`);
-      const level = parseRole(r.role);
-      if (!level) errors.push(`Role "${r.role}": use Admin or Member.`);
-      else if (level === 'admin' && caller.role === 'member') errors.push('Only an owner or admin can add admins.');
+      // Role column: Admin or Member (blank = Member) and / or job role names (any case, comma-separated). An unknown
+      // name is reported and the person is added without it (PLAN.md §26.7).
+      const cell = roleCells.get(r.line)!;
+      const level = cell.level;
+      warnings.push(...cell.warnings);
+      if (level === 'admin' && caller.role === 'member') errors.push('Only an owner or admin can add admins.');
       let departmentId: string | null = null;
       if (r.department) {
         const d = depts.find((x) => lower(x.name) === lower(r.department) || lower(x.code) === lower(r.department));
@@ -776,7 +839,7 @@ export class PeopleService {
       }
       const login = !!(email || code);
       if (!login) warnings.push('No email or employee ID: added without a login (give one later with Reset password).');
-      return { ...r, joinDate: joinDate || r.joinDate, level: level ?? 'member', departmentId, reportsToId, reportsToLine, login, errors, warnings };
+      return { ...r, joinDate: joinDate || r.joinDate, level: level ?? 'member', roles: cell.names, roleIds: cell.roleIds, departmentId, reportsToId, reportsToLine, login, errors, warnings };
     });
 
     // Managers inside the file: no loops.

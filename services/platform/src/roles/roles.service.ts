@@ -501,7 +501,6 @@ export class RolesService {
         system: roles.system,
         archived: roles.archived,
         duties: roles.duties,
-        people: sql<number>`(select count(*)::int from ${personRoles} pr join ${people} p on p.id = pr.person_id where pr.role_id = ${roles.id} and p.status = 'active')`,
       })
       .from(roles)
       .where(and(eq(roles.companyId, caller.companyId), eq(roles.kind, 'role'), includeArchived ? sql`true` : eq(roles.archived, false)))
@@ -509,8 +508,19 @@ export class RolesService {
     const grants = rows.length
       ? await db.select().from(roleGrants).where(inArray(roleGrants.roleId, rows.map((r) => r.id)))
       : [];
+    // Active holders per role: one grouped query (a correlated subquery here counted 0, PLAN.md §26.7).
+    const counts = rows.length
+      ? await db
+          .select({ roleId: personRoles.roleId, n: sql<number>`count(*)::int` })
+          .from(personRoles)
+          .innerJoin(people, eq(people.id, personRoles.personId))
+          .where(and(inArray(personRoles.roleId, rows.map((r) => r.id)), eq(people.status, 'active')))
+          .groupBy(personRoles.roleId)
+      : [];
+    const held = new Map(counts.map((c) => [c.roleId, Number(c.n)]));
     return rows.map((r) => ({
       ...r,
+      people: held.get(r.id) ?? 0,
       grants: grants.filter((g) => g.roleId === r.id).map(({ app, permission, scope }) => ({ app, permission, scope })),
     }));
   }
@@ -854,6 +864,47 @@ export class RolesService {
     });
     await this.applyApps(companyId, personId, { close: false });
     await this.push(companyId);
+  }
+
+  /**
+   * Add person with roles in one request (PLAN.md §26.7), checked before the person is made: the job roles chosen
+   * (Guard, roles from the role builder) only within what the caller holds (R1); Admin like "Make Admin"; Member is
+   * everyone's starting role (as an invite link gives it). Returns the role ids to give once the person exists.
+   */
+  async planNewPersonRoles(caller: Caller, roleIds: string[], level: 'owner' | 'admin' | 'member'): Promise<string[]> {
+    const { adminId, memberId } = await this.builtInIds(caller.companyId);
+    const extra = [...new Set(roleIds)].filter((id) => id !== adminId && id !== memberId);
+    await this.assertCanGiveRoles(caller, extra);
+    if (level === 'member') return [...extra, memberId];
+    await this.assertCanGiveRoles(caller, [adminId]);
+    return [...extra, adminId];
+  }
+
+  /** Gives a just-added person the roles `planNewPersonRoles` checked: seat, apps, push to the apps. Throws without a seat. */
+  async giveNewPersonRoles(companyId: string, personId: string, roleIds: string[]) {
+    if (!roleIds.length) return;
+    await this.assertSeatForRoles(companyId, personId, roleIds);
+    await this.dbs.db.transaction(async (tx) => {
+      await tx.insert(personRoles).values(roleIds.map((roleId) => ({ personId, roleId }))).onConflictDoNothing();
+      await this.syncLevels(tx, companyId, [personId]);
+    });
+    await this.applyApps(companyId, personId, { close: false });
+    await this.push(companyId);
+    await this.moduleRef.get(DirectoryService, { strict: false }).push(companyId);
+  }
+
+  /**
+   * Edit person with roles (PLAN.md §26.7): the job roles chosen replace the others; Admin / Member follow `level` when
+   * it changes, otherwise stay as they are. The full list for `setPersonRoles`, or null when nothing changes.
+   */
+  async rolesForEdit(companyId: string, personId: string, roleIds: string[], level?: 'admin' | 'member'): Promise<string[] | null> {
+    const { adminId, memberId } = await this.builtInIds(companyId);
+    const builtIn = (id: string) => id === adminId || id === memberId;
+    const current = (await this.rolesOf(companyId, [personId])).get(personId) ?? [];
+    const base = level === 'admin' ? [adminId] : level === 'member' ? [memberId] : current.filter(builtIn);
+    const next = [...new Set([...roleIds.filter((id) => !builtIn(id)), ...base])];
+    const same = next.length === current.length && next.every((id) => current.includes(id));
+    return same ? null : next;
   }
 
   /** Admin and Member back to their starting permissions and no duties; the owners hold Admin (`company -- reset`). */

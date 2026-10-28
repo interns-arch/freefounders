@@ -37,7 +37,7 @@ const columns: Column<PeopleImportRow>[] = [
     header: 'Department · designation',
     cell: (r) => [r.department, r.designation].filter(Boolean).join(' · ') || '—',
   },
-  { key: 'role', header: 'Role', cell: (r) => (r.level === 'admin' ? 'Admin' : 'Member') },
+  { key: 'role', header: 'Role', cell: (r) => [r.level === 'admin' ? 'Admin' : 'Member', ...(r.roles ?? [])].join(', ') },
   {
     key: 'check',
     header: 'Check',
@@ -93,7 +93,7 @@ export function ImportPeopleDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Import people</DialogTitle>
           <DialogDescription>
-            One row per person: Name, Email, Mobile, Employee ID, Department, Designation, Reports to (their employee ID or email), Join date and Role (Admin or Member). Each person gets a login when they have an email or employee ID.
+            One row per person: Name, Email, Mobile, Employee ID, Department, Designation, Reports to (their employee ID or email), Join date and Role (Admin or Member, plus any role names from Admin → Roles, comma-separated). Each person gets a login when they have an email or employee ID.
           </DialogDescription>
         </DialogHeader>
 
@@ -163,6 +163,7 @@ export function ImportPeopleDialog({ onClose }: { onClose: () => void }) {
 function ImportDone({ result, onClose }: { result: PeopleImportResult; onClose: () => void }) {
   const withPassword = result.results.filter((r) => r.status === 'added' && r.password);
   const skipped = result.results.filter((r) => r.status === 'skipped');
+  const withoutRoles = result.results.filter((r) => r.status === 'added' && r.warnings?.length);
   const sheet = () =>
     downloadBlob(
       'people-sign-in-sheet.csv',
@@ -188,6 +189,15 @@ function ImportDone({ result, onClose }: { result: PeopleImportResult; onClose: 
             </Button>
           </div>
         </div>
+      )}
+      {withoutRoles.length > 0 && (
+        <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-sm text-muted-foreground" aria-label="Added without some roles">
+          {withoutRoles.map((s) => (
+            <li key={s.line}>
+              Row {s.line} ({s.fullName}): {s.warnings!.join(' ')}
+            </li>
+          ))}
+        </ul>
       )}
       {skipped.length > 0 && (
         <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-sm text-muted-foreground" aria-label="Skipped rows">
