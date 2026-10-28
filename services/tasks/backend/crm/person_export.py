@@ -120,6 +120,7 @@ def _task_rows(tasks, corrective, now, other):
     for t in tasks:
         result, days_late = task_result(t, now)
         own = t.created_by_id == t.assigned_to_id or t.id in corrective
+        excused = getattr(t, "_excused", False)
         who = other(t)
         review = t._review.get_status_display() if getattr(t, "_review", None) else ""
         rows.append([
@@ -129,7 +130,7 @@ def _task_rows(tasks, corrective, now, other):
             t.group.name if t.group_id else "",
             _local(t.created_at), _local(t.due_at), _local(t.completed_at),
             _hours(t.effort_minutes), _hours(t.actual_minutes),
-            "No" if own else "Yes", review,
+            "No" if own else ("Effort only — sub-task was late" if excused else "Yes"), review,
             timezone.localtime(t.due_at or t.created_at).strftime("%Y-%m"),
             getattr(t, "_part_of", ""), getattr(t, "_main", ""),
             _hours(getattr(t, "_given", 0)),
@@ -193,6 +194,18 @@ def build_person_workbook(view, person, start, end, range_label, viewer):
     delegated = [t for t in base.filter(created_by=person).exclude(assigned_to=person)
                  if _in_range(t, start, end)]
     corrective_all = corrective_task_ids([t.id for t in received + delegated])
+
+    # admin rule (same as the score): a late task of an admin whose sub-task
+    # was late isn't judged on time
+    from accounts.access import is_admin
+    from .chain import excused_for_admins
+    if is_admin(person):
+        excused_ids = excused_for_admins(
+            [{"id": t.id, "assigned_to_id": t.assigned_to_id, "status": t.status,
+              "due_at": t.due_at, "completed_at": t.completed_at} for t in received],
+            {person.pk}, now)
+        for t in received:
+            t._excused = t.id in excused_ids
 
     # Task chain: effort handed to sub-tasks is earned by those people, so "Effort" here is what the holder kept
     # (same rule as the score); each row says which task it is a part of and the chain's main task.
@@ -262,6 +275,8 @@ def build_person_workbook(view, person, start, end, range_label, viewer):
         ("In progress", s["in_progress"]),
         ("Overdue", s["overdue"]),
         ("Self-assigned / correction (not scored)", s["self_assigned"]),
+        ("Late only because a sub-task was late (not held against)",
+         s.get("excused_by_subtasks", 0)),
         ("Given by others (scored)", s["total"] - s["self_assigned"]),
         ("Time assigned (h)", _hours(s["time_assigned_minutes"])),
         ("Time earned (h)", _hours(s["time_earned_minutes"])),

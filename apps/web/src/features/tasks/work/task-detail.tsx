@@ -21,13 +21,13 @@ import { toast } from 'sonner';
 import { useConfirm } from '@/components/common/confirm';
 import { ErrorState } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/overlays';
 import { Avatar, Checkbox, Progress, Skeleton } from '@/components/ui/primitives';
 import { FilePick, Linkify, ProofreadText, fmtDT, fmtEffort, relDue } from '@/features/tasks/shared';
 import { cn } from '@/lib/utils';
 import { useTaskDialogs } from './dialogs';
-import { PriorityPill, SectionHead, StatusPill, TaskCode } from './task-bits';
+import { Chip, PriorityPill, SectionHead, StatusPill, TaskCode } from './task-bits';
 import { PartOfNote, SubtasksSection } from './task-chain';
 import { safeHref } from '@/lib/safe-url';
 
@@ -73,6 +73,9 @@ export function TaskDetailSheet({ taskId, review, focusComment, onClose }: { tas
   );
 }
 
+/** Longest comment the server keeps (crm.models.COMMENT_MAX). */
+const COMMENT_MAX = 5000;
+
 /** A titled block of the panel: uppercase heading with a count, then its content. */
 function Section({ title, count, extra, children, className }: { title: string; count?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -117,7 +120,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
   const [sendingBack, setSendingBack] = useState(review === 'reject');
   const [why, setWhy] = useState('');
   const reviewRef = useRef<HTMLDivElement>(null);
-  const commentRef = useRef<HTMLInputElement>(null);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
 
   const dl = t.day_log;
   const isAssignee = t.assigned_to === me?.id;
@@ -488,6 +491,11 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
                   ) : (
                     <span className="truncate">{f.filename}</span>
                   )}
+                  {f.is_proof && (
+                    <Chip tone="green" title="Sent as completion proof" className="px-1.5">
+                      <CheckCircle2 aria-hidden /> Proof
+                    </Chip>
+                  )}
                   <span className="shrink-0 text-xs text-muted-foreground">· {f.uploaded_by?.name}</span>
                   {canRemoveFile(f) && (
                     <Button variant="ghost" size="icon-xs" className="-mr-1 shrink-0 text-muted-foreground hover:text-destructive" aria-label={`Remove ${f.filename}`} title="Remove this file" disabled={removeFile.isPending} onClick={() => dropFile(f)}>
@@ -500,20 +508,29 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
           )}
           <div className="flex flex-wrap items-center gap-2">
             <FilePick busy={upload.isPending} onPick={(all) => upload.mutate({ id: t.id, files: all.slice(0, 5) }, { onSuccess: () => toast.success('Uploaded'), onError: fail })} />
-            <span className="text-xs text-muted-foreground">Up to 5 files, 10 MB each.</span>
+            <span className="text-xs text-muted-foreground">
+              Up to 5 files, 10 MB each.
+              {!upload.isPending && t.status === 'done' && ' You can still add files after the task is done — they stay on it.'}
+              {!upload.isPending && t.frequency && t.frequency !== 'one_time' && ' Files (not completion proof) carry over to the next copy of this task.'}
+            </span>
           </div>
         </Section>
 
         <Section title="Comments & updates" count={feed.length > 0 ? feed.length : undefined}>
-          <div className="flex gap-2">
-            <Input
+          {/* A real box: long comments and line breaks are kept whole (up to 5000 characters).
+              Enter sends, Shift+Enter starts a new line; the box grows with what is written. */}
+          <div className="flex items-start gap-2">
+            <Textarea
               ref={commentRef}
               aria-label="Write a comment"
-              placeholder="Write a comment…"
+              placeholder="Write a comment… (Shift+Enter for a new line)"
               value={text}
+              maxLength={COMMENT_MAX}
+              rows={text.includes('\n') || text.length > 60 ? 4 : 1}
+              className="min-h-9 resize-y"
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   send();
                 }
@@ -533,7 +550,7 @@ function DetailBody({ t, review, focusComment, onClose }: { t: TaskDetail; revie
                     {a.kind === 'comment' ? <MessageSquare className="size-3 text-primary" aria-hidden /> : <FileText className="size-3" aria-hidden />}
                     <strong className="font-semibold text-foreground">{a.actor?.name || 'System'}</strong> · {fmtDT(a.created_at)}
                   </div>
-                  <p className={cn('mt-0.5 whitespace-pre-wrap', a.kind === 'comment' ? 'rounded-lg rounded-tl-sm border bg-card px-3 py-2' : 'text-foreground/90')}>
+                  <p className={cn('mt-0.5 break-words whitespace-pre-wrap', a.kind === 'comment' ? 'rounded-lg rounded-tl-sm border bg-card px-3 py-2' : 'text-foreground/90')}>
                     <Linkify text={a.text} />
                   </p>
                 </li>

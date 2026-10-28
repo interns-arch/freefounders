@@ -429,6 +429,9 @@ class TaskAttachment(models.Model):
     file = models.FileField(upload_to=task_attachment_path)
     filename = models.CharField(max_length=255)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    # proof sent with the completion belongs to THAT occurrence; every other
+    # file is reference material and travels to the next recurring copy
+    is_proof = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -453,12 +456,16 @@ class TaskSettings(models.Model):
         verbose_name_plural = "task settings"
 
 
+COMMENT_MAX = 5000      # one comment; system log lines stay short anyway
+
+
 class TaskActivity(models.Model):
     """Audit trail for tasks -- who did what, when (the 'Activities' feed).
     kind='comment' rows are human conversation; kind='log' rows are system."""
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="activities")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
-    text = models.CharField(max_length=300)
+    # a comment is kept whole -- a 300-character column cut long ones off
+    text = models.TextField(max_length=COMMENT_MAX)
     kind = models.CharField(max_length=10, default="log",
                             choices=[("log", "Log"), ("comment", "Comment")])
     created_at = models.DateTimeField(auto_now_add=True)

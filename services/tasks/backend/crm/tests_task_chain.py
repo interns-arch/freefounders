@@ -361,3 +361,82 @@ class ChangeRequestOldDueTests(ChainBase):
         top = self.client.get("/api/tasks/change_request_leaders/?range=all").data["rows"][0]
         self.assertEqual((top["total"], top["approved"], top["rejected"], top["pending"], top["tasks"]),
                          (3, 1, 1, 1, 1))
+
+
+# Ported from the original (ef68f1e, PLAN.md §19.43)
+class AdminSubtaskDelayTests(Base):
+    """Admin rule: an Admin / Super Admin whose task ran late because a
+    sub-task they gave out was late is not marked down for it. Everyone
+    else is still judged on their own task's timing."""
+    def setUp(self):
+        super().setUp()
+        self.now = timezone.now()
+
+    def task(self, holder, *, due_days, done_days=None, parent=None, giver=None, effort=60):
+        t = Task.objects.create(
+            title="T", assigned_to=holder, created_by=giver or self.manager, parent=parent,
+            effort_minutes=effort, due_at=self.now + timedelta(days=due_days),
+            status=TaskStatus.DONE if done_days is not None else TaskStatus.OPEN)
+        if done_days is not None:
+            Task.objects.filter(pk=t.pk).update(completed_at=self.now + timedelta(days=done_days))
+        return Task.objects.get(pk=t.pk)
+
+    def row(self, user):
+        self.as_(self.admin)
+        rows = self.client.get(f"/api/tasks/employees_report/?range=all&user={user.id}").data["rows"]
+        return rows[0]
+
+    def test_admin_not_marked_down_when_a_subtask_made_it_late(self):
+        self.task(self.admin, due_days=-5, done_days=-6)                 # on time, scored
+        main = self.task(self.admin, due_days=-1, effort=120)            # overdue now
+        self.task(self.amit, due_days=-2, parent=main, giver=self.admin)  # the late part
+        r = self.row(self.admin)
+        self.assertEqual(r["overdue"], 1)                # the fact still shows
+        self.assertEqual(r["excused_by_subtasks"], 1)
+        self.assertEqual(r["scored_missed"], 0)
+        self.assertEqual(r["on_time_rate"], 100.0)
+        self.assertEqual(r["score"], 100.0)
+
+    def test_finished_late_after_a_late_subtask_earns_effort_without_the_late_mark(self):
+        self.task(self.admin, due_days=-5, done_days=-6)
+        main = self.task(self.admin, due_days=-3, done_days=-1, effort=120)  # done late
+        self.task(self.amit, due_days=-4, done_days=-2, parent=main, giver=self.admin, effort=60)
+        r = self.row(self.admin)
+        self.assertEqual(r["delayed"], 1)
+        self.assertEqual(r["on_time_rate"], 100.0)
+        self.assertEqual(r["score"], 100.0)
+
+    def test_super_admin_too(self):
+        boss = make("chief", Role.SUPER_ADMIN, "management")
+        self.task(boss, due_days=-5, done_days=-6)
+        main = self.task(boss, due_days=-1)
+        self.task(self.amit, due_days=-2, parent=main, giver=boss, effort=10)
+        self.assertEqual(self.row(boss)["score"], 100.0)
+
+    def test_non_admin_is_still_judged(self):
+        self.task(self.rahul, due_days=-5, done_days=-6)
+        main = self.task(self.rahul, due_days=-1)
+        self.task(self.amit, due_days=-2, parent=main, giver=self.rahul, effort=10)
+        r = self.row(self.rahul)
+        self.assertEqual(r["excused_by_subtasks"], 0)
+        self.assertEqual(r["scored_missed"], 1)
+        self.assertLess(r["score"], 100.0)
+
+    def test_admin_late_with_on_time_subtasks_is_still_judged(self):
+        self.task(self.admin, due_days=-5, done_days=-6)
+        main = self.task(self.admin, due_days=-1)
+        self.task(self.amit, due_days=-3, done_days=-4, parent=main, giver=self.admin, effort=10)
+        r = self.row(self.admin)
+        self.assertEqual(r["excused_by_subtasks"], 0)
+        self.assertLess(r["score"], 100.0)
+
+    def test_panel_and_excel_say_so(self):
+        main = self.task(self.admin, due_days=-1)
+        self.task(self.amit, due_days=-2, parent=main, giver=self.admin, effort=10)
+        self.as_(self.admin)
+        self.assertTrue(self.client.get(f"/api/tasks/{main.id}/").data["chain"]["excused"])
+        res = self.client.get(f"/api/tasks/person_export/?user={self.admin.id}&range=all")
+        rows = list(load_workbook(BytesIO(res.content))["Tasks received"].iter_rows(values_only=True))
+        head = rows[0]
+        scored = {r[head.index("Code")]: r[head.index("Scored")] for r in rows[1:]}
+        self.assertEqual(scored[main.code], "Effort only — sub-task was late")

@@ -53,6 +53,8 @@ export function RangePicker({
   countedBy = 'due date',
   ranges = RANGES,
   allowCustom = true,
+  dateBy,
+  setDateBy,
   className,
 }: {
   range: string;
@@ -63,6 +65,9 @@ export function RangePicker({
   countedBy?: string;
   ranges?: Array<[string, string]>;
   allowCustom?: boolean;
+  /** Task lists: match the range on the due / done date ('due') or the day the task was given ('assigned'). */
+  dateBy?: 'due' | 'assigned';
+  setDateBy?: (v: 'due' | 'assigned') => void;
   className?: string;
 }) {
   return (
@@ -75,6 +80,12 @@ export function RangePicker({
         ))}
         {allowCustom && <option value="custom">Custom range…</option>}
       </NativeSelect>
+      {setDateBy && (
+        <NativeSelect aria-label="Count by" title="Which date the range is matched against" value={dateBy ?? 'due'} onChange={(e) => setDateBy(e.target.value === 'assigned' ? 'assigned' : 'due')} className="w-auto min-w-44">
+          <option value="due">By due / done date</option>
+          <option value="assigned">By date assigned</option>
+        </NativeSelect>
+      )}
       {range === 'custom' && (
         <>
           <Input type="date" aria-label="From date" className="w-auto" value={custom.start} onChange={(e) => setCustom({ ...custom, start: e.target.value })} />

@@ -277,6 +277,10 @@ class NoticeViewSet(ExportMixin, viewsets.ModelViewSet):
 
         template = company_env("NOTICE_WHATSAPP_TEMPLATE", "notice_posted").strip()
         text = " ".join((notice.content or "").split())[:900] or notice.title
+        # WhatsApp shows *text* in bold -- the notice title stands out in the
+        # chat. Stray stars in the title would break the pair, so drop them.
+        title = " ".join(notice.title.replace("*", "").split())
+        bold_title = f"*{title[:196]}*" if title else notice.title
         only_missing = str((request.data or {}).get("only_missing", "")).lower() in ("1", "true")
         ids = [u.pk for u in (missing if only_missing else reach)]
 
@@ -294,8 +298,8 @@ class NoticeViewSet(ExportMixin, viewsets.ModelViewSet):
                     tried = []
                     res = None
                     if template:
-                        params = ([name, notice.title, text] if template == "company_notice"
-                                  else [name, notice.title[:200]])
+                        params = ([name, bold_title, text] if template == "company_notice"
+                                  else [name, bold_title])
                         res = whatsapp.send_template(u.whatsapp_phone, template, params)
                         tried.append(res)
                     # Template not approved yet (or rejected): still try the plain
@@ -303,7 +307,7 @@ class NoticeViewSet(ExportMixin, viewsets.ModelViewSet):
                     # everyone if a general WHATSAPP_TEMPLATE_NAME is configured.
                     if not res or res.get("status") != "sent":
                         res = whatsapp.send_text(u.whatsapp_phone,
-                                                 f"Notice: {notice.title}"
+                                                 f"*Notice: {title}*"
                                                  f"{chr(10)}{notice.content or ''}".strip())
                         tried.append(res)
                     _remember_whatsapp(u, res, template if len(tried) == 1 and template else "")

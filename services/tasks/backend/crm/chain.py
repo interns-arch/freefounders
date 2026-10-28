@@ -72,6 +72,40 @@ def own_effort_map(task_ids):
     return {tid: max(0, (effort.get(tid) or 0) - (s or 0)) for tid, s in given.items()}
 
 
+def parents_with_late_parts(parent_ids, now=None):
+    """Ids of the tasks (among parent_ids) that have a sub-task which is
+    overdue now or was finished after its own due date."""
+    ids = list(parent_ids)
+    if not ids:
+        return set()
+    now = now or timezone.now()
+    late = set()
+    for pid, status, due, done in (Task.objects.filter(parent_id__in=ids, deleted_at__isnull=True)
+                                   .values_list("parent_id", "status", "due_at", "completed_at")):
+        if not due:
+            continue
+        if (status != TaskStatus.DONE and due < now) or (done and done > due):
+            late.add(pid)
+    return late
+
+
+def excused_for_admins(rows, admin_ids, now=None):
+    """Admin rule: a task held by an admin (a level-3 role: Admin / Super Admin,
+    or the Platform's admin roles) that ran late (finished after its due date,
+    or still open past it) is NOT held against them when one of its sub-tasks
+    was late -- the delay came from the people they gave the parts to, who are
+    scored on those parts. `rows` are dicts with id, assigned_to_id, status,
+    due_at, completed_at. Returns the ids to leave out of the on-time judgement."""
+    now = now or timezone.now()
+    late_admin_tasks = [
+        r["id"] for r in rows
+        if r["assigned_to_id"] in admin_ids and r["due_at"] and (
+            (r["status"] != TaskStatus.DONE and r["due_at"] < now)
+            or (r["status"] == TaskStatus.DONE and r["completed_at"]
+                and r["completed_at"] > r["due_at"]))]
+    return parents_with_late_parts(late_admin_tasks, now)
+
+
 def own_effort(task):
     return max(0, (task.effort_minutes or 0) - given_effort(task)) \
         if task.effort_minutes is not None else None

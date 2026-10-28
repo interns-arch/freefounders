@@ -51,7 +51,7 @@ class NoticeWhatsAppTests(TestCase):
         self.assertEqual(tpl.call_count, 2)
         _, name, params = tpl.call_args.args
         self.assertEqual(name, "notice_posted")      # utility: name + title only
-        self.assertEqual(params, ["a", "Diwali holiday"])
+        self.assertEqual(params, ["a", "*Diwali holiday*"])   # bold on WhatsApp
         mail.assert_not_called()
         self.assertEqual(Notification.objects.filter(type="notice").count(), 2)
 
@@ -104,6 +104,26 @@ class NoticeWhatsAppTests(TestCase):
         self.assertEqual(txt.call_count, 2)
         n = Notification.objects.filter(type="notice").first()
         self.assertEqual([c["status"] for c in n.channels], ["error", "sent"])
+
+    # the title is bold on WhatsApp (ported from the original, 5206167)
+    def test_title_is_bold_and_stray_stars_dropped(self):
+        self.n.title = "  *NEW*  UPDATE "
+        self.n.save()
+        self.as_(self.admin)
+        with INLINE, mock.patch("notifications.channels.whatsapp.send_template",
+                                return_value=FAKE) as tpl:
+            self.client.post(f"/api/notices/{self.n.id}/send_whatsapp/")
+        self.assertEqual(tpl.call_args.args[2][1], "*NEW UPDATE*")
+
+    def test_plain_fallback_is_bold_too(self):
+        self.as_(self.admin)
+        refused = {"channel": "whatsapp", "status": "error", "detail": "HTTP 404"}
+        with INLINE, mock.patch("notifications.channels.whatsapp.send_template",
+                                return_value=refused), \
+                mock.patch("notifications.channels.whatsapp.send_text",
+                           return_value=FAKE) as txt:
+            self.client.post(f"/api/notices/{self.n.id}/send_whatsapp/")
+        self.assertTrue(txt.call_args.args[1].startswith("*Notice: Diwali holiday*\n"))
 
 
 class NoticeManageTests(TestCase):

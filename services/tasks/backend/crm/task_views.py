@@ -376,13 +376,28 @@ def _notify_task_completed(task, actor):
 
 def _advance_due(due, frequency):
     if frequency == TaskFrequency.DAILY:
-        return due + timedelta(days=1)
-    if frequency == TaskFrequency.WEEKLY:
-        return due + timedelta(weeks=1)
-    # monthly: same day next month (clamped to 28 to stay valid)
-    month = due.month % 12 + 1
-    year = due.year + (1 if due.month == 12 else 0)
-    return due.replace(year=year, month=month, day=min(due.day, 28))
+        nxt = due + timedelta(days=1)
+    elif frequency == TaskFrequency.WEEKLY:
+        nxt = due + timedelta(weeks=1)
+    else:
+        # monthly: same day next month (clamped to 28 to stay valid)
+        month = due.month % 12 + 1
+        year = due.year + (1 if due.month == 12 else 0)
+        nxt = due.replace(year=year, month=month, day=min(due.day, 28))
+    return _next_working_day(nxt)
+
+
+def _next_working_day(due):
+    """A recurring task never falls due on the weekly off day (Sunday,
+    HR_WEEK_OFF_DAYS, per company) or a holiday in the calendar: it moves to
+    the next working day at the same time -- nobody is late for a day off."""
+    from hr.services import is_holiday, is_week_off
+    for _ in range(14):                 # a long holiday run is still bounded
+        day = timezone.localtime(due).date()
+        if not is_week_off(day) and not is_holiday(day):
+            return due
+        due += timedelta(days=1)
+    return due
 
 
 def _linked_task_finished(task, remarks=""):
@@ -412,7 +427,27 @@ def _spawn_next_occurrence(task, actor):
     )
     nxt.subscribers.set(task.subscribers.all())
     act(nxt, actor, f"Auto-created next {task.get_frequency_display().lower()} occurrence")
+    _carry_reference_files(task, nxt, actor)
     return nxt
+
+
+def _carry_reference_files(src, dst, actor):
+    """The next copy of a recurring task keeps the reference files (the
+    sheet, the price list, the photo to work from) -- each as its own copy,
+    so removing it from one occurrence never deletes it from another.
+    Completion proof stays with the occurrence it proves. The copy is saved
+    through the default storage, so in multi-company mode it lands under the
+    same company's c/<schema>/ folder (tenancy/storage.py)."""
+    from django.core.files.base import ContentFile
+    for a in src.attachments.filter(is_proof=False).order_by("created_at"):
+        try:
+            with a.file.open("rb") as fh:
+                data = fh.read()
+        except (FileNotFoundError, OSError, ValueError):
+            continue                      # nothing on disk to carry
+        copy = TaskAttachment(task=dst, filename=a.filename, uploaded_by=a.uploaded_by)
+        copy.file.save(a.filename, ContentFile(data), save=True)
+        act(dst, actor, f"File carried over from {src.code}: {a.filename[:120]}")
 
 
 # ---------------------------------------------------------------------------
@@ -524,9 +559,14 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                 # date, so it is judged by the deadline it is measured against.
                 lo = timezone.make_aware(datetime.combine(start, dt_time.min))
                 hi = timezone.make_aware(datetime.combine(end, dt_time.max))
-                qs = qs.filter(
-                    _Q(status=TaskStatus.DONE, completed_at__range=(lo, hi))
-                    | (~_Q(status=TaskStatus.DONE) & _Q(due_at__range=(lo, hi))))
+                if p.get("date_by") == "assigned":
+                    # "what was handed out on 9 Oct" -- the day it was given,
+                    # whatever its deadline or wherever it stands now
+                    qs = qs.filter(created_at__range=(lo, hi))
+                else:
+                    qs = qs.filter(
+                        _Q(status=TaskStatus.DONE, completed_at__range=(lo, hi))
+                        | (~_Q(status=TaskStatus.DONE) & _Q(due_at__range=(lo, hi))))
                 # the screen shows these, so nobody has to work out where a
                 # week ends -- the same fix the dashboard already got
                 self.request.applied_range = (start.isoformat(), end.isoformat())
@@ -919,6 +959,13 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                 "parts_done": sum(1 for p in parts if p.status == TaskStatus.DONE),
                 "parts_open": len(open_), "parts_waiting": len(waiting),
                 "blocked": chain.completion_block_message(task) if parts else None,
+                # admin rule: lateness caused by a late sub-task isn't scored
+                "excused": bool(parts) and bool(task.assigned_to) and is_admin(task.assigned_to) and bool(
+                    chain.excused_for_admins(
+                        [{"id": task.id, "assigned_to_id": task.assigned_to_id,
+                          "status": task.status, "due_at": task.due_at,
+                          "completed_at": task.completed_at}],
+                        {task.assigned_to_id}, now)),
                 "can_view_chain": is_admin_ and bool(parts or task.parent_id),
             },
         }
@@ -973,7 +1020,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def activity(self, request, pk=None):
         """Task Updates feed — system logs + comments for ONE task."""
-        acts = self.get_object().activities.select_related("actor")[:100]
+        acts = self.get_object().activities.select_related("actor")[:300]
         return Response(TaskActivitySerializer(acts, many=True).data)
 
     @action(detail=True, methods=["get"], url_path="day_logs")
@@ -1093,11 +1140,20 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def comment(self, request, pk=None):
         task = self.get_object()
+        from .models import COMMENT_MAX
         text = str(request.data.get("text", "")).strip()
         if not text:
             raise ValidationError({"text": "Say something."})
+        if len(text) > COMMENT_MAX:
+            raise ValidationError({"text": f"Keep a comment under {COMMENT_MAX} characters "
+                                           f"(this one is {len(text)}) -- split it in two."})
         TaskActivity.objects.create(task=task, actor=request.user,
-                                    text=text[:300], kind="comment")
+                                    text=text, kind="comment")
+        # WhatsApp template values must be one line and short; the email
+        # and the app always carry the whole comment
+        one_line = " ".join(text.split())
+        wa_text = (one_line if len(one_line) <= 700
+                   else one_line[:690].rstrip() + "… (full comment in the app)")
         for target in (task.assigned_to, task.created_by):
             if target and target.is_active and target.pk != request.user.pk:
                 who_c = request.user.get_full_name() or request.user.username
@@ -1109,7 +1165,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                            if task.assigned_to else "Assigned to: -",
                            "",
                            f"{who_c} wrote:",
-                           text[:300],
+                           text,
                            "",
                            "Open Tasks to reply.",
                        ]),
@@ -1118,9 +1174,9 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                            target.get_full_name() or target.username,
                            who_c,
                            f"{task.code} - {task.title}",
-                           text[:280],
+                           wa_text,
                        ]))
-        acts = task.activities.select_related("actor")[:100]
+        acts = task.activities.select_related("actor")[:300]
         return Response(TaskActivitySerializer(acts, many=True).data,
                         status=http.HTTP_201_CREATED)
 
@@ -1568,6 +1624,12 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
         for t in raw:
             if t["id"] in own:
                 t["effort_minutes"] = own[t["id"]]
+        # Admin rule: an admin is not marked down when their task ran late
+        # because a sub-task they gave out was late
+        from .chain import excused_for_admins
+        excused = excused_for_admins(raw, {u.pk for u in users if is_admin(u)})
+        for t in raw:
+            t["excused"] = t["id"] in excused
         from .scoring import corrective_task_ids
         corrective = corrective_task_ids([t["id"] for t in raw])
         per = {u.pk: [] for u in users}
@@ -1588,7 +1650,9 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                 f"repeats \u00d72, max {MAX_EMPLOYEE_PENALTY}). "
                 f"Only tasks assigned BY SOMEONE ELSE are scored \u2014 a task "
                 f"you create for yourself, or one raised to correct a "
-                f"mistake, earns no points")
+                f"mistake, earns no points. For an Admin / Super Admin, a "
+                f"task that ran late because a sub-task they gave out was late "
+                f"is not judged on time")
 
     def _person_rows(self, per, corrective, name_of, start, end, now, today,
                      always_emit=False):
@@ -1607,7 +1671,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                                  "overdue": 0, "pending": 0, "in_progress": 0,
                                  "completed": 0, "in_time": 0, "delayed": 0,
                                  "self_assigned": 0, "scored_completed": 0,
-                                 "scored_missed": 0,
+                                 "scored_missed": 0, "excused_by_subtasks": 0,
                                  "time_assigned_minutes": 0, "time_earned_minutes": 0,
                                  "time_spent_minutes": 0, "on_time_rate": None,
                                  "effort_ratio": None, "score": None,
@@ -1624,11 +1688,16 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
             for t in sub:
                 # not scored: your own task, or one raised to correct a mistake
                 own = t["created_by_id"] == uid or t["id"] in corrective
+                # admin's task late only because a sub-task was late: the
+                # facts still show, the score just doesn't judge its timing
+                excused = t.get("excused", False)
                 if own:
                     c["self_assigned"] += 1
+                if excused:
+                    c["excused_by_subtasks"] += 1
                 if t["status"] != TaskStatus.DONE and t["due_at"] and t["due_at"] < now:
                     c["overdue"] += 1
-                    if not own:
+                    if not own and not excused:
                         sc_missed += 1    # judged, not skipped, by the on-time rate
                 if t["status"] == TaskStatus.OPEN:
                     c["pending"] += 1
@@ -1641,12 +1710,14 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                     earned += t["effort_minutes"] or 0
                     spent += t["actual_minutes"] or 0
                     if not own:
-                        sc_completed += 1
                         sc_earned += t["effort_minutes"] or 0
-                        if not late:
-                            sc_in_time += 1
+                        if not excused:
+                            sc_completed += 1
+                            if not late:
+                                sc_in_time += 1
                 assigned += t["effort_minutes"] or 0
-                if not own:
+                # an excused task still open isn't held against the effort ratio
+                if not own and not (excused and t["status"] != TaskStatus.DONE):
                     sc_assigned += t["effort_minutes"] or 0
                 s = timezone.localtime(t["created_at"]).date()
                 e = timezone.localtime(t["completed_at"]).date() if t["completed_at"] else today
@@ -1694,7 +1765,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
                 "user": uid, "name": name_of[uid], "total": len(sub),
                 **{k: c.get(k, 0) for k in ("overdue", "pending", "in_progress",
                                             "completed", "in_time", "delayed",
-                                            "self_assigned")},
+                                            "self_assigned", "excused_by_subtasks")},
                 "scored_completed": sc_completed,     # delegated + finished
                 "scored_missed": sc_missed,           # delegated + still overdue
                 "time_assigned_minutes": assigned,
@@ -2511,7 +2582,7 @@ class TaskViewSet(ExportMixin, viewsets.ModelViewSet):
         for f in proof:
             f = compress_upload(f)  # a photo is stored as a smaller JPEG (PLAN.md §19.20)
             TaskAttachment.objects.create(task=task, file=f, filename=f.name[:255],
-                                          uploaded_by=request.user)
+                                          uploaded_by=request.user, is_proof=True)
         old_status = task.status
         task.status = TaskStatus.DONE
         task.completion_note = remarks[:500]

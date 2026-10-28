@@ -22,6 +22,8 @@ export interface TeamReportRow {
   in_progress: number;
   overdue: number;
   self_assigned: number;
+  /** An admin's tasks late only because a sub-task they gave out was late (not held against them). */
+  excused_by_subtasks?: number;
   time_assigned_minutes: number;
   time_earned_minutes: number;
   time_spent_minutes: number;

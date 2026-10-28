@@ -22,6 +22,7 @@ export function workListQuery(params: WorkListParams): Query {
     range: params.range,
     start: params.start,
     end: params.end,
+    date_by: params.date_by,
     assigned_to: params.assigned_to,
     department: params.department,
     search: params.search,

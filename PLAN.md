@@ -2614,6 +2614,46 @@ unread count.
 
 Goes live with a website + Tasks API + Assets API update (no migrations). No new APK.
 
+### 19.43 Port of 2026-10-28: full comments, files carried over, date assigned, workdays, admin sub-task rule
+Founder: "comments kept whole; files stay and carry over to the next recurring copy" (original `d86d62b`, done first),
+plus everything else that landed on the original branch `feature/delegated-dashboard-whatsapp` (read-only) after
+`1dabd35`. Ported up to **`d86d62b`**:
+- **`d86d62b` Comments kept whole, files stay and carry over.** `TaskActivity.text` is a text column (a comment up to
+  5000 characters, line breaks kept; longer is refused with "split it in two", never cut). The email carries the whole
+  comment; WhatsApp gets one line, cut at 700 characters with "(full comment in the app)". `TaskAttachment.is_proof`:
+  files sent with Complete are flagged; on the next copy of a recurring task every **other** file is copied (its own
+  file each, so removing it from one occurrence never touches another; logged "File carried over from T-…"). The task
+  feed shows 300 entries (was 100). Migration **`crm 0024_full_comments_and_proof_flag`** (the original's 0021; it also
+  flags existing proof from the "Completion proof attached:" log lines, matching the name without its extension because
+  photos are stored as JPEG, §19.20). Web (task panel): the comment box is a growing textarea (Enter sends,
+  Shift+Enter new line, 5000 max), comments wrap; a file sent as proof shows a green "Proof" label; finished tasks say
+  files can still be added, recurring ones that files (not proof) carry over. Files: copies go through the default
+  storage, so in multi-company mode they land under the same company's `c/<schema>/` folder (`tenancy/storage.py`);
+  production keeps `/app/backend/media` on the host volume `${FF_HOME}/data/tasks-media` (tasks + tasks-worker,
+  `infra/deploy/docker-compose.yml`), so nothing is lost across deploys/restarts.
+- **`fae7ed1` Date assigned on every list.** `GET /tasks/?range=…&date_by=assigned` matches the day the task was given
+  (`created_at`); default unchanged (done date / due date). Web: the range picker is now on My Tasks, Delegated,
+  Subscribed and All Tasks, with "By due / done date | By date assigned" (`?by=assigned` in the address); core
+  `WorkListParams.date_by`; downloads follow the same filter.
+- **`fc2f1de` Recurring tasks skip the weekly off day and holidays**: the next occurrence moves to the next working day,
+  same time (`_next_working_day`; the company's `HR_WEEK_OFF_DAYS` via `hr.services.is_week_off`, holiday calendar).
+- **`ef68f1e` + `461ce09` Admin sub-task rule.** An admin's task that ran late because one of its sub-tasks was late is
+  left out of their on-time judgement (effort still earned; the facts still show): employees report / Team performance
+  `excused_by_subtasks`, score formula text, person Excel ("Effort only — sub-task was late" + Summary line), task
+  `chain.excused` in the API. "Admin" = `accounts.access.is_admin` (any level-3 role, so Platform admin roles count),
+  not the original's built-in role codes. The panel note was removed again in `461ce09`, so no UI.
+- **`5206167` Notices on WhatsApp: title in bold** (`*title*`, stray stars dropped; plain fallback `*Notice: title*`).
+- **Not ported: `b7d0495`.** Despite its message it deletes the "remove a file" tests from the original; ours already has
+  them (`crm/tests_ported_2026_10.py`, `RemoveFileTests`) and keeps them.
+
+| Check | Result |
+|---|---|
+| Tasks (SQLite) | `npm run quick-check -- --tests tasks` all green. New `crm/tests_task_files_comments.py` (5) and `crm/tests_recurrence_workdays.py` (6) from the original; `tests_tasks_area` + 2 (date assigned) and the weekly test pinned to a Wednesday; `tests_task_chain` + `AdminSubtaskDelayTests` (6); `workspace/tests_notice_whatsapp` + 2 |
+| Tasks tenancy (Postgres) | 52 pass; local dev migrated with `migrate_companies` (`crm 0024`) |
+| Web | `npm run web:build` (rules + typecheck + build) clean |
+
+Goes live with a Tasks API + website update (`migrate_companies` applies `crm 0024`). No new APK.
+
 ## 20. Scale plan: self-serve sign-up, payments, 100 000 companies / millions of users (draft 2026-10-13, for approval)
 
 Founder: "use Notion's architecture for making and giving new users; plan how we share this with millions of users and

@@ -256,7 +256,7 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TaskAttachment
-        fields = ["id", "filename", "url", "uploaded_by", "created_at"]
+        fields = ["id", "filename", "url", "uploaded_by", "is_proof", "created_at"]
 
     def get_url(self, obj):
         return file_url(obj.file)

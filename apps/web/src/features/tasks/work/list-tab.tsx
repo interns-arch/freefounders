@@ -50,7 +50,8 @@ const EMPTY: Record<ListScope, string> = {
 
 /**
  * My Tasks / All Tasks / Delegated / Subscribed. Every filter lives in the address (?status=open|in_progress|done|all,
- * &overdue=1, &done=on_time|late, &recurring=1, and for All Tasks &range= &person= &dept= &q=), so links from the
+ * &overdue=1, &done=on_time|late, &recurring=1, &range= (+ &by=assigned: match the day the task was given) on every
+ * list, and for All Tasks &person= &dept= &q=), so links from the
  * dashboard tiles, Home and WhatsApp land on exactly this view.
  */
 export function TaskListTab({
@@ -74,6 +75,8 @@ export function TaskListTab({
   const fDone = status === 'done' ? (values.done ?? '') : '';
   const range = values.range ?? 'all';
   const custom = { start: values.start ?? '', end: values.end ?? '' };
+  // the range matches the due / done date (default) or the day the task was given
+  const dateBy: 'due' | 'assigned' = values.by === 'assigned' ? 'assigned' : 'due';
   const person = values.person ?? '';
   const dept = values.dept ?? '';
   const [search, setSearch] = useSearchBox(values.q ?? '', (q) => set({ q }), 300);
@@ -89,7 +92,7 @@ export function TaskListTab({
     overdue,
     done: fDone || undefined,
     recurring,
-    ...(scope === 'all' && range !== 'all' ? { range, ...(range === 'custom' ? custom : {}) } : {}),
+    ...(range !== 'all' ? { range, ...(range === 'custom' ? custom : {}), ...(dateBy === 'assigned' ? { date_by: 'assigned' as const } : {}) } : {}),
     ...(scope === 'all' || scope === 'delegated' ? { assigned_to: person || undefined } : {}),
     ...(scope === 'all' ? { department: dept || undefined, search: values.q || undefined } : {}),
   };
@@ -101,7 +104,7 @@ export function TaskListTab({
     return [...(list.data?.rows ?? [])].sort((a, b) => rank(a) - rank(b));
   }, [list.data]);
   // Counts use every row; only the first 50 are drawn (weak phones), "Load more" adds the next ones.
-  const more = useShowMore(rows, { reset: [scope, status, overdue, recurring, fDone, range, custom, person, dept, values.q ?? ''] });
+  const more = useShowMore(rows, { reset: [scope, status, overdue, recurring, fDone, range, custom, dateBy, person, dept, values.q ?? ''] });
 
   // Delegated: I can hand work to anyone, so the filter lists everyone I can assign to.
   const filterPeople = useMemo<PersonRow[]>(() => {
@@ -157,6 +160,19 @@ export function TaskListTab({
     });
   };
 
+  const rangePicker = (
+    <RangePicker
+      range={range}
+      setRange={(v) => set({ range: v === 'all' ? null : v })}
+      custom={custom}
+      setCustom={(c) => set({ start: c.start, end: c.end })}
+      dateBy={dateBy}
+      setDateBy={(v) => set({ by: v === 'assigned' ? v : null })}
+      applied={list.data?.range_from ? { from: list.data.range_from, to: list.data.range_to } : null}
+      countedBy={dateBy === 'assigned' ? 'date assigned' : status === 'done' ? 'completion date' : status === 'all' ? 'completion date (done) or due date (open)' : 'due date'}
+    />
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -188,7 +204,7 @@ export function TaskListTab({
         <span className="flex-1" />
         <DownloadMenu
           target={tasksExports.tasks(listParams)}
-          filename={fileSlug('tasks', SCOPE_FILE[scope], status, overdue && 'overdue', recurring && 'recurring', fDone, scope === 'all' && range !== 'all' && (range === 'custom' ? `${custom.start}-to-${custom.end}` : range), todayStamp())}
+          filename={fileSlug('tasks', SCOPE_FILE[scope], status, overdue && 'overdue', recurring && 'recurring', fDone, range !== 'all' && (range === 'custom' ? `${custom.start}-to-${custom.end}` : range), range !== 'all' && dateBy === 'assigned' && 'by-assigned', todayStamp())}
           empty={!list.isLoading && customReady && rows.length === 0}
           loading={list.isLoading || !customReady}
         />
@@ -199,17 +215,13 @@ export function TaskListTab({
         )}
       </div>
 
+      {/* every list can be read by date: due / done date, or the day it was given */}
+      {scope !== 'all' && <div className="flex flex-wrap items-center gap-2">{rangePicker}</div>}
+
       {scope === 'all' && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <RangePicker
-              range={range}
-              setRange={(v) => set({ range: v === 'all' ? null : v })}
-              custom={custom}
-              setCustom={(c) => set({ start: c.start, end: c.end })}
-              applied={list.data?.range_from ? { from: list.data.range_from, to: list.data.range_to } : null}
-              countedBy={status === 'done' ? 'completion date' : status === 'all' ? 'completion date (done) or due date (open)' : 'due date'}
-            />
+            {rangePicker}
             <NativeSelect aria-label="Department" className="w-auto min-w-40" value={dept} onChange={(e) => set({ dept: e.target.value, person: null })}>
               <option value="">All departments</option>
               {deptOptions.map(([v, l]) => (

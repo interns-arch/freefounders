@@ -120,7 +120,9 @@ class TaskDashboardTests(Base):
 
 class RecurrenceTests(Base):
     def test_completing_weekly_task_spawns_next(self):
-        due = timezone.now() + timedelta(hours=2)
+        # a Wednesday, so "a week later" never lands on the Sunday off day
+        now = timezone.localtime()
+        due = (now + timedelta(days=(2 - now.weekday()) % 7 + 7)).replace(hour=11, minute=0)
         t = Task.objects.create(title="Weekly report", assigned_to=self.rahul,
                                 frequency="weekly", due_at=due)
         self.as_(self.rahul)
@@ -332,6 +334,29 @@ class AllTasksDateFilterTests(Base):
         titles = [t["title"] for t in
                   self.ask(range="custom", start=start, end=end, status="done")["results"]]
         self.assertEqual(titles, ["in range"])
+
+    def test_by_date_assigned_finds_what_was_given_that_day(self):
+        given = self.today - timedelta(days=19)
+        old = self.due_on(10, "given that day, due later")
+        closed = self.done_on(15, "given that day, already done")
+        Task.objects.filter(pk__in=[old.pk, closed.pk]).update(
+            created_at=self.now - timedelta(days=19))
+        self.due_on(0, "given today")
+        day = dict(range="custom", start=given.isoformat(), end=given.isoformat())
+        titles = sorted(t["title"] for t in self.ask(date_by="assigned", **day)["results"])
+        self.assertEqual(titles, ["given that day, already done", "given that day, due later"])
+        # the default still matches by due / done date: neither is due or closed then
+        self.assertEqual(self.ask(**day)["results"], [])
+
+    def test_my_tasks_and_delegated_honour_the_range_too(self):
+        t = self.due_on(10, "mine")
+        Task.objects.filter(pk=t.pk).update(created_at=self.now - timedelta(days=3))
+        d = (self.today - timedelta(days=3)).isoformat()
+        for who, scope in ((self.rahul, "my"), (self.manager, "delegated")):
+            self.as_(who)
+            res = self.client.get(f"/api/tasks/?scope={scope}&range=custom&start={d}&end={d}"
+                                  "&date_by=assigned")
+            self.assertEqual([x["title"] for x in res.data["results"]], ["mine"], scope)
 
     def test_a_backwards_custom_range_is_refused(self):
         self.as_(self.admin)

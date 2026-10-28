@@ -85,6 +85,8 @@ export interface TaskFile {
   filename: string;
   url: string | null;
   uploaded_by: UserBrief | null;
+  /** Sent as completion proof: stays with this occurrence; other files carry over to the next recurring copy. */
+  is_proof?: boolean;
   created_at: string;
 }
 
@@ -227,6 +229,8 @@ export interface ReportRow extends Partial<DashboardCounts> {
   date?: string;
   score?: number | null;
   self_assigned?: number;
+  /** An admin's tasks late only because a sub-task they gave out was late (not held against them). */
+  excused_by_subtasks?: number;
   scored_completed?: number;
   review?: string;
   days_overdue?: number;
@@ -295,6 +299,8 @@ export interface WorkListParams {
   range?: string;
   start?: string;
   end?: string;
+  /** Match the range on the day the task was given instead of its due / done date. */
+  date_by?: 'assigned';
   assigned_to?: string | number;
   department?: string;
   search?: string;

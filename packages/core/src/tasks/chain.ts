@@ -58,6 +58,8 @@ export interface TaskChainInfo {
   parts_waiting: number;
   /** Why the task can't be completed yet (open parts / parts waiting to be accepted), or null. */
   blocked: string | null;
+  /** The holder is an admin and the task ran late because a sub-task was late: not judged on time. */
+  excused?: boolean;
   can_view_chain: boolean;
 }
 
