@@ -57,6 +57,9 @@ export class DbService implements OnModuleDestroy {
     connectionString: databaseUrl(),
     ssl: databaseSsl(),
     max: Number(process.env.DB_POOL_SIZE ?? 20),
+    // Never wait forever for a free connection: a full pool answers an error after 10 s instead of hanging every
+    // request (and the health check) until a restart.
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS ?? 10_000),
     ...(tenancyEnabled() ? { options: `-c search_path=${NO_COMPANY}` } : {}),
   });
   readonly root: Database = drizzle(this.pool, { schema });

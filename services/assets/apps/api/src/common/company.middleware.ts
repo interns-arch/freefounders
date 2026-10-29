@@ -57,7 +57,15 @@ export function companyMiddleware(dbs: DbService) {
       }
       (req as AuthedRequest).companyId = companyId;
       const release = await dbs.bindCompany(schema, next);
-      res.on('close', release);
+      // The browser may have gone away while this request waited for a connection: 'close' then fired before we
+      // listened, and the pinned connection would never return to the pool (Assets froze twice with all of them
+      // held, 2026-10-28/29). Release now in that case; otherwise when the response closes or finishes.
+      // (Not req.destroyed: an incoming request is destroyed once its body has been read, which is normal.)
+      if (res.closed || res.writableFinished) release();
+      else {
+        res.once('close', release);
+        res.once('finish', release);
+      }
     } catch (err) {
       next(err);
     }
