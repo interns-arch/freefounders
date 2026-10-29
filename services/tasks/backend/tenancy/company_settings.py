@@ -87,6 +87,14 @@ def company_env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def company_value(name: str) -> str:
+    """The current company's own value only (never the environment); "" when it has none."""
+    schema = schemas.current() if schemas.enabled() else "-"
+    if not schema:
+        return ""
+    return _company_values(schema).get(name, "").strip()
+
+
 def set_value(name: str, value: str) -> None:
     from .models import CompanySetting
 

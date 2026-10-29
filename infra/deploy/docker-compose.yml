@@ -7,6 +7,10 @@
 # ~1.9 GB / 1.5 CPU.
 name: freefounders
 
+# App containers: no privilege gain through setuid/file capabilities (security audit 2026-10-29).
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+
 x-logging: &logging
   driver: json-file
   options:
@@ -48,6 +52,8 @@ services:
       dockerfile: ../../infra/deploy/platform.Dockerfile
     image: kaampilot-platform:latest
     restart: unless-stopped
+    <<: *hardening
+    cap_drop: [ALL]
     depends_on:
       postgres: { condition: service_healthy }
     environment:
@@ -128,6 +134,7 @@ services:
       dockerfile: Dockerfile
     image: kaampilot-tasks:latest
     restart: unless-stopped
+    <<: *hardening
     depends_on:
       postgres: { condition: service_healthy }
     env_file: tasks.env
@@ -163,6 +170,7 @@ services:
   tasks-worker:
     image: kaampilot-tasks:latest
     restart: unless-stopped
+    <<: *hardening
     depends_on:
       tasks: { condition: service_healthy }
     env_file: tasks.env
@@ -183,6 +191,8 @@ services:
       dockerfile: ../../infra/deploy/assets.Dockerfile
     image: kaampilot-assets:latest
     restart: unless-stopped
+    <<: *hardening
+    cap_drop: [ALL]
     depends_on:
       postgres: { condition: service_healthy }
     environment:
@@ -221,12 +231,21 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on: [platform, tasks, assets]
+    # FF_BIND = the host address the port listens on. Production (kaampilot.com through the shared Caddy, which dials
+    # 172.17.0.1): FF_BIND=172.17.0.1, so the plain-http port is not reachable from the internet. Default 0.0.0.0
+    # (unchanged) for the open-demo setup that is reached as http://<server>:7395.
     ports:
-      - "${FF_PORT:-7395}:7395"
+      - "${FF_BIND:-0.0.0.0}:${FF_PORT:-7395}:7395"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${FF_HOME:?}/web:/srv/web:ro
     networks: [internal, edge]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:7395/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     mem_limit: 64m
     memswap_limit: 64m
     cpus: 0.15

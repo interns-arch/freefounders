@@ -514,11 +514,27 @@ export class AiRateLimit {
   }
 }
 
-/** Questions per IP address in 10 minutes: AI_RATE_SIGNED_OUT (20) / AI_RATE_SIGNED_IN (60). */
-export function aiRateLimits(env: NodeJS.ProcessEnv = process.env): { signedOut: number; signedIn: number } {
-  const n = (raw: string | undefined, d: number) => {
+/**
+ * Questions per IP address in 10 minutes: AI_RATE_SIGNED_OUT (20) / AI_RATE_SIGNED_IN (60); signed-out questions from
+ * all networks together: AI_RATE_SIGNED_OUT_TOTAL (300; 0 = no overall cap).
+ */
+export function aiRateLimits(env: NodeJS.ProcessEnv = process.env): { signedOut: number; signedIn: number; signedOutTotal: number } {
+  const n = (raw: string | undefined, d: number, zero = false) => {
     const v = raw?.trim() ? Number(raw) : d;
-    return Number.isFinite(v) && v > 0 ? Math.floor(v) : d;
+    return Number.isFinite(v) && (v > 0 || (zero && v === 0)) ? Math.floor(v) : d;
   };
-  return { signedOut: n(env.AI_RATE_SIGNED_OUT, 20), signedIn: n(env.AI_RATE_SIGNED_IN, 60) };
+  return { signedOut: n(env.AI_RATE_SIGNED_OUT, 20), signedIn: n(env.AI_RATE_SIGNED_IN, 60), signedOutTotal: n(env.AI_RATE_SIGNED_OUT_TOTAL, 300, true) };
+}
+
+/** The rate-limit key of an address: IPv4 as is, IPv6 by its /64 network (an IPv4-mapped IPv6 address as IPv4). */
+export function aiAddressKey(ip: string | undefined): string {
+  if (!ip) return 'unknown';
+  const v4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (v4) return v4[1];
+  if (!ip.includes(':')) return ip;
+  const [head, tail] = ip.toLowerCase().split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail !== undefined && tail !== '' ? tail.split(':') : [];
+  const groups = tail === undefined ? left : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right];
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`;
 }

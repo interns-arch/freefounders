@@ -102,6 +102,10 @@ let listening = false;
 let seq = 0;
 
 function onMessage(event: Event) {
+  // The shell's answers have no source window; a message another frame or window posted (an embedded payment or
+  // booking page) is never taken as the app's answer (security audit 2026-10-29).
+  const source = (event as MessageEvent).source;
+  if (source && source !== window) return;
   const raw = (event as MessageEvent).data;
   if (typeof raw !== 'string' || !raw.startsWith('{')) return;
   let reply: Reply;
@@ -125,6 +129,13 @@ function onMessage(event: Event) {
   }
 }
 
+/** 64 random bits as hex, so a request id cannot be guessed (crypto.getRandomValues also works on plain http). */
+function randomPart(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Asks the phone app for something (see the protocol above). Rejects with AppRequestError. */
 export function appRequest<T>(type: AppRequestType, payload: Record<string, unknown> = {}, timeoutMs = TIMEOUTS[type]): Promise<T> {
   const bridge = isInApp() ? window.ReactNativeWebView : undefined;
@@ -135,7 +146,7 @@ export function appRequest<T>(type: AppRequestType, payload: Record<string, unkn
     window.addEventListener('message', onMessage);
     listening = true;
   }
-  const id = `r${Date.now().toString(36)}-${++seq}`;
+  const id = `r${Date.now().toString(36)}-${++seq}-${randomPart()}`;
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);

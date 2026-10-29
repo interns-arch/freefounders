@@ -78,9 +78,17 @@ export function parseCsv(text: string): string[][] {
 
 // ─── XLSX ────────────────────────────────────────────────────────────────────
 
-/** The files of a zip (stored or deflated entries), read from the central directory. */
-export function unzip(buf: Buffer): Map<string, Buffer> {
+/** Limits of `unzip` (security audit 2026-10-29: a small "zip bomb" upload must not exhaust the Platform's memory). */
+export const ZIP_MAX_ENTRIES = 1000;
+export const ZIP_MAX_TOTAL_BYTES = 40 * 1024 * 1024;
+
+/**
+ * The files of a zip (stored or deflated entries), read from the central directory. Only entries `want` accepts are
+ * unpacked; at most ZIP_MAX_ENTRIES entries and ZIP_MAX_TOTAL_BYTES unpacked in all, else "File too large".
+ */
+export function unzip(buf: Buffer, want: (name: string) => boolean = () => true): Map<string, Buffer> {
   const out = new Map<string, Buffer>();
+  let budget = ZIP_MAX_TOTAL_BYTES;
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) {
@@ -90,6 +98,7 @@ export function unzip(buf: Buffer): Map<string, Buffer> {
   }
   if (eocd < 0) throw new Error('Not a zip file');
   const count = buf.readUInt16LE(eocd + 10);
+  if (count > ZIP_MAX_ENTRIES) throw new Error('File too large');
   let p = buf.readUInt32LE(eocd + 16);
   for (let n = 0; n < count; n++) {
     if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('Damaged zip file');
@@ -100,11 +109,23 @@ export function unzip(buf: Buffer): Map<string, Buffer> {
     const commentLen = buf.readUInt16LE(p + 32);
     const local = buf.readUInt32LE(p + 42);
     const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
+    p += 46 + nameLen + extraLen + commentLen;
+    if (!want(name) || out.has(name)) continue;
     const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const raw = buf.subarray(start, start + size);
-    if (method === 0) out.set(name, Buffer.from(raw));
-    else if (method === 8) out.set(name, inflateRawSync(raw, { maxOutputLength: 50 * 1024 * 1024 }));
-    p += 46 + nameLen + extraLen + commentLen;
+    let data: Buffer;
+    if (method === 0) data = Buffer.from(raw);
+    else if (method === 8) {
+      try {
+        data = inflateRawSync(raw, { maxOutputLength: Math.max(1, budget) });
+      } catch (err) {
+        if ((err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') throw new Error('File too large');
+        throw err;
+      }
+    } else continue;
+    budget -= data.length;
+    if (budget < 0) throw new Error('File too large');
+    out.set(name, data);
   }
   return out;
 }
@@ -131,7 +152,8 @@ function colIndex(ref: string): number {
 
 /** The first sheet of an .xlsx as rows of text (numbers as written; dates stay day numbers, read by `parseDate`). */
 export function parseXlsx(buf: Buffer): string[][] {
-  const files = unzip(buf);
+  // Only what is read below: the shared strings, the workbook and its relationships, and the sheets.
+  const files = unzip(buf, (name) => /^xl\/(sharedStrings\.xml|workbook\.xml|_rels\/workbook\.xml\.rels|worksheets\/[^/]+\.xml)$/.test(name));
   const shared = files.get('xl/sharedStrings.xml');
   const strings = shared ? [...shared.toString('utf8').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => texts(m[1]!)) : [];
   // The first sheet in the workbook's order (its relationship target), else the lowest-numbered sheet file.

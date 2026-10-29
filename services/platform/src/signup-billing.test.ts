@@ -478,6 +478,22 @@ describe('invites (PLAN.md §21.2)', () => {
     assert.equal((await call('PUT', `/people/${p.body.person.id}/apps/tasks`, { token: owner, body: {} })).status, 402);
     await dbs.db.update(subscriptions).set({ plan: 'suite', state: 'trialing', trialEndsAt: new Date(Date.now() + 14 * 86400_000) }).where(eq(subscriptions.companyId, ids.company));
   });
+
+  test('security audit 2026-10-29: a switched-off person cannot switch themselves back on through an invite link', async () => {
+    const added = await call('POST', '/people', { token: owner, body: { fullName: 'Off Person', email: 'off.person@invite.test' } });
+    assert.equal(added.status, 201, JSON.stringify(added.body));
+    const personId = added.body.person.id as string;
+    await dbs.db.update(people).set({ status: 'inactive' }).where(eq(people.id, personId));
+    const link = (await call('POST', '/invites', { token: owner, body: {} })).body;
+    const t = await verified('off.person@invite.test');
+    const res = await call('POST', `/invites/${link.token}/accept`, { body: { signupToken: t.signupToken, fullName: 'Off Person', password: PASSWORD, username: uname() } });
+    assert.equal(res.status, 403, JSON.stringify(res.body));
+    const [row] = await dbs.db.select().from(people).where(eq(people.id, personId));
+    assert.equal(row.status, 'inactive', 'still switched off');
+    assert.equal(row.accountId, null, 'not linked');
+    const [inv] = await dbs.db.select().from(invites).where(eq(invites.id, link.id));
+    assert.equal(inv.uses, 0, 'the link is not used up');
+  });
 });
 
 describe('billing with the fake gateway (PLAN.md §21)', () => {

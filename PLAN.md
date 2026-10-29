@@ -4424,3 +4424,63 @@ Founder (Admin → People → Add person): "Role" offered only Member / Admin / 
   count incl. an inactive holder); `people-import.test.ts` role names + unknown name warning. e2e `web-admin.spec.ts`
   "Add person: Level and Roles…" (written; needs the dev suite).
 **Deploy**: Platform API + website. No migrations, no new APK.
+
+## 27. Security audit 2026-10-29
+Founder: "use https://github.com/Netxeo/skill-file-security to pass the security issues and fix them". Full report:
+`docs/security/SECURITY-AUDIT-2026-10-29.md`. The framework's checklists and scoring were used as a reference only:
+none of its installer scripts ran, and no files of its own (`memory-security.md`, AI config edits) were added.
+- **Score** (per category, weighted as the framework does): **90.5 → 95.9 / 100** once deployed with the server settings
+  below. Before: 1 Critical, 6 High, 16 Medium, about 20 Low. Git history: no secrets in any commit.
+- **Fixed**:
+  - **Gateway.**
+    - The port now listens on `FF_BIND`, default `0.0.0.0` (unchanged); production uses `172.17.0.1`. This closes the
+      live plain-http `http://<ip>:7395` bypass.
+    - HSTS.
+    - The visitor's real address now comes from the shared Caddy's `X-Forwarded-For` (`trusted_proxies` +
+      `{client_ip}`). Before, every visitor shared one IP, so one script could exhaust the OTP, sign-in and visitor
+      limits for everyone.
+    - `/tasks/api/internal/*` and `/assets/api/internal/*` answer 404.
+    - Healthcheck added.
+    - The watchdog checks 172.17.0.1.
+  - **Containers.** The Tasks image runs as uid 10001. `no-new-privileges` on the app containers; `cap_drop: ALL` on
+    platform and assets.
+  - **Platform.**
+    - Production never shows a code for code sign-in or forgot password, nor once MSG91/Resend is set up. Before,
+      `DEMO_MODE=1` let anyone take over any account.
+    - A switched-off person can no longer reactivate themselves through an invite link (403).
+    - XLSX import caps entries (1000) and unpacked size (40 MB) against zip bombs.
+    - "Ask Kaampilot" treats ended sessions as signed out, counts IPv6 per /64, and has an overall signed-out cap
+      `AI_RATE_SIGNED_OUT_TOTAL` (300 per 10 min).
+  - **Tasks.**
+    - A company's own `AI_BASE_URL` never receives the server's AI key, and must be a public https address (multi-company
+      mode).
+    - Bodies over 2 MB on public visitor routes are refused before parsing (`PUBLIC_BODY_MAX_BYTES`).
+    - Gate and visitor photos over 16 MP are refused before decoding.
+    - The AI ID-card reader is throttled.
+  - **Web.** The app bridge ignores messages from other frames and uses random request ids. The badge print title is
+    escaped.
+  - **Dependencies.** zod updated to 4.6.7 (lockfiles only). The body-parser, multer, qs and fast-uri fixes are under
+    two weeks old: run `npm audit fix` after 2026-11-05. Until then the gateway drops request `Content-Encoding`
+    (body-parser DoS).
+- **Founder decisions** (exact changes in the report):
+  - F1 Pillow 13.0.0 (major; 39 advisories on 12.3.0).
+  - F2 enforce the CSP after a week of reports.
+  - F3 daily cap on wrong OTP codes (trade-off: a victim's code sign-in can be blocked).
+  - F4 refuse emails already used by Kaampilot accounts on Add/Edit person.
+  - F5 no server Gmail/WhatsApp/AI credentials for companies without opting in.
+  - F6 Cashfree webhook timestamp window.
+  - F7 HSTS preload.
+- **Server / founder actions**:
+  - Rotate the MSG91, Cashfree, Resend and Gemini keys that were pasted in chat.
+  - In `.env`: `FF_BIND=172.17.0.1`, `COOKIE_SECURE=true`, `DEMO_MODE=0`.
+  - Close 7395 in the security group and turn on ufw.
+  - Change the demo passwords.
+  - Keep encrypted backups off the box.
+  - `chown -R 10001:10001 /opt/freefounders/data/tasks-media` before restarting tasks.
+  - Copy the new watchdog script.
+- **Tests**:
+  - New: Platform `people-import.test.ts` (zip bomb), `signup-billing.test.ts` (switched-off invite), `ai/ai.test.ts`
+    (/64 keys, caps).
+  - New: Tasks `visitors/tests_security.py`, `tenancy/tests_integrations.py::AiAddressSecurityTests`.
+  - `npm run quick-check -- --tests platform,tasks,assets` and `npm run web:build` green.
+**Deploy**: Platform, Tasks + worker (chown step first), Assets, gateway (FF_BIND), website. No migrations, no new APK.

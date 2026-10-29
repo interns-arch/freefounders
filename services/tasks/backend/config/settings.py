@@ -71,6 +71,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "config.body_limit.PublicBodyLimitMiddleware",  # signed-out visitor pages: bodies over 2 MB refused unread
     "tenancy.middleware.CompanyMiddleware",  # no-op unless TENANCY=schemas
     "tenancy.profile.ModuleGateMiddleware",  # switched-off modules answer 404 (PLAN.md §16.2)
     "whitenoise.middleware.WhiteNoiseMiddleware",  # static + SPA on Render

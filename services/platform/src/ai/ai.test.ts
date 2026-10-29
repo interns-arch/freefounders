@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { HttpException } from '@nestjs/common';
 import {
+  aiAddressKey,
   AiRateLimit,
   aiConfig,
   aiRateLimits,
@@ -245,7 +246,20 @@ describe('AI helper', () => {
     assert.equal(rl.take('out:1.2.3.4', 20, t0 + 100), false);
     assert.equal(rl.take('out:5.6.7.8', 20, t0 + 100), true, 'another address is not affected');
     assert.equal(rl.take('out:1.2.3.4', 20, t0 + 10 * 60_000 + 50), true, 'after 10 minutes it works again');
-    assert.deepEqual(aiRateLimits({}), { signedOut: 20, signedIn: 60 });
-    assert.deepEqual(aiRateLimits({ AI_RATE_SIGNED_OUT: '5', AI_RATE_SIGNED_IN: 'x' }), { signedOut: 5, signedIn: 60 });
+    assert.deepEqual(aiRateLimits({}), { signedOut: 20, signedIn: 60, signedOutTotal: 300 });
+    assert.deepEqual(aiRateLimits({ AI_RATE_SIGNED_OUT: '5', AI_RATE_SIGNED_IN: 'x' }), { signedOut: 5, signedIn: 60, signedOutTotal: 300 });
+    assert.equal(aiRateLimits({ AI_RATE_SIGNED_OUT_TOTAL: '0' }).signedOutTotal, 0, '0 = no overall cap');
+  });
+
+  test('security audit 2026-10-29: IPv6 addresses share one limit per /64; IPv4 (also mapped) as is', () => {
+    assert.equal(aiAddressKey('1.2.3.4'), '1.2.3.4');
+    assert.equal(aiAddressKey('::ffff:1.2.3.4'), '1.2.3.4');
+    assert.equal(aiAddressKey(undefined), 'unknown');
+    const a = aiAddressKey('2001:db8:abcd:12:1111:2222:3333:4444');
+    assert.equal(a, '2001:db8:abcd:12::/64');
+    assert.equal(aiAddressKey('2001:0db8:abcd:0012::1'), a, 'same /64, other host, zero-padded and compressed');
+    assert.equal(aiAddressKey('2001:db8::1'), '2001:db8:0:0::/64');
+    assert.notEqual(aiAddressKey('2001:db8:abcd:13::1'), a, 'another /64');
+    assert.equal(aiAddressKey('::1'), '0:0:0:0::/64');
   });
 });

@@ -5,7 +5,9 @@ GET  /api/integrations/  → groups of fields; a secret is never returned, only 
 PUT  /api/integrations/  {"values": {"NAME": "value" | null}}  → "" or null removes the company's value (the server's
                           environment value, if any, applies again). Every change is recorded (who, when; never the value).
 """
+import ipaddress
 import os
+from urllib.parse import urlsplit
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -13,6 +15,7 @@ from rest_framework.response import Response
 
 from accounts.permissions import IsAdmin
 
+from . import schemas
 from .company_settings import SECRET_KEYS, company_env, remove_value, set_value
 from .models import CompanySetting, SettingChange
 
@@ -49,6 +52,29 @@ GROUPS = [
 ]
 FIELDS = {name: kind for g in GROUPS for name, _label, kind in g["fields"]}
 assert all((kind == SECRET) == (name in SECRET_KEYS) for name, kind in FIELDS.items())
+
+
+def check_ai_base_url(value: str) -> str | None:
+    """Multi-company mode: an AI address must be https on a public host name or address (security audit 2026-10-29:
+    a company admin must not make the server call its own internal network). Returns the problem, or None."""
+    try:
+        parts = urlsplit(value)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        return "Enter a full https:// address."
+    if parts.scheme != "https" or not host:
+        return "Enter a full https:// address."
+    public = "Use the provider's public https:// address."
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None:
+        return None if ip.is_global else public
+    # Single-label names (Docker service names such as "platform") and local suffixes are this server's own network.
+    if "." not in host or host == "localhost" or host.endswith((".localhost", ".local", ".internal", ".lan")):
+        return public
+    return None
 
 
 def mask(value: str) -> str:
@@ -102,6 +128,10 @@ def integrations(request):
             raise ValidationError({name: "Too long."})
         if FIELDS[name] == BOOL and value and value.lower() not in ("true", "false"):
             raise ValidationError({name: "Use true or false."})
+        if name == "AI_BASE_URL" and value and schemas.enabled():
+            problem = check_ai_base_url(value)
+            if problem:
+                raise ValidationError({name: problem})
         clean[name] = value.lower() if FIELDS[name] == BOOL else value
     actor = request.user
     who = (actor.get_full_name() or actor.username)[:150]

@@ -5,8 +5,9 @@
 DIR=/opt/freefounders
 LOG=$DIR/kaampilot-caddy-watchdog.log
 C=problem-app-caddy-1
-# Kaampilot itself must be up, else there is nothing to route to.
-curl -sf -m 5 http://127.0.0.1:7395/api/platform/health >/dev/null || exit 0
+# Kaampilot itself must be up, else there is nothing to route to. The gateway listens on FF_BIND (172.17.0.1 in
+# production since the 2026-10-29 security audit; 0.0.0.0 before, which 127.0.0.1 also reaches).
+curl -sf -m 5 http://172.17.0.1:7395/api/platform/health >/dev/null   || curl -sf -m 5 http://127.0.0.1:7395/api/platform/health >/dev/null || exit 0
 docker exec $C wget -qO- http://127.0.0.1:2019/config/apps/http/servers/srv0/routes 2>/dev/null | grep -q kaampilot && exit 0
 docker cp $DIR/kaampilot-route.json $C:/tmp/kaampilot-route.json >/dev/null 2>&1
 if docker exec $C wget -qO- --header="Content-Type: application/json" --post-file=/tmp/kaampilot-route.json \

@@ -13,6 +13,9 @@ cat > "$ENV" <<VARS
 # Kaampilot secrets for this server. Mode 600; never commit, never copy into the repo.
 FF_HOME=$FF_HOME
 FF_PORT=$PORT
+# Host address the gateway port listens on: 0.0.0.0 = reachable as http://<server>:PORT (open demo). Behind the
+# shared Caddy on this host (https://kaampilot.com, it dials 172.17.0.1) set 172.17.0.1 so plain http stays private.
+FF_BIND=${FF_BIND:-0.0.0.0}
 PUBLIC_WEB_URL=http://$PUBLIC_HOST:$PORT
 TASKS_ALLOWED_HOSTS=$PUBLIC_HOST,localhost,127.0.0.1,tasks
 # Plain http: the sign-in cookies cannot be Secure-only. Set true once the site is on https.

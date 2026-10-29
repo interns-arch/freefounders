@@ -22,7 +22,7 @@ Postgres and the APIs are on an `internal` Docker network: no host ports, no int
 | `docker-compose.yml` | the services above; secrets come from `FF_HOME/.env` |
 | `platform.Dockerfile`, `assets.Dockerfile` | multi-stage Node 22 slim; runtime stage has prod deps only (argon2 / sharp linux-x64 binaries) |
 | `../../services/tasks/Dockerfile` | the Tasks image (reused; compose overrides its entrypoint) |
-| `Caddyfile` | the gateway: same routing as `infra/gateway/dev-gateway.mjs`, security headers without HSTS (http) |
+| `Caddyfile` | the gateway: same routing as `infra/gateway/dev-gateway.mjs`, security headers incl. HSTS (ignored on plain http), visitor address from the shared Caddy's `X-Forwarded-For`, `/tasks/api/internal/*` and `/assets/api/internal/*` refused |
 | `postgres-init.sh` | first start only: one role + database per service |
 | `tasks.env` | non-secret Tasks settings (DEBUG off, WhatsApp/Gmail/AI off, scheduler only in the worker) |
 | `gen-env.sh` | writes `FF_HOME/.env` with fresh random secrets (mode 600) |
@@ -76,6 +76,8 @@ for s in platform assets tasks; do nice -n 19 app/infra/deploy/ff.sh build $s; d
 app/infra/deploy/ff.sh up -d                       # migrations run on start
 app/infra/deploy/ff.sh exec -T platform node dist/companies.js sync
 ```
+Since 2026-10-29 the Tasks image runs as uid/gid 10001 (not root). Once, before the first start of such an image:
+`sudo chown -R 10001:10001 /opt/freefounders/data/tasks-media` (otherwise uploads fail with "permission denied").
 
 ## Stop / start / logs
 ```
@@ -91,6 +93,7 @@ Remove completely: `ff.sh down` (containers + networks; images and `data/` stay)
 | Variable | Meaning |
 |---|---|
 | `FF_PORT` | host port of the gateway (7395) |
+| `FF_BIND` | host address that port listens on. Default `0.0.0.0` (open demo, `http://<server>:7395`). **Production behind the shared Caddy (kaampilot.com): `FF_BIND=172.17.0.1`**, so the plain-http port is not reachable from the internet (security audit 2026-10-29); then check with `curl http://172.17.0.1:7395/api/platform/health` and close 7395 in the security group. |
 | `PUBLIC_WEB_URL` | the address people open (invite links, Assets QR codes, Tasks CSRF origin) |
 | `TASKS_ALLOWED_HOSTS` | Django host names: the public host, localhost, 127.0.0.1, `tasks` (internal calls) |
 | `COOKIE_SECURE` | `false` on plain http (Platform refresh cookie and Assets session cookie); `true` on https |

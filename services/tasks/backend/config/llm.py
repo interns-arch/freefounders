@@ -15,7 +15,8 @@ import time
 import re
 
 import requests
-from tenancy.company_settings import company_env
+from tenancy import schemas
+from tenancy.company_settings import company_env, company_value
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +30,11 @@ DEFAULT_TIMEOUT = {"nvidia": 90, "anthropic": 30, "openai": 30,
 
 
 def _key() -> str:
+    # Security audit 2026-10-29: a company that points AI at its own address (AI_BASE_URL) must bring its own key in
+    # multi-company mode; the server's key (environment) is never sent to an address a company admin typed.
+    if schemas.enabled() and company_value("AI_BASE_URL"):
+        return (company_value("AI_API_KEY") or company_value("NVIDIA_API_KEY")
+                or company_value("ANTHROPIC_API_KEY") or "").strip()
     return (company_env("AI_API_KEY")
             or company_env("NVIDIA_API_KEY")
             or company_env("ANTHROPIC_API_KEY") or "").strip()

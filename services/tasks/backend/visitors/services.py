@@ -18,6 +18,9 @@ from .models import (Delivery, DeliveryStatus, GateAction, GateLink, GateLog, Ve
 
 GATE_PHOTO_MAX = 1536 * 1024
 PUBLIC_PHOTO_MAX = 600 * 1024
+# A gate or visitor photo is at most a phone camera frame. A small PNG/WebP can claim a huge canvas that decodes into
+# hundreds of MB (security audit 2026-10-29): anything bigger is refused before it is decoded.
+PHOTO_MAX_PIXELS = 16_000_000
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 ACTIVE = (VisitStatus.WAITING, VisitStatus.WAITING_HOST, VisitStatus.INSIDE)
 
@@ -133,6 +136,17 @@ def decode_photo(data, max_bytes=GATE_PHOTO_MAX, field="photo") -> bytes | None:
         raise ValidationError({field: "The photo is too large."})
     if not (raw[:3] == b"\xff\xd8\xff" or raw[:8] == b"\x89PNG\r\n\x1a\n" or (raw[:4] == b"RIFF" and raw[8:12] == b"WEBP")):
         raise ValidationError({field: "The photo must be a JPEG, PNG or WebP image."})
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(raw)) as im:  # reads the header only
+            width, height = im.size
+    except Exception:  # noqa: BLE001 -- not readable: store_photo answers "could not be read" as before
+        return raw
+    if width * height > PHOTO_MAX_PIXELS:
+        raise ValidationError({field: "The photo is too large."})
     return raw
 
 

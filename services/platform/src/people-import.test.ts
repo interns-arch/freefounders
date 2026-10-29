@@ -13,7 +13,7 @@ import { toCsv, toXlsx } from './common/sheet';
 import { DbService } from './db/db.service';
 import { logins, otpCodes, people, personRoles, subscriptions } from './db/schema';
 import { createApp } from './main';
-import { parseDate, readImportFile } from './people/people-import';
+import { parseDate, readImportFile, unzip, ZIP_MAX_ENTRIES } from './people/people-import';
 
 const PASSWORD = 'Import@2026';
 let app: INestApplication;
@@ -97,6 +97,49 @@ describe('people import: reading files', () => {
     assert.equal(fromCsv[0]!.line, 2);
     assert.deepEqual(['2026-10-01', '01-10-2026', '1/10/2026', '46296', '31-02-2026'].map(parseDate), ['2026-10-01', '2026-10-01', '2026-10-01', '2026-10-01', null]);
     assert.throws(() => readImportFile('p.csv', Buffer.from('Email\nx@y.test\n')), /No "Name" column/);
+  });
+
+  test('security audit 2026-10-29: a zip bomb (many entries sharing one large deflate stream) is refused, not unpacked', () => {
+    /** A zip whose `names` all point at one deflated block of `bytes` zeros. */
+    const bomb = (names: string[], bytes: number) => {
+      const data = deflateRawSync(Buffer.alloc(bytes));
+      const local = Buffer.alloc(30 + 1);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(8, 8);
+      local.writeUInt32LE(data.length, 18);
+      local.writeUInt32LE(bytes, 22);
+      local.writeUInt16LE(1, 26);
+      local.write('x', 30);
+      const central = names.map((name) => {
+        const n = Buffer.from(name);
+        const c = Buffer.alloc(46);
+        c.writeUInt32LE(0x02014b50, 0);
+        c.writeUInt16LE(8, 10);
+        c.writeUInt32LE(data.length, 20);
+        c.writeUInt32LE(bytes, 24);
+        c.writeUInt16LE(n.length, 28);
+        c.writeUInt32LE(0, 42);
+        return Buffer.concat([c, n]);
+      });
+      const cd = Buffer.concat(central);
+      const end = Buffer.alloc(22);
+      end.writeUInt32LE(0x06054b50, 0);
+      end.writeUInt16LE(names.length, 8);
+      end.writeUInt16LE(names.length, 10);
+      end.writeUInt32LE(cd.length, 12);
+      end.writeUInt32LE(local.length + data.length, 16);
+      return Buffer.concat([local, data, cd, end]);
+    };
+    // 3 sheets x 20 MB = 60 MB unpacked from a file of a few KB: over the 40 MB budget.
+    const sheets = bomb(['xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml', 'xl/worksheets/sheet3.xml'], 20 * 1024 * 1024);
+    assert.ok(sheets.length < 100_000);
+    assert.throws(() => unzip(sheets), /File too large/);
+    assert.throws(() => readImportFile('p.xlsx', sheets), /could not be read/);
+    // Too many entries.
+    assert.throws(() => unzip(bomb(Array.from({ length: ZIP_MAX_ENTRIES + 1 }, (_v, i) => `f${i}`), 10)), /File too large/);
+    // Entries the reader does not need are never unpacked.
+    const other = bomb(['docProps/a.xml', 'docProps/b.xml', 'docProps/c.xml'], 20 * 1024 * 1024);
+    assert.equal(unzip(other, (n) => n.startsWith('xl/')).size, 0);
   });
 });
 

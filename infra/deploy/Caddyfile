@@ -5,11 +5,26 @@
 {
 	admin off
 	auto_https off
+	servers {
+		# Visitors reach this gateway through the server's shared Caddy (https://kaampilot.com, TLS there), which dials
+		# 172.17.0.1:FF_PORT over the Docker bridge. Trust X-Forwarded-For only from private addresses (that Caddy), read
+		# right to left, so {client_ip} is the visitor and the APIs' per-address limits (they trust exactly one hop) see
+		# the real visitor instead of one shared bridge address (security audit 2026-10-29, F-B).
+		trusted_proxies static private_ranges
+		trusted_proxies_strict
+	}
+}
+
+# Every upstream gets exactly one X-Forwarded-For value: the visitor's address worked out above.
+(upstream) {
+	header_up X-Forwarded-For {client_ip}
 }
 
 (security_headers) {
 	header {
-		# No HSTS: this site is plain http until it gets a domain and a certificate.
+		# https://kaampilot.com is https-only at the shared Caddy; browsers ignore this header on plain http (FF_BIND keeps
+		# the plain-http port off the internet). No preload yet (founder decision). Security audit 2026-10-29.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -33,23 +48,39 @@ http://:7395 {
 	request_body {
 		max_size 100MB
 	}
+	# No client of this app sends compressed request bodies. Dropping the header keeps body-parser's inflate path (DoS
+	# advisory GHSA-27r3-jxmh-p828, fixed in body-parser 2.4.0, too new to take yet) unreachable (security audit 2026-10-29).
+	request_header -Content-Encoding
 
 	handle /api/platform/* {
-		reverse_proxy platform:4000
+		reverse_proxy platform:4000 {
+			import upstream
+		}
 	}
 
 	handle_path /tasks/api/* {
 		rewrite * /api{uri}
-		reverse_proxy tasks:8000
+		# Service-to-service routes (Platform → Tasks over the internal network) are never served from outside.
+		@tasks_internal path /api/internal /api/internal/*
+		respond @tasks_internal 404
+		reverse_proxy tasks:8000 {
+			import upstream
+		}
 	}
 	handle /media/* {
 		header ?Cache-Control "private, no-store"
-		reverse_proxy tasks:8000
+		reverse_proxy tasks:8000 {
+			import upstream
+		}
 	}
 
 	handle_path /assets/api/* {
 		rewrite * /api{uri}
-		reverse_proxy assets:3000
+		@assets_internal path /api/internal /api/internal/*
+		respond @assets_internal 404
+		reverse_proxy assets:3000 {
+			import upstream
+		}
 	}
 
 	handle {

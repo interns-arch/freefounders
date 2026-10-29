@@ -478,6 +478,10 @@ export async function badgePng(v: BadgeData, format: BadgeFormat, photo: Blob | 
   return canvas.toDataURL('image/png');
 }
 
+/** Text for an HTML string written into the print window. */
+const escapeHtml = (t: string | null | undefined) =>
+  String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
 /** Prints a visitor's badge on its own page. */
 export const printBadge = (v: Visit, format: BadgeFormat, photo: Blob | null) => printBadgeData(visitBadge(v), format, photo);
 
@@ -485,7 +489,7 @@ export const printBadge = (v: Visit, format: BadgeFormat, photo: Blob | null) =>
 export async function printBadgeData(v: BadgeData, format: BadgeFormat, photo: Blob | null): Promise<void> {
   const png = await badgePng(v, format, photo);
   await printHtml(
-    `<!doctype html><html><head><meta charset="utf-8"><title>Badge ${v.passNo}</title><style>@page{size:${BADGE_PAGE[format].css};margin:0}html,body{margin:0;padding:0;background:white}img{display:block;width:100%;height:auto}</style></head><body><img alt="Badge" src="${png}"></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><title>Badge ${escapeHtml(v.passNo)}</title><style>@page{size:${BADGE_PAGE[format].css};margin:0}html,body{margin:0;padding:0;background:white}img{display:block;width:100%;height:auto}</style></head><body><img alt="Badge" src="${png}"></body></html>`,
   );
 }
 

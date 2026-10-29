@@ -23,5 +23,10 @@ RUN SECRET_KEY=collectstatic-build-only DEBUG=false \
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Not root (security audit 2026-10-29): a fixed uid so a bind-mounted media folder can be given to it on the host
+# (`chown -R 10001:10001 <media folder>` once, before the first start of this image; infra/deploy/README.md).
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home app     && mkdir -p /app/backend/media && chown -R app:app /app/backend
+USER app
+
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]

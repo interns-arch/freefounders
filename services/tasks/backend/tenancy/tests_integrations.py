@@ -79,3 +79,44 @@ class IntegrationsTests(TestCase):
         self.assertEqual(self.client.put("/api/integrations/", {"values": {"SECRET_KEY": "x"}}, format="json").status_code, 400)
         self.assertEqual(self.client.put("/api/integrations/", {"values": {"AI_ENABLED": "maybe"}}, format="json").status_code, 400)
         self.assertEqual(self.client.put("/api/integrations/", {"values": {}}, format="json").status_code, 400)
+
+
+class AiAddressSecurityTests(TestCase):
+    """Security audit 2026-10-29: the server's AI key never goes to an address a company admin typed, and in
+    multi-company mode that address must be a public https one."""
+
+    def setUp(self):
+        forget()
+
+    def tearDown(self):
+        forget()
+
+    def test_address_check(self):
+        from .integrations import check_ai_base_url
+
+        self.assertIsNone(check_ai_base_url("https://api.example.com/v1"))
+        self.assertIsNone(check_ai_base_url("https://8.8.8.8/v1"))
+        for bad in ("http://api.example.com/v1", "ftp://x.example.com", "https://", "https://platform:4000/internal/logs",
+                    "https://localhost/v1", "https://127.0.0.1/v1", "https://169.254.169.254/latest", "https://10.0.0.5/v1",
+                    "https://[::1]/v1", "https://postgres/", "https://svc.internal/v1"):
+            self.assertIsNotNone(check_ai_base_url(bad), bad)
+
+    def test_server_key_is_not_sent_to_a_company_address(self):
+        from config import llm
+
+        from .company_settings import set_value
+
+        with mock.patch.dict(os.environ, {"AI_API_KEY": "sk-server-key-9999"}), \
+                mock.patch("tenancy.schemas.enabled", return_value=True), \
+                mock.patch("tenancy.schemas.current", return_value="co_audit"):
+            self.assertEqual(llm._key(), "sk-server-key-9999", "no address of its own: the server key as before")
+            set_value("AI_BASE_URL", "https://attacker.example")
+            self.assertEqual(llm._key(), "", "own address: never the server's key")
+            set_value("AI_API_KEY", "sk-company-key-0000")
+            self.assertEqual(llm._key(), "sk-company-key-0000", "its own key is used")
+        # Standalone installs (one company): unchanged.
+        CompanySetting.objects.all().delete()
+        forget()
+        set_value("AI_BASE_URL", "https://my-proxy.example")
+        with mock.patch.dict(os.environ, {"AI_API_KEY": "sk-server-key-9999"}):
+            self.assertEqual(llm._key(), "sk-server-key-9999")

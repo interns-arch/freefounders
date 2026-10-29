@@ -8,12 +8,13 @@ from django.db.models import Count, Q
 from django.db.models.functions import ExtractHour, TruncDate
 from django.utils import timezone
 from rest_framework import mixins, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from config.exports import export_file, export_format
+from config.throttles import AIThrottle
 
 from . import conf, services as sv, services_v3 as v3
 from .models import (Checkpoint, ContractorPass, Delivery, Incident, IncidentKind, MaterialPass, MaterialStatus,
@@ -396,6 +397,7 @@ def scan_view(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([AIThrottle])  # a paid AI call, like every other AI action (security audit 2026-10-29)
 def id_scan_view(request):
     _need(sv.can_gate(request.user))
     return Response(v3.read_id_card(request.user, request.data.get("photo")))

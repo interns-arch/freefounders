@@ -185,7 +185,9 @@ export class InvitesService {
         const [same] = await tx.select().from(people).where(and(eq(people.companyId, invite.companyId), sql`lower(${people.email}) = ${account.email.toLowerCase()}`)).limit(1);
         if (same) {
           if (same.accountId && same.accountId !== account.id) throw new ConflictException('Another account already uses this email in this company');
-          await tx.update(people).set({ accountId: account.id, status: 'active', updatedAt: new Date() }).where(eq(people.id, same.id));
+          // A switched-off person never switches themselves back on through an invite link (security audit 2026-10-29).
+          if (same.status !== 'active') throw new ForbiddenException('Your access to this company was switched off. Ask its admin.');
+          await tx.update(people).set({ accountId: account.id, updatedAt: new Date() }).where(eq(people.id, same.id));
           return same.id;
         }
       }

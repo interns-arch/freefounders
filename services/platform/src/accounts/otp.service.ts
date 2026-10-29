@@ -25,9 +25,16 @@ function ipLimit(): number {
  * The code comes back in the answer (dev and tests only: OTP_DEV_ECHO=1, never in production), except on an open demo
  * server that sets DEMO_MODE=1 (infra/deploy/README.md): anyone can then sign up without a real email/SMS. Unsafe for
  * real customers; off by default.
+ *
+ * Security audit 2026-10-29: in production a code is never shown for sign-in with a code or forgot password (that
+ * would let anyone take over any account by typing its email), and never once a real sender (MSG91 / Resend) is set
+ * up, even if DEMO_MODE was left on. Dev and tests (NODE_ENV not production) are unchanged.
  */
-export function otpDevEcho(): boolean {
-  return process.env.OTP_DEV_ECHO === '1' && (process.env.NODE_ENV !== 'production' || demoMode());
+export function otpDevEcho(purpose: OtpPurpose = 'signup', env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.OTP_DEV_ECHO !== '1') return false;
+  if (env.NODE_ENV !== 'production') return true;
+  const sender = (env.OTP_SENDER ?? '').trim().toLowerCase();
+  return env.DEMO_MODE === '1' && purpose === 'signup' && (!sender || sender === 'fake');
 }
 
 /** DEMO_MODE=1: an open demo server (codes on screen, FakePay). Never on an install with real customers. */
@@ -125,7 +132,7 @@ export class OtpService {
     const limit = ipLimit();
     // Dev only (OTP_DEV_ECHO=1, never in production): everything typed on this machine reaches the Platform from the
     // same loopback address through the dev gateway, so the per-network guard would stop the browser tests.
-    const devLoopback = otpDevEcho() && !!ip && /^(::1|127\.|::ffff:127\.)/.test(ip);
+    const devLoopback = otpDevEcho(purpose) && !!ip && /^(::1|127\.|::ffff:127\.)/.test(ip);
     if (limit && ip && !devLoopback) {
       const [byIp] = await db
         .select({ n: sql<number>`count(*)::int`, first: sql<Date | null>`min(${otpCodes.createdAt})` })
@@ -148,7 +155,7 @@ export class OtpService {
       platformLog({ level: 'warn', event: 'otp.send_failed', message: `A ${purpose} code by ${target.channel} could not be sent (${err instanceof OtpSendError ? err.kind : 'unavailable'})` });
       throw sendFailed(err, target.channel);
     }
-    return { otpId: id, channel: target.channel, ...(otpDevEcho() ? { devCode: code } : {}) };
+    return { otpId: id, channel: target.channel, ...(otpDevEcho(purpose) ? { devCode: code } : {}) };
   }
 
   /**
