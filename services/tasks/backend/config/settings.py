@@ -152,9 +152,14 @@ REST_FRAMEWORK = {
         # per address: the open QR visitor sign-in (no login, PLAN.md section 22.8); each company also limits per address + link
         "visitor_public": env("THROTTLE_VISITOR_PUBLIC", "30/hour"),
         "visitor_pass": env("THROTTLE_VISITOR_PASS", "120/hour"),
+        # V4 (PLAN.md section 22.11): the phone polls its own visit / searches whom to meet; check-out requests
+        "visitor_device": env("THROTTLE_VISITOR_DEVICE", "900/hour"),
+        "visitor_checkout": env("THROTTLE_VISITOR_CHECKOUT", "20/hour"),
     },
     "NUM_PROXIES": int(env("NUM_PROXIES", "0")) or None,
 }
+# The visitor's device cookie (PLAN.md section 22.11): the path the browser uses for the public visitor API.
+VISITOR_COOKIE_PATH = env("VISITOR_COOKIE_PATH", "/tasks/api/visitors/public/")
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=8),

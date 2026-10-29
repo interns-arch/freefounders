@@ -18,7 +18,7 @@ from rest_framework.throttling import AnonRateThrottle
 
 from config.exports import ExportMixin, export_file, export_format
 
-from . import conf, services as sv
+from . import conf, services as sv, services_v4 as v4
 from .models import Delivery, GateAction, GateLog, IncidentKind, VehicleEntry, Visit, VisitStatus, WatchEntry
 
 
@@ -34,9 +34,10 @@ def _dt(v):
     return timezone.localtime(v).isoformat() if v else None
 
 
-def visit_row(v: Visit, now=None):
+def visit_row(v: Visit, now=None, viewer=None):
     mins = v.minutes_inside(now)
-    return {
+    now = now or timezone.now()
+    row = {
         "id": v.pk, "visitor": v.visitor_id, "name": v.name, "mobile": v.mobile, "company": v.company,
         "host": _brief(v.host), "host_label": v.host_label, "location": _loc(v.location), "purpose": v.purpose,
         "people": v.people, "status": v.status, "status_display": v.get_status_display(), "source": v.source,
@@ -50,7 +51,30 @@ def visit_row(v: Visit, now=None):
         "email": v.email, "expected_at": _dt(v.expected_at), "expected_until": _dt(v.expected_until),
         "window": sv._window(v), "invited_by": sv.name_of(v.invited_by), "group": v.group, "watch_note": v.watch_note,
         "pass_sent_at": _dt(v.pass_sent_at), "pass_channels": v.pass_channels, "pass_path": sv.pass_path(v),
+        # V4 (PLAN.md §22.11): codes, the host's answer, check-out from the phone, feedback
+        "code_expires_at": _dt(v.code_expires_at), "check_in_via": v.check_in_via,
+        "host_notified_at": _dt(v.host_notified_at), "host_answer": v.host_answer, "host_place": v.host_place,
+        "host_note": v.host_note, "host_answered_at": _dt(v.host_answered_at), "host_no_answer": v4.no_answer(v, now),
+        "sent_to_place_at": _dt(v.sent_to_place_at), "sent_to_place_by": sv.name_of(v.sent_to_place_by),
+        "checkout_requested_at": _dt(v.checkout_requested_at),
+        "checkout_pending": bool(v.status == VisitStatus.INSIDE and v.checkout_requested_at and v.checkout_code_expires_at
+                                 and v.checkout_code_expires_at > now),
+        "checkout_code": v.checkout_code if v.status == VisitStatus.INSIDE and v.checkout_requested_at else "",
+        "checkout_via": v.checkout_via, "checkout_held_at": _dt(v.checkout_held_at),
+        "checkout_hold_note": v.checkout_hold_note, "feedback_rating": v.feedback_rating,
+        "feedback_comment": v.feedback_comment, "host_phone": "",
     }
+    # "Call host": the host's number only for the gate / the register, never for other hosts or the public.
+    if viewer is not None and v.host_id and v4.gate_can(viewer):
+        row["host_phone"] = v.host.whatsapp_phone or ""
+    return row
+
+
+def _answer_text(r) -> str:
+    a = r.get("host_answer")
+    said = {"place": f"Wait at {r.get('host_place')}", "coming": "Coming to the gate",
+            "unavailable": "Not available"}.get(a, "")
+    return f"{said} ({r['host_note']})" if said and r.get("host_note") else said
 
 
 def vehicle_row(e: VehicleEntry, now=None):
@@ -114,10 +138,14 @@ class VisitViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         ("People", "people"), ("Status", "status_display"), ("In", "check_in_at"), ("Out", "check_out_at"),
         ("Minutes inside", "minutes_inside"), ("Vehicle", "vehicle_no"), ("Items", "items"), ("ID", lambda r: f"{r['id_type']} …{r['id_last4']}" if r["id_last4"] else ""),
         ("Checked in by", "check_in_by"), ("Checked out by", "check_out_by"), ("Came by", "source"), ("Notes", "notes"),
+        # V4 (PLAN.md §22.11)
+        ("Let in by", "check_in_via"), ("Host answer", lambda r: _answer_text(r)), ("Host answered", "host_answered_at"),
+        ("Sent to place", "sent_to_place_at"), ("Check-out asked", "checkout_requested_at"),
+        ("Checked out via", "checkout_via"), ("Rating", "feedback_rating"), ("Feedback", "feedback_comment"),
     ]
 
     def row(self, v, now=None):
-        return visit_row(v, now)
+        return visit_row(v, now, viewer=self.request.user)
 
     def get_queryset(self):
         u = self.request.user
@@ -185,6 +213,34 @@ class VisitViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         if not v:
             raise ValidationError({"code": "No visitor pass with this code."})
         return Response(visit_row(sv.check_out(request.user, v)))
+
+    @action(detail=False, methods=["get"], url_path="code")
+    def by_code(self, request):
+        """V4: the gate types a 4-digit check-in or check-out code: whose visit, before anything happens."""
+        _need(sv.can_gate(request.user))
+        kind, v = v4.find_by_code(request.user, request.query_params.get("code"))
+        return Response({"kind": kind, "visit": visit_row(v, viewer=request.user)})
+
+    @action(detail=True, methods=["post"])
+    def approve_checkout(self, request, pk=None):
+        _need(sv.can_gate(request.user))
+        return Response(visit_row(v4.approve_checkout(request.user, self.get_object()), viewer=request.user))
+
+    @action(detail=True, methods=["post"])
+    def hold_checkout(self, request, pk=None):
+        _need(sv.can_gate(request.user))
+        return Response(visit_row(v4.hold_checkout(request.user, self.get_object(), request.data.get("note")),
+                                  viewer=request.user))
+
+    @action(detail=True, methods=["post"])
+    def answer(self, request, pk=None):
+        """V4: the host says where the visitor should wait (a place, coming to the gate, not available)."""
+        return Response(visit_row(v4.host_answer(request.user, self.get_object(), request.data), viewer=request.user))
+
+    @action(detail=True, methods=["post"])
+    def sent_to_place(self, request, pk=None):
+        _need(sv.can_gate(request.user))
+        return Response(visit_row(v4.sent_to_place(request.user, self.get_object()), viewer=request.user))
 
     @action(detail=True, methods=["post"])
     def accept(self, request, pk=None):
@@ -453,6 +509,8 @@ def config_view(request):
         "overstay_hours": s["overstay_hours"], "locations": _locations(), "send_pass": s["send_pass"],
         "watch_action": s["watch_action"], "badge_format": s["badge_format"], "id_scan": s["id_scan"],
         "contractor_max_days": s["contractor_max_days"],
+        "waiting_places": s["waiting_places"], "host_answer_minutes": s["host_answer_minutes"],
+        "checkout_qr": s["checkout_qr"], "code_minutes": s["code_minutes"],
         "incident_kinds": [{"value": k, "label": v} for k, v in IncidentKind.choices],
         "vehicle_types": [{"value": k, "label": v} for k, v in VehicleEntry._meta.get_field("type").choices],
     })
@@ -486,6 +544,9 @@ def link_view(request):
         if request.data.get("regenerate"):
             link.token, link.rotated_at = sv.new_token_value(), timezone.now()
             sv.log(u, GateAction.LINK, "Made a new visitor QR (the old one stops working)")
+        if request.data.get("regenerate_checkout"):
+            link.checkout_token, link.checkout_rotated_at = sv.new_token_value(), timezone.now()
+            sv.log(u, GateAction.LINK, "Made a new check-out QR (the old one stops working)")
         if isinstance(request.data.get("enabled"), bool):
             link.enabled = request.data["enabled"]
             sv.log(u, GateAction.LINK, f"Visitor QR {'on' if link.enabled else 'off'}")
@@ -494,7 +555,11 @@ def link_view(request):
     b = brand()
     return Response({"path": f"/v/{sv.company_code()}/{link.token}", "enabled": link.enabled and conf.get()["open_link"],
                      "rotated_at": _dt(link.rotated_at), "company": b["name"] if b else "", "logo_url": b["logo_url"] if b else None,
-                     "can_change": sv.can_settings(u)})
+                     "can_change": sv.can_settings(u),
+                     # V4: the check-out QR (visitors check out from the phone they checked in with)
+                     "checkout_path": f"/v/{sv.company_code()}/{link.checkout_token}/out",
+                     "checkout_enabled": link.enabled and conf.get()["checkout_qr"],
+                     "checkout_rotated_at": _dt(link.checkout_rotated_at)})
 
 
 @api_view(["GET"])
@@ -621,21 +686,50 @@ def _public(request, code, token):
     if request.method == "GET":
         b = brand()
         return Response({"company": b["name"] if b else "", "logo_url": b["logo_url"] if b else None,
-                         "purposes": s["purposes"], "photo": s["public_photo"], "consent_text": s["consent_text"]})
+                         "colour": b["colour"] if b else None, "purposes": s["purposes"], "photo": s["public_photo"], "consent_text": s["consent_text"],
+                         "host_list": s["public_host_list"], "code_minutes": s["code_minutes"]})
     data = request.data if isinstance(request.data, dict) else {}
-    if str(data.get("website") or "").strip():  # honeypot: a bot filled the hidden field
-        return Response({"code": "".join(sv.secrets.choice(sv.CODE_ALPHABET) for _ in range(6))}, status=201)
+    if str(data.get("website") or "").strip():  # honeypot: a bot filled the hidden field (answered like a person)
+        return Response({"code": f"{sv.secrets.randbelow(10000):04d}", "expires_at": None,
+                         "device": sv.secrets.token_urlsafe(32)}, status=201)
     hour_ago = timezone.now() - timedelta(hours=1)
     ip = _ip_hash(request)
     recent = Visit.objects.filter(source="open_link", created_at__gte=hour_ago)
     if recent.filter(ip_hash=ip).count() >= PER_IP_HOUR or recent.filter(gate_link=link).count() >= PER_LINK_HOUR:
         return Response({"detail": "Too many sign-ins from here. Please ask the guard."}, status=429)
-    v = sv.public_submit(link, data, ip)
+    secret, device_hash = v4.new_device()
+    v = sv.public_submit(link, data, ip, device_hash)
     hit = sv.watch_match(v.mobile, v.name)
     if hit:  # the gate sees it on the waiting card; the visitor is told nothing different
         v.watch_note = sv.text(f"Watchlist: {hit.reason}", 200)
         v.save(update_fields=["watch_note"])
-    return Response({"code": v.short_code}, status=201)
+    # V4: the 4-digit check-in code, and the phone's device secret (kept there + in an httpOnly cookie; only its hash
+    # is on the visit) so the check-out QR finds this visit on this phone only.
+    res = Response({"code": v.short_code, "expires_at": _dt(v.code_expires_at), "device": secret}, status=201)
+    _set_device_cookie(request, res, code, secret)
+    return res
+
+
+def _in_company(code, fn, not_found=None):
+    """Run a public view inside the company named by the code in its URL (multi-company mode): its schema from the
+    registry, never another one. Every refusal is the same 404."""
+    from tenancy import schemas
+    not_found = not_found or NOT_FOUND
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{1,50}", code or ""):
+        return Response(not_found, status=404)
+    if not schemas.enabled():
+        return fn()
+    try:
+        schema = schemas.schema_for_code(code)
+    except ValueError:
+        return Response(not_found, status=404)
+    if not _registered(schema):
+        return Response(not_found, status=404)
+    with schemas.use(schema):
+        return fn()
+
+
+TOKEN_RE = r"[A-Za-z0-9_\-]{10,60}"
 
 
 @api_view(["GET", "POST"])
@@ -643,19 +737,120 @@ def _public(request, code, token):
 @permission_classes([AllowAny])
 @throttle_classes([PublicThrottle])
 def public_view(request, code, token):
-    from tenancy import schemas
-    if not re.fullmatch(r"[A-Za-z0-9_\-]{1,50}", code or "") or not re.fullmatch(r"[A-Za-z0-9_\-]{10,60}", token or ""):
+    if not re.fullmatch(TOKEN_RE, token or ""):
         return Response(NOT_FOUND, status=404)
-    if not schemas.enabled():
-        return _public(request, code, token)
-    try:
-        schema = schemas.schema_for_code(code)
-    except ValueError:
+    return _in_company(code, lambda: _public(request, code, token))
+
+
+# ---------------------------------------------------------------- V4: the visitor's phone (PLAN.md §22.11)
+
+DEVICE_HEADER = "HTTP_X_VISITOR_DEVICE"
+OTHER_DEVICE = {"detail": "Open this on the phone you checked in with, or ask the guard.", "code": "other_device"}
+
+
+def _cookie_name(code: str) -> str:
+    return f"kpv_{code}"
+
+
+def _set_device_cookie(request, res, code, secret):
+    """httpOnly copy of the phone's device secret, scoped to the visitor API path (through the gateway the browser
+    calls /tasks/api/visitors/public/...); the page also keeps it in localStorage and sends it as a header."""
+    res.set_cookie(_cookie_name(code), secret, max_age=24 * 3600, httponly=True, samesite="Lax",
+                   secure=request.is_secure(), path=getattr(settings, "VISITOR_COOKIE_PATH", "/tasks/api/visitors/public/"))
+
+
+def _device_secret(request, code) -> str:
+    """The phone's device secret: in the POST body (the page's localStorage copy; never in a URL), the
+    X-Visitor-Device header, or the httpOnly cookie."""
+    body = request.data if request.method == "POST" and isinstance(request.data, dict) else {}
+    return str(body.get("device") or request.META.get(DEVICE_HEADER) or request.COOKIES.get(_cookie_name(code))
+               or "").strip()
+
+
+class DeviceThrottle(AnonRateThrottle):
+    """The phone polls its own visit (every few seconds while it waits) and searches whom to meet."""
+    scope = "visitor_device"
+
+
+class CheckoutThrottle(AnonRateThrottle):
+    scope = "visitor_checkout"
+
+    def allow_request(self, request, view):
+        return request.method != "POST" or super().allow_request(request, view)
+
+
+def _no_store(res):
+    res["Cache-Control"] = "no-store"
+    return res
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([DeviceThrottle])
+def public_hosts_view(request, code, token):
+    """Whom to meet on the QR form: names + departments only (or only departments, or nothing: a company setting)."""
+    from tenancy.profile import module_on
+
+    from .models import GateLink
+    if not re.fullmatch(TOKEN_RE, token or ""):
         return Response(NOT_FOUND, status=404)
-    if not _registered(schema):
+
+    def one():
+        s = conf.get()
+        link = GateLink.objects.filter(token=token).first()
+        if not module_on("visitors") or not link or not link.enabled or not s["open_link"]:
+            return Response(NOT_FOUND, status=404)
+        return _no_store(Response({"mode": s["public_host_list"],
+                                   "results": v4.public_hosts(request.query_params.get("q") or "")}))
+    return _in_company(code, one)
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([DeviceThrottle])
+def public_device_view(request, code):
+    """The phone asks about its own visit (found only by its device secret): pending + code, inside + where to wait,
+    leaving + check-out code, out. Nothing about anyone else."""
+    from tenancy.profile import module_on
+
+    def one():
+        if not module_on("visitors"):
+            return Response(NOT_FOUND, status=404)
+        return _no_store(Response(v4.device_state(v4.visit_for_device(_device_secret(request, code)))))
+    return _in_company(code, one)
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([CheckoutThrottle])
+def public_checkout_view(request, code, token):
+    """The check-out QR /v/<company code>/<checkout token>/out. GET: the page (+ this phone's visit, if any). POST
+    {rating, comment}: this phone's visit asks to check out; the guard approves it with the check-out code."""
+    from tenancy.profile import brand, module_on
+
+    from .models import GateLink
+    if not re.fullmatch(TOKEN_RE, token or ""):
         return Response(NOT_FOUND, status=404)
-    with schemas.use(schema):
-        return _public(request, code, token)
+
+    def one():
+        s = conf.get()
+        link = GateLink.objects.filter(checkout_token=token).first()
+        if not module_on("visitors") or not link or not link.enabled or not s["checkout_qr"]:
+            return Response(NOT_FOUND, status=404)
+        secret = _device_secret(request, code)
+        if request.method == "GET":
+            b = brand()
+            return _no_store(Response({"company": b["name"] if b else "", "logo_url": b["logo_url"] if b else None,
+                                       "colour": b["colour"] if b else None, "visit": v4.device_state(v4.visit_for_device(secret))}))
+        v = v4.visit_for_device(secret, only_inside=True)
+        if not v:
+            return Response(OTHER_DEVICE, status=403)
+        data = request.data if isinstance(request.data, dict) else {}
+        return _no_store(Response(v4.device_state(v4.request_checkout(v, data))))
+    return _in_company(code, one)
 
 
 PASS_NOT_FOUND = {"detail": "This visitor pass is not valid."}

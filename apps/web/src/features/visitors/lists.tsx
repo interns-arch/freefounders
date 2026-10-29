@@ -23,7 +23,7 @@ import {
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { CalendarClock, Car, Check, Copy, HardHat, Package, Send, UserCheck, UserPlus, Users, X } from '@/components/icons';
+import { CalendarClock, Car, Check, Copy, HardHat, MapPin, Package, Send, UserCheck, UserPlus, Users, X } from '@/components/icons';
 import { useConfirm } from '@/components/common/confirm';
 import { DataTable } from '@/components/common/data-table';
 import { DownloadMenu } from '@/components/common/download-menu';
@@ -265,7 +265,16 @@ export function MyVisitorsPage({ config }: { config: VisitorConfig }) {
       {recent.length > 0 && (
         <MySection title="Recent visitors">
           {recent.map((v) => (
-            <MyVisitCard key={v.id} visit={v} focus={focus === v.id} />
+            <MyVisitCard key={v.id} visit={v} focus={focus === v.id}>
+              {/* V4: tell the guard where they should wait (or change the answer) while they are here. */}
+              {v.status === 'inside' && v.host?.id != null && (
+                <Button asChild size="lg" variant={v.host_answer ? 'outline' : 'default'}>
+                  <Link to={`/visitors/answer?visit=${v.id}`}>
+                    <MapPin /> {v.host_answer ? (v.host_answer === 'place' ? `Waiting at ${v.host_place}` : 'Change answer') : 'Where should they wait?'}
+                  </Link>
+                </Button>
+              )}
+            </MyVisitCard>
           ))}
         </MySection>
       )}
@@ -388,6 +397,9 @@ export function RegisterPage({ config }: { config: VisitorConfig }) {
           { key: 'time', header: 'Inside', cell: (r) => formatMinutes(r.minutes_inside) },
           { key: 'status', header: 'Status', cell: (r) => <StatusBadge visit={r} /> },
           { key: 'by', header: 'Checked in by', cell: (r) => r.check_in_by || '—', hideOnMobile: true },
+          { key: 'via', header: 'Let in / out', cell: (r) => [VIA[r.check_in_via], r.checkout_via === 'qr' ? 'QR out' : r.checkout_via === 'guard' ? 'guard out' : ''].filter(Boolean).join(' · ') || '—', hideOnMobile: true },
+          { key: 'answer', header: 'Host answer', cell: (r) => hostAnswerText(r) || '—', hideOnMobile: true },
+          { key: 'rating', header: 'Rating', cell: (r) => (r.feedback_rating != null ? `${r.feedback_rating}/5` : '—'), hideOnMobile: true },
         ]}
       />
       {pages > 1 && (
@@ -406,6 +418,15 @@ export function RegisterPage({ config }: { config: VisitorConfig }) {
       <VisitDialog visit={open} onClose={() => setOpen(null)} />
     </div>
   );
+}
+
+/** How the guard let them in (V4). */
+const VIA: Record<string, string> = { code: 'Check-in code', card: 'Guard (QR sign-in)', gate: 'Guard (walk-in)', pass: 'Pass scanned' };
+
+function hostAnswerText(v: Visit): string {
+  const said = v.host_answer === 'place' ? `Wait at ${v.host_place}` : v.host_answer === 'coming' ? 'Coming to the gate' : v.host_answer === 'unavailable' ? 'Not available' : '';
+  if (!said) return '';
+  return `${said}${v.host_note ? ` (${v.host_note})` : ''}${v.host_answered_at ? ` · ${clock(v.host_answered_at)}` : ''}`;
 }
 
 function VisitDialog({ visit: v, onClose }: { visit: Visit | null; onClose: () => void }) {
@@ -440,6 +461,14 @@ function VisitDialog({ visit: v, onClose }: { visit: Visit | null; onClose: () =
                   ['Expected', v.window],
                   ['Email', v.email],
                   ['Pass', v.source === 'invite' || v.pass_sent_at ? passSentNote(v) : ''],
+                  // V4 (PLAN.md §22.11)
+                  ['Let in', VIA[v.check_in_via] ?? ''],
+                  ['Host answer', hostAnswerText(v)],
+                  ['Sent to place', v.sent_to_place_at ? `${clock(v.sent_to_place_at)}${v.sent_to_place_by ? ` by ${v.sent_to_place_by}` : ''}` : ''],
+                  ['Check-out asked', v.checkout_requested_at ? clock(v.checkout_requested_at) : ''],
+                  ['Checked out', v.checkout_via === 'qr' ? 'Phone (check-out QR), approved by the guard' : v.checkout_via === 'guard' ? 'By the guard' : ''],
+                  ['Held', v.checkout_held_at ? `${clock(v.checkout_held_at)}${v.checkout_hold_note ? `: ${v.checkout_hold_note}` : ''}` : ''],
+                  ['Feedback', v.feedback_rating != null || v.feedback_comment ? `${v.feedback_rating != null ? `${v.feedback_rating}/5` : ''}${v.feedback_comment ? ` “${v.feedback_comment}”` : ''}`.trim() : ''],
                 ]
                   .filter(([, x]) => x)
                   .map(([k, x]) => (
@@ -487,6 +516,9 @@ const ACTIONS: Array<[string, string]> = [
   ['material_request,material_decide,material_gate,material_return', 'Material passes'],
   ['patrol,checkpoint', 'Patrol'],
   ['incident,incident_close', 'Incidents'],
+  ['code_approve,code_miss', 'Codes (approved / wrong)'],
+  ['host_answer,sent_to_place', 'Where to wait'],
+  ['checkout_request,checkout_approve,checkout_hold', 'Check-out from the phone'],
   ['settings,link', 'Settings and QR'],
 ];
 

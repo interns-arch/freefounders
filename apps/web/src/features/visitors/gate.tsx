@@ -9,6 +9,7 @@ import {
   type PersonBrief,
   type Visit,
   type VisitorConfig,
+  type CodeHit,
   type ContractorPass,
   type MaterialPass,
   useAcceptVisit,
@@ -39,6 +40,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Badge, Card, CardContent } from '@/components/ui/primitives';
 import { CameraScanner } from '@/features/assets/inventory/scan-page';
 import { cn } from '@/lib/utils';
+import { CodeDialog, CodeEntry, HostAnswerLine } from './gate-codes';
 import { HostPicker, PassDialog, PhotoField, PrivatePhoto, StatusBadge, WatchNote, alertGuard, clock, formatMinutes, hostName, useBlobUrl } from './parts';
 
 const GATE_KEY = 'ff-visitors-gate';
@@ -65,6 +67,7 @@ export function GatePage({ config }: { config: VisitorConfig }) {
   const [pass, setPass] = useState<Visit | null>(null);
   const [scan, setScan] = useState(false);
   const [scanned, setScanned] = useState<{ contractor?: ContractorPass; material?: MaterialPass } | null>(null);
+  const [hit, setHit] = useState<CodeHit | null>(null);
   const checkOut = useCheckOutVisit();
   const reject = useRejectVisit();
   const confirm = useConfirm();
@@ -77,7 +80,9 @@ export function GatePage({ config }: { config: VisitorConfig }) {
   const waiting = rows.filter((v) => v.status === 'waiting' && match(v));
   const expected = rows.filter((v) => v.status === 'expected' && match(v));
   const waitingHost = rows.filter((v) => v.status === 'waiting_host' && match(v));
-  const inside = rows.filter((v) => v.status === 'inside' && match(v));
+  const inside = rows.filter((v) => v.status === 'inside' && !v.checkout_pending && match(v));
+  // V4: asked to leave from their phone; the guard approves with the check-out code (or here).
+  const leaving = rows.filter((v) => v.status === 'inside' && v.checkout_pending && match(v));
   const done = rows.filter((v) => ['out', 'denied', 'rejected'].includes(v.status) && match(v));
 
   // Someone new signed in from the QR: a beep and a vibration (the list refreshes every few seconds).
@@ -89,6 +94,28 @@ export function GatePage({ config }: { config: VisitorConfig }) {
       toast.info('A visitor is waiting at the gate');
     }
     if (list.data) seen.current = ids;
+  }, [rows, list.data]);
+
+  // V4: someone asks to leave, or a host answers where to wait: a beep + a toast (the list refreshes every 8 s).
+  const heard = useRef<Map<number, string> | null>(null);
+  useEffect(() => {
+    if (!list.data) return;
+    const now = new Map(rows.map((v) => [v.id, `${v.checkout_pending ? 'L' : ''}|${v.host_answered_at ?? ''}`]));
+    if (heard.current) {
+      for (const v of rows) {
+        const before = heard.current.get(v.id);
+        if (before === undefined) continue;
+        if (v.checkout_pending && !before.startsWith('L')) {
+          alertGuard();
+          toast.info(`${v.name} wants to leave: ask for the check-out code`);
+        }
+        if (v.host_answered_at && before.split('|')[1] !== v.host_answered_at) {
+          alertGuard();
+          toast.info(`${hostName(v)}: ${v.host_answer === 'place' ? `${v.name} to wait at ${v.host_place}` : v.host_answer === 'coming' ? `coming to the gate for ${v.name}` : `not available for ${v.name}`}`);
+        }
+      }
+    }
+    heard.current = now;
   }, [rows, list.data]);
 
   const out = async (v: Visit) => {
@@ -114,7 +141,7 @@ export function GatePage({ config }: { config: VisitorConfig }) {
     <div className="space-y-5">
       <PageHeader
         title="Gate"
-        description={`${inside.length} inside · ${waiting.length + waitingHost.length} waiting · ${expected.length} expected · ${done.length} left today`}
+        description={`${inside.length + leaving.length} inside · ${waiting.length + waitingHost.length} waiting · ${leaving.length} leaving · ${expected.length} expected · ${done.length} left today`}
         actions={
           <>
             <Button variant="outline" size="lg" onClick={() => navigate('/visitors/deliveries?new=1')}>
@@ -129,10 +156,23 @@ export function GatePage({ config }: { config: VisitorConfig }) {
           </>
         }
       />
+      <CodeEntry onHit={setHit} />
       <SearchField value={q} onChange={setQ} label="Search name, mobile, pass or vehicle" className="max-w-md" />
 
+      {leaving.length > 0 && (
+        <Section title={`Waiting to leave (${leaving.length})`} note="They tapped Check out on the check-out QR. Ask for the code, check the vehicle and items, then approve.">
+          {leaving.map((v) => (
+            <VisitCard key={v.id} visit={v} onOpen={() => setPass(v)}>
+              <Button size="lg" variant="success" onClick={() => setHit({ kind: 'checkout', visit: v })}>
+                <LogOut /> Check out…
+              </Button>
+            </VisitCard>
+          ))}
+        </Section>
+      )}
+
       {waiting.length > 0 && (
-        <Section title="Waiting at the gate" note="Signed in from the visitor QR. Check their details, then let them in.">
+        <Section title="Waiting at the gate" note="Signed in from the visitor QR. Type the code from their phone above (or check their details and tap Check in).">
           {waiting.map((v) => (
             <VisitCard key={v.id} visit={v}>
               <Button size="lg" variant="success" onClick={() => setForm({ accept: v })}>
@@ -207,6 +247,7 @@ export function GatePage({ config }: { config: VisitorConfig }) {
         />
       )}
       <PassDialog visit={pass} onClose={() => setPass(null)} badgeFormat={config.badge_format} />
+      <CodeDialog hit={hit} config={config} gate={lastGate()} onClose={() => setHit(null)} />
       <ScanPassDialog
         open={scan}
         onClose={() => setScan(false)}
@@ -272,7 +313,8 @@ function VisitCard({ visit: v, children, onOpen, compact }: { visit: Visit; chil
               </span>
             ) : v.status === 'waiting' ? (
               <>
-                Code <span className="font-mono font-semibold text-foreground">{v.short_code}</span> · {v.mobile} · {clock(v.created_at)}
+                Code <span className="font-mono font-semibold text-foreground">{v.short_code}</span>
+                {v.code_expires_at ? ` (till ${clock(v.code_expires_at)})` : ''} · {v.mobile} · {clock(v.created_at)}
               </>
             ) : (
               <>
@@ -282,6 +324,7 @@ function VisitCard({ visit: v, children, onOpen, compact }: { visit: Visit; chil
             )}
           </p>
           {!compact && <WatchNote note={v.watch_note} />}
+          {!compact && <HostAnswerLine visit={v} />}
           {children && <div className="flex flex-wrap gap-2 pt-1 max-sm:[&>button]:flex-1">{children}</div>}
         </div>
       </CardContent>

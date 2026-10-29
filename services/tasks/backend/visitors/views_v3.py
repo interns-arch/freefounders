@@ -468,6 +468,17 @@ def reports_view(request):
             "incidents_open": Incident.objects.filter(status="open").count(),
             "patrol_scans": PatrolScan.objects.filter(at__gte=a, at__lt=b).count(),
             "patrol_problems": PatrolScan.objects.filter(at__gte=a, at__lt=b, all_ok=False).count(),
+            # V4 (PLAN.md §22.11): codes, check-out from the phone, feedback, the host's answer
+            "code_check_ins": came.filter(check_in_via="code").count(),
+            "qr_check_outs": came.filter(checkout_via="qr").count(),
+            "feedback": came.filter(feedback_rating__isnull=False).count(),
+            "avg_rating": round(sum(ratings) / len(ratings), 1) if (ratings := list(came.filter(
+                feedback_rating__isnull=False).values_list("feedback_rating", flat=True))) else 0,
+            "host_answers": came.filter(host_answered_at__isnull=False).count(),
+            "avg_answer_minutes": round(sum(waits) / len(waits)) if (waits := [
+                int((x - y).total_seconds() // 60) for x, y in came.filter(
+                    host_answered_at__isnull=False, host_notified_at__isnull=False)
+                .values_list("host_answered_at", "host_notified_at")[:20000]]) else 0,
         },
         "per_day": days,
         "per_hour": [{"hour": h, "visits": hours.get(h, 0)} for h in range(24)],

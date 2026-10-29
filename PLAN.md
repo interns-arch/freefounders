@@ -3433,7 +3433,7 @@ per period, cancel any time to stop the next period, no partial refunds; duplica
 on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
 top of `legal.tsx`.
 
-## 22. Visitor management (V1, V2, V3 built 2026-10-26, §22.8–§22.10)
+## 22. Visitor management (V1, V2, V3 built 2026-10-26, §22.8–§22.10; V4 2026-10-28, §22.11)
 
 Founder (2026-10-26): "one more option: visitor management software, to keep the record of every visitor and all the
 company's security records." This is a plan only; nothing is built until the founder answers §22.7.
@@ -3663,6 +3663,143 @@ Founder (2026-10-26): "yes start V3". Tasks `visitors` migration 0004 (`services
   `platform.test.ts` (gate movement in history), Platform `integration.test.ts` (flow), e2e `e2e/web-visitors-v3.spec.ts`.
 
 **Still open**: WhatsApp pass template approval (Meta); analytics beyond the reports page if the founder wants more.
+
+### 22.11 V4: check-in / check-out codes, the check-out QR, whom to meet + where to wait (2026-10-28)
+Founder (2026-10-28): a second QR for check-out with feedback, bound to the visitor's own phone; a check-in code the
+guard enters to approve; "whom to meet" picked from the company's people, and the host answers where the visitor
+should wait (in the app and on WhatsApp); the guard sees the answer live. Same day: **check-out also needs the guard's
+approval** (a check-out code), and **both codes are 4 random digits** like an OTP.
+
+**Flows**
+1. **Self check-in (QR, changed).** The form (`/v/<code>/<token>`) now has **Whom to meet**: a search of the company's
+   active people showing **name + department only** (never email, phone or username; at most 8 matches, 2+ letters,
+   throttled), or a typed name / department as before. Setting **People list on the QR form**: `people` (default),
+   `departments` (only the department list: the visitor picks a department, the guard picks the person) or `off`
+   (typed, as V1). On submit the visit is **pending** (status `waiting`, as before) and the phone shows a **check-in
+   code**: 4 random digits (`secrets`, never derived from ids or sequential), unique among the company's pending check-in
+   *and* check-out codes (retry on collision), valid **120 min** (setting `code_minutes`, 10–720), single use. The page
+   keeps polling and turns into "You are checked in" (and the waiting place once the host answers) after approval.
+   Still waiting when the code expires: the worker marks it **Did not come** (`no_show`).
+2. **Device binding.** The submit answer carries a random **device secret** (32 bytes); the phone keeps it in
+   `localStorage` (`kp-visitor-device:<company code>`) and the API also sets it as an httpOnly, SameSite=Lax cookie
+   `kpv_<company code>` scoped to the visitor API path (`VISITOR_COOKIE_PATH`, default `/tasks/api/visitors/public/`,
+   the path the browser uses through the gateway; Secure on HTTPS; 1 day). Only **SHA-256 of the secret** is stored on
+   the visit (`device_hash`). Either copy works: the page sends its stored copy in the POST body (never in a URL; an
+   `X-Visitor-Device` header also works), else the cookie is used.
+3. **Guard approves the check-in (Gate → Enter code).** A big 4-digit input (numeric keyboard). The code shows the
+   visitor's name, photo, purpose, whom to meet, people, vehicle and mobile **before** anything happens, so a wrong
+   match is visible; then **Approve check-in** (takes the photo first when the company requires one and the visitor
+   sent no selfie) or **Turn away**. The visit is `inside` only then (`check_in_via = code`). Walk-ins the guard adds
+   directly and invited visitors scanned at the gate need no code (`via = gate / pass`); tapping **Check in** on a
+   waiting card still works (`via = card`). Wrong codes: **10 wrong tries in 5 minutes per guard → locked for 5
+   minutes** (counted on the company's own Guard activity rows, action "Wrong code entered", so it holds across server
+   processes); every miss answers the same "No visitor is waiting with this code" (never says which part was wrong).
+4. **Whom to meet → the host is asked where to wait.** At **approval** (not at submit, so hosts are not pinged for
+   visitors the guard turns away; with host approval on, at check-in, since the host answers both in one go) the host
+   gets:
+   - an in-app notification (area **Visitors**, type `visitor_where`) linking to **`/visitors/answer?visit=<id>`**
+     ("Your visitor": name, company, purpose, photo, waiting since), and
+   - a **WhatsApp template** (setting `host_wa_template`; empty = none: then the in-app notice only, no free-form
+     WhatsApp). Inside the company's WhatsApp hours (default 10 AM–7 PM, §19.37) it is sent at once; outside them it is
+     **skipped** (a visitor at 8 PM cannot wait for tomorrow's message); the in-app notice always goes.
+   The host answers: a **waiting place** from the company's list (setting `waiting_places`, default Reception, Meeting
+   room 1, Conference room, My desk), **"I'm coming to the gate"**, or **"Not available"**, plus an optional note
+   (≤ 200). Only the host (or `visitors.view_all`) may answer; they may change it until the visit ends.
+   **WhatsApp replies are not read**: the inbound webhook (`/api/webhooks/whatsapp`) runs without a company in
+   multi-company mode (one Meta number cannot be mapped to a company safely), so the template carries a **link button**
+   to the answer screen instead of reply buttons.
+5. **The guard sees the answer live.** The gate list refreshes every 8 s; a new answer beeps, shows a toast and
+   appears on the visit card ("Neha: wait at Meeting room 1 · note"); every gate person also gets a notification
+   (`visitor_host_answer`). The guard taps **Sent to Meeting room 1** (logged, time kept). No answer after N minutes
+   (setting `host_answer_minutes`, default 5, 1–60): the card shows **No answer yet** and **Call host** with the host's
+   phone (`whatsapp_phone`), sent only to people with `visitors.gate` / `view_all`.
+6. **Check-out QR** `/v/<code>/<checkout token>/out` (a second fixed company QR, own token, own "Make a new QR",
+   printed from Visitors → Settings next to the check-in QR; setting `checkout_qr`, on). The page asks only for
+   optional **feedback** (1–5 + comment ≤ 300) and **Check out**. It finds the visit from the device secret only (the
+   latest `inside` visit with that hash); a phone without the secret, or with another visit's, sees "Open this on the
+   phone you checked in with, or ask the guard" (no names). Tapping Check out **requests** check-out: feedback is saved,
+   the visit stays `inside` (the roll call stays right) with `checkout_requested_at`, and the phone shows a 4-digit
+   **check-out code** + "Show this to the guard". Limit: 20 check-out requests / hour per address
+   (`THROTTLE_VISITOR_CHECKOUT`); the phone's polling + people search: 900 / hour (`THROTTLE_VISITOR_DEVICE`).
+7. **Guard approves the check-out.** "Waiting to leave" section on the gate (beep + toast for new ones) and the same
+   **Enter code** box (a check-out code opens the leaving visitor: name, photo, vehicle, items). **Approve check-out**
+   → `out`, `check_out_at` = approval time, `check_out_by` = guard, `checkout_via = qr`. **Hold** (with a note) → stays
+   inside, the request and code are cleared, the phone says "Please see the guard". The guard's own **Check out** button
+   (and scanning the pass) still checks out directly (`checkout_via = guard`).
+8. **Register / reports / guard activity**: the visit detail and the download show how they were checked in (code /
+   card / gate / pass), host answer + place + note + time, sent-to-place time, check-out requested / approved + by whom,
+   the check-out method (QR device / guard) and feedback. Reports add QR check-outs, average rating and host answers.
+   New Guard activity actions: code approved, wrong code, host answer, sent to place, check-out requested / approved /
+   held.
+
+**Records** (migration `visitors/0005`): Visit gets `device_hash`, `code_expires_at`, `check_in_via`, `host_notified_at`,
+`host_answer`, `host_place`, `host_note`, `host_answered_at`, `sent_to_place_at/by`, `checkout_requested_at`,
+`checkout_code`, `checkout_code_expires_at`, `checkout_via`, `checkout_held_at`, `checkout_hold_note`,
+`feedback_rating`, `feedback_comment`, `feedback_at`; GateLink gets `checkout_token`, `checkout_rotated_at`.
+`short_code` (check-in) and `checkout_code` hold the 4 digits; old 6-character codes still work until those visits end.
+Settings (`VISITORS_SETTINGS`): `public_host_list`, `code_minutes`, `waiting_places`, `host_answer_minutes`,
+`host_wa_template`, `host_wa_lang`, `checkout_qr`.
+
+**Endpoints** (Tasks). Public (no sign-in, company from the code, every refusal the same 404):
+`GET /visitors/public/<code>/<token>/hosts/?q=` (people / departments), `POST /visitors/public/<code>/<token>/` (now
+answers `{code, expires_at, device}` and sets the cookie), `POST /visitors/public/<code>/device/` `{device}` (my visit's state:
+first name, codes, waiting place; nothing else), `GET|POST /visitors/public/<code>/out/<checkout token>/`. Signed in:
+`GET /visitors/visits/code/?code=` (gate), `POST /visitors/visits/<id>/approve_checkout/`, `.../hold_checkout/`
+`{note}`, `.../answer/` `{answer, place, note}` (host), `.../sent_to_place/` (gate); `accept` takes `via: "code"`;
+`/visitors/link/` also returns / rotates the check-out QR (`regenerate_checkout`).
+
+**WhatsApp template to submit to Meta** (category **Utility**, name e.g. `visitor_waiting`, language English; put the
+name in Visitors → Settings → "WhatsApp template for hosts"):
+- Body: `Hello {{1}}, {{2}} from {{3}} is at the gate to meet you (purpose: {{4}}). Please tell the guard where they
+  should wait.` (samples: Neha · Ravi Kumar · ABC Ltd · Meeting)
+- Button: **Visit website**, dynamic URL `https://kaampilot.com/{{1}}`, text "Answer"; sample suffix
+  `visitors/answer?visit=123`.
+The code sends body parameters 1–4 and the button parameter `visitors/answer?visit=<id>`.
+
+**Decisions taken here**: hosts are asked at approval (not at submit); this WhatsApp is template-only and skipped
+outside WhatsApp hours; answers come through the link (no reply buttons) until the inbound webhook can tell companies
+apart; "check-out requested" is a flag on an `inside` visit, not a new status, so the roll call never drops a visitor
+still at the gate.
+
+**Screens (built 2026-10-29)**
+- **Public pages** (`features/visitors/public.tsx`, `checkout.tsx`, `public-parts.tsx`; founder: "more colourful"): the
+  company's brand colour (Settings, readable in both themes via `lib/brand-colour.ts`) as a solid header band with the
+  logo + name and a big "Welcome!" / "Thank you for visiting" line, the form card overlapping it, brand-tinted accents,
+  the 4-digit code in four big boxes, Hugeicons, 48 px fields and buttons; solid colours and tints only (no gradients,
+  not approved yet). Check-in: "Get my check-in code" → code + steps + expiry → "You are checked in" + "Please wait at
+  …". Check-out: rating 1–5 (big buttons) + comment → "Check out" → check-out code → "Thank you for visiting".
+- **Gate** (`gate.tsx`, `gate-codes.tsx`): a **Visitor code** box at the top (numeric keyboard, 4 big digits, looks up
+  as soon as 4 are typed) → dialog with photo + details → **Approve check-in** / **Turn away**, or **Approve
+  check-out** / **Hold** (note); **Waiting to leave** section; each inside card shows the host's answer + **Sent to …**,
+  or **No answer yet** + **Call host** (tel: link); beep + toast for new leavers and new answers.
+- **Your visitor** `/visitors/answer?visit=<id>` (`answer.tsx`; hosts with `visitors.invite`, or view_all): the
+  waiting places + "I'm coming to the gate" + "Not available" as big choices, a note, Send / Update. My visitors shows
+  **Where should they wait?** on a visitor who is inside.
+- **Settings**: two QR cards (check-in, check-out), each with its caption under the QR on screen ("Visitors check-in"
+  / "Visitors check-out" + "Kaampilot · company"); Poster PNG / Print draw the same caption **below the QR** (company
+  line small above), files `visitors-check-in-<code>.png` / `visitors-check-out-<code>.png`; "Make a new QR" per card.
+  New rules: Check-out QR, whom to meet on the QR form, codes valid for, host no-answer minutes, WhatsApp template +
+  language, waiting places.
+- **Register / reports / guard activity**: the register's detail + columns (let in / out, host answer, rating) and the
+  download carry the V4 fields; reports add code check-ins, phone check-outs, average rating, host answers + average
+  answer time; Guard activity filters "Codes", "Where to wait", "Check-out from the phone".
+
+**Tests**: `visitors/tests_v4.py` (code format `^\d{4}$`, uniqueness among pending check-in + check-out codes, single
+use, expiry + worker, wrong-code lock per guard with the same answer every time, walk-ins need no code, host asked at
+approval not at submit (and not when turned away), host answer → guard notification + gate row + phone, Call host
+only for the gate, WhatsApp template with the link button when set (mocked) and nothing on WhatsApp without one,
+check-out: right phone → pending code → guard approves → out (`via qr`), cookie copy, other phone refused + sees
+nothing, hold keeps inside, check-out code expiry, guard's own check-out still works, rating checks, check-out QR
+rotate / off / module off, public people list = name + department only, departments / off modes, device state
+without / with a wrong secret, settings validation, reports, export; Postgres: the check-out QR and the device only
+inside their own company). Changed: `tests.py` (submit answer now `{code, expires_at, device}`), `accounts/
+people_delete.py` (`Visit.sent_to_place_by`), e2e `web-visitors.spec.ts` (4-digit code, new button) + new
+`e2e/web-visitors-v4.spec.ts` (written; the dev suite was not running, so not run). Quick check with Tasks tests and
+`npm run web:build` pass; Tasks + tenancy tests also pass on Postgres.
+
+**Deploy**: migration `visitors/0005` (`migrate_companies`); no new required env (optional `THROTTLE_VISITOR_DEVICE`,
+`THROTTLE_VISITOR_CHECKOUT`, `VISITOR_COOKIE_PATH` in `.env.example`); print and put up the new check-out QR poster;
+submit the `visitor_waiting` template to Meta and, once approved, enter its name in Visitors → Settings.
 
 ## 23. Internal names renamed to Kaampilot (2026-10-26)
 Founder: "make the project name everywhere Kaampilot, not FreeFounders". This finishes §19.x's visible rename:

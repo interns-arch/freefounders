@@ -46,6 +46,11 @@ export interface VisitorConfig {
   id_scan: boolean;
   contractor_max_days: number;
   incident_kinds: Array<{ value: string; label: string }>;
+  // V4 (PLAN.md §22.11)
+  waiting_places: string[];
+  host_answer_minutes: number;
+  checkout_qr: boolean;
+  code_minutes: number;
 }
 
 /** A watchlist match at the gate: "stop" refuses check-in (an admin may override), "warn" asks the guard. */
@@ -100,7 +105,34 @@ export interface Visit {
   pass_channels: Array<{ channel: 'whatsapp' | 'email'; status: string; detail?: string }>;
   /** "/v/<company code>/p/<token>": the visitor's own pass page (put the site's origin in front). */
   pass_path: string;
+  // V4 (PLAN.md §22.11): codes, the host's answer, check-out from the phone, feedback
+  code_expires_at: string | null;
+  /** How the guard let them in: code / card / gate (walk-in) / pass (invite). */
+  check_in_via: '' | 'code' | 'card' | 'gate' | 'pass';
+  host_notified_at: string | null;
+  host_answer: '' | HostAnswer;
+  host_place: string;
+  host_note: string;
+  host_answered_at: string | null;
+  /** The host was asked and has not answered within the company's minutes. */
+  host_no_answer: boolean;
+  sent_to_place_at: string | null;
+  sent_to_place_by: string;
+  checkout_requested_at: string | null;
+  /** Asked to leave from the phone; the guard approves with the 4-digit check-out code. */
+  checkout_pending: boolean;
+  checkout_code: string;
+  checkout_via: '' | 'qr' | 'guard';
+  checkout_held_at: string | null;
+  checkout_hold_note: string;
+  feedback_rating: number | null;
+  feedback_comment: string;
+  /** Only for the gate / the register ("Call host"). */
+  host_phone: string;
 }
+
+/** Where the host wants the visitor: a waiting place, "I'm coming to the gate", or "Not available". */
+export type HostAnswer = 'place' | 'coming' | 'unavailable';
 
 export interface VehicleEntry {
   id: number;
@@ -159,6 +191,14 @@ export interface VisitorSettings {
   patrol_from: number;
   patrol_to: number;
   contractor_max_days: number;
+  // V4
+  public_host_list: 'people' | 'departments' | 'off';
+  code_minutes: number;
+  waiting_places: string[];
+  host_answer_minutes: number;
+  host_wa_template: string;
+  host_wa_lang: string;
+  checkout_qr: boolean;
 }
 
 export interface VisitorLink {
@@ -169,6 +209,10 @@ export interface VisitorLink {
   company: string;
   logo_url: string | null;
   can_change: boolean;
+  /** V4: the check-out QR "/v/<company code>/<token>/out". */
+  checkout_path: string;
+  checkout_enabled: boolean;
+  checkout_rotated_at: string | null;
 }
 
 export interface ReturningVisitor {
@@ -279,6 +323,8 @@ export interface CheckInInput {
   notes?: string;
   /** The guard (or an admin) confirmed a watchlist warning. */
   watch_ok?: boolean;
+  /** V4: approved by typing the visitor's 4-digit check-in code. */
+  via?: 'code';
 }
 
 /** POST /visitors/visits/ — the guard checks a walk-in visitor in. */
@@ -292,6 +338,22 @@ export const useCheckOutPass = () => useVisitorsMutation((code: string) => tasks
 /** The host's answer when the company asks hosts first. */
 export const useDecideVisit = () => useVisitorsMutation(({ id, decision }: { id: number; decision: 'allow' | 'deny' }) => tasksApi.post<Visit>(`/visitors/visits/${id}/decide/`, { decision }));
 export const useEditVisit = () => useVisitorsMutation(({ id, ...body }: Partial<CheckInInput> & { id: number }) => tasksApi.patch<Visit>(`/visitors/visits/${id}/`, body));
+// ─── V4: codes, check-out approval, where to wait ─────────────────────────────
+
+export interface CodeHit {
+  kind: 'checkin' | 'checkout';
+  visit: Visit;
+}
+/** The gate types a 4-digit check-in or check-out code: whose visit (shown before anything happens). */
+export const useFindByCode = () => useMutation({ mutationFn: (code: string) => tasksApi.get<CodeHit>('/visitors/visits/code/', { code }) });
+export const useApproveCheckout = () => useVisitorsMutation((id: number) => tasksApi.post<Visit>(`/visitors/visits/${id}/approve_checkout/`));
+export const useHoldCheckout = () => useVisitorsMutation(({ id, note }: { id: number; note?: string }) => tasksApi.post<Visit>(`/visitors/visits/${id}/hold_checkout/`, { note }));
+/** The host says where the visitor should wait. */
+export const useAnswerVisit = () =>
+  useVisitorsMutation(({ id, ...body }: { id: number; answer: HostAnswer; place?: string; note?: string }) => tasksApi.post<Visit>(`/visitors/visits/${id}/answer/`, body));
+/** The guard sent the visitor to the place the host named. */
+export const useSentToPlace = () => useVisitorsMutation((id: number) => tasksApi.post<Visit>(`/visitors/visits/${id}/sent_to_place/`));
+
 /** The gate scans a pass QR (or types a pass number / code): which visit it is. */
 export const useFindPass = () => useMutation({ mutationFn: (code: string) => tasksApi.get<Visit>('/visitors/visits/find/', { code }) });
 
@@ -493,7 +555,8 @@ export function useVisitorLink(enabled = true) {
   return useQuery({ queryKey: [...KEY, 'link'], queryFn: () => tasksApi.get<VisitorLink>('/visitors/link/'), enabled });
 }
 /** "Make a new QR" (the old one stops working) or switch the open sign-in on / off. */
-export const useChangeVisitorLink = () => useVisitorsMutation((body: { regenerate?: boolean; enabled?: boolean }) => tasksApi.post<VisitorLink>('/visitors/link/', body));
+export const useChangeVisitorLink = () =>
+  useVisitorsMutation((body: { regenerate?: boolean; regenerate_checkout?: boolean; enabled?: boolean }) => tasksApi.post<VisitorLink>('/visitors/link/', body));
 
 // ─── the open QR sign-in (no sign-in needed) ──────────────────────────────────
 
@@ -503,6 +566,11 @@ export interface PublicVisitorForm {
   purposes: string[];
   photo: PhotoRule;
   consent_text: string;
+  /** The company's brand colour (the public pages wear it). */
+  colour: string | null;
+  /** Whom to meet: people (name + department), departments only, or typed. */
+  host_list: 'people' | 'departments' | 'off';
+  code_minutes: number;
 }
 export interface PublicVisitorInput {
   name: string;
@@ -510,6 +578,8 @@ export interface PublicVisitorInput {
   company?: string;
   purpose?: string;
   host_name?: string;
+  /** A person picked from the list (V4). */
+  host?: number | null;
   people?: number;
   vehicle_no?: string;
   photo?: string | null;
@@ -528,7 +598,82 @@ export function usePublicVisitorForm(code: string, token: string) {
 }
 export function useSubmitPublicVisitor(code: string, token: string) {
   return useMutation({
-    mutationFn: (body: PublicVisitorInput) => tasksApi.post<{ code: string }>(`/visitors/public/${encodeURIComponent(code)}/${encodeURIComponent(token)}/`, body),
+    mutationFn: (body: PublicVisitorInput) => tasksApi.post<PublicSignInResult>(`/visitors/public/${encodeURIComponent(code)}/${encodeURIComponent(token)}/`, body),
+  });
+}
+
+// ─── V4 (PLAN.md §22.11): the visitor's phone ─────────────────────────────────
+
+export interface PublicSignInResult {
+  /** The 4-digit check-in code for the guard. */
+  code: string;
+  expires_at: string | null;
+  /** This phone's device secret: keep it (the check-out QR finds the visit with it). */
+  device: string;
+}
+export type PublicHostOption = { id: number; name: string; department: string } | { department: string; id?: undefined; name?: undefined };
+
+/** Whom to meet on the QR form: names + departments only (2+ letters), or the department list. */
+export function usePublicHosts(code: string, token: string, q: string, mode: PublicVisitorForm['host_list'] | undefined) {
+  const term = q.trim();
+  return useQuery({
+    queryKey: ['public-visitor-hosts', code, token, mode === 'departments' ? '' : term],
+    queryFn: () =>
+      tasksApi.get<{ mode: PublicVisitorForm['host_list']; results: PublicHostOption[] }>(
+        `/visitors/public/${encodeURIComponent(code)}/${encodeURIComponent(token)}/hosts/`,
+        mode === 'departments' ? {} : { q: term },
+      ),
+    enabled: mode === 'departments' || (mode === 'people' && term.length >= 2),
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** What the visitor's own phone may show about their visit. */
+export interface DeviceState {
+  state: 'none' | 'pending' | 'expired' | 'waiting_host' | 'inside' | 'leaving' | 'held' | 'out' | 'closed';
+  first_name?: string;
+  pass_no?: string;
+  /** "Please wait at Reception." once the host answers. */
+  where?: string;
+  /** The 4-digit check-in code (pending) or check-out code (leaving). */
+  code?: string;
+  expires_at?: string | null;
+}
+
+/** The phone's own visit (found by its device secret, sent in the body, never in a URL); polls while it waits. */
+export function useDeviceState(code: string, device: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['visitor-device', code, device],
+    queryFn: () => tasksApi.post<DeviceState>(`/visitors/public/${encodeURIComponent(code)}/device/`, device ? { device } : {}),
+    enabled,
+    retry: false,
+    refetchInterval: (q) => (q.state.data && ['pending', 'waiting_host', 'leaving', 'inside', 'held'].includes(q.state.data.state) ? 10_000 : false),
+  });
+}
+
+export interface PublicCheckoutPage {
+  company: string;
+  logo_url: string | null;
+  colour: string | null;
+  visit: DeviceState;
+}
+/** The check-out QR page: /v/<company code>/<checkout token>/out. */
+export function usePublicCheckout(code: string, token: string) {
+  return useQuery({
+    queryKey: ['public-checkout', code, token],
+    queryFn: () => tasksApi.get<PublicCheckoutPage>(`/visitors/public/${encodeURIComponent(code)}/out/${encodeURIComponent(token)}/`),
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+/** Ask to check out from this phone (feedback optional): answers the check-out code for the guard. */
+export function useRequestCheckout(code: string, token: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { device: string | null; rating?: number | null; comment?: string }) =>
+      tasksApi.post<DeviceState>(`/visitors/public/${encodeURIComponent(code)}/out/${encodeURIComponent(token)}/`, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['visitor-device', code] }),
   });
 }
 
@@ -904,6 +1049,13 @@ export interface VisitorReport {
     incidents_open: number;
     patrol_scans: number;
     patrol_problems: number;
+    // V4
+    code_check_ins: number;
+    qr_check_outs: number;
+    feedback: number;
+    avg_rating: number;
+    host_answers: number;
+    avg_answer_minutes: number;
   };
   per_day: Array<{ date: string; visits: number }>;
   per_hour: Array<{ hour: number; visits: number }>;

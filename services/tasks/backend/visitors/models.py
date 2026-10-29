@@ -68,6 +68,9 @@ class GateLink(models.Model):
     enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     rotated_at = models.DateTimeField(null=True, blank=True)
+    # V4 (PLAN.md §22.11): the second fixed QR, for checking out from the visitor's own phone.
+    checkout_token = models.CharField(max_length=40, unique=True, default=new_token)
+    checkout_rotated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["id"]
@@ -126,6 +129,31 @@ class Visit(models.Model):
     pass_channels = models.JSONField(default=list, blank=True)
     # Watchlist (V2): why the gate was warned about this visitor (kept with the visit).
     watch_note = models.CharField(max_length=200, blank=True, default="")
+    # V4 (PLAN.md §22.11). The visitor's phone: only a SHA-256 of its random device secret, never the secret.
+    device_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    # The 4-digit check-in code (short_code) works until this time, once.
+    code_expires_at = models.DateTimeField(null=True, blank=True)
+    # How the guard let them in: code / card (tapped on the waiting card) / gate (walk-in) / pass (invite scanned).
+    check_in_via = models.CharField(max_length=6, blank=True, default="")
+    # Whom to meet -> where to wait: asked when the visit is approved; the host's answer goes to the guard.
+    host_notified_at = models.DateTimeField(null=True, blank=True)
+    host_answer = models.CharField(max_length=12, blank=True, default="")      # place / coming / unavailable
+    host_place = models.CharField(max_length=80, blank=True, default="")
+    host_note = models.CharField(max_length=200, blank=True, default="")
+    host_answered_at = models.DateTimeField(null=True, blank=True)
+    sent_to_place_at = models.DateTimeField(null=True, blank=True)
+    sent_to_place_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                         related_name="+")
+    # Check-out from the visitor's phone (check-out QR): requested, then approved by the guard with the code.
+    checkout_requested_at = models.DateTimeField(null=True, blank=True)
+    checkout_code = models.CharField(max_length=8, blank=True, default="", db_index=True)
+    checkout_code_expires_at = models.DateTimeField(null=True, blank=True)
+    checkout_via = models.CharField(max_length=6, blank=True, default="")   # qr / guard
+    checkout_held_at = models.DateTimeField(null=True, blank=True)
+    checkout_hold_note = models.CharField(max_length=200, blank=True, default="")
+    feedback_rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    feedback_comment = models.CharField(max_length=300, blank=True, default="")
+    feedback_at = models.DateTimeField(null=True, blank=True)
     anonymised = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
@@ -268,6 +296,14 @@ class GateAction(models.TextChoices):
     INCIDENT = "incident", "Incident reported"
     INCIDENT_CLOSE = "incident_close", "Incident closed"
     ID_SCAN = "id_scan", "ID card read"
+    # V4 (PLAN.md §22.11)
+    CODE_APPROVE = "code_approve", "Check-in code approved"
+    CODE_MISS = "code_miss", "Wrong code entered"
+    HOST_ANSWER = "host_answer", "Host said where to wait"
+    SENT_TO_PLACE = "sent_to_place", "Visitor sent to the waiting place"
+    CHECKOUT_REQUEST = "checkout_request", "Check-out asked from the phone"
+    CHECKOUT_APPROVE = "checkout_approve", "Check-out approved"
+    CHECKOUT_HOLD = "checkout_hold", "Check-out held"
     SETTINGS = "settings", "Visitor settings changed"
     LINK = "link", "Visitor QR link changed"
 

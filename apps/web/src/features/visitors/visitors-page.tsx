@@ -4,6 +4,7 @@ import { useVisitorConfig } from '@kaampilot/core/visitors';
 import { Navigate, useParams } from 'react-router';
 import { ErrorState, PageLoader } from '@/components/common/page';
 import { NotFound } from '@/app/pages/errors';
+import { AnswerPage } from './answer';
 import { ContractorsPage } from './contractors';
 import { DeliveriesPage } from './deliveries';
 import { GatePage } from './gate';
@@ -35,6 +36,9 @@ export function VisitorsPage() {
       return c.can.gate || c.can.view_all ? <InsidePage /> : <NotFound />;
     case 'my':
       return c.can.invite ? <MyVisitorsPage config={c} /> : <NotFound />;
+    case 'answer':
+      // V4: the host says where their visitor should wait (from the notification / WhatsApp button).
+      return c.can.invite || c.can.view_all ? <AnswerPage config={c} /> : <NotFound />;
     case 'deliveries':
       return c.can.gate || c.can.view_all ? <DeliveriesPage config={c} /> : <NotFound />;
     case 'contractors':

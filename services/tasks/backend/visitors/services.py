@@ -234,10 +234,11 @@ def apply_fields(v: Visit, data: dict, s: dict, *, require_photo: bool):
         raise ValidationError({"photo": "Take the visitor's photo."})
 
 
-def _admit(v: Visit, actor, s, action):
-    """Inside now (host informed), or waiting for the host when the company asks hosts to approve."""
+def _admit(v: Visit, actor, s, action, via="gate"):
+    """Inside now (the host is asked where they should wait, V4), or waiting for the host when the company asks hosts
+    to approve."""
     now = timezone.now()
-    v.check_in_by = actor
+    v.check_in_by, v.check_in_via = actor, via
     if not v.pass_no:
         v.save()
         v.pass_no = f"V{v.pk:05d}"
@@ -250,10 +251,11 @@ def _admit(v: Visit, actor, s, action):
     else:
         v.status, v.check_in_at = VisitStatus.INSIDE, now
         v.save()
-        log(actor, action, f"{who(v)} in{f' to meet {name_of(v.host)}' if v.host else ''}", visit=v)
+        log(actor, action, f"{who(v)} in{f' to meet {name_of(v.host)}' if v.host else ''}"
+            f"{' (check-in code)' if via == 'code' else ''}", visit=v)
         if v.host:
-            _notify(v.host, "visitor_arrived", f"{v.name} is at the gate for you",
-                    f"{who(v)} · {v.purpose or 'visit'} · pass {v.pass_no}", visit_link(v))
+            from .services_v4 import ask_host
+            ask_host(v)
     vis = v.visitor
     if not vis.anonymised:
         vis.name, vis.company = v.name, v.company or vis.company
@@ -283,7 +285,7 @@ def check_in(actor, data: dict) -> Visit:
     v = Visit(visitor=visitor, source=VisitSource.GATE, consent_at=timezone.now())
     apply_fields(v, {**data, "mobile": mobile}, s, require_photo=True)
     hit = screen(actor, v, data, s)
-    v = _admit(v, actor, s, GateAction.VISIT_IN)
+    v = _admit(v, actor, s, GateAction.VISIT_IN, via="gate")
     _after_admit(actor, v, s, hit)
     return v
 
@@ -297,7 +299,10 @@ def accept(actor, v: Visit, data: dict) -> Visit:
     hit = screen(actor, v, data, s)
     v.consent_at = v.consent_at or timezone.now()
     invited = v.status == VisitStatus.EXPECTED
-    v = _admit(v, actor, s, GateAction.VISIT_IN if invited else GateAction.OPEN_ACCEPT)
+    # V4: the guard typed the visitor's 4-digit check-in code (only a QR sign-in has one).
+    via = "pass" if invited else ("code" if data.get("via") == "code" else "card")
+    action = GateAction.VISIT_IN if invited else (GateAction.CODE_APPROVE if via == "code" else GateAction.OPEN_ACCEPT)
+    v = _admit(v, actor, s, action, via=via)
     _after_admit(actor, v, s, hit)
     return v
 
@@ -329,7 +334,8 @@ def decide(actor, v: Visit, allow: bool) -> Visit:
     now = timezone.now()
     v.host_decision_at, v.host_decision_by = now, actor
     if allow:
-        v.status, v.check_in_at = VisitStatus.INSIDE, now
+        # The host is right here: they say where to wait on the same screen (V4), no second notice.
+        v.status, v.check_in_at, v.host_notified_at = VisitStatus.INSIDE, now, now
     else:
         v.status = VisitStatus.DENIED
     v.save()
@@ -341,6 +347,8 @@ def check_out(actor, v: Visit) -> Visit:
     if v.status != VisitStatus.INSIDE:
         raise ValidationError({"detail": "This visitor is not inside."})
     v.status, v.check_out_at, v.check_out_by = VisitStatus.OUT, timezone.now(), actor
+    # V4: asked from the phone (check-out QR) and let out by the guard, or checked out by the guard alone.
+    v.checkout_via = "qr" if v.checkout_requested_at else "guard"
     v.save()
     log(actor, GateAction.VISIT_OUT, f"{who(v)} out after {v.minutes_inside()} min", visit=v)
     return v
@@ -464,7 +472,7 @@ def company_code() -> str:
     return cur[3:] if cur else "main"
 
 
-def public_submit(link: GateLink, data: dict, ip_hash: str) -> Visit:
+def public_submit(link: GateLink, data: dict, ip_hash: str, device_hash: str = "") -> Visit:
     s = conf.get()
     name = text(data.get("name"), 80)
     errors = {}
@@ -496,13 +504,19 @@ def public_submit(link: GateLink, data: dict, ip_hash: str) -> Visit:
         people = max(1, min(50, int(data.get("people") or 1)))
     except (TypeError, ValueError):
         people = 1
+    from . import services_v4
     host_text = text(data.get("host_name"), 80)
-    host = _match_host(host_text)
+    # V4: a person picked from the form's list (name + department only), else the typed name / department.
+    host = services_v4.public_host(data.get("host")) or _match_host(host_text)
+    if not host and not host_text:
+        raise ValidationError({"host_name": "Whom have you come to meet?"})
     visitor = _visitor_for(mobile, name, text(data.get("company"), 120))
+    now = timezone.now()
     v = Visit(visitor=visitor, name=name, mobile=mobile, company=text(data.get("company"), 120),
               purpose=text(data.get("purpose"), 60), people=people, host=host, host_label="" if host else host_text,
               vehicle_no=vehicle_no, status=VisitStatus.WAITING, source=VisitSource.OPEN_LINK,
-              short_code=new_short_code(), consent_at=timezone.now(), ip_hash=ip_hash, gate_link=link)
+              short_code=services_v4.new_code(now), code_expires_at=now + timedelta(minutes=services_v4.code_minutes()),
+              device_hash=device_hash, consent_at=now, ip_hash=ip_hash, gate_link=link)
     if raw:
         store_photo(v.photo, raw)
     v.save()
@@ -558,6 +572,7 @@ def retention_cleanup(now=None) -> int:
         v.name, v.mobile, v.company, v.id_type, v.id_last4 = "Visitor (removed)", "", "", "", ""
         v.items, v.notes, v.ip_hash, v.vehicle_no, v.anonymised = "", "", "", "", True
         v.email, v.watch_note, v.pass_channels = "", "", []
+        v.device_hash, v.host_note, v.feedback_comment, v.checkout_hold_note = "", "", "", ""
         v.save()
         n += 1
     for vis in Visitor.objects.filter(anonymised=False, last_visit_at__lt=cutoff):
@@ -596,7 +611,9 @@ def run_jobs() -> None:
     if not module_on("visitors"):
         return
     from . import services_v3
+    from .services_v4 import expire_codes
     overstay_alerts()
+    expire_codes()
     mark_no_shows()
     delivery_reminders()
     services_v3.run_jobs()

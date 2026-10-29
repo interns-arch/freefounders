@@ -171,8 +171,11 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
   - Check a visitor in with mobile, name, company, purpose, whom to meet, gate, photo, ID type + last 4 digits only, vehicle and items.
   - This gives a pass number and QR. Check out with one tap or by scanning the pass.
   - Optional host approval (Allow / Deny).
-- **Visitor QR**: one company QR poster. Visitors scan it and fill in the form themselves, and the guard confirms.
-- **My visitors** (any employee): **Invite visitor** sends a pass link in advance. Here you also see parcels waiting for you.
+- **Check-in QR**: one company QR poster ("Visitors check-in"). Visitors scan it, fill in the form (whom to meet: names and departments only) and get a **4-digit check-in code**. The guard types it in **Gate › Visitor code**, sees the details and photo, and taps **Approve check-in**.
+- **Check-out QR**: a second poster ("Visitors check-out"). Visitors scan it with the **same phone** they checked in with, give optional feedback (1–5) and tap **Check out**. They get a 4-digit check-out code; the guard types it and taps **Approve check-out** (or **Hold**). Another phone cannot check them out. The guard can still check anyone out by hand.
+- **Where to wait**: once a visitor is let in, the host gets a notification (and a WhatsApp if the company set up its template) and picks a waiting place (Settings › Waiting places), "I'm coming to the gate" or "Not available". The guard sees it on the visit card and taps **Sent to …**. No answer after 5 minutes: **No answer yet** + **Call host**.
+- Both QR posters are in Visitors › **Settings** (download PNG or print).
+- **My visitors** (any employee): **Invite visitor** sends a pass link in advance. Here you also see parcels waiting for you, and **Where should they wait?** for a visitor who is here.
 - **Vehicles**: in/out with plate photo. **Parcels**: receive, hand over or return.
 - Also: **Contractors** (multi-day passes), **Material passes** (goods in/out, manager-approved), **Patrol** (QR checkpoints), **Incidents**.
 - **Inside now**: roll call for evacuation.

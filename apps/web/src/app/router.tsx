@@ -37,6 +37,8 @@ export const router = createBrowserRouter([
   { path: '/pricing', lazy: async () => ({ Component: (await import('@/features/landing/landing-page')).PricingPage }), errorElement: <RouteError /> },
   // The open visitor sign-in from the QR at the gate (PLAN.md §22): no sign-in, any phone browser.
   { path: '/v/:code/:token', lazy: async () => ({ Component: (await import('@/features/visitors/public')).PublicVisitorPage }), errorElement: <RouteError /> },
+  // The check-out QR (PLAN.md §22.11): only the phone that checked in can check out; the guard approves the code.
+  { path: '/v/:code/:token/out', lazy: async () => ({ Component: (await import('@/features/visitors/checkout')).PublicCheckoutPage }), errorElement: <RouteError /> },
   { path: '/v/:code/p/:token', lazy: async () => ({ Component: (await import('@/features/visitors/pass')).PublicPassPage }), errorElement: <RouteError /> },
   {
     element: <RequireSession />,

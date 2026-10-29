@@ -153,6 +153,7 @@ RELATIONS = {
     "visitors.Visit.host_decision_by": NULL,
     "visitors.Visit.check_in_by": NULL,
     "visitors.Visit.check_out_by": NULL,
+    "visitors.Visit.sent_to_place_by": NULL,   # V4 (PLAN.md §22.11)
     "visitors.VehicleEntry.in_by": NULL,
     "visitors.VehicleEntry.out_by": NULL,
     "visitors.GateLog.actor": NULL,

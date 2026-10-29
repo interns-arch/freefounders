@@ -170,7 +170,8 @@ class OpenLinkTests(Base):
         self.assertNotIn("hosts", form.data)
         res = APIClient().post(self.url, self.body, format="json")
         self.assertEqual(res.status_code, 201)
-        self.assertEqual(set(res.data), {"code"})
+        # V4: only the 4-digit code, when it expires, and this phone's own device secret (PLAN.md §22.11).
+        self.assertEqual(set(res.data), {"code", "expires_at", "device"})
         v = Visit.objects.get()
         self.assertEqual((v.status, v.short_code, v.host), ("waiting", res.data["code"], self.host))
         self.assertEqual(self.api(self.guard).get("/api/badges/").data["visitors"]["waiting"], 1)

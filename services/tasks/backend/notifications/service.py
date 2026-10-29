@@ -53,7 +53,8 @@ def notify(user, type_: str, title: str, body: str = "", link: str = "",
            wa_template: tuple[str, list] | None = None,
            link_label: str | None = None,
            extra_links=(), want_whatsapp: bool = True,
-           want_email: bool = True, outside_hours: str = "defer", category: str = "") -> Notification:
+           want_email: bool = True, outside_hours: str = "defer", category: str = "",
+           wa_url_button: str = "", wa_lang: str = "en") -> Notification:
     """wa_template=(template_name, [params]) routes the WhatsApp leg through
     an approved Meta template (deliverable any time); without it the message
     goes as free-form text, which Meta only delivers inside a 24h
@@ -90,8 +91,11 @@ def notify(user, type_: str, title: str, body: str = "", link: str = "",
             deferred = {"template": wa_template[0] if wa_template else None,
                         "params": list(wa_template[1]) if wa_template else [],
                         "text": f"{title}\n{body}".strip()}
+            if wa_template and (wa_url_button or wa_lang != "en"):
+                deferred |= {"button": wa_url_button, "lang": wa_lang}
     elif wa_template:
-        wa = whatsapp.send_template(user.whatsapp_phone, wa_template[0], wa_template[1])
+        extra = {k: v for k, v in (("lang", wa_lang if wa_lang != "en" else ""), ("url_button", wa_url_button)) if v}
+        wa = whatsapp.send_template(user.whatsapp_phone, wa_template[0], wa_template[1], **extra)
     else:
         wa = whatsapp.send_text(user.whatsapp_phone, f"{title}\n{body}".strip())
     results.append(wa)
@@ -116,7 +120,8 @@ def send_deferred_whatsapp(limit: int = 300) -> int:
         if n.created_at < stale or not n.user.is_active:
             res = {"channel": "whatsapp", "status": "skipped", "detail": "held too long, dropped"}
         elif held.get("template"):
-            res = whatsapp.send_template(n.user.whatsapp_phone, held["template"], held.get("params") or [])
+            extra = {k: v for k, v in (("lang", held.get("lang")), ("url_button", held.get("button"))) if v}
+            res = whatsapp.send_template(n.user.whatsapp_phone, held["template"], held.get("params") or [], **extra)
             _remember_whatsapp(n.user, res, held["template"])
         else:
             res = whatsapp.send_text(n.user.whatsapp_phone, held.get("text") or n.title)

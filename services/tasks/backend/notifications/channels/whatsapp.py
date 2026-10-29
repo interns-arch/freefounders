@@ -107,9 +107,19 @@ def _param(value) -> str:
     return clean[:500] or "—"
 
 
-def send_template(to_phone: str, template_name: str, params: list[str], lang: str = "en") -> dict:
+def send_template(to_phone: str, template_name: str, params: list[str], lang: str = "en",
+                  url_button: str = "") -> dict:
+    """url_button: the dynamic part of the template's first "Visit website" button (e.g. "visitors/answer?visit=7"
+    for a button whose URL was approved as https://kaampilot.com/{{1}})."""
     if not to_phone:
         return {"channel": "whatsapp", "status": "skipped", "detail": "user has no whatsapp number"}
+    components = [{
+        "type": "body",
+        "parameters": [{"type": "text", "text": _param(p)} for p in params],
+    }]
+    if url_button:
+        components.append({"type": "button", "sub_type": "url", "index": "0",
+                           "parameters": [{"type": "text", "text": str(url_button)[:500]}]})
     return _post({
         "messaging_product": "whatsapp",
         "to": _normalize(to_phone),
@@ -117,9 +127,6 @@ def send_template(to_phone: str, template_name: str, params: list[str], lang: st
         "template": {
             "name": template_name,
             "language": {"code": lang},
-            "components": [{
-                "type": "body",
-                "parameters": [{"type": "text", "text": _param(p)} for p in params],
-            }],
+            "components": components,
         },
     })

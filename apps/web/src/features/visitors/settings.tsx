@@ -31,7 +31,8 @@ export function VisitorSettingsPage() {
   return (
     <div className="max-w-3xl space-y-5">
       <PageHeader title="Visitor settings" description="How the gate works for your company." />
-      <QrCard />
+      <QrCard kind="in" />
+      <QrCard kind="out" />
       <SettingsForm initial={q.data} />
     </div>
   );
@@ -40,16 +41,22 @@ export function VisitorSettingsPage() {
 function SettingsForm({ initial }: { initial: VisitorSettings }) {
   const [f, setF] = useState(initial);
   const [purposes, setPurposes] = useState(initial.purposes.join('\n'));
+  const [places, setPlaces] = useState(initial.waiting_places.join('\n'));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useSaveVisitorSettings();
   useEffect(() => {
     setF(initial);
     setPurposes(initial.purposes.join('\n'));
+    setPlaces(initial.waiting_places.join('\n'));
   }, [initial]);
   const set = <K extends keyof VisitorSettings>(k: K, v: VisitorSettings[K]) => setF((cur) => ({ ...cur, [k]: v }));
   const submit = async () => {
     try {
-      await save.mutateAsync({ ...f, purposes: purposes.split('\n').map((p) => p.trim()).filter(Boolean) });
+      await save.mutateAsync({
+        ...f,
+        purposes: purposes.split('\n').map((p) => p.trim()).filter(Boolean),
+        waiting_places: places.split('\n').map((p) => p.trim()).filter(Boolean),
+      });
       setErrors({});
       toast.success('Visitor settings saved');
     } catch (e) {
@@ -57,7 +64,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
       toast.error(errorMessage(e));
     }
   };
-  const toggle = (k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass' | 'id_scan', label: string, hint: string) => (
+  const toggle = (k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass' | 'id_scan' | 'checkout_qr', label: string, hint: string) => (
     <label className="flex cursor-pointer items-start justify-between gap-4 py-2">
       <span>
         <span className="block font-medium">{label}</span>
@@ -74,7 +81,8 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
       <CardContent className="space-y-4">
         <div className="divide-y">
           {toggle('host_approval', 'Host approves first', 'Off: the guard lets visitors in and the host is told. On: the host taps Allow or Deny and the guard sees the answer.')}
-          {toggle('open_link', 'Visitor QR sign-in', 'Visitors scan the QR at the gate and fill in their details themselves; the guard checks them in.')}
+          {toggle('open_link', 'Visitor QR sign-in', 'Visitors scan the check-in QR and fill in their details; they get a 4-digit code and the guard approves it.')}
+          {toggle('checkout_qr', 'Check-out QR', 'Visitors scan the check-out QR with the phone they checked in with, give feedback and get a 4-digit code; the guard approves it.')}
           {toggle('photo_vehicle', 'Vehicle photo required', 'A photo of the vehicle / number plate at vehicle check-in.')}
           {toggle('send_pass', 'Send the visitor pass', 'The pass link (QR) goes to the visitor by WhatsApp, and by email when given: at check-in and with every invite.')}
           {toggle('id_scan', 'Read ID cards with AI', "The guard photographs the ID card; the company's AI fills the name, ID type and last 4 digits. The card photo is sent to the AI provider once and never kept. Needs the company's AI set up.")}
@@ -154,6 +162,30 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
             <Input type="number" min={1} max={366} value={f.contractor_max_days} onChange={(e) => set('contractor_max_days', Number(e.target.value))} />
           </Field>
         </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Whom to meet on the QR form" hint="Never shows emails or phone numbers">
+            <NativeSelect value={f.public_host_list} onChange={(e) => set('public_host_list', e.target.value as VisitorSettings['public_host_list'])}>
+              <option value="people">People: name + department</option>
+              <option value="departments">Departments only</option>
+              <option value="off">Typed by the visitor</option>
+            </NativeSelect>
+          </Field>
+          <Field label="Codes work for (minutes)" hint="Check-in and check-out codes" error={errors.code_minutes}>
+            <Input type="number" min={10} max={720} value={f.code_minutes} onChange={(e) => set('code_minutes', Number(e.target.value))} />
+          </Field>
+          <Field label="Host no answer after (minutes)" hint="The guard sees “No answer yet” + Call host" error={errors.host_answer_minutes}>
+            <Input type="number" min={1} max={60} value={f.host_answer_minutes} onChange={(e) => set('host_answer_minutes', Number(e.target.value))} />
+          </Field>
+          <Field label="WhatsApp template for hosts" hint="Meta-approved name, e.g. visitor_waiting. Empty: app notice only." error={errors.host_wa_template}>
+            <Input value={f.host_wa_template} onChange={(e) => set('host_wa_template', e.target.value.trim())} placeholder="visitor_waiting" className="font-mono" />
+          </Field>
+          <Field label="Template language" error={errors.host_wa_lang}>
+            <Input value={f.host_wa_lang} onChange={(e) => set('host_wa_lang', e.target.value.trim())} placeholder="en" className="font-mono" />
+          </Field>
+        </div>
+        <Field label="Waiting places" hint="One per line. The host picks one (or “I’m coming to the gate” / “Not available”)." error={errors.waiting_places}>
+          <Textarea rows={4} value={places} onChange={(e) => setPlaces(e.target.value)} />
+        </Field>
         <Field label="Purposes of visit" hint="One per line" error={errors.purposes}>
           <Textarea rows={6} value={purposes} onChange={(e) => setPurposes(e.target.value)} />
         </Field>
@@ -170,8 +202,29 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
   );
 }
 
-/** Draws the printable poster (company name, the QR, how to use it) as a PNG data URL. */
-async function posterPng(url: string, company: string): Promise<string> {
+const KIND = {
+  in: {
+    caption: 'Visitors check-in',
+    title: 'Visitor check-in QR',
+    describe: 'One QR for your company. Print it once and put it up at the gate: visitors scan it, fill in their details and show the 4-digit code to the guard.',
+    steps: ['1. Scan with your phone camera   2. Fill in your details', '3. Show the 4-digit code to the guard'],
+    file: 'visitors-check-in',
+    renew: 'Make a new check-in QR?',
+  },
+  out: {
+    caption: 'Visitors check-out',
+    title: 'Visitor check-out QR',
+    describe: 'Put it up at the exit. Visitors scan it with the phone they checked in with, give feedback and show the 4-digit code; the guard approves.',
+    steps: ['1. Scan with the phone you checked in with   2. Tap Check out', '3. Show the 4-digit code to the guard'],
+    file: 'visitors-check-out',
+    renew: 'Make a new check-out QR?',
+  },
+} as const;
+
+/** Draws the printable poster as a PNG data URL: "Kaampilot · company" small above, the QR, and the caption
+ * ("Visitors check-in" / "Visitors check-out") right below the QR, then the steps. Black on white for any printer. */
+async function posterPng(url: string, company: string, kind: 'in' | 'out'): Promise<string> {
+  const k = KIND[kind];
   const qr = await QRCodeLib.toDataURL(url, { margin: 1, width: 900, errorCorrectionLevel: 'M' });
   const img = new Image();
   await new Promise<void>((resolve, reject) => {
@@ -188,32 +241,38 @@ async function posterPng(url: string, company: string): Promise<string> {
   g.fillRect(0, 0, canvas.width, canvas.height);
   g.fillStyle = 'black';
   g.textAlign = 'center';
-  g.font = 'bold 72px sans-serif';
-  g.fillText(company || 'Visitors', canvas.width / 2, 200);
-  g.font = '600 56px sans-serif';
-  g.fillText('Visitors: scan to sign in', canvas.width / 2, 310);
-  g.drawImage(img, (canvas.width - 900) / 2, 400, 900, 900);
+  g.font = '600 40px sans-serif';
+  g.fillText(`Kaampilot · ${company || 'Visitors'}`, canvas.width / 2, 170, 1100);
+  g.drawImage(img, (canvas.width - 900) / 2, 230, 900, 900);
+  // The caption, right below the QR.
+  g.font = 'bold 96px sans-serif';
+  g.fillText(k.caption, canvas.width / 2, 1250, 1140);
   g.font = '40px sans-serif';
-  g.fillText('1. Scan with your phone camera   2. Fill in your details', canvas.width / 2, 1420);
-  g.fillText('3. Show the code on your screen to the guard', canvas.width / 2, 1480);
-  g.font = '28px sans-serif';
-  g.fillText(url, canvas.width / 2, 1620);
+  g.fillText(k.steps[0], canvas.width / 2, 1380, 1140);
+  g.fillText(k.steps[1], canvas.width / 2, 1440, 1140);
+  g.font = '26px sans-serif';
+  g.fillText(url, canvas.width / 2, 1620, 1180);
   return canvas.toDataURL('image/png');
 }
 
-function QrCard() {
+function QrCard({ kind }: { kind: 'in' | 'out' }) {
+  const k = KIND[kind];
   const link = useVisitorLink();
   const change = useChangeVisitorLink();
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const d = link.data;
-  const url = d ? `${window.location.origin}${d.path}` : '';
+  const path = d ? (kind === 'in' ? d.path : d.checkout_path) : '';
+  const url = d ? `${window.location.origin}${path}` : '';
+  const code = path.split('/')[2] ?? '';
+  const enabled = d ? (kind === 'in' ? d.enabled : d.checkout_enabled) : true;
+  const rotated = d ? (kind === 'in' ? d.rotated_at : d.checkout_rotated_at) : null;
   const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
 
   const download = async () => {
     setBusy(true);
     try {
-      await saveFile('visitor-qr-poster.png', dataUrlToBlob(await posterPng(url, d?.company ?? '')));
+      await saveFile(`${k.file}-${code}.png`, dataUrlToBlob(await posterPng(url, d?.company ?? '', kind)));
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -222,10 +281,10 @@ function QrCard() {
   };
   const print = async () => {
     // A clean page with only the poster: the browser's print dialog also saves it as a PDF.
-    const png = await posterPng(url, d?.company ?? '');
+    const png = await posterPng(url, d?.company ?? '', kind);
     const w = window.open('', '_blank');
     if (!w) return void toast.error('Allow pop-ups to print the poster, or use Download.');
-    w.document.title = 'Visitor QR poster';
+    w.document.title = `${k.file}-${code}`;
     const im = w.document.createElement('img');
     im.src = png;
     im.style.width = '100%';
@@ -235,15 +294,15 @@ function QrCard() {
   };
   const regenerate = async () => {
     const r = await confirm({
-      title: 'Make a new QR?',
+      title: k.renew,
       description: 'The QR printed now stops working at once. Print and put up the new one.',
       confirmText: 'Make a new QR',
       destructive: true,
     });
     if (!r.confirmed) return;
     try {
-      await change.mutateAsync({ regenerate: true });
-      toast.success('New visitor QR made. Print the new poster.');
+      await change.mutateAsync(kind === 'in' ? { regenerate: true } : { regenerate_checkout: true });
+      toast.success('New QR made. Print the new poster.');
     } catch (e) {
       toast.error(errorMessage(e));
     }
@@ -252,8 +311,8 @@ function QrCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Visitor QR</CardTitle>
-        <CardDescription>One QR for your company. Print it once and put it up at the gate; it keeps working until you make a new one.</CardDescription>
+        <CardTitle>{k.title}</CardTitle>
+        <CardDescription>{k.describe} It keeps working until you make a new one.</CardDescription>
       </CardHeader>
       <CardContent>
         {link.error ? (
@@ -262,12 +321,20 @@ function QrCard() {
           <PageLoader />
         ) : (
           <div className="flex flex-col gap-4 sm:flex-row">
-            <QRCode value={url} size={168} className="shrink-0 self-center" />
+            <figure className="flex shrink-0 flex-col items-center gap-1 self-center">
+              <QRCode value={url} size={168} />
+              <figcaption className="text-center">
+                <span className="block text-[15px] font-bold" data-testid={`qr-caption-${kind}`}>
+                  {k.caption}
+                </span>
+                {d.company && <span className="block text-[13px] text-muted-foreground">Kaampilot · {d.company}</span>}
+              </figcaption>
+            </figure>
             <div className="min-w-0 flex-1 space-y-3">
-              <p className="font-mono text-[13px] break-all" data-testid="visitor-qr-url">
+              <p className="font-mono text-[13px] break-all" data-testid={kind === 'in' ? 'visitor-qr-url' : 'visitor-checkout-qr-url'}>
                 {url}
               </p>
-              {!d.enabled && <p className="text-[13px] font-medium text-warning">The QR sign-in is switched off: the link answers “not valid”.</p>}
+              {!enabled && <p className="text-[13px] font-medium text-warning">This QR is switched off (Rules below): the link answers “not valid”.</p>}
               {local && <p className="text-[13px] text-muted-foreground">This is a local address: phones cannot open it. Print from the live site.</p>}
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => void download()} loading={busy}>
@@ -288,7 +355,7 @@ function QrCard() {
                   </Button>
                 )}
               </div>
-              {d.rotated_at && <p className="text-[13px] text-muted-foreground">Last new QR: {new Date(d.rotated_at).toLocaleString('en-IN')}</p>}
+              {rotated && <p className="text-[13px] text-muted-foreground">Last new QR: {new Date(rotated).toLocaleString('en-IN')}</p>}
             </div>
           </div>
         )}

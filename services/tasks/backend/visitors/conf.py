@@ -3,6 +3,7 @@
 Kept in the company's own CompanySetting table (key VISITORS_SETTINGS); nothing saved = the defaults below.
 """
 import json
+import re
 
 from tenancy.company_settings import company_env, set_value
 
@@ -13,6 +14,8 @@ WATCH_ACTIONS = ("stop", "warn")     # a watchlist match: the gate cannot let th
 BADGE_FORMATS = ("card", "label")    # printed badge: A6 card on any printer, or a 62 mm label printer
 ID_TYPES = ["Aadhaar", "PAN", "Driving licence", "Voter ID", "Passport", "Company ID", "Other"]
 DEFAULT_PURPOSES = ["Meeting", "Interview", "Delivery", "Vendor / supplier", "Maintenance / repair", "Personal", "Other"]
+HOST_LIST_MODES = ("people", "departments", "off")
+DEFAULT_PLACES = ["Reception", "Meeting room 1", "Conference room", "My desk"]
 DEFAULT_CONSENT = (
     "I agree that my name, mobile number and photo are recorded for the security of the premises. They are kept "
     "for a limited time and then deleted."
@@ -41,6 +44,14 @@ DEFAULTS = {
     "patrol_from": 0,                # patrol hours, 0-23; from == to = all day; 20 -> 6 wraps past midnight
     "patrol_to": 0,
     "contractor_max_days": 90,
+    # V4 (PLAN.md §22.11)
+    "public_host_list": "people",    # whom to meet on the QR form: people (name + department) / departments / off
+    "code_minutes": 120,             # the 4-digit check-in / check-out codes work this long
+    "waiting_places": DEFAULT_PLACES,
+    "host_answer_minutes": 5,        # no answer from the host after N minutes: the guard sees "No answer yet"
+    "host_wa_template": "",          # Meta-approved utility template for the host (empty = in-app notice only)
+    "host_wa_lang": "en",
+    "checkout_qr": True,             # the check-out QR (visitors check out from the phone they checked in with)
 }
 
 
@@ -81,7 +92,31 @@ def clean(data: dict) -> tuple[dict, dict]:
                 if not purposes:
                     raise ValueError("Add at least one purpose")
                 cur[key] = purposes[:30]
-            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan"):
+            elif key == "waiting_places":
+                items = value if isinstance(value, list) else str(value).split(",")
+                places = []
+                for p in items:
+                    t = " ".join(str(p).split())[:60]
+                    if t and t.lower() not in {x.lower() for x in places}:
+                        places.append(t)
+                if not places:
+                    raise ValueError("Add at least one waiting place")
+                cur[key] = places[:20]
+            elif key == "public_host_list":
+                if value not in HOST_LIST_MODES:
+                    raise ValueError(f"One of: {', '.join(HOST_LIST_MODES)}")
+                cur[key] = value
+            elif key == "code_minutes":
+                cur[key] = _bounded_int(value, 10, 720, "Code valid for")
+            elif key == "host_answer_minutes":
+                cur[key] = _bounded_int(value, 1, 60, "Host answer")
+            elif key in ("host_wa_template", "host_wa_lang"):
+                t = str(value or "").strip()
+                if not re.fullmatch(r"[a-z0-9_]{0,60}" if key == "host_wa_template" else r"[a-zA-Z_]{2,8}", t):
+                    raise ValueError("Lower-case letters, digits and _ only (the name as approved by Meta)"
+                                     if key == "host_wa_template" else "A language code like en or en_US")
+                cur[key] = t
+            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan", "checkout_qr"):
                 if not isinstance(value, bool):
                     raise ValueError("On or off")
                 cur[key] = value

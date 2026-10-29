@@ -23,6 +23,10 @@ urlpatterns = [
     path("visitors/inside/", views.inside_view),
     path("visitors/guards/", views.guards_view),
     path("visitors/people/<int:pk>/photo/", views.visitor_photo_view),
+    # V4 (PLAN.md §22.11): before the check-in link's pattern, which would take "device" / "out" as a token.
+    path("visitors/public/<str:code>/device/", views.public_device_view),
+    path("visitors/public/<str:code>/out/<str:token>/", views.public_checkout_view),
+    path("visitors/public/<str:code>/<str:token>/hosts/", views.public_hosts_view),
     path("visitors/public/<str:code>/<str:token>/", views.public_view),
     path("visitors/pass/<str:code>/<str:token>/", views.public_pass_view),
     path("visitors/invites/", views.invites_view),

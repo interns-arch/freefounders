@@ -78,9 +78,9 @@ test('Visitors: module on, Guard role, QR sign-in without login, gate check-in /
   await visitor.getByLabel('Purpose of visit').selectOption('Meeting');
   await visitor.getByLabel('Whom have you come to meet?').fill('Accounts team');
   await visitor.getByRole('checkbox', { name: 'I agree' }).click();
-  await visitor.getByRole('button', { name: 'Send to the guard' }).click();
+  await visitor.getByRole('button', { name: 'Get my check-in code' }).click();
   const code = (await visitor.getByTestId('visitor-code').textContent())?.trim();
-  expect(code).toMatch(/^[A-Z0-9]{6}$/);
+  expect(code).toMatch(/^\d{4}$/); // V4: 4 random digits (PLAN.md §22.11)
   // A bad token is a clean "not valid" (page) and 404 (API).
   await visitor.goto(link.path.replace(/[^/]+$/, 'bad-token-0000000000'));
   await expect(visitor.getByRole('heading', { name: 'This link is not valid' })).toBeVisible();
