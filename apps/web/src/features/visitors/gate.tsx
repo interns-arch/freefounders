@@ -40,7 +40,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Badge, Card, CardContent } from '@/components/ui/primitives';
 import { CameraScanner } from '@/features/assets/inventory/scan-page';
 import { cn } from '@/lib/utils';
-import { CodeDialog, CodeEntry, HostAnswerLine } from './gate-codes';
+import { CodeDialog, CodeEntry, HostAnswerLine, LeavingActions } from './gate-codes';
+
 import { HostPicker, PassDialog, PhotoField, PrivatePhoto, StatusBadge, WatchNote, alertGuard, clock, formatMinutes, hostName, useBlobUrl } from './parts';
 
 const GATE_KEY = 'ff-visitors-gate';
@@ -81,7 +82,7 @@ export function GatePage({ config }: { config: VisitorConfig }) {
   const expected = rows.filter((v) => v.status === 'expected' && match(v));
   const waitingHost = rows.filter((v) => v.status === 'waiting_host' && match(v));
   const inside = rows.filter((v) => v.status === 'inside' && !v.checkout_pending && match(v));
-  // V4: asked to leave from their phone; the guard approves with the check-out code (or here).
+  // V4.1: asked to leave from their phone (no code): the guard approves or holds here.
   const leaving = rows.filter((v) => v.status === 'inside' && v.checkout_pending && match(v));
   const done = rows.filter((v) => ['out', 'denied', 'rejected'].includes(v.status) && match(v));
 
@@ -107,7 +108,7 @@ export function GatePage({ config }: { config: VisitorConfig }) {
         if (before === undefined) continue;
         if (v.checkout_pending && !before.startsWith('L')) {
           alertGuard();
-          toast.info(`${v.name} wants to leave: ask for the check-out code`);
+          toast.info(`${v.name} wants to leave: approve or hold`);
         }
         if (v.host_answered_at && before.split('|')[1] !== v.host_answered_at) {
           alertGuard();
@@ -160,12 +161,10 @@ export function GatePage({ config }: { config: VisitorConfig }) {
       <SearchField value={q} onChange={setQ} label="Search name, mobile, pass or vehicle" className="max-w-md" />
 
       {leaving.length > 0 && (
-        <Section title={`Waiting to leave (${leaving.length})`} note="They tapped Check out on the check-out QR. Ask for the code, check the vehicle and items, then approve.">
+        <Section title={`Waiting to leave (${leaving.length})`} note="They tapped Check out on their phone. Check the person, vehicle and items, then approve (or hold with a note they see).">
           {leaving.map((v) => (
             <VisitCard key={v.id} visit={v} onOpen={() => setPass(v)}>
-              <Button size="lg" variant="success" onClick={() => setHit({ kind: 'checkout', visit: v })}>
-                <LogOut /> Check out…
-              </Button>
+              <LeavingActions visit={v} />
             </VisitCard>
           ))}
         </Section>
@@ -325,6 +324,13 @@ function VisitCard({ visit: v, children, onOpen, compact }: { visit: Visit; chil
           </p>
           {!compact && <WatchNote note={v.watch_note} />}
           {!compact && <HostAnswerLine visit={v} />}
+          {!compact && v.checkout_pending && (
+            <p className="text-[13px] font-medium">
+              Asked to leave {clock(v.checkout_requested_at)}
+              {v.feedback_rating != null ? ` · feedback ${v.feedback_rating}/5` : ''}
+              {v.feedback_comment ? ` · “${v.feedback_comment}”` : ''}
+            </p>
+          )}
           {children && <div className="flex flex-wrap gap-2 pt-1 max-sm:[&>button]:flex-1">{children}</div>}
         </div>
       </CardContent>

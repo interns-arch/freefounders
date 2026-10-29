@@ -159,6 +159,7 @@ class VehicleTests(Base):
 class OpenLinkTests(Base):
     def setUp(self):
         super().setUp()
+        conf.save({**conf.get(), "whom_to_meet": True})  # V4.1: off for a new company
         self.link = services.the_link()
         self.url = f"/api/visitors/public/main/{self.link.token}/"
         self.body = {"name": "Priya", "mobile": "9123456789", "company": "Acme", "purpose": "Interview",

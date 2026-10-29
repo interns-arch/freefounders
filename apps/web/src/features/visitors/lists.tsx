@@ -266,8 +266,8 @@ export function MyVisitorsPage({ config }: { config: VisitorConfig }) {
         <MySection title="Recent visitors">
           {recent.map((v) => (
             <MyVisitCard key={v.id} visit={v} focus={focus === v.id}>
-              {/* V4: tell the guard where they should wait (or change the answer) while they are here. */}
-              {v.status === 'inside' && v.host?.id != null && (
+              {/* V4: tell the guard where they should wait (or change the answer) while they are here (V4.1: only when the company asks whom to meet). */}
+              {config.whom_to_meet && v.status === 'inside' && v.host?.id != null && (
                 <Button asChild size="lg" variant={v.host_answer ? 'outline' : 'default'}>
                   <Link to={`/visitors/answer?visit=${v.id}`}>
                     <MapPin /> {v.host_answer ? (v.host_answer === 'place' ? `Waiting at ${v.host_place}` : 'Change answer') : 'Where should they wait?'}

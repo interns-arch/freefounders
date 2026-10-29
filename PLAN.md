@@ -3433,7 +3433,7 @@ per period, cancel any time to stop the next period, no partial refunds; duplica
 on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
 top of `legal.tsx`.
 
-## 22. Visitor management (V1, V2, V3 built 2026-10-26, §22.8–§22.10; V4 2026-10-28, §22.11)
+## 22. Visitor management (V1, V2, V3 built 2026-10-26, §22.8–§22.10; V4 2026-10-28, V4.1 2026-10-29, §22.11)
 
 Founder (2026-10-26): "one more option: visitor management software, to keep the record of every visitor and all the
 company's security records." This is a plan only; nothing is built until the founder answers §22.7.
@@ -3801,7 +3801,62 @@ people_delete.py` (`Visit.sent_to_place_by`), e2e `web-visitors.spec.ts` (4-digi
 `THROTTLE_VISITOR_CHECKOUT`, `VISITOR_COOKIE_PATH` in `.env.example`); print and put up the new check-out QR poster;
 submit the `visitor_waiting` template to Meta and, once approved, enter its name in Visitors → Settings.
 
+**V4.1 changes 2026-10-29** (founder). Replaces the parts of flows 1, 4, 6 and 7 above that they contradict.
+1. **No check-out code.** On the check-out QR (same-phone rule unchanged) the visitor gives optional feedback and taps
+   **Check out** → the visit stays `inside` with `checkout_requested_at` (a double tap keeps the first request) and shows
+   in the gate's **Waiting to leave** list (name, photo, whom they met, vehicle, time inside, asked-at time, feedback)
+   with **Approve check-out** (→ `out`, `checkout_via = qr`) and **Hold** (note). No 4-digit code is made, shown or typed
+   for check-out anywhere; the request does not expire (it waits for the guard; the guard's own **Check out** and pass
+   scan still work). The phone shows "Please wait — the guard will let you out" and turns into "You are checked out.
+   Thank you for visiting!" once approved, or "The guard asked you to wait: <note>" on Hold (the **hold note is now
+   shown to the visitor**; the guard's dialog says so); they may tap Check out again. The gate's **Visitor code** box
+   takes check-in codes only (`/visitors/visits/code/` always answers `kind: "checkin"`); codes are unique among pending
+   check-in codes only. `Visit.checkout_code` / `checkout_code_expires_at` stay in the table unused (no migration); the
+   visit row no longer carries `checkout_code`; device state `leaving` has no `code`, `held` adds `note`.
+2. **Whom to meet is a dropdown** on the QR form (setting "list" = People): tap → a list opens with **Not sure** first
+   (when not required) and the company's active people as "Name — Department", sorted by name, with a type-to-filter
+   box inside (Radix popover + cmdk, 48 px trigger, 16 px text). `GET …/hosts/` now returns the whole list (sorted, at
+   most 1000; `q` still narrows it), names + departments only, never contacts or usernames. Departments / typed modes
+   unchanged except that they are optional too.
+3. **Whom to meet / where to wait is optional** (`VISITORS_SETTINGS`):
+   - `whom_to_meet` "Ask visitors whom they are meeting": **default off for a new company**. Companies already using
+     Visitors keep their behaviour: data migration `visitors/0006` (no table change) sets it **on** in every company
+     schema that has visits, its visitor QR (`GateLink`) or saved visitor settings when the migration runs; a choice
+     already saved is never overwritten; a new, empty company gets nothing (off).
+   - `whom_required` "Whom to meet is required": default **off**, also for existing companies (before V4.1 the field was
+     always required; the founder asked for optional by default). With it on, the form needs a person / department /
+     name.
+   - Off: the form has no whom-to-meet field (`host_list: "none"`; a host sent anyway is ignored), `…/hosts/` answers
+     `{mode: "none", results: []}`, nobody is asked where to wait, and My visitors hides "Where should they wait?".
+     **Decision**: a host the guard picks on a walk-in, or who invited the visitor, is still told "<name> is at the gate
+     for you" in the app (the V1 notice, no question, no WhatsApp, no "No answer yet"), so the guard flow and invites
+     work exactly as before V4.
+   - On + a person picked: as V4 (host asked at approval in the app + WhatsApp template; the answer goes to the guard and
+     to the **visitor's phone**, shown as a large bordered card at the top of "You are checked in" and on the check-out
+     page). On + "Not sure" / blank: no host, nobody asked, guard flow unchanged.
+   - The phone polls its own state every 5 s while something is pending (code, host confirmation, where to wait,
+     check-out, hold), every 20 s once the place is known; reloading the check-in page on the same phone goes straight
+     back to the status screen (device secret) instead of an empty form.
+4. Screens/texts: Settings (two new switches; "Whom to meet: the list" disabled when off; "Check-in code works for";
+   check-out QR text and poster steps without a code), gate (Waiting to leave buttons, toast "wants to leave: approve or
+   hold", code box text), check-out page, check-in page, AI help text (`services/platform/src/ai/knowledge.ts`).
+
+**Tests (V4.1)**: `tests_v4.py`: check-out request → Waiting to leave (row data, no code anywhere) → approve → phone
+"out"; double tap keeps the first request; hold → phone `held` + note → ask again; request does not expire and an
+old-style check-out code finds nothing; codes unique among pending check-ins; `WhomToMeetTests`: off (no field, no list,
+host ignored, no host question; walk-in host gets the V1 notice only), on + optional ("Not sure" → nobody asked, phone
+has no place), required (400 without someone), picked host → asked → place on the phone (device + check-out page),
+the 0006 migration (existing company on, saved choice kept, empty company untouched); full people list sorted, no
+inactive people, no usernames; settings validation of the two switches. `tests.py` OpenLinkTests switch whom-to-meet on.
+e2e: `web-visitors-v4.spec.ts` (dropdown, no check-out code, Waiting to leave approve, phone texts) and
+`web-visitors.spec.ts` (no whom-to-meet typing) updated; not run (the dev suite was not running).
+
+**Deploy (V4.1)**: Tasks + web. `migrate_companies` runs `visitors/0006` (data only); no new env. Reprint the check-out
+QR poster only if wanted (the QR is the same; only the printed steps changed). Tell guards: check-outs now appear in
+"Waiting to leave", no code.
+
 ## 23. Internal names renamed to Kaampilot (2026-10-26)
+
 Founder: "make the project name everywhere Kaampilot, not FreeFounders". This finishes §19.x's visible rename:
 - **Renamed**: npm names `@kaampilot/*` (root package `kaampilot`); token issuer / audience `kaampilot-platform` /
   `kaampilot` (refresh sessions live in the database, so a deploy costs each signed-in person one silent token refresh,

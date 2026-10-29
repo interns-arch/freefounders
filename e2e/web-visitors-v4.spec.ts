@@ -1,7 +1,8 @@
-// Visitors V4 (PLAN.md §22.11): a visitor checks in from the QR (whom to meet picked from names + departments) and gets
-// a 4-digit code; the guard types it and approves; the host says where to wait and the guard sees it; the visitor
-// checks out from the check-out QR on the same phone (another phone is refused), gets a 4-digit check-out code, and the
-// guard approves it. The owner works the gate here (the Owner role has every permission).
+// Visitors V4 + V4.1 (PLAN.md §22.11): a visitor checks in from the QR (whom to meet picked from a dropdown of names +
+// departments) and gets a 4-digit code; the guard types it and approves; the host says where to wait, the guard sees it
+// and the visitor's phone shows it; the visitor checks out from the check-out QR on the same phone (another phone is
+// refused) with no code: "Please wait", the guard approves from "Waiting to leave", the phone says "checked out".
+// The owner works the gate here (the Owner role has every permission).
 // Run against the live suite (`npm run dev`); reset DEMO afterwards
 // (`npm --prefix services/platform run company -- reset --code DEMO --keep-owner`).
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test';
@@ -27,7 +28,7 @@ async function signIn(page: Page, path: string) {
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
-test('Visitors V4: 4-digit check-in code, where to wait, check-out QR on the same phone, guard approves both', async ({ browser, page, request }) => {
+test('Visitors V4.1: check-in code, whom-to-meet dropdown, where to wait on the phone, check-out without a code', async ({ browser, page, request }) => {
   test.setTimeout(240_000);
   const owner = await token(request);
   const s = Date.now().toString(36);
@@ -42,6 +43,9 @@ test('Visitors V4: 4-digit check-in code, where to wait, check-out QR on the sam
     await signIn(page, '/visitors/today');
   }
   const me = (await (await request.get('/tasks/api/auth/me', { headers: auth(owner) })).json()) as { first_name: string; last_name: string };
+  // V4.1: whom to meet is a company setting (off for a new company): on, optional.
+  const put = await request.put('/tasks/api/visitors/settings/', { headers: auth(owner), data: { whom_to_meet: true, whom_required: false } });
+  expect(put.ok(), await put.text()).toBeTruthy();
   const link = (await (await request.get('/tasks/api/visitors/link/', { headers: auth(owner) })).json()) as { path: string; checkout_path: string };
   expect(link.checkout_path).toMatch(/^\/v\/[a-z0-9_]+\/[A-Za-z0-9_-]+\/out$/);
 
@@ -54,12 +58,15 @@ test('Visitors V4: 4-digit check-in code, where to wait, check-out QR on the sam
   await phone.getByLabel('Your name').fill(name);
   await phone.getByLabel('Mobile number').fill('9876509876');
   await phone.getByLabel('Purpose of visit').selectOption('Meeting');
-  await phone.getByLabel('Whom have you come to meet?').fill(me.first_name.slice(0, 3));
-  const option = phone.getByRole('list', { name: 'People' }).getByRole('button').first();
+  // The dropdown: tap → the list opens ("Not sure" first, then people) → type to filter → pick.
+  await phone.getByTestId('whom-to-meet').click();
+  await expect(phone.getByRole('option', { name: 'Not sure' })).toBeVisible();
+  await expect(phone.getByRole('listbox')).not.toContainText('@');
+  await phone.getByPlaceholder('Type to filter names').fill(`${me.first_name} ${me.last_name}`.trim());
+  const option = phone.getByRole('option', { name: new RegExp(me.first_name) }).first();
   await expect(option).toBeVisible({ timeout: 10_000 });
-  await expect(phone.getByRole('list', { name: 'People' })).not.toContainText('@');
   await option.click();
-  await expect(phone.getByTestId('host-picked')).toBeVisible();
+  await expect(phone.getByTestId('whom-to-meet')).toContainText(me.first_name);
   const selfie = phone.getByTestId('public-photo');
   if (await selfie.count()) await selfie.setInputFiles({ name: 'selfie.jpg', mimeType: 'image/jpeg', buffer: JPEG });
   await phone.getByRole('checkbox', { name: 'I agree' }).click();
@@ -106,18 +113,19 @@ test('Visitors V4: 4-digit check-in code, where to wait, check-out QR on the sam
   await expect(other.getByTestId('checkout-other-device')).toBeVisible();
   await otherCtx.close();
 
-  // 5. The same phone: feedback + Check out → a 4-digit check-out code; the guard approves it.
+  // 5. The same phone: feedback + Check out → "Please wait" (no code); the guard approves from "Waiting to leave".
   await phone.goto(link.checkout_path);
+  await expect(phone.getByText('Please wait at Reception.')).toBeVisible();
   await phone.getByTestId('rating-5').click();
   await phone.getByLabel('Anything to tell us? (optional)').fill('Very smooth');
   await phone.getByRole('button', { name: 'Check out' }).click();
-  const outCode = (await phone.getByTestId('checkout-code').textContent())?.trim() ?? '';
-  expect(outCode).toMatch(/^\d{4}$/);
-  await page.getByLabel('Visitor code').fill(outCode);
-  await expect(page.getByTestId('code-dialog')).toContainText(`${name} is leaving`);
-  await page.getByTestId('code-dialog').getByRole('button', { name: 'Approve check-out' }).click();
+  await expect(phone.getByTestId('checkout-pending')).toContainText('Please wait — the guard will let you out');
+  await expect(phone.getByTestId('checkout-code')).toHaveCount(0);
+  await expect(page.getByText(/Waiting to leave \(\d+\)/)).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId(`approve-checkout-${id}`).click();
   await expect(page.getByText(new RegExp(`${name} checked out`))).toBeVisible();
-  await expect(phone.getByTestId('checkout-done')).toBeVisible({ timeout: 20_000 });
+  await expect(phone.getByTestId('checkout-done')).toContainText('You are checked out. Thank you for visiting!', { timeout: 20_000 });
+
   await phoneCtx.close();
 
   // 6. The register keeps it all; the settings show both QR posters with their captions.

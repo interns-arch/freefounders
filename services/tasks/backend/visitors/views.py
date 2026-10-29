@@ -57,9 +57,8 @@ def visit_row(v: Visit, now=None, viewer=None):
         "host_note": v.host_note, "host_answered_at": _dt(v.host_answered_at), "host_no_answer": v4.no_answer(v, now),
         "sent_to_place_at": _dt(v.sent_to_place_at), "sent_to_place_by": sv.name_of(v.sent_to_place_by),
         "checkout_requested_at": _dt(v.checkout_requested_at),
-        "checkout_pending": bool(v.status == VisitStatus.INSIDE and v.checkout_requested_at and v.checkout_code_expires_at
-                                 and v.checkout_code_expires_at > now),
-        "checkout_code": v.checkout_code if v.status == VisitStatus.INSIDE and v.checkout_requested_at else "",
+        # V4.1: asked to leave from the phone (no code): the guard's "Waiting to leave" list.
+        "checkout_pending": bool(v.status == VisitStatus.INSIDE and v.checkout_requested_at),
         "checkout_via": v.checkout_via, "checkout_held_at": _dt(v.checkout_held_at),
         "checkout_hold_note": v.checkout_hold_note, "feedback_rating": v.feedback_rating,
         "feedback_comment": v.feedback_comment, "host_phone": "",
@@ -216,7 +215,7 @@ class VisitViewSet(_List, mixins.ListModelMixin, mixins.RetrieveModelMixin, view
 
     @action(detail=False, methods=["get"], url_path="code")
     def by_code(self, request):
-        """V4: the gate types a 4-digit check-in or check-out code: whose visit, before anything happens."""
+        """V4: the gate types a visitor's 4-digit check-in code: whose visit, before anything happens."""
         _need(sv.can_gate(request.user))
         kind, v = v4.find_by_code(request.user, request.query_params.get("code"))
         return Response({"kind": kind, "visit": visit_row(v, viewer=request.user)})
@@ -510,7 +509,7 @@ def config_view(request):
         "watch_action": s["watch_action"], "badge_format": s["badge_format"], "id_scan": s["id_scan"],
         "contractor_max_days": s["contractor_max_days"],
         "waiting_places": s["waiting_places"], "host_answer_minutes": s["host_answer_minutes"],
-        "checkout_qr": s["checkout_qr"], "code_minutes": s["code_minutes"],
+        "checkout_qr": s["checkout_qr"], "code_minutes": s["code_minutes"], "whom_to_meet": s["whom_to_meet"],
         "incident_kinds": [{"value": k, "label": v} for k, v in IncidentKind.choices],
         "vehicle_types": [{"value": k, "label": v} for k, v in VehicleEntry._meta.get_field("type").choices],
     })
@@ -687,7 +686,8 @@ def _public(request, code, token):
         b = brand()
         return Response({"company": b["name"] if b else "", "logo_url": b["logo_url"] if b else None,
                          "colour": b["colour"] if b else None, "purposes": s["purposes"], "photo": s["public_photo"], "consent_text": s["consent_text"],
-                         "host_list": s["public_host_list"], "code_minutes": s["code_minutes"]})
+                         "host_list": v4.host_mode(), "host_required": bool(s["whom_to_meet"] and s["whom_required"]),
+                         "code_minutes": s["code_minutes"]})
     data = request.data if isinstance(request.data, dict) else {}
     if str(data.get("website") or "").strip():  # honeypot: a bot filled the hidden field (answered like a person)
         return Response({"code": f"{sv.secrets.randbelow(10000):04d}", "expires_at": None,
@@ -789,7 +789,8 @@ def _no_store(res):
 @permission_classes([AllowAny])
 @throttle_classes([DeviceThrottle])
 def public_hosts_view(request, code, token):
-    """Whom to meet on the QR form: names + departments only (or only departments, or nothing: a company setting)."""
+    """Whom to meet on the QR form: the company's people for the dropdown, names + departments only (or only
+    departments, or nothing: company settings)."""
     from tenancy.profile import module_on
 
     from .models import GateLink
@@ -801,7 +802,7 @@ def public_hosts_view(request, code, token):
         link = GateLink.objects.filter(token=token).first()
         if not module_on("visitors") or not link or not link.enabled or not s["open_link"]:
             return Response(NOT_FOUND, status=404)
-        return _no_store(Response({"mode": s["public_host_list"],
+        return _no_store(Response({"mode": v4.host_mode(),
                                    "results": v4.public_hosts(request.query_params.get("q") or "")}))
     return _in_company(code, one)
 
@@ -812,7 +813,7 @@ def public_hosts_view(request, code, token):
 @throttle_classes([DeviceThrottle])
 def public_device_view(request, code):
     """The phone asks about its own visit (found only by its device secret): pending + code, inside + where to wait,
-    leaving + check-out code, out. Nothing about anyone else."""
+    leaving (waiting for the guard), held (+ the guard's note), out. Nothing about anyone else."""
     from tenancy.profile import module_on
 
     def one():
@@ -828,7 +829,9 @@ def public_device_view(request, code):
 @throttle_classes([CheckoutThrottle])
 def public_checkout_view(request, code, token):
     """The check-out QR /v/<company code>/<checkout token>/out. GET: the page (+ this phone's visit, if any). POST
-    {rating, comment}: this phone's visit asks to check out; the guard approves it with the check-out code."""
+    {rating, comment}: this phone's visit asks to check out; it shows in the guard's "Waiting to leave" list and the
+    guard approves it (or holds it). No code (V4.1)."""
+
     from tenancy.profile import brand, module_on
 
     from .models import GateLink

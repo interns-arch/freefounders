@@ -15,6 +15,8 @@ import { QRCode } from '@/components/common/codes';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Switch } from '@/components/ui/primitives';
+import { cn } from '@/lib/utils';
+
 import { dataUrlToBlob } from '@/lib/compress-image';
 import { saveFile } from '@/lib/native-bridge';
 
@@ -64,13 +66,18 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
       toast.error(errorMessage(e));
     }
   };
-  const toggle = (k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass' | 'id_scan' | 'checkout_qr', label: string, hint: string) => (
-    <label className="flex cursor-pointer items-start justify-between gap-4 py-2">
+  const toggle = (
+    k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass' | 'id_scan' | 'checkout_qr' | 'whom_to_meet' | 'whom_required',
+    label: string,
+    hint: string,
+    disabled = false,
+  ) => (
+    <label className={cn('flex items-start justify-between gap-4 py-2', disabled ? 'opacity-60' : 'cursor-pointer')}>
       <span>
         <span className="block font-medium">{label}</span>
         <span className="block text-[13px] text-muted-foreground">{hint}</span>
       </span>
-      <Switch checked={f[k]} onCheckedChange={(v) => set(k, v)} aria-label={label} />
+      <Switch checked={f[k]} onCheckedChange={(v) => set(k, v)} aria-label={label} disabled={disabled} />
     </label>
   );
   return (
@@ -82,7 +89,9 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
         <div className="divide-y">
           {toggle('host_approval', 'Host approves first', 'Off: the guard lets visitors in and the host is told. On: the host taps Allow or Deny and the guard sees the answer.')}
           {toggle('open_link', 'Visitor QR sign-in', 'Visitors scan the check-in QR and fill in their details; they get a 4-digit code and the guard approves it.')}
-          {toggle('checkout_qr', 'Check-out QR', 'Visitors scan the check-out QR with the phone they checked in with, give feedback and get a 4-digit code; the guard approves it.')}
+          {toggle('checkout_qr', 'Check-out QR', 'Visitors scan the check-out QR with the phone they checked in with, give feedback and tap Check out; they show in “Waiting to leave” and the guard approves (or holds). No code.')}
+          {toggle('whom_to_meet', 'Ask visitors whom they are meeting', 'On: the QR form has a “Whom are you meeting?” list of your people (name and department only). The person picked is asked where the visitor should wait, and the visitor’s phone shows the answer. Off: not asked; the guard flow is the same.')}
+          {toggle('whom_required', 'Whom to meet is required', 'Off: visitors may leave it as “Not sure”. On: they must pick someone.', !f.whom_to_meet)}
           {toggle('photo_vehicle', 'Vehicle photo required', 'A photo of the vehicle / number plate at vehicle check-in.')}
           {toggle('send_pass', 'Send the visitor pass', 'The pass link (QR) goes to the visitor by WhatsApp, and by email when given: at check-in and with every invite.')}
           {toggle('id_scan', 'Read ID cards with AI', "The guard photographs the ID card; the company's AI fills the name, ID type and last 4 digits. The card photo is sent to the AI provider once and never kept. Needs the company's AI set up.")}
@@ -163,14 +172,14 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Whom to meet on the QR form" hint="Never shows emails or phone numbers">
-            <NativeSelect value={f.public_host_list} onChange={(e) => set('public_host_list', e.target.value as VisitorSettings['public_host_list'])}>
+          <Field label="Whom to meet: the list" hint={f.whom_to_meet ? 'Never shows emails or phone numbers' : 'Turn on “Ask visitors whom they are meeting” first'}>
+            <NativeSelect value={f.public_host_list} onChange={(e) => set('public_host_list', e.target.value as VisitorSettings['public_host_list'])} disabled={!f.whom_to_meet}>
               <option value="people">People: name + department</option>
               <option value="departments">Departments only</option>
               <option value="off">Typed by the visitor</option>
             </NativeSelect>
           </Field>
-          <Field label="Codes work for (minutes)" hint="Check-in and check-out codes" error={errors.code_minutes}>
+          <Field label="Check-in code works for (minutes)" hint="Check-out needs no code" error={errors.code_minutes}>
             <Input type="number" min={10} max={720} value={f.code_minutes} onChange={(e) => set('code_minutes', Number(e.target.value))} />
           </Field>
           <Field label="Host no answer after (minutes)" hint="The guard sees “No answer yet” + Call host" error={errors.host_answer_minutes}>
@@ -214,8 +223,8 @@ const KIND = {
   out: {
     caption: 'Visitors check-out',
     title: 'Visitor check-out QR',
-    describe: 'Put it up at the exit. Visitors scan it with the phone they checked in with, give feedback and show the 4-digit code; the guard approves.',
-    steps: ['1. Scan with the phone you checked in with   2. Tap Check out', '3. Show the 4-digit code to the guard'],
+    describe: 'Put it up at the exit. Visitors scan it with the phone they checked in with, give feedback and tap Check out; the guard approves it from “Waiting to leave”.',
+    steps: ['1. Scan with the phone you checked in with', '2. Tap Check out   3. Wait for the guard to let you out'],
     file: 'visitors-check-out',
     renew: 'Make a new check-out QR?',
   },

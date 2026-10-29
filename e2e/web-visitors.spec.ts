@@ -76,7 +76,7 @@ test('Visitors: module on, Guard role, QR sign-in without login, gate check-in /
   await visitor.getByLabel('Mobile number').fill('9876501234');
   await visitor.getByLabel('Company / coming from').fill('ABC Ltd');
   await visitor.getByLabel('Purpose of visit').selectOption('Meeting');
-  await visitor.getByLabel('Whom have you come to meet?').fill('Accounts team');
+  // V4.1: whom to meet is optional (and may not be asked at all): left out here; web-visitors-v4 covers the dropdown.
   await visitor.getByRole('checkbox', { name: 'I agree' }).click();
   await visitor.getByRole('button', { name: 'Get my check-in code' }).click();
   const code = (await visitor.getByTestId('visitor-code').textContent())?.trim();

@@ -45,8 +45,12 @@ DEFAULTS = {
     "patrol_to": 0,
     "contractor_max_days": 90,
     # V4 (PLAN.md §22.11)
+    # V4.1 (2026-10-29): "Ask visitors whom they are meeting" is optional. Off for a new company; companies that
+    # already used Visitors before V4.1 were switched on by migration visitors/0006 (their behaviour is kept).
+    "whom_to_meet": False,
+    "whom_required": False,          # with whom_to_meet on: the visitor must pick someone (else "Not sure" is fine)
     "public_host_list": "people",    # whom to meet on the QR form: people (name + department) / departments / off
-    "code_minutes": 120,             # the 4-digit check-in / check-out codes work this long
+    "code_minutes": 120,             # the 4-digit check-in code works this long (check-out needs no code, V4.1)
     "waiting_places": DEFAULT_PLACES,
     "host_answer_minutes": 5,        # no answer from the host after N minutes: the guard sees "No answer yet"
     "host_wa_template": "",          # Meta-approved utility template for the host (empty = in-app notice only)
@@ -116,7 +120,8 @@ def clean(data: dict) -> tuple[dict, dict]:
                     raise ValueError("Lower-case letters, digits and _ only (the name as approved by Meta)"
                                      if key == "host_wa_template" else "A language code like en or en_US")
                 cur[key] = t
-            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan", "checkout_qr"):
+            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan", "checkout_qr",
+                         "whom_to_meet", "whom_required"):
                 if not isinstance(value, bool):
                     raise ValueError("On or off")
                 cur[key] = value

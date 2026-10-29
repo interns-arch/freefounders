@@ -144,7 +144,8 @@ class Visit(models.Model):
     sent_to_place_at = models.DateTimeField(null=True, blank=True)
     sent_to_place_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
                                          related_name="+")
-    # Check-out from the visitor's phone (check-out QR): requested, then approved by the guard with the code.
+    # Check-out from the visitor's phone (check-out QR): requested, then approved by the guard. The two checkout_code
+    # fields are unused since V4.1 (no check-out code, 2026-10-29); kept so no migration is needed.
     checkout_requested_at = models.DateTimeField(null=True, blank=True)
     checkout_code = models.CharField(max_length=8, blank=True, default="", db_index=True)
     checkout_code_expires_at = models.DateTimeField(null=True, blank=True)

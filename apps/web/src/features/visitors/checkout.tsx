@@ -1,20 +1,21 @@
 /**
  * The check-out QR (PLAN.md §22.11): /v/<company code>/<checkout token>/out. No sign-in. The page finds the visitor's
  * visit only from this phone's device secret (kept at check-in): optional feedback (1–5 + a comment), then "Check out"
- * gives a 4-digit check-out code for the guard, who approves it. Another phone sees only "open this on the phone you
- * checked in with".
+ * puts them in the guard's "Waiting to leave" list (V4.1: no code). The page follows it live: "Please wait, the guard
+ * will let you out" → "You are checked out" (or the guard's hold note). Another phone sees only "open this on the
+ * phone you checked in with".
  */
 import { ApiError, errorMessage } from '@kaampilot/core';
 import { useDeviceState, usePublicCheckout, useRequestCheckout } from '@kaampilot/core/visitors';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import { CheckCircle2, Clock, LogOut, ShieldCheck, Smartphone, Star } from '@/components/icons';
+import { CheckCircle2, Clock, Hand, LogOut, MapPin, ShieldCheck, Smartphone, Star } from '@/components/icons';
 import { Field } from '@/components/common/form';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { BigCode, PublicCard, PublicShell, readDevice, until, usePublicBrand } from './public-parts';
+import { BigCode, PublicCard, PublicShell, readDevice, usePublicBrand } from './public-parts';
 
 const RATINGS = ['Poor', 'Could be better', 'Okay', 'Good', 'Excellent'];
 
@@ -66,25 +67,23 @@ export function PublicCheckoutPage() {
   if (s.state === 'out') {
     return shell(
       `Thank you for visiting${first ? `, ${first}` : ''}!`,
-      'You are checked out. Have a safe journey.',
-      <PublicCard className="space-y-2 text-center" role="status" data-testid="checkout-done">
+      'Have a safe journey.',
+      <PublicCard className="space-y-2 text-center" role="status" aria-live="polite" data-testid="checkout-done">
         <CheckCircle2 className="mx-auto size-14 text-success" aria-hidden />
+        <p className="text-lg font-semibold">You are checked out. Thank you for visiting!</p>
         <p className="text-[15px] text-muted-foreground">We hope to see you again.</p>
       </PublicCard>,
     );
   }
-  if (s.state === 'leaving' && s.code) {
+  if (s.state === 'leaving') {
+    // V4.1: no code. The guard sees this visitor in "Waiting to leave"; this page updates by itself.
     return shell(
       `Almost done${first ? `, ${first}` : ''}`,
-      'Show this code to the guard on your way out.',
-      <PublicCard className="space-y-4" role="status" data-testid="checkout-pending">
-        <BigCode code={s.code} label="Your check-out code" testId="checkout-code" />
-        <p className="text-center text-[17px] font-semibold">Show this to the guard</p>
-        {s.expires_at && (
-          <p className="flex items-center justify-center gap-2 text-[13px] text-muted-foreground">
-            <Clock className="size-4" aria-hidden /> Works until {until(s.expires_at)}
-          </p>
-        )}
+      undefined,
+      <PublicCard className="space-y-4 text-center" role="status" aria-live="polite" data-testid="checkout-pending">
+        <Clock className="mx-auto size-12 animate-pulse text-primary motion-reduce:animate-none" aria-hidden />
+        <p className="text-xl font-semibold">Please wait — the guard will let you out</p>
+        <p className="text-[15px] text-muted-foreground">Keep this page open. It changes as soon as the guard approves.</p>
       </PublicCard>,
     );
   }
@@ -113,10 +112,20 @@ export function PublicCheckoutPage() {
     'Tell us how it went, then check out.',
     <PublicCard className="space-y-5">
       {s.state === 'held' && (
-        <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[15px] font-medium text-warning">
-          The guard asked you to wait. Please speak to the guard, then check out again.
+        <div role="status" aria-live="polite" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-3 text-warning" data-testid="checkout-held">
+          <Hand className="mt-0.5 size-5 shrink-0" aria-hidden />
+          <div>
+            <p className="text-[17px] font-semibold">The guard asked you to wait{s.note ? `: ${s.note}` : '.'}</p>
+            <p className="text-[13px]">Please speak to the guard, then tap Check out again.</p>
+          </div>
+        </div>
+      )}
+      {s.where && s.state === 'inside' && (
+        <p className="flex items-center justify-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-[15px] font-semibold text-primary">
+          <MapPin className="size-5 shrink-0" aria-hidden /> {s.where}
         </p>
       )}
+
       <fieldset className="space-y-2">
         <legend className="text-[15px] font-semibold">How was your visit? (optional)</legend>
         <div className="grid grid-cols-5 gap-2" role="radiogroup" aria-label="Rating">

@@ -1,7 +1,8 @@
 /**
- * The gate's V4 parts (PLAN.md §22.11): the big "Visitor code" box (4-digit check-in or check-out code), the dialog
- * that shows whose visit it is before anything happens (Approve check-in / Turn away, Approve check-out / Hold), and
- * the host's answer on a visit card (where to wait, "Sent to …", "No answer yet" + Call host).
+ * The gate's V4 parts (PLAN.md §22.11): the big "Visitor code" box (4-digit check-in code), the dialog that shows
+ * whose visit it is before anything happens (Approve check-in / Turn away), Approve check-out / Hold on a visitor in
+ * "Waiting to leave" (V4.1: no check-out code), and the host's answer on a visit card (where to wait, "Sent to …",
+ * "No answer yet" + Call host).
  */
 import { ApiError, errorMessage } from '@kaampilot/core';
 import { type CodeHit, type Visit, type VisitorConfig, useAcceptVisit, useApproveCheckout, useFindByCode, useHoldCheckout, useRejectVisit, useSentToPlace, useVisitPhoto } from '@kaampilot/core/visitors';
@@ -46,7 +47,7 @@ export function CodeEntry({ onHit }: { onHit: (hit: CodeHit) => void }) {
             <label htmlFor="visitor-code" className="flex items-center gap-1.5 text-[15px] font-semibold">
               <Hash className="size-4 text-primary" aria-hidden /> Visitor code
             </label>
-            <p className="text-[13px] text-muted-foreground">The 4 digits on the visitor’s phone: checking in or leaving.</p>
+            <p className="text-[13px] text-muted-foreground">The 4-digit check-in code on the visitor’s phone.</p>
             <Input
               id="visitor-code"
               ref={ref}
@@ -81,7 +82,48 @@ export function CodeEntry({ onHit }: { onHit: (hit: CodeHit) => void }) {
   );
 }
 
-/** Whose visit the code is: details + photo first, then the guard approves (or turns away / holds). */
+/** "Waiting to leave" (V4.1): the visitor tapped Check out on their phone; the guard approves or holds (with a note
+ * the visitor sees on their phone). No code. */
+export function LeavingActions({ visit: v }: { visit: Visit }) {
+  const approveOut = useApproveCheckout();
+  const hold = useHoldCheckout();
+  const confirm = useConfirm();
+  const out = async () => {
+    try {
+      const done = await approveOut.mutateAsync(v.id);
+      toast.success(`${done.name} checked out · ${formatMinutes(done.minutes_inside)}`);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  const holdIt = async () => {
+    const r = await confirm({
+      title: `Hold ${v.name}'s check-out?`,
+      description: 'They stay inside. Their phone shows “The guard asked you to wait” with your note.',
+      confirmText: 'Hold',
+      note: { label: 'Note for the visitor (e.g. please come to the gate desk)' },
+    });
+    if (!r.confirmed) return;
+    try {
+      await hold.mutateAsync({ id: v.id, note: r.note });
+      toast.success(`${v.name}: check-out held`);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  return (
+    <>
+      <Button size="lg" variant="success" onClick={() => void out()} loading={approveOut.isPending} data-testid={`approve-checkout-${v.id}`}>
+        <LogOut /> Approve check-out
+      </Button>
+      <Button size="lg" variant="outline" onClick={() => void holdIt()} disabled={approveOut.isPending || hold.isPending}>
+        <Hand /> Hold
+      </Button>
+    </>
+  );
+}
+
+/** Whose visit the code is: details + photo first, then the guard approves (or turns away). */
 export function CodeDialog({ hit, config, gate, onClose }: { hit: CodeHit | null; config: VisitorConfig; gate: number | null; onClose: () => void }) {
   const v = hit?.visit;
   const photo = useVisitPhoto(v?.has_photo ? v.id : null);
@@ -89,12 +131,9 @@ export function CodeDialog({ hit, config, gate, onClose }: { hit: CodeHit | null
   const [blocked, setBlocked] = useState('');
   const accept = useAcceptVisit();
   const reject = useRejectVisit();
-  const approveOut = useApproveCheckout();
-  const hold = useHoldCheckout();
   const confirm = useConfirm();
   if (!hit || !v) return null;
-  const leaving = hit.kind === 'checkout';
-  const needPhoto = !leaving && config.photo_visitor === 'required' && !v.has_photo;
+  const needPhoto = config.photo_visitor === 'required' && !v.has_photo;
   const close = () => {
     setShot(null);
     setBlocked('');
@@ -129,26 +168,6 @@ export function CodeDialog({ hit, config, gate, onClose }: { hit: CodeHit | null
       toast.error(errorMessage(e));
     }
   };
-  const out = async () => {
-    try {
-      const done = await approveOut.mutateAsync(v.id);
-      toast.success(`${done.name} checked out · ${formatMinutes(done.minutes_inside)}`);
-      close();
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
-  };
-  const holdIt = async () => {
-    const r = await confirm({ title: `Hold ${v.name}'s check-out?`, description: 'They stay inside and are asked to speak to you. The note stays at the gate.', confirmText: 'Hold', note: { label: 'Why (e.g. laptop not on the pass)' } });
-    if (!r.confirmed) return;
-    try {
-      await hold.mutateAsync({ id: v.id, note: r.note });
-      toast.success(`${v.name}: check-out held`);
-      close();
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
-  };
 
   const facts: Array<[string, string]> = [
     ['To meet', hostName(v)],
@@ -158,14 +177,13 @@ export function CodeDialog({ hit, config, gate, onClose }: { hit: CodeHit | null
     ['People', v.people > 1 ? String(v.people) : ''],
     ['Vehicle', v.vehicle_no],
     ['Items', v.items],
-    ...(leaving ? ([['In since', `${clock(v.check_in_at)} · ${formatMinutes(v.minutes_inside)}`], ['Pass', v.pass_no]] as Array<[string, string]>) : []),
   ];
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent className="max-w-md" data-testid="code-dialog">
         <DialogHeader>
-          <DialogTitle>{leaving ? `${v.name} is leaving` : `Check in ${v.name}?`}</DialogTitle>
-          <DialogDescription>{leaving ? 'Check the vehicle and items, then approve the check-out.' : 'Check the person matches the photo and the details.'}</DialogDescription>
+          <DialogTitle>{`Check in ${v.name}?`}</DialogTitle>
+          <DialogDescription>Check the person matches the photo and the details.</DialogDescription>
         </DialogHeader>
         <div className="flex gap-3">
           <PrivatePhoto query={photo} alt={v.name} className="size-28 shrink-0" />
@@ -191,32 +209,15 @@ export function CodeDialog({ hit, config, gate, onClose }: { hit: CodeHit | null
             <PhotoField label="Visitor photo" value={shot} onChange={setShot} required testId="code-photo" />
           </Field>
         )}
-        {leaving && v.feedback_rating != null && (
-          <p className="text-[13px] text-muted-foreground">
-            Feedback: {v.feedback_rating}/5{v.feedback_comment ? ` · “${v.feedback_comment}”` : ''}
-          </p>
-        )}
         <div className="flex flex-wrap gap-2 max-sm:[&>button]:flex-1">
-          {leaving ? (
-            <>
-              <Button size="lg" variant="success" onClick={() => void out()} loading={approveOut.isPending}>
-                <LogOut /> Approve check-out
-              </Button>
-              <Button size="lg" variant="outline" onClick={() => void holdIt()} disabled={approveOut.isPending}>
-                <Hand /> Hold
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button size="lg" variant="success" onClick={() => void approveIn()} loading={accept.isPending}>
-                <LogIn /> Approve check-in
-              </Button>
-              <Button size="lg" variant="outline" onClick={() => void turnAway()} disabled={accept.isPending}>
-                <UserRoundX /> Turn away
-              </Button>
-            </>
-          )}
+          <Button size="lg" variant="success" onClick={() => void approveIn()} loading={accept.isPending}>
+            <LogIn /> Approve check-in
+          </Button>
+          <Button size="lg" variant="outline" onClick={() => void turnAway()} disabled={accept.isPending}>
+            <UserRoundX /> Turn away
+          </Button>
         </div>
+
       </DialogContent>
     </Dialog>
   );

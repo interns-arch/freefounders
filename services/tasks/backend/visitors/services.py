@@ -505,11 +505,14 @@ def public_submit(link: GateLink, data: dict, ip_hash: str, device_hash: str = "
     except (TypeError, ValueError):
         people = 1
     from . import services_v4
-    host_text = text(data.get("host_name"), 80)
-    # V4: a person picked from the form's list (name + department only), else the typed name / department.
-    host = services_v4.public_host(data.get("host")) or _match_host(host_text)
-    if not host and not host_text:
-        raise ValidationError({"host_name": "Whom have you come to meet?"})
+    host, host_text = None, ""
+    if s["whom_to_meet"]:
+        # V4: a person picked from the form's list (name + department only), else the typed name / department.
+        # V4.1: optional ("Not sure" / blank) unless the company made it required.
+        host_text = text(data.get("host_name"), 80)
+        host = services_v4.public_host(data.get("host")) or (_match_host(host_text) if host_text else None)
+        if s["whom_required"] and not host and not host_text:
+            raise ValidationError({"host_name": "Whom have you come to meet?"})
     visitor = _visitor_for(mobile, name, text(data.get("company"), 120))
     now = timezone.now()
     v = Visit(visitor=visitor, name=name, mobile=mobile, company=text(data.get("company"), 120),

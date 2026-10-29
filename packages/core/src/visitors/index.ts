@@ -51,6 +51,8 @@ export interface VisitorConfig {
   host_answer_minutes: number;
   checkout_qr: boolean;
   code_minutes: number;
+  /** V4.1: the company asks visitors whom they are meeting (and hosts where to wait). */
+  whom_to_meet: boolean;
 }
 
 /** A watchlist match at the gate: "stop" refuses check-in (an admin may override), "warn" asks the guard. */
@@ -119,9 +121,8 @@ export interface Visit {
   sent_to_place_at: string | null;
   sent_to_place_by: string;
   checkout_requested_at: string | null;
-  /** Asked to leave from the phone; the guard approves with the 4-digit check-out code. */
+  /** Asked to leave from the phone (V4.1: no code): in the gate's "Waiting to leave" list until approved / held. */
   checkout_pending: boolean;
-  checkout_code: string;
   checkout_via: '' | 'qr' | 'guard';
   checkout_held_at: string | null;
   checkout_hold_note: string;
@@ -192,6 +193,9 @@ export interface VisitorSettings {
   patrol_to: number;
   contractor_max_days: number;
   // V4
+  /** V4.1: "Ask visitors whom they are meeting" (off for a new company), and whether they must answer. */
+  whom_to_meet: boolean;
+  whom_required: boolean;
   public_host_list: 'people' | 'departments' | 'off';
   code_minutes: number;
   waiting_places: string[];
@@ -341,10 +345,11 @@ export const useEditVisit = () => useVisitorsMutation(({ id, ...body }: Partial<
 // ─── V4: codes, check-out approval, where to wait ─────────────────────────────
 
 export interface CodeHit {
-  kind: 'checkin' | 'checkout';
+  /** Only check-in codes since V4.1 (check-out needs no code). */
+  kind: 'checkin';
   visit: Visit;
 }
-/** The gate types a 4-digit check-in or check-out code: whose visit (shown before anything happens). */
+/** The gate types a visitor's 4-digit check-in code: whose visit (shown before anything happens). */
 export const useFindByCode = () => useMutation({ mutationFn: (code: string) => tasksApi.get<CodeHit>('/visitors/visits/code/', { code }) });
 export const useApproveCheckout = () => useVisitorsMutation((id: number) => tasksApi.post<Visit>(`/visitors/visits/${id}/approve_checkout/`));
 export const useHoldCheckout = () => useVisitorsMutation(({ id, note }: { id: number; note?: string }) => tasksApi.post<Visit>(`/visitors/visits/${id}/hold_checkout/`, { note }));
@@ -568,8 +573,10 @@ export interface PublicVisitorForm {
   consent_text: string;
   /** The company's brand colour (the public pages wear it). */
   colour: string | null;
-  /** Whom to meet: people (name + department), departments only, or typed. */
-  host_list: 'people' | 'departments' | 'off';
+  /** Whom to meet: none (not asked, V4.1), people (dropdown of name + department), departments only, or typed. */
+  host_list: 'none' | 'people' | 'departments' | 'off';
+  /** V4.1: the visitor must pick someone (else "Not sure" is fine). */
+  host_required: boolean;
   code_minutes: number;
 }
 export interface PublicVisitorInput {
@@ -613,19 +620,17 @@ export interface PublicSignInResult {
 }
 export type PublicHostOption = { id: number; name: string; department: string } | { department: string; id?: undefined; name?: undefined };
 
-/** Whom to meet on the QR form: names + departments only (2+ letters), or the department list. */
-export function usePublicHosts(code: string, token: string, q: string, mode: PublicVisitorForm['host_list'] | undefined) {
-  const term = q.trim();
+/** Whom to meet on the QR form (V4.1 dropdown): the company's active people sorted by name (names + departments
+ * only; the page filters as the visitor types), or the department list. */
+export function usePublicHosts(code: string, token: string, mode: PublicVisitorForm['host_list'] | undefined) {
   return useQuery({
-    queryKey: ['public-visitor-hosts', code, token, mode === 'departments' ? '' : term],
+    queryKey: ['public-visitor-hosts', code, token, mode],
     queryFn: () =>
       tasksApi.get<{ mode: PublicVisitorForm['host_list']; results: PublicHostOption[] }>(
         `/visitors/public/${encodeURIComponent(code)}/${encodeURIComponent(token)}/hosts/`,
-        mode === 'departments' ? {} : { q: term },
       ),
-    enabled: mode === 'departments' || (mode === 'people' && term.length >= 2),
-    staleTime: 60_000,
-    placeholderData: keepPreviousData,
+    enabled: mode === 'departments' || mode === 'people',
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -636,9 +641,11 @@ export interface DeviceState {
   pass_no?: string;
   /** "Please wait at Reception." once the host answers. */
   where?: string;
-  /** The 4-digit check-in code (pending) or check-out code (leaving). */
+  /** The 4-digit check-in code (pending only; check-out needs no code since V4.1). */
   code?: string;
   expires_at?: string | null;
+  /** held: the guard's note ("The guard asked you to wait: …"). */
+  note?: string;
 }
 
 /** The phone's own visit (found by its device secret, sent in the body, never in a URL); polls while it waits. */
@@ -648,7 +655,13 @@ export function useDeviceState(code: string, device: string | null, enabled = tr
     queryFn: () => tasksApi.post<DeviceState>(`/visitors/public/${encodeURIComponent(code)}/device/`, device ? { device } : {}),
     enabled,
     retry: false,
-    refetchInterval: (q) => (q.state.data && ['pending', 'waiting_host', 'leaving', 'inside', 'held'].includes(q.state.data.state) ? 10_000 : false),
+    // Live: every 5 s while the guard or the host still has to act (approval, where to wait, check-out), slower once
+    // there is nothing left to wait for (the device throttle allows 900 / hour).
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      if (!d || !['pending', 'waiting_host', 'leaving', 'inside', 'held'].includes(d.state)) return false;
+      return d.state === 'inside' && d.where ? 20_000 : 5_000;
+    },
   });
 }
 
@@ -667,7 +680,8 @@ export function usePublicCheckout(code: string, token: string) {
     staleTime: Infinity,
   });
 }
-/** Ask to check out from this phone (feedback optional): answers the check-out code for the guard. */
+/** Ask to check out from this phone (feedback optional): the guard sees it in "Waiting to leave" and approves. */
+
 export function useRequestCheckout(code: string, token: string) {
   const qc = useQueryClient();
   return useMutation({

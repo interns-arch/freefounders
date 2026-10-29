@@ -1,4 +1,7 @@
-"""Visitors V4 (PLAN.md §22.11): 4-digit codes, device binding, the check-out QR, whom to meet + where to wait."""
+"""Visitors V4 (PLAN.md §22.11): the 4-digit check-in code, device binding, the check-out QR, whom to meet + where to
+wait. V4.1 (2026-10-29): check-out without a code (request -> Waiting to leave -> approve / hold), whom to meet optional
+(company setting, off for a new company)."""
+import importlib
 import hashlib
 import re
 import unittest
@@ -24,6 +27,7 @@ CODE = re.compile(r"^\d{4}$")
 class V4Base(Base):
     def setUp(self):
         super().setUp()
+        conf.save({**conf.get(), "whom_to_meet": True})  # a company that asks whom they are meeting (V4.1)
         self.link = services.the_link()
         self.url = f"/api/visitors/public/main/{self.link.token}/"
         self.out_url = f"/api/visitors/public/main/out/{self.link.checkout_token}/"
@@ -77,12 +81,9 @@ class CheckInCodeTests(V4Base):
         again = self.api(self.guard).get(f"/api/visitors/visits/code/?code={code}")
         self.assertEqual(again.status_code, 400)
 
-    def test_codes_are_unique_among_pending_check_ins_and_check_outs(self):
+    def test_codes_are_unique_among_pending_check_ins(self):
         taken = self.sign_in().data["code"]
-        Visit.objects.create(visitor=Visitor.objects.get(), name="X", status="inside", checkout_code="0042",
-                             checkout_requested_at=timezone.now(),
-                             checkout_code_expires_at=timezone.now() + timedelta(minutes=30))
-        with mock.patch("visitors.services_v4.secrets.randbelow", side_effect=[int(taken), 42, 7]):
+        with mock.patch("visitors.services_v4.secrets.randbelow", side_effect=[int(taken), 7]):
             self.assertEqual(services_v4.new_code(), "0007")
         # An expired code is free again.
         Visit.objects.filter(short_code=taken).update(code_expires_at=timezone.now() - timedelta(minutes=1))
@@ -199,28 +200,40 @@ class CheckoutTests(V4Base):
         self.approve(res.data["code"])
         return res.data["device"]
 
-    def test_right_device_requests_guard_approves(self):
+    def test_request_goes_to_waiting_to_leave_and_the_guard_approves_without_a_code(self):
         device = self.inside()
         page = self.phone(device).get(self.out_url)
         self.assertEqual(page.data["visit"]["state"], "inside")
         res = self.phone(device).post(self.out_url, {"rating": 5, "comment": "Quick and polite"}, format="json")
         self.assertEqual(res.status_code, 200, res.data)
+        # V4.1: "Please wait, the guard will let you out": no code anywhere.
         self.assertEqual(res.data["state"], "leaving")
-        self.assertRegex(res.data["code"], CODE)
+        self.assertNotIn("code", res.data)
         v = Visit.objects.get()
         self.assertEqual((v.status, v.feedback_rating, v.feedback_comment), ("inside", 5, "Quick and polite"))
-        self.assertTrue(v.checkout_requested_at)
-        # The same request again keeps the same code (no new code for a double tap).
-        self.assertEqual(self.phone(device).post(self.out_url, {}, format="json").data["code"], res.data["code"])
+        self.assertEqual((v.checkout_code, v.checkout_code_expires_at), ("", None))
+        asked = v.checkout_requested_at
+        self.assertTrue(asked)
+        self.assertTrue(GateLog.objects.filter(action=GateAction.CHECKOUT_REQUEST, visit=v).exists())
+        # A double tap keeps the first request.
+        self.assertEqual(self.phone(device).post(self.out_url, {}, format="json").data["state"], "leaving")
+        self.assertEqual(Visit.objects.get().checkout_requested_at, asked)
+        # The guard's "Waiting to leave" list: name, photo, whom they met, vehicle, time inside, feedback.
         gate = self.api(self.guard).get("/api/visitors/visits/?scope=today").data["results"][0]
         self.assertTrue(gate["checkout_pending"])
-        found = self.api(self.guard).get(f"/api/visitors/visits/code/?code={res.data['code']}")
-        self.assertEqual(found.data["kind"], "checkout")
+        self.assertNotIn("checkout_code", gate)
+        self.assertEqual((gate["name"], gate["host"]["id"], gate["has_photo"], gate["feedback_rating"]),
+                         ("Priya Shah", self.host.pk, True, 5))
+        self.assertIsNotNone(gate["minutes_inside"])
+        # Nobody without the gate permission approves.
+        self.assertIn(self.api(self.other).post(f"/api/visitors/visits/{v.pk}/approve_checkout/").status_code, (403, 404))
         out = self.api(self.guard).post(f"/api/visitors/visits/{v.pk}/approve_checkout/")
         self.assertEqual((out.data["status"], out.data["checkout_via"], out.data["check_out_by"]), ("out", "qr", "Ramesh"))
         self.assertTrue(out.data["check_out_at"] and out.data["checkout_requested_at"])
+        self.assertTrue(GateLog.objects.filter(action=GateAction.CHECKOUT_APPROVE, actor=self.guard).exists())
+        # The phone updates to "You are checked out".
         self.assertEqual(self.phone(device).get(self.out_url).data["visit"]["state"], "out")
-        self.assertEqual(self.api(self.guard).get(f"/api/visitors/visits/code/?code={res.data['code']}").status_code, 400)
+        self.assertEqual(self.phone(device).get("/api/visitors/public/main/device/").data["state"], "out")
 
     def test_cookie_copy_of_the_device_works_too(self):
         self.inside()
@@ -250,17 +263,23 @@ class CheckoutTests(V4Base):
                                         format="json")
         self.assertEqual((res.data["status"], res.data["checkout_pending"], res.data["checkout_hold_note"]),
                          ("inside", False, "Laptop not on pass"))
+        # V4.1: the phone says "The guard asked you to wait: <note>".
         state = self.phone(device).get("/api/visitors/public/main/device/").data
-        self.assertEqual(state["state"], "held")
-        self.assertNotIn("Laptop", str(state), "the guard's note stays at the gate")
+        self.assertEqual((state["state"], state["note"]), ("held", "Laptop not on pass"))
+        self.assertTrue(GateLog.objects.filter(action=GateAction.CHECKOUT_HOLD).exists())
+        # They may ask again after speaking to the guard: back in the list.
         self.assertEqual(self.phone(device).post(self.out_url, {}, format="json").data["state"], "leaving")
+        self.assertTrue(self.api(self.guard).get("/api/visitors/visits/?scope=today").data["results"][0]["checkout_pending"])
 
-    def test_checkout_code_expires(self):
+    def test_request_stays_until_the_guard_acts_and_no_code_opens_it(self):
         device = self.inside()
-        code = self.phone(device).post(self.out_url, {}, format="json").data["code"]
-        Visit.objects.update(checkout_code_expires_at=timezone.now() - timedelta(seconds=1))
-        self.assertEqual(self.api(self.guard).get(f"/api/visitors/visits/code/?code={code}").status_code, 400)
-        self.assertEqual(self.phone(device).get("/api/visitors/public/main/device/").data["state"], "inside")
+        self.phone(device).post(self.out_url, {}, format="json")
+        Visit.objects.update(checkout_requested_at=timezone.now() - timedelta(hours=5))
+        self.assertEqual(self.phone(device).get("/api/visitors/public/main/device/").data["state"], "leaving")
+        self.assertTrue(self.api(self.guard).get("/api/visitors/visits/?scope=today").data["results"][0]["checkout_pending"])
+        # The "Visitor code" box only knows check-in codes: an old-style check-out code finds nothing.
+        Visit.objects.update(checkout_code="4321", checkout_code_expires_at=timezone.now() + timedelta(minutes=30))
+        self.assertEqual(self.api(self.guard).get("/api/visitors/visits/code/?code=4321").status_code, 400)
 
     def test_guard_can_still_check_out_directly(self):
         self.inside()
@@ -290,15 +309,23 @@ class PublicLeakTests(V4Base):
     def test_people_list_shows_only_names_and_departments(self):
         self.host.email, self.host.whatsapp_phone = "neha@corp.com", "919800000000"
         self.host.save()
-        res = APIClient().get(f"{self.url}hosts/?q=neh")
+        gone = person("zoya")
+        gone.is_active = False
+        gone.save()
+        # V4.1: the whole list of active people for the dropdown, sorted by name (no typing needed).
+        res = APIClient().get(f"{self.url}hosts/")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["mode"], "people")
-        self.assertEqual(len(res.data["results"]), 1)
-        self.assertEqual(set(res.data["results"][0]), {"id", "name", "department"})
+        names = [r["name"] for r in res.data["results"]]
+        self.assertEqual(names, sorted(names))
+        self.assertIn("Neha", names)
+        self.assertNotIn("Zoya", names)
+        self.assertTrue(all(set(r) == {"id", "name", "department"} for r in res.data["results"]))
         self.assertNotIn("neha@corp.com", str(res.data))
         self.assertNotIn("9198", str(res.data))
-        self.assertEqual(APIClient().get(f"{self.url}hosts/?q=n").data["results"], [], "2 letters at least")
-        self.assertEqual(APIClient().get(f"/api/visitors/public/main/{'z' * 22}/hosts/?q=neh").status_code, 404)
+        self.assertNotIn("ramesh", str(res.data), "never usernames")
+        self.assertEqual([r["name"] for r in APIClient().get(f"{self.url}hosts/?q=neh").data["results"]], ["Neha"])
+        self.assertEqual(APIClient().get(f"/api/visitors/public/main/{'z' * 22}/hosts/").status_code, 404)
 
     def test_departments_and_off_modes(self):
         conf.save({**conf.get(), "public_host_list": "departments"})
@@ -381,8 +408,11 @@ class V4SettingsAndReportsTests(V4Base):
     def test_settings_validate_v4_values(self):
         api = self.api(self.admin)
         bad = api.put("/api/visitors/settings/", {"host_wa_template": "Visitor Waiting!", "code_minutes": 5,
-                                                  "waiting_places": [], "public_host_list": "all"}, format="json")
-        self.assertEqual(set(bad.data), {"host_wa_template", "code_minutes", "waiting_places", "public_host_list"})
+                                                  "waiting_places": [], "public_host_list": "all",
+                                                  "whom_to_meet": "yes", "whom_required": 1}, format="json")
+        self.assertEqual(set(bad.data), {"host_wa_template", "code_minutes", "waiting_places", "public_host_list",
+                                         "whom_to_meet", "whom_required"})
+
         ok = api.put("/api/visitors/settings/", {"host_wa_template": "visitor_waiting", "code_minutes": 30,
                                                  "waiting_places": ["Lobby", "lobby", "Cafe"]}, format="json")
         self.assertEqual((ok.data["code_minutes"], ok.data["waiting_places"]), (30, ["Lobby", "Cafe"]))
@@ -402,3 +432,90 @@ class V4SettingsAndReportsTests(V4Base):
         self.assertEqual((t["code_check_ins"], t["qr_check_outs"], t["feedback"], t["avg_rating"]), (1, 1, 1, 4))
         csv = self.api(self.admin).get("/api/visitors/visits/?export=csv")
         self.assertIn(b"Rating", csv.content)
+
+
+class WhomToMeetTests(V4Base):
+    """V4.1: whom to meet is a company choice (off for a new company), optional unless required; the host is asked
+    where to wait only when someone was picked."""
+
+    def form(self):
+        return APIClient().get(self.url).data
+
+    def test_new_company_does_not_ask_and_nobody_is_pinged(self):
+        conf.save({**conf.get(), "whom_to_meet": False})
+        self.assertEqual((self.form()["host_list"], self.form()["host_required"]), ("none", False))
+        self.assertEqual(APIClient().get(f"{self.url}hosts/").data, {"mode": "none", "results": []})
+        # A host sent anyway is ignored; the guard flow is unchanged.
+        signed = self.sign_in(host=self.host.pk, host_name="Neha")
+        v = Visit.objects.get()
+        self.assertEqual((v.host, v.host_label), (None, ""))
+        self.approve(signed.data["code"])
+        self.assertEqual(Visit.objects.get().status, "inside")
+        self.assertIsNone(Visit.objects.get().host_notified_at)
+        self.assertFalse(Notification.objects.filter(user=self.host).exists())
+        # A walk-in the guard enters with a host (guard flow unchanged): the host is told they arrived, as before V4,
+        # but never asked where they should wait.
+        walk_in = self.check_in(mobile="9811111111").data
+        n = Notification.objects.get(user=self.host)
+        self.assertEqual(n.type, "visitor_arrived")
+        self.assertNotIn("answer", n.link)
+        self.assertIsNone(Visit.objects.get(pk=walk_in["id"]).host_notified_at)
+        self.assertFalse(self.api(self.guard).get("/api/visitors/visits/?scope=today").data["results"][0]["host_no_answer"])
+
+    def test_on_and_optional_not_sure_is_fine_and_nobody_is_asked(self):
+        self.assertEqual((self.form()["host_list"], self.form()["host_required"]), ("people", False))
+        signed = self.sign_in(host=None, host_name="")
+        self.approve(signed.data["code"])
+        v = Visit.objects.get()
+        self.assertEqual((v.status, v.host, v.host_label, v.host_notified_at), ("inside", None, "", None))
+        self.assertFalse(Notification.objects.filter(user=self.host).exists())
+        state = self.phone(signed.data["device"]).get("/api/visitors/public/main/device/").data
+        self.assertEqual((state["state"], state["where"]), ("inside", ""))
+
+    def test_required_needs_someone(self):
+        conf.save({**conf.get(), "whom_required": True})
+        self.assertTrue(self.form()["host_required"])
+        res = APIClient().post(self.url, {**self.body, "host": None}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("host_name", res.data)
+        self.sign_in()  # with a person picked
+
+    def test_picked_host_is_asked_and_the_visitor_sees_the_place_live(self):
+        signed = self.sign_in().data
+        self.assertEqual(self.phone(signed["device"]).get("/api/visitors/public/main/device/").data["where"], "")
+        self.approve(signed["code"])
+        v = Visit.objects.get()
+        self.assertTrue(Notification.objects.filter(user=self.host, link=f"/visitors/answer?visit={v.pk}").exists())
+        self.api(self.host).post(f"/api/visitors/visits/{v.pk}/answer/", {"answer": "place", "place": "Reception"},
+                                 format="json")
+        state = self.phone(signed["device"]).get("/api/visitors/public/main/device/").data
+        self.assertEqual((state["state"], state["where"]), ("inside", "Please wait at Reception."))
+        self.assertTrue(Notification.objects.filter(user=self.guard, type="visitor_host_answer").exists())
+        # The check-out page on the same phone shows it too.
+        self.assertEqual(self.phone(signed["device"]).get(self.out_url).data["visit"]["where"], "Please wait at Reception.")
+
+    def test_migration_keeps_asking_for_companies_already_using_visitors(self):
+        from django.apps import apps
+
+        from tenancy import company_settings
+        from tenancy.models import CompanySetting
+        step = importlib.import_module("visitors.migrations.0006_v41_keep_whom_to_meet").keep_whom_to_meet
+        # A company already using Visitors (its QR exists) that never saved settings: switched on.
+        CompanySetting.objects.filter(key=conf.KEY).delete()
+        company_settings.forget()
+        self.assertFalse(conf.get()["whom_to_meet"])
+        step(apps, None)
+        company_settings.forget()
+        self.assertTrue(conf.get()["whom_to_meet"])
+        # A choice already made is kept.
+        conf.save({**conf.get(), "whom_to_meet": False})
+        step(apps, None)
+        company_settings.forget()
+        self.assertFalse(conf.get()["whom_to_meet"])
+        # A new, empty company: nothing written, so the default (off) applies.
+        CompanySetting.objects.filter(key=conf.KEY).delete()
+        from .models import GateLink
+        Visit.objects.all().delete()
+        GateLink.objects.all().delete()
+        step(apps, None)
+        self.assertFalse(CompanySetting.objects.filter(key=conf.KEY).exists())

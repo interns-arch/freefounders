@@ -1,5 +1,8 @@
-"""Visitors V4 (PLAN.md §22.11): 4-digit check-in / check-out codes, the visitor's phone bound to their visit, the
-check-out QR with feedback, and the host saying where the visitor should wait (in the app and by WhatsApp template).
+"""Visitors V4 (PLAN.md §22.11): the 4-digit check-in code, the visitor's phone bound to their visit, the check-out QR
+with feedback, and the host saying where the visitor should wait (in the app and by WhatsApp template).
+
+V4.1 (2026-10-29): check-out needs no code (the request shows in the guard's "Waiting to leave" list: Approve / Hold),
+and whom to meet is optional (company setting `whom_to_meet`, optionally `whom_required`).
 """
 import hashlib
 import secrets
@@ -29,19 +32,13 @@ def pending_checkin(now=None) -> Q:
     return Q(status=VisitStatus.WAITING, code_expires_at__gt=now or timezone.now())
 
 
-def pending_checkout(now=None) -> Q:
-    return Q(status=VisitStatus.INSIDE, checkout_requested_at__isnull=False,
-             checkout_code_expires_at__gt=now or timezone.now())
-
-
 def new_code(now=None) -> str:
-    """4 random digits (like an OTP; never derived from an id), unique among the company's pending check-in and
-    check-out codes, so one "Enter code" box finds exactly one visit."""
+    """4 random digits (like an OTP; never derived from an id), unique among the company's pending check-in codes, so
+    the "Visitor code" box finds exactly one visit."""
     now = now or timezone.now()
     for _ in range(60):
         code = f"{secrets.randbelow(10000):04d}"
-        taken = Visit.objects.filter(pending_checkin(now) & Q(short_code=code)
-                                     | pending_checkout(now) & Q(checkout_code=code)).exists()
+        taken = Visit.objects.filter(pending_checkin(now), short_code=code).exists()
         if not taken:
             return code
     raise ValidationError({"detail": "Too many visitors are waiting right now. Please ask the guard."})
@@ -52,7 +49,7 @@ def _misses(actor, now) -> int:
 
 
 def find_by_code(actor, raw) -> tuple[str, Visit]:
-    """The gate types a code: ("checkin" | "checkout", visit). Wrong codes are counted per guard; after CODE_TRIES in
+    """The gate types a check-in code: ("checkin", visit) (check-out has no code since V4.1). Wrong codes are counted per guard; after CODE_TRIES in
     CODE_WINDOW code entry is locked for the rest of the window. A miss never says what was wrong."""
     now = timezone.now()
     if _misses(actor, now) >= CODE_TRIES:
@@ -61,12 +58,11 @@ def find_by_code(actor, raw) -> tuple[str, Visit]:
     code = "".join(ch for ch in str(raw or "") if ch.isdigit())
     v = None
     if len(code) == 4:
-        v = (Visit.objects.filter(pending_checkin(now), short_code=code).select_related("host", "location").first()
-             or Visit.objects.filter(pending_checkout(now), checkout_code=code).select_related("host", "location").first())
+        v = Visit.objects.filter(pending_checkin(now), short_code=code).select_related("host", "location").first()
     if not v:
         log(actor, GateAction.CODE_MISS, "Wrong visitor code entered")
         raise ValidationError({"code": NO_CODE})
-    return ("checkin" if v.status == VisitStatus.WAITING else "checkout"), v
+    return "checkin", v
 
 
 def expire_codes(now=None) -> int:
@@ -112,8 +108,8 @@ def where_to_wait(v: Visit) -> str:
 
 
 def device_state(v: Visit | None) -> dict:
-    """What the visitor's own phone may show: the state of their own visit and their codes. Nothing about anyone else,
-    never the host's contact details."""
+    """What the visitor's own phone may show: the state of their own visit, its check-in code, where to wait, and the
+    guard's hold note (said to them). Nothing about anyone else, never the host's contact details."""
     if not v:
         return {"state": "none"}
     now = timezone.now()
@@ -126,12 +122,12 @@ def device_state(v: Visit | None) -> dict:
     elif v.status == VisitStatus.WAITING_HOST:
         out |= {"state": "waiting_host"}
     elif v.status == VisitStatus.INSIDE:
-        leaving = bool(v.checkout_requested_at and v.checkout_code_expires_at and v.checkout_code_expires_at > now)
-        if leaving:
-            out |= {"state": "leaving", "code": v.checkout_code,
-                    "expires_at": timezone.localtime(v.checkout_code_expires_at).isoformat()}
+        if v.checkout_requested_at:
+            out |= {"state": "leaving"}  # "Please wait, the guard will let you out" (V4.1: no code)
+        elif v.checkout_held_at:
+            out |= {"state": "held", "note": v.checkout_hold_note}
         else:
-            out |= {"state": "held" if v.checkout_held_at else "inside"}
+            out |= {"state": "inside"}
     elif v.status == VisitStatus.OUT:
         out |= {"state": "out", "where": ""}
     else:  # turned away / denied / did not come / cancelled
@@ -159,9 +155,7 @@ def request_checkout(v: Visit, data: dict) -> Visit:
         v.feedback_comment = comment
     if rating not in (None, "") or comment:
         v.feedback_at = now
-    if not (v.checkout_requested_at and v.checkout_code_expires_at and v.checkout_code_expires_at > now):
-        v.checkout_code = new_code(now)
-        v.checkout_code_expires_at = now + timedelta(minutes=code_minutes())
+    if not v.checkout_requested_at:  # a double tap keeps the first request (and its place in the guard's list)
         v.checkout_requested_at = now
         v.checkout_held_at, v.checkout_hold_note = None, ""
         v.save()
@@ -176,7 +170,7 @@ def approve_checkout(actor, v: Visit) -> Visit:
         raise ValidationError({"detail": "This visitor has not asked to check out."})
     v.status, v.check_out_at, v.check_out_by, v.checkout_via = VisitStatus.OUT, timezone.now(), actor, "qr"
     v.save()
-    log(actor, GateAction.CHECKOUT_APPROVE, f"{who(v)} out after {v.minutes_inside()} min (check-out code)", visit=v)
+    log(actor, GateAction.CHECKOUT_APPROVE, f"{who(v)} out after {v.minutes_inside()} min (asked from their phone)", visit=v)
     return v
 
 
@@ -184,7 +178,7 @@ def hold_checkout(actor, v: Visit, note: str) -> Visit:
     if v.status != VisitStatus.INSIDE or not v.checkout_requested_at:
         raise ValidationError({"detail": "This visitor has not asked to check out."})
     note = text(note, 200)
-    v.checkout_requested_at, v.checkout_code, v.checkout_code_expires_at = None, "", None
+    v.checkout_requested_at = None
     v.checkout_held_at, v.checkout_hold_note = timezone.now(), note
     v.save()
     log(actor, GateAction.CHECKOUT_HOLD, f"{who(v)}: check-out held{f': {note}' if note else ''}", visit=v)
@@ -203,9 +197,16 @@ def ask_host(v: Visit) -> None:
     only when the company has one approved (no free-form WhatsApp), and only inside the WhatsApp hours."""
     host = v.host
     if not host or not host.is_active:
+        return  # V4.1: nobody picked ("Not sure"): nobody is asked
+    s = conf.get()
+    if not s["whom_to_meet"]:
+        # V4.1: the company does not use whom to meet / where to wait. A host the guard picked (or who invited the
+        # visitor) is still told they arrived, as before V4: in the app only, no question, no WhatsApp.
+        from .services import _notify, visit_link
+        _notify(host, "visitor_arrived", f"{v.name} is at the gate for you",
+                f"{who(v)} · {v.purpose or 'visit'} · pass {v.pass_no}", visit_link(v))
         return
     from notifications.service import notify
-    s = conf.get()
     template = s["host_wa_template"]
     first = host.first_name or name_of(host)
     try:
@@ -280,29 +281,39 @@ def no_answer(v: Visit, now=None) -> bool:
 
 # ---------------------------------------------------------------- the QR form's people list
 
-def public_hosts(q: str) -> list[dict]:
-    """Whom to meet on the QR form: name + department only (never email / phone / username)."""
+PUBLIC_PEOPLE_MAX = 1000
+
+
+def host_mode() -> str:
+    """What the QR form asks for whom to meet: "none" (the company does not ask, V4.1), else people / departments /
+    off (typed)."""
+    s = conf.get()
+    return s["public_host_list"] if s["whom_to_meet"] else "none"
+
+
+def public_hosts(q: str = "") -> list[dict]:
+    """Whom to meet on the QR form: the company's active people sorted by name, for the dropdown (V4.1; the phone
+    filters as the visitor types). Name + department only (never email / phone / username). `q` narrows it."""
     from accounts.models import DepartmentOption, User
-    mode = conf.get()["public_host_list"]
+    mode = host_mode()
     if mode == "departments":
         return [{"department": name} for _, name in DepartmentOption.choices_list()]
     if mode != "people":
         return []
-    words = [w for w in str(q or "").split() if w][:3]
-    if not words or len(" ".join(words)) < 2:
-        return []
     qs = User.objects.filter(is_active=True)
-    for w in words:
+    for w in [w for w in str(q or "").split() if w][:3]:
         qs = qs.filter(Q(first_name__icontains=w) | Q(last_name__icontains=w))
     labels = dict(DepartmentOption.choices_list())
-    return [{"id": u.pk, "name": (f"{u.first_name} {u.last_name}".strip() or "Employee"),
-             "department": labels.get(u.department, "")} for u in qs.order_by("first_name", "last_name")[:8]]
+    rows = qs.order_by("first_name", "last_name", "pk").values("pk", "first_name", "last_name", "department")
+    return [{"id": u["pk"], "name": (f"{u['first_name']} {u['last_name']}".strip() or "Employee"),
+             "department": labels.get(u["department"], "")} for u in rows[:PUBLIC_PEOPLE_MAX]]
 
 
 def public_host(raw_id):
     """A person picked from the QR form's list (only when the company shows people)."""
     from accounts.models import User
-    if raw_id in (None, "") or conf.get()["public_host_list"] != "people":
+    if raw_id in (None, "") or host_mode() != "people":
+
         return None
     try:
         pk = int(raw_id)
