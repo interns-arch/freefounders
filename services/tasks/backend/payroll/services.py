@@ -34,10 +34,14 @@ def month_bounds(year: int, month: int):
     return first, last
 
 
-def working_days_in(year: int, month: int) -> Decimal:
-    """Calendar days minus weekly offs and company holidays."""
+def working_days_in(year: int, month: int, user=None) -> Decimal:
+    """Calendar days minus weekly offs and company holidays. With a person: minus their own off days (roster Off /
+    week-off without a roster entry; a rostered working day on a week-off counts, PLAN.md §28)."""
     first, last = month_bounds(year, month)
     holidays = set(Holiday.objects.filter(date__range=(first, last)).values_list("date", flat=True))
+    if user is not None:
+        from hr.roster import working_days
+        return Decimal(len(working_days(user, first, last, holidays)))
     count, cur = 0, first
     while cur <= last:
         if not is_week_off(cur) and cur not in holidays:
@@ -75,7 +79,9 @@ def count_days(user, year: int, month: int, working_days: Decimal) -> dict:
 
     A half-day leave (PLAN.md §19.40) is half leave + half work: 0.5 paid (paid type) or 0.5 loss of pay (unpaid type)
     for the leave half, plus 0.5 when the person punched in for the other half (never more than one day)."""
+    from hr.roster import Book
     first, last = month_bounds(year, month)
+    book = Book([user.pk], first, last)
     records = {a.date: a for a in Attendance.objects.filter(user=user, date__range=(first, last))}
     leaves = approved_leave_days(user, first, last)
     half_leave_days = {d for d, (_paid, half) in leaves.items() if half}
@@ -83,7 +89,7 @@ def count_days(user, year: int, month: int, working_days: Decimal) -> dict:
     present = half = 0
     paid_leave = unpaid_leave = Decimal(0)
     for day in sorted(set(records) | half_leave_days):
-        if is_week_off(day):
+        if book.is_off(user.pk, day):   # the person's own off day (PLAN.md §28)
             continue
         rec = records.get(day)
         status = rec.status if rec else None
@@ -123,7 +129,8 @@ def build_payslip(run, user) -> Payslip | None:
     if not structure:
         return None
 
-    working_days = run.working_days or working_days_in(run.year, run.month)
+    # The person's own working days (their roster); the same as the company's without roster entries (PLAN.md §28).
+    working_days = working_days_in(run.year, run.month, user)
     days = count_days(user, run.year, run.month, working_days)
 
     gross = money(structure.monthly_gross)

@@ -44,6 +44,8 @@ export interface HrSettingValues {
   reg_person_limits: Array<{ user: number; name: string; limit: number }>;
   /** times: status from the times like a punch; present: always Present. */
   reg_mark: 'times' | 'present';
+  /** Roster (PLAN.md §28): rest under this many hours between two shifts is a warning (0 = none). */
+  roster_min_rest_hours: number;
 }
 
 export type HrSettings = { [K in keyof HrSettingValues]: HrSetting<HrSettingValues[K]> };

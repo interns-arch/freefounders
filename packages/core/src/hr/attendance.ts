@@ -58,7 +58,7 @@ export interface HrConfig {
   /** HR settings (hr.settings). */
   can_manage: boolean;
   /** The managers' attendance screens this person may open: their permissions, plus their own team under the "manager approves" rule (PLAN.md §19.19). */
-  screens?: Partial<Record<'live' | 'daily' | 'dashboard' | 'reports', boolean>>;
+  screens?: Partial<Record<'live' | 'daily' | 'dashboard' | 'reports' | 'roster', boolean>>;
 }
 
 /** GET /hr/config/ */
@@ -99,6 +99,9 @@ export interface AttendanceToday {
   /** Punch-in reminders (PLAN.md §19.39): the rule, why today needs none, and how many the server sent today. */
   punch_reminders?: PunchReminderRule;
   day_off?: 'holiday' | 'week_off' | 'leave' | null;
+  /** The day a punch now belongs to (an open overnight shift: yesterday) and its shift when a roster / default shift decides it (PLAN.md §28). */
+  date?: string;
+  shift?: DayShift | null;
   reminders_sent?: number;
 }
 
@@ -148,6 +151,9 @@ export interface AttendanceDay {
   work_mode?: string;
   /** The latest regularization request for the day (any status). */
   request?: { id: number; status: RegularizationStatus; reason_label: string } | null;
+  /** The day's shift and minutes worked beyond it, when a roster / default shift decides the day (PLAN.md §28). */
+  shift?: DayShift;
+  overtime_minutes?: number;
 }
 
 export interface AttendanceMonth {
@@ -425,4 +431,18 @@ export function nearestOffice<O extends { name: string; latitude: number; longit
     if (!best || metres < best.metres) best = { office: o, metres, inside: metres <= o.radius_m };
   }
   return best;
+}
+
+/** A day's shift on the attendance answers (PLAN.md §28); absent for plain office hours. */
+export interface DayShift {
+  id: number;
+  code: string;
+  name: string;
+  colour: string;
+  is_off: boolean;
+  start: string;
+  end: string;
+  overnight: boolean;
+  source: 'roster' | 'default';
+  off: boolean;
 }

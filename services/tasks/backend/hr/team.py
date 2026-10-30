@@ -119,17 +119,25 @@ def person(u, names) -> dict:
 # ---------------------------------------------------------- classification
 
 class Calendar:
-    """Holidays and week-offs for a range, read once (no query per day)."""
+    """Holidays, week-offs and the people's rosters (PLAN.md §28) for a range, read once (no query per day)."""
 
-    def __init__(self, first: date, last: date):
+    def __init__(self, first: date, last: date, user_ids=()):
+        from .roster import Book
         self.holidays = {h.date: h.name for h in Holiday.objects.filter(date__range=(first, last))}
         self.week_offs = set(services.cfg()["week_offs"])
         self.today = timezone.localdate()
+        self.book = Book(user_ids, first, last)
 
-    def status_without_record(self, day: date):
+    def is_off(self, day: date, user_id=None) -> bool:
+        """The person's off day (roster Off / company week-off); without a person, the company week-off."""
+        if user_id is None:
+            return day.weekday() in self.week_offs
+        return self.book.is_off(user_id, day)
+
+    def status_without_record(self, day: date, user_id=None):
         if day in self.holidays:
             return AttendanceStatus.HOLIDAY.value
-        if day.weekday() in self.week_offs:
+        if self.is_off(day, user_id):
             return AttendanceStatus.WEEK_OFF.value
         if day > self.today:
             return None
@@ -172,7 +180,7 @@ def parse_range(params):
 def team_day(users, day: date) -> dict:
     """One row per person with their status for the day."""
     names = department_names()
-    cal = Calendar(day, day)
+    cal = Calendar(day, day, [u.id for u in users])
     records = {a.user_id: a for a in Attendance.objects.filter(user__in=[u.id for u in users], date=day)
                .select_related("regularization")}
     from .punch_reminders import sent_today
@@ -196,13 +204,16 @@ def team_day(users, day: date) -> dict:
             })
         else:
             row.update({
-                "status": cal.status_without_record(day),
+                "status": cal.status_without_record(day, u.id),
                 "check_in": None, "check_out": None, "working_minutes": 0,
                 "is_late": False, "is_early_checkout": False, "missing_checkout": False,
                 "attendance_id": None, "note": "", "uniform_ok": None,
                 "has_check_in_photo": False, "has_check_out_photo": False,
                 **services.regularized_fields(None),
             })
+        brief = cal.book.plan(u.id, day).brief()   # the day's shift when a roster / default shift decides it
+        if brief:
+            row["shift"] = brief
         rows.append(row)
     return {
         "date": day.isoformat(),
@@ -216,7 +227,7 @@ def team_day(users, day: date) -> dict:
 
 def month_statuses(users, first: date, last: date):
     """{user_id: {date: (status, record|None)}} for the range, with three queries in all."""
-    cal = Calendar(first, last)
+    cal = Calendar(first, last, [u.id for u in users])
     by_user = {}
     for a in Attendance.objects.filter(user__in=[u.id for u in users], date__range=(first, last)):
         by_user.setdefault(a.user_id, {})[a.date] = a
@@ -226,7 +237,7 @@ def month_statuses(users, first: date, last: date):
         days, cur = {}, first
         while cur <= last:
             rec = recs.get(cur)
-            days[cur] = (rec.status, rec) if rec else (cal.status_without_record(cur), None)
+            days[cur] = (rec.status, rec) if rec else (cal.status_without_record(cur, u.id), None)
             cur += timedelta(days=1)
         out[u.id] = days
     return out, cal
@@ -334,15 +345,16 @@ def build_report(kind, users, params):
 
     if kind == "late":
         first, last = parse_range(params)
-        start = services._parse_hhmm(services.cfg()["work_start"], time(9, 30))
+        from .roster import Book
         recs = (Attendance.objects.filter(user__in=[u.id for u in users], date__range=(first, last), is_late=True)
                 .select_related("user").order_by("date", "check_in"))
+        book = Book([u.id for u in users], first, last)
         rows = []
         for a in recs:
             late_by = ""
-            if a.check_in:
-                delta = datetime.combine(a.date, timezone.localtime(a.check_in).time()) - datetime.combine(a.date, start)
-                late_by = max(0, int(delta.total_seconds() // 60))
+            start_at = book.plan(a.user_id, a.date).start_at()   # the person's shift start (PLAN.md §28)
+            if a.check_in and start_at:
+                late_by = max(0, int((a.check_in - start_at).total_seconds() // 60))
             rows.append([_dmy(a.date)] + _ident(a.user, names) + [_hm(a.check_in), late_by, _hm(a.check_out), _hours(a.working_minutes)])
         return (f"Late arrivals {_dmy(first)} to {_dmy(last)}", f"attendance-late-{first.isoformat()}-to-{last.isoformat()}",
                 ["Date"] + ident + ["Check in", "Minutes late", "Check out", "Hours"], rows)
@@ -611,22 +623,22 @@ def validate_rows(parsed):
 
 
 def _apply_row(row, by_name, today_text, existing):
+    from .roster import plan_for
     conf = services.cfg()
     user, day = row["_user"], row["_day"]
     rec = existing.get((user.id, day)) or Attendance(user=user, date=day)
     tz = timezone.get_current_timezone()
     rec.check_in = timezone.make_aware(datetime.combine(day, row["_in"]), tz) if row["_in"] else None
     rec.check_out = timezone.make_aware(datetime.combine(day, row["_out"]), tz) if row["_out"] else None
-    start = services._parse_hhmm(conf["work_start"], time(9, 30))
-    end = services._parse_hhmm(conf["work_end"], time(18, 30))
-    late_cutoff = (datetime.combine(day, start) + timedelta(minutes=conf["grace_minutes"])).time()
-    rec.is_late = bool(row["_in"] and row["_in"] > late_cutoff)
-    rec.is_early_checkout = bool(row["_out"] and row["_out"] < end)
+    plan = plan_for(user, day, conf)    # the person's shift that day (PLAN.md §28)
+    late_after, end_at = plan.late_after(), plan.end_at()
+    rec.is_late = bool(rec.check_in and late_after and rec.check_in > late_after)
+    rec.is_early_checkout = bool(rec.check_out and end_at and rec.check_out < end_at)
     rec.working_minutes = (int((rec.check_out - rec.check_in).total_seconds() // 60)
                            if rec.check_in and rec.check_out else 0)
     status = row["status"]
     if status == "present":
-        if not row["_explicit"] and rec.check_out and rec.working_minutes / 60 < conf["half_day_hours"]:
+        if not row["_explicit"] and rec.check_out and rec.working_minutes / 60 < plan.half_day_hours:
             status = "half_day"            # blank status: decided like a normal punch
         else:
             status = "late" if rec.is_late else "present"

@@ -1,4 +1,4 @@
-import { Banknote, CalendarCheck, CalendarDays, CalendarHeart, CalendarRange, ClipboardCheck, Clock, FileSpreadsheet, LayoutGrid, Radio, Settings2, Wallet } from '@/components/icons';
+import { Banknote, CalendarCheck, CalendarClock, CalendarDays, CalendarHeart, CalendarRange, ClipboardCheck, Clock, FileSpreadsheet, LayoutGrid, Radio, Settings2, Wallet } from '@/components/icons';
 import type { Access } from '@kaampilot/core';
 import type { NavItem } from '@/app/nav';
 
@@ -16,6 +16,8 @@ export const ATTENDANCE_SCREENS = {
   dashboard: (a: Access) => a.tasks.canAny('hr.dashboard'),
   reports: (a: Access) => a.tasks.canAny('hr.reports'),
   approvals: (a: Access) => a.tasks.canAny('hr.approve'),
+  /** Roster and shifts (PLAN.md §28): any scope, or HR settings (= company). */
+  roster: (a: Access) => a.tasks.canAny('hr.roster') || a.tasks.can('hr.settings'),
   payroll: (a: Access) => a.tasks.module('payroll') && (a.tasks.can('payroll.run') || a.tasks.can('payroll.salaries')),
   settings: (a: Access) => a.tasks.can('hr.settings'),
 };
@@ -31,6 +33,7 @@ export const ATTENDANCE_NAV: NavItem[] = [
   { label: 'Daily attendance', to: '/attendance/daily', icon: CalendarRange, group: 'Manage', show: ATTENDANCE_SCREENS.daily },
   { label: 'Dashboard', to: '/attendance/dashboard', icon: LayoutGrid, group: 'Manage', show: ATTENDANCE_SCREENS.dashboard },
   { label: 'Reports', to: '/attendance/reports', icon: FileSpreadsheet, group: 'Manage', show: ATTENDANCE_SCREENS.reports },
+  { label: 'Roster', to: '/attendance/roster', icon: CalendarClock, group: 'Manage', show: ATTENDANCE_SCREENS.roster },
   { label: 'Approvals', to: '/attendance/approvals', icon: ClipboardCheck, group: 'Manage', show: ATTENDANCE_SCREENS.approvals, badge: (b) => b.attendance.approvals },
   { label: 'Payroll', to: '/attendance/payroll', icon: Banknote, group: 'Manage', show: ATTENDANCE_SCREENS.payroll },
   { label: 'HR settings', to: '/attendance/settings', icon: Settings2, group: 'Manage', show: ATTENDANCE_SCREENS.settings },

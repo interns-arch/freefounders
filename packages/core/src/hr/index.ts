@@ -5,3 +5,4 @@ export * from './settings';
 export * from './payroll';
 export * from './team';
 export * from './exports';
+export * from './roster';

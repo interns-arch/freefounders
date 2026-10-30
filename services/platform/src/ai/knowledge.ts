@@ -96,7 +96,13 @@ Menu items for everyone: **Today**, **My attendance**, **My leave**, **My salary
 - No reminders on leave, holidays or week-offs. They stop once you punch in.
 - HR sets this in HR settings › Punch-in reminders.
 
-**HR settings**: work hours, late grace, weekly offs, office locations, photo at punch, uniform check, leave types, who approves, regularization and punch-in reminders.
+**Roster and shifts** (Attendance › **Roster**)
+- HR (or a manager whose role has "Roster and shifts") plans who works which shift on which day: a grid of people × days, week or month. Click a cell to pick a shift or Off; select many cells (drag or Shift-click) to set them at once; Apply to week, Copy last week, Repeat pattern (e.g. G, M, N weekly) and Default shift per person. Changes are saved with **Save** (Discard undoes them). Less than 11 hours of rest between two shifts shows a warning.
+- A person's shift for a day: the roster entry, else their default shift, else the company office hours. Late, early leaving, half day, absent, punch-in reminders and payroll working days all follow it. An Off day is never absent. A night shift (e.g. 22:00–06:00) counts on the day it starts.
+- Everyone sees **My roster** (their next 14 days) on Attendance › Today, and gets a notification when HR changes their shift.
+- The shift list (name, code, hours, break, grace, half-day hours, colour) is in HR settings › **Shifts**. The roster can be downloaded as Excel and uploaded back.
+
+**HR settings**: work hours, late grace, weekly offs, office locations, photo at punch, uniform check, leave types, who approves, regularization, punch-in reminders and shifts.
 
 **Payroll (optional module)**
 - HR uses Attendance › **Payroll**:

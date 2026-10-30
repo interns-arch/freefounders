@@ -116,6 +116,30 @@ class MultiCompanyTests(SimpleTestCase):
         res = self.api(access(ACME_ID, self.acme_user)).get(f"/api/team360/{beta_only.pk}/")
         self.assertIn(res.status_code, (403, 404))
 
+    def test_roster_is_per_company(self):
+        """PLAN.md §28: each company's own shift library and roster; a save never reaches another schema."""
+        from datetime import time as t
+
+        from hr.models import RosterEntry, Shift
+        with schemas.use(ACME):
+            night = Shift.objects.create(name="Acme night", code="AN", start=t(22), end=t(6))
+            self.assertTrue(Shift.objects.filter(is_off=True).exists(), "migrate_companies seeds the Off shift")
+        try:
+            res = self.api(access(ACME_ID, self.acme_user)).put(
+                "/api/hr/roster/", {"changes": [{"user": self.acme_user.pk, "date": "2030-01-07", "shift": night.pk}]},
+                format="json")
+            self.assertIn(res.status_code, (200, 403), res.content)   # 403 = own-records rule for a non-Owner
+            res = self.api(access(BETA_ID, self.beta_user)).get("/api/hr/shifts/")
+            self.assertEqual(res.status_code, 200, res.content)
+            self.assertNotIn("AN", {s["code"] for s in res.json()})
+            with schemas.use(BETA):
+                self.assertFalse(RosterEntry.objects.exists())
+                self.assertFalse(Shift.objects.filter(code="AN").exists())
+        finally:
+            with schemas.use(ACME):
+                RosterEntry.objects.all().delete()
+                Shift.objects.filter(code="AN").delete()
+
     def test_another_company_cannot_open_a_task_by_id(self):
         res = self.api(access(BETA_ID, self.beta_user)).get(f"/api/tasks/{self.acme_task.pk}/")
         if res.status_code == 200:  # same id can exist in Beta; it must be Beta's own task

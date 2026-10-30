@@ -49,7 +49,7 @@ DELETE -- the row belongs to the person (and its own dependents go with it, by t
   mistakes.Mistake.employee / reported_by  mistakes logged against them and by them (+events)
   mistakes.SOP.created_by                  SOPs they wrote (mistakes citing them -> NULL sop)
   hr.Attendance.user (+punch photos), hr.AttendanceCorrection.user, hr.CompOff.user, hr.LeaveRequest.user
-  (+document), hr.FaceProfile.user, hr.AttendanceReminderLog.user, payroll.SalaryStructure.user, payroll.Advance.user, payroll.Payslip.user
+  (+document), hr.FaceProfile.user, hr.AttendanceReminderLog.user, hr.RosterEntry.user, hr.PersonShift.user, payroll.SalaryStructure.user, payroll.Advance.user, payroll.Payslip.user
   accounts.UserAccessRole.user, admin.LogEntry.user, token_blacklist.OutstandingToken.user, and the m2m rows
   (group memberships, task subscriptions, link favourites, notice reads, auth groups/permissions)
   tenancy.OutboxEvent                      events about a deleted task (payload.taskId)
@@ -62,7 +62,7 @@ NULL -- the row belongs to someone else or to the company; only the pointer to t
   mistakes.MistakeCategory.created_by, mistakes.SOP.owner (an SOP someone else wrote), mistakes.Mistake.manager,
   workspace.Group.owner (a shared group stays with its members), workspace.LinkCollection.created_by (still holds
   other people's links), hr.AttendanceCorrection.reviewed_by/added_by, hr.LeaveRequest.reviewed_by, hr.LeaveRequest.beyond_balance_by, hr.CompOff.created_by,
-  hr.FaceProfile.enrolled_by, payroll.SalaryStructure/Advance/PayrollRun.created_by
+  hr.FaceProfile.enrolled_by, hr.RosterEntry/PersonShift.updated_by, payroll.SalaryStructure/Advance/PayrollRun.created_by
   crm.AssignmentRule.member_ids (JSON list of user ids): the id is taken out of the list.
 
 No relation to the user is PROTECT (hr.LeaveRequest.leave_type is PROTECT, but it points at a leave type).
@@ -132,6 +132,10 @@ RELATIONS = {
     "hr.FaceProfile.user": DELETE,
     "hr.FaceProfile.enrolled_by": NULL,
     "hr.AttendanceReminderLog.user": DELETE,
+    "hr.RosterEntry.user": DELETE,            # roster (PLAN.md §28)
+    "hr.RosterEntry.updated_by": NULL,
+    "hr.PersonShift.user": DELETE,
+    "hr.PersonShift.updated_by": NULL,
     # payroll
     "payroll.SalaryStructure.user": DELETE,
     "payroll.SalaryStructure.created_by": NULL,
@@ -413,7 +417,8 @@ def _delete_everything(user, using, counts, files):
 
 # Rows that are personal data or access, not history: removed even when history is kept.
 PERSONAL = (
-    "hr.FaceProfile.user", "hr.AttendanceReminderLog.user", "notifications.Notification.user", "notifications.WhatsAppDelivery.user",
+    "hr.FaceProfile.user", "hr.AttendanceReminderLog.user", "hr.RosterEntry.user", "hr.PersonShift.user",
+    "notifications.Notification.user", "notifications.WhatsAppDelivery.user",
     "token_blacklist.OutstandingToken.user", "accounts.UserAccessRole.user", "accounts.User_groups.user",
     "accounts.User_user_permissions.user", "workspace.Group_members.user", "crm.Task_subscribers.user",
     "workspace.Link_favorites.user", "workspace.NoticeRead.user",

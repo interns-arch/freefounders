@@ -37,14 +37,15 @@ LINK = "/hr?tab=today"          # web: /tasks/hr → /attendance (Today, the Pun
 OPEN_STATUSES = (AttendanceStatus.PRESENT, AttendanceStatus.LATE)
 
 
-def rule(conf=None) -> dict:
+def rule(conf=None, plan=None) -> dict:
+    """The company rule; with a person's day plan (PLAN.md §28) the reporting time is their shift start."""
     conf = conf or services.cfg()
     return {
         "enabled": conf["punch_reminders"],
         "count": conf["punch_reminder_count"],
         "gap_minutes": conf["punch_reminder_gap"],
         "first_after_minutes": conf["punch_reminder_first"],
-        "reporting_time": conf["work_start"],
+        "reporting_time": (plan.start_text() if plan is not None and plan.start else "") or conf["work_start"],
     }
 
 
@@ -52,9 +53,9 @@ def _at(day, t: time) -> datetime:
     return timezone.make_aware(datetime.combine(day, t), timezone.get_current_timezone())
 
 
-def slots(day, conf=None) -> list[datetime]:
-    """When reminders 1..count are due on `day` (aware datetimes)."""
-    r = rule(conf)
+def slots(day, conf=None, plan=None) -> list[datetime]:
+    """When reminders 1..count are due on `day` (aware datetimes), from the person's shift start when given."""
+    r = rule(conf, plan)
     start = services._parse_hhmm(r["reporting_time"], time(9, 30))
     first = _at(day, start) + timedelta(minutes=r["first_after_minutes"])
     return [first + timedelta(minutes=r["gap_minutes"] * i) for i in range(r["count"])]
@@ -75,8 +76,8 @@ def day_off_reason(user, day) -> str | None:
     """'holiday' | 'week_off' | 'leave' when nobody (or this person) is expected to punch in on `day`."""
     if services.is_holiday(day):
         return "holiday"
-    if services.is_week_off(day):
-        return "week_off"
+    if (services.is_off_day(user, day) if user is not None else services.is_week_off(day)):
+        return "week_off"   # the person's own off day: roster Off, or the company week-off (PLAN.md §28)
     if user is not None and _on_leave_ids([user.id], day):
         return "leave"
     return None
@@ -116,20 +117,30 @@ def send_punch_reminders(now=None) -> int:
         return 0
     now = now or timezone.now()
     day = timezone.localtime(now).date()
-    if services.is_holiday(day) or services.is_week_off(day):
+    if services.is_holiday(day):
         return 0
-    day_slots = slots(day, conf)
-    if now < day_slots[0]:
-        return 0
-    start = _at(day, services._parse_hhmm(conf["work_start"], time(9, 30)))
-    end = _at(day, services._parse_hhmm(conf["work_end"], time(18, 30)))
-    if end > start and now >= end:
-        return 0  # the working day is over: a punch-in reminder is no longer useful
 
     people = list(User.objects.filter(is_active=True))
     if not people:
         return 0
     ids = [u.id for u in people]
+    # Each person's own shift for today (PLAN.md §28): roster entry, else default shift, else the office hours.
+    from .roster import Book
+    book = Book(ids, day, day, conf)
+    plans = {}
+    for user in people:
+        plan = book.plan(user.id, day)
+        if plan.off or not plan.start:
+            continue    # their off day
+        day_slots = slots(day, conf, plan)
+        if now < day_slots[0]:
+            continue
+        start, end = plan.start_at(), plan.end_at()
+        if end and end > start and now >= end:
+            continue    # their working day is over: a punch-in reminder is no longer useful
+        plans[user.id] = (plan, day_slots)
+    if not plans:
+        return 0
     decided = set()
     for rec in Attendance.objects.filter(user_id__in=ids, date=day).only("user_id", "check_in", "status"):
         if rec.check_in or rec.status not in OPEN_STATUSES:
@@ -141,8 +152,9 @@ def send_punch_reminders(now=None) -> int:
 
     sent = 0
     for user in people:
-        if user.id in decided:
+        if user.id in decided or user.id not in plans:
             continue
+        plan, day_slots = plans[user.id]
         done, last_at = last.get(user.id, (0, None))
         n = due_number(now, done, last_at, day_slots, r["gap_minutes"])
         if not n or not has_capability(user, "attendance.punch"):
@@ -153,7 +165,7 @@ def send_punch_reminders(now=None) -> int:
         except IntegrityError:
             continue  # another worker sent this one
         try:
-            note = notify(user, NOTIFICATION_TYPE, message(n, r["count"], conf["work_start"]), "", link=LINK,
+            note = notify(user, NOTIFICATION_TYPE, message(n, r["count"], plan.start_text() or conf["work_start"]), "", link=LINK,
                           outside_hours="skip", category="attendance")
             entry.channels = [{"channel": "in_app", "status": "sent", "id": note.id}, *(note.channels or [])]
             entry.save(update_fields=["channels"])

@@ -346,6 +346,72 @@ export const DATA_TOOLS: DataTool[] = [
     },
   },
   {
+    name: 'my_roster',
+    description:
+      "The signed-in person's own shifts (roster) for the next days: per date the shift name/code and hours, or off day, holiday or leave. Use for 'what is my shift tomorrow', 'when is my next off day'.",
+    parameters: { type: 'object', properties: { days: { type: 'integer', minimum: 1, maximum: 31, description: 'How many days from today; default 14.' } }, additionalProperties: false },
+    needs: 'tasks',
+    async run(ctx, input) {
+      const days = input.days === undefined ? 14 : Number(input.days);
+      if (!Number.isInteger(days) || days < 1 || days > 31) throw new BadInput('days must be 1-31');
+      const d = await ctx.get<Obj>('tasks', '/hr/roster/mine/', { days });
+      return {
+        from: d.from,
+        to: d.to,
+        uses_roster: d.uses_roster,
+        days: ((d.days ?? []) as Obj[]).map((x) => ({
+          ...pick(x, ['date', 'weekday', 'off', 'holiday', 'name', 'code', 'start', 'end', 'overnight', 'source']),
+          leave: x.leave ? pick(x.leave as Obj, ['type', 'half_day', 'status']) : undefined,
+        })),
+      };
+    },
+  },
+  {
+    name: 'team_roster',
+    description:
+      "The roster (who works which shift on which day) of the people the signed-in person plans (their team / department / company, decided by the app) for up to 31 days from a date. Refused for people without roster access.",
+    parameters: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'YYYY-MM-DD; default this week Monday.' },
+        days: { type: 'integer', minimum: 1, maximum: 31, description: 'How many days; default 7.' },
+        department: { type: 'string', description: 'A department code, to narrow the list.' },
+      },
+      additionalProperties: false,
+    },
+    needs: 'tasks',
+    async run(ctx, input) {
+      if (input.from !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(input.from))) throw new BadInput('from must be YYYY-MM-DD');
+      const n = input.days === undefined ? 7 : Number(input.days);
+      if (!Number.isInteger(n) || n < 1 || n > 31) throw new BadInput('days must be 1-31');
+      const query: Record<string, string | number | undefined> = { department: input.department };
+      if (input.from) {
+        const start = new Date(`${input.from}T00:00:00Z`);
+        query.from = String(input.from);
+        query.to = new Date(start.getTime() + (n - 1) * 86_400_000).toISOString().slice(0, 10);
+      }
+      const d = await ctx.get<Obj>('tasks', '/hr/roster/', query);
+      const shifts = new Map(((d.shifts ?? []) as Obj[]).map((s) => [s.id, s]));
+      const cells = new Map<string, Obj>();
+      for (const e of (d.entries ?? []) as Obj[]) cells.set(`${e.user}|${e.date}`, shifts.get(e.shift) ?? {});
+      const dates = ((d.days ?? []) as Obj[]).map((x) => x.date as string);
+      return {
+        from: d.from,
+        to: d.to,
+        office_hours: d.office,
+        shifts: [...shifts.values()].map((s) => pick(s, ['code', 'name', 'start', 'end', 'is_off'])),
+        people: ((d.people ?? []) as Obj[]).map((p) => ({
+          name: p.name,
+          department: p.department,
+          default_shift: p.default_shift ? (shifts.get(p.default_shift) as Obj | undefined)?.code ?? null : null,
+          days: Object.fromEntries(dates.map((date) => [date, (cells.get(`${p.user_id}|${date}`) as Obj | undefined)?.code ?? null])),
+        })),
+        rest_warnings: ((d.warnings ?? []) as Obj[]).length,
+        note: 'A null day = no roster entry: the default shift (or the office hours); company week-offs still apply then.',
+      };
+    },
+  },
+  {
     name: 'find_people',
     description:
       "People the signed-in person may see in Team 360 (by name, employee code or username), each with today's status, this month's attendance % / late / leave / absent days and open / overdue / done tasks. Without a name it lists everyone in their scope (sorted as asked). Use it first to get a person_id. Refused for people without Team 360 access.",

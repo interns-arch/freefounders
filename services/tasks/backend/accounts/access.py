@@ -19,7 +19,8 @@ SCOPES = ("own", "team", "department", "company")
 # before it are upgraded once with the `upgrade` rules below: by the data migration here, by the Platform for
 # its own copy (it reads these rules from GET /internal/permissions), and on a push from a Platform that has not
 # upgraded yet (`catalogueVersions.tasks` < 2). The rules are frozen: a later change adds version 3 with its own.
-CATALOGUE_VERSION = 3
+CATALOGUE_VERSION = 4
+# 4 = Roster and shifts (2026-10-30, PLAN.md §28): roles with HR settings get it for the whole company.
 # 3 = the Visitors module (2026-10-26, PLAN.md §22). Its rules carry "since": 3, so upgrading a role saved under
 # version 2 applies only them (the version-2 rules have no "since" and apply only to roles from before version 2).
 
@@ -138,6 +139,12 @@ CATALOGUE = [
        "Upload attendance from a spreadsheet.", upgrade=[{"from": "hr.manage"}]),
     _p("hr.mark", "Mark attendance by hand", "Team attendance",
        "Set someone present, half day or absent for a day.", upgrade=[{"from": "hr.manage"}]),
+    _p("hr.roster", "Roster and shifts", "Team attendance",
+       "Plan who works which shift on which day for their team, their department or everyone; company scope also "
+       "edits the shift library.",
+       _caps("hr.roster", _TEAM_UP),
+       upgrade=[{"from": "hr.settings", "scope": "company", "since": 4},
+                {"from": "hr.manage", "scope": "company", "since": 4}]),
     # ── HR administration ──
     _p("holidays.manage", "Manage holidays", "HR administration",
        "Add and remove company holidays.", upgrade=[{"from": "settings.manage"}]),

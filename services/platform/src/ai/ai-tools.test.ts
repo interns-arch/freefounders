@@ -288,6 +288,9 @@ describe('AI data answers', () => {
       assert.equal((c.init.headers as Record<string, string>).authorization, `Bearer ${USER_TOKEN}`);
     }
     assert.ok(w.app.some((c) => c.url === 'http://platform.test:4000/api/platform/billing'), 'billing is read from the Platform API itself (its guard checks access)');
+    // Roster (PLAN.md §28): the person's own shifts and the team roster, read with their own token.
+    assert.ok(w.app.some((c) => c.url.includes('/hr/roster/mine/?days=14')), 'my_roster');
+    assert.ok(w.app.some((c) => /\/hr\/roster\/(\?|$)/.test(c.url)), 'team_roster');
     // Bad input and unknown tools are refused without a request.
     const before = w.app.length;
     assert.equal((await runTool(reader, DATA_TOOLS, 'person_report', { person_id: 'drop table' })).status, 'bad_input');

@@ -287,3 +287,61 @@ class AttendanceReminderLog(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.date} reminder {self.n}"
+
+
+# ------------------------------------------------------------------ roster (PLAN.md §28)
+
+# A shift's colour is the NAME of a theme token (the web maps it to its own classes; never a hex value).
+SHIFT_COLOURS = ("primary", "cta", "success", "warning", "info", "destructive", "attendance", "tasks", "assets",
+                 "visitors", "muted")
+
+
+class Shift(models.Model):
+    """One shift of the company's library (PLAN.md §28.1). `end` before `start` = an overnight shift (ends the next
+    day). `is_off` = the weekly-off entry (no times). Empty grace / half-day hours use the company HR rules."""
+    name = models.CharField(max_length=60)
+    code = models.CharField(max_length=4)
+    start = models.TimeField(null=True, blank=True)
+    end = models.TimeField(null=True, blank=True)
+    break_minutes = models.PositiveIntegerField(default=0)
+    grace_minutes = models.PositiveIntegerField(null=True, blank=True)
+    half_day_hours = models.FloatField(null=True, blank=True)
+    colour = models.CharField(max_length=12, default="primary")
+    is_off = models.BooleanField(default=False)
+    active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["is_off", "order", "start", "name"]
+
+    @property
+    def overnight(self) -> bool:
+        return bool(self.start and self.end and self.end <= self.start)
+
+    def __str__(self):
+        return f"{self.code} {self.name}"
+
+
+class RosterEntry(models.Model):
+    """The shift one person works on one date (PLAN.md §28.2). No row = their default shift / the office hours."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="roster_entries")
+    date = models.DateField()
+    shift = models.ForeignKey(Shift, on_delete=models.PROTECT, related_name="entries")
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="roster_changes")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["date", "user_id"]
+        constraints = [models.UniqueConstraint(fields=["user", "date"], name="uniq_roster_day")]
+        indexes = [models.Index(fields=["date", "user"], name="hr_roster_date_user")]
+
+
+class PersonShift(models.Model):
+    """A person's usual shift when the roster has no entry for a date (PLAN.md §28.2)."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="default_shift")
+    shift = models.ForeignKey(Shift, on_delete=models.PROTECT, related_name="people")
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="default_shift_changes")
+    updated_at = models.DateTimeField(auto_now=True)

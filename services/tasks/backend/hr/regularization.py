@@ -109,16 +109,23 @@ def limit_for(user, conf=None) -> tuple:
     return conf["reg_monthly_limit"], False
 
 
-def today_shift_ended(conf=None) -> bool:
+def today_shift_ended(conf=None, user=None) -> bool:
+    """Has today's shift ended? The person's own shift (roster / default, PLAN.md §28), else the office hours."""
     conf = conf or services.cfg()
+    if user is not None:
+        from .roster import plan_for
+        end_at = plan_for(user, timezone.localdate(), conf).end_at()
+        return bool(end_at is None or timezone.now() >= end_at)
     end = services._parse_hhmm(conf["work_end"], time(18, 30))
     return timezone.localtime().time() >= end
 
 
 def policy_for(user) -> dict:
     """What the request form needs: the policy and how many requests are left this month."""
+    from .roster import plan_for
     conf = services.cfg()
     today = timezone.localdate()
+    plan = plan_for(user, today, conf)
     period = conf["reg_limit_period"]
     limit, personal = limit_for(user, conf)
     used = used_in_period(user, today, period)
@@ -139,9 +146,9 @@ def policy_for(user) -> dict:
         "days_back": conf["reg_days_back"],
         "earliest": (today - timedelta(days=conf["reg_days_back"])).isoformat(),
         "mark": conf["reg_mark"],
-        "work_start": conf["work_start"],
-        "work_end": conf["work_end"],
-        "shift_ended": today_shift_ended(conf),
+        "work_start": plan.start_text() or conf["work_start"],
+        "work_end": plan.end_text() or conf["work_end"],
+        "shift_ended": today_shift_ended(conf, user),
     }
 
 
@@ -160,7 +167,7 @@ def parse_hhmm(text, field):
         raise ValidationError({field: "Use a time like 09:30."})
 
 
-def days_of(start, end):
+def days_of(start, end, user=None):
     """The days asked for: one day as it is; a range without its week-offs and holidays."""
     if end is None or end == start:
         return [start]
@@ -168,7 +175,7 @@ def days_of(start, end):
         raise ValidationError({"end_date": "The end date is before the start date."})
     if (end - start).days >= MAX_RANGE_DAYS:
         raise ValidationError({"end_date": f"Ask for at most {MAX_RANGE_DAYS} days at once."})
-    days = services.leave_working_days(start, end)
+    days = services.leave_working_days(start, end, user)
     if not days:
         raise ValidationError({"end_date": "That range has only week-offs and holidays."})
     return days
@@ -190,22 +197,29 @@ def _checked(user, data, conf, direct=False):
         raise ValidationError({"reason": "Say what happened (needed for “Other”)."})
 
     today = timezone.localdate()
-    days = days_of(data["date"], data.get("end_date"))
+    days = days_of(data["date"], data.get("end_date"), user)
     in_t = parse_hhmm(data.get("check_in_time"), "check_in_time")
     out_t = parse_hhmm(data.get("check_out_time"), "check_out_time")
     # An older client sends full date-times for one day: kept exactly (a shift may end after midnight).
     full_in, full_out = data.get("requested_check_in"), data.get("requested_check_out")
     if len(days) > 1 or in_t or out_t:
         full_in = full_out = None
+    shift_hours = False
     if not (in_t or out_t or full_in or full_out):
         if reason_type in SHIFT_REASONS:
-            in_t = services._parse_hhmm(conf["work_start"], time(9, 30))
-            out_t = services._parse_hhmm(conf["work_end"], time(18, 30))
+            shift_hours = True   # each day's own shift (roster / default / office hours, PLAN.md §28)
         else:
             raise ValidationError({"detail": "Give the check-in or check-out time to correct.", "code": "times"})
 
     def wanted(day):
         """(check-in, check-out) asked for on that day as aware date-times (None = keep the recorded one)."""
+        if shift_hours:
+            from .roster import plan_for
+            plan = plan_for(user, day, conf)
+            if plan.has_times:
+                return plan.start_at(), plan.end_at()
+            return (_at(day, services._parse_hhmm(conf["work_start"], time(9, 30))),
+                    _at(day, services._parse_hhmm(conf["work_end"], time(18, 30))))
         return (full_in or (_at(day, in_t) if in_t else None), full_out or (_at(day, out_t) if out_t else None))
 
     first_in, first_out = wanted(days[0])
@@ -223,8 +237,10 @@ def _checked(user, data, conf, direct=False):
     for day in days:
         if day > today:
             _refuse("A future day cannot be regularized.", "future")
-        if not direct and day == today and not today_shift_ended(conf):
-            _refuse(f"Today can be regularized after the shift ends ({conf['work_end']}).", "shift_not_over")
+        if not direct and day == today and not today_shift_ended(conf, user):
+            from .roster import plan_for
+            _refuse(f"Today can be regularized after the shift ends ({plan_for(user, today, conf).end_text() or conf['work_end']}).",
+                    "shift_not_over")
         if not direct and day < earliest:
             _refuse(f"Regularization is allowed for the last {conf['reg_days_back']} day(s) only "
                     f"(from {earliest:%d-%m-%Y}).", "too_far_back")
@@ -359,18 +375,18 @@ def apply(c: AttendanceCorrection, by=None) -> Attendance:
         rec.check_in = c.requested_check_in
     if c.requested_check_out:
         rec.check_out = c.requested_check_out
-    start = services._parse_hhmm(conf["work_start"], time(9, 30))
-    end = services._parse_hhmm(conf["work_end"], time(18, 30))
-    late_cutoff = (datetime.combine(c.date, start) + timedelta(minutes=conf["grace_minutes"])).time()
+    from .roster import plan_for
+    plan = plan_for(c.user, c.date, conf)    # the person's shift that day (PLAN.md §28)
+    late_after, end_at = plan.late_after(), plan.end_at()
     rec.working_minutes = (max(0, int((rec.check_out - rec.check_in).total_seconds() // 60))
                            if rec.check_in and rec.check_out else 0)
     if conf["reg_mark"] == "present":
         rec.is_late = rec.is_early_checkout = False
         rec.status = AttendanceStatus.PRESENT
     else:
-        rec.is_late = bool(rec.check_in and timezone.localtime(rec.check_in).time() > late_cutoff)
-        rec.is_early_checkout = bool(rec.check_out and timezone.localtime(rec.check_out).time() < end)
-        if rec.check_in and rec.check_out and rec.working_minutes / 60 < conf["half_day_hours"]:
+        rec.is_late = bool(rec.check_in and late_after and rec.check_in > late_after)
+        rec.is_early_checkout = bool(rec.check_out and end_at and rec.check_out < end_at)
+        if rec.check_in and rec.check_out and rec.working_minutes / 60 < plan.half_day_hours:
             rec.status = AttendanceStatus.HALF_DAY
         elif rec.is_late:
             rec.status = AttendanceStatus.LATE

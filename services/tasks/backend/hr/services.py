@@ -68,6 +68,7 @@ def cfg():
         # A different limit for some people: {user id: limit (0 = unlimited)} (2026-10-24).
         "reg_person_limits": _person_limits(_env("REGULARIZATION_PERSON_LIMITS", "")),
         "reg_mark": _env("REGULARIZATION_MARK", "times") if _env("REGULARIZATION_MARK", "times") in REG_MARKS else "times",
+        "roster_min_rest_hours": _bounded(_env("ROSTER_MIN_REST_HOURS", "11"), 11, 0, 24),
     }
 
 
@@ -159,6 +160,8 @@ EDITABLE = {
     "reg_days_back": ("REGULARIZATION_DAYS_BACK", "int", (0, REG_MAX)),
     "reg_person_limits": ("REGULARIZATION_PERSON_LIMITS", "limits", (0, REG_MAX)),
     "reg_mark": ("REGULARIZATION_MARK", "choice", REG_MARKS),
+    # Roster (PLAN.md §28): fewer hours of rest than this between two shifts is a warning (0 = no warning).
+    "roster_min_rest_hours": ("ROSTER_MIN_REST_HOURS", "int", (0, 24)),
 }
 
 # Face check settings that no longer exist (PLAN.md §19.18). An older screen may still send them: "off" (or blank) is
@@ -399,12 +402,21 @@ def is_holiday(day: date) -> bool:
     return Holiday.objects.filter(date=day).exists()
 
 
+def is_off_day(user, day: date) -> bool:
+    """The person's own off day (PLAN.md §28): a roster Off entry, or the company week-off without a roster entry."""
+    from .roster import is_off_day as off
+    return off(user, day)
+
+
 def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None, accuracy=None) -> Attendance:
     """`descriptor` (a face signature from an older client) is ignored: there is no face check.
     `uniform` (True/False) answers the company's uniform question; needed only when UNIFORM_CHECK is "ask", where
     only True punches in (No blocks the punch, PLAN.md §19.36). `accuracy` (metres) is the phone's GPS accuracy."""
+    from .roster import plan_for, punch_day
     conf = cfg()
-    today = timezone.localdate()
+    now_at = timezone.now()
+    # The shift's start date (PLAN.md §28.3): after midnight, an overnight shift that began yesterday is yesterday's.
+    today = punch_day(user, now_at)
     existing = Attendance.objects.filter(user=user, date=today).first()
     if existing and existing.check_in:
         raise HRError("You have already checked in today.")
@@ -419,13 +431,12 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None
 
     office, _ = validate_location(lat, lng, accuracy)
 
-    now = timezone.localtime()
-    start = _parse_hhmm(conf["work_start"], time(9, 30))
-    late_cutoff = (datetime.combine(today, start) + timedelta(minutes=conf["grace_minutes"])).time()
-    late = now.time() > late_cutoff
+    # Late = after the person's shift start + grace (their roster / default shift, else the office hours).
+    cutoff = plan_for(user, today, conf).late_after()
+    late = bool(cutoff and now_at > cutoff)
 
     record = existing or Attendance(user=user, date=today)
-    record.check_in = timezone.now()
+    record.check_in = now_at
     record.check_in_lat, record.check_in_lng = lat, lng
     record.location = office
     record.is_late = late
@@ -439,8 +450,9 @@ def check_in(user, lat=None, lng=None, descriptor=None, photo=None, uniform=None
 
 
 def check_out(user, lat=None, lng=None, descriptor=None, photo=None, accuracy=None) -> Attendance:
+    from .roster import plan_for, punch_day
     conf = cfg()
-    today = timezone.localdate()
+    today = punch_day(user)   # an open overnight day is punched out the next morning (PLAN.md §28.3)
     record = Attendance.objects.filter(user=user, date=today).first()
     if not record or not record.check_in:
         raise HRError("You have not checked in today.")
@@ -453,10 +465,11 @@ def check_out(user, lat=None, lng=None, descriptor=None, photo=None, accuracy=No
     record.check_out_lat, record.check_out_lng = lat, lng
     record.working_minutes = max(0, int((record.check_out - record.check_in).total_seconds() // 60))
 
-    end = _parse_hhmm(conf["work_end"], time(18, 30))
-    record.is_early_checkout = timezone.localtime(record.check_out).time() < end
+    plan = plan_for(user, today, conf)
+    end_at = plan.end_at()
+    record.is_early_checkout = bool(end_at and record.check_out < end_at)
     hours = record.working_minutes / 60
-    if hours < conf["half_day_hours"]:
+    if hours < plan.half_day_hours:
         record.status = AttendanceStatus.HALF_DAY
     elif record.is_late:
         record.status = AttendanceStatus.LATE
@@ -469,8 +482,12 @@ def check_out(user, lat=None, lng=None, descriptor=None, photo=None, accuracy=No
 
 # ---------------------------------------------------------------- leave
 
-def leave_working_days(start: date, end: date):
-    """Dates in the range that are actual working days (no week-offs/holidays)."""
+def leave_working_days(start: date, end: date, user=None):
+    """Dates in the range that are actual working days (no week-offs/holidays). With a person: their own off days
+    (roster, PLAN.md §28) instead of the company week-offs."""
+    if user is not None:
+        from .roster import working_days
+        return working_days(user, start, end)
     days, cur = [], start
     while cur <= end:
         if not is_week_off(cur) and not is_holiday(cur):
@@ -481,7 +498,7 @@ def leave_working_days(start: date, end: date):
 
 def apply_leave_to_attendance(leave: LeaveRequest):
     """Approved leave -> LEAVE attendance rows, so reports and check-in agree."""
-    for day in leave_working_days(leave.start_date, leave.end_date):
+    for day in leave_working_days(leave.start_date, leave.end_date, leave.user):
         record, _ = Attendance.objects.get_or_create(
             user=leave.user, date=day,
             defaults={"status": AttendanceStatus.LEAVE, "leave_request": leave},
@@ -589,6 +606,8 @@ def monthly_report(user, year: int, month: int) -> dict:
                .select_related("regularization")}
     holidays = {h.date: h.name for h in Holiday.objects.filter(date__range=(first, last))}
     today = timezone.localdate()
+    from .roster import Book, overtime_minutes
+    book = Book([user.id], first, last)
     # Regularization requests of the month (PLAN.md §19.38): the latest per day, shown with the day.
     from .models import AttendanceCorrection
     requests = {}
@@ -600,6 +619,7 @@ def monthly_report(user, year: int, month: int) -> dict:
     cur = first
     while cur <= last:
         rec = records.get(cur)
+        plan = book.plan(user.id, cur)
         if rec:
             status = rec.status
             total_minutes += rec.working_minutes
@@ -617,7 +637,7 @@ def monthly_report(user, year: int, month: int) -> dict:
         else:
             if cur in holidays:
                 status = AttendanceStatus.HOLIDAY
-            elif is_week_off(cur):
+            elif plan.off:
                 status = AttendanceStatus.WEEK_OFF
             elif cur > today:
                 status = None
@@ -628,6 +648,11 @@ def monthly_report(user, year: int, month: int) -> dict:
                      "is_early_checkout": False, "missing_checkout": False, **regularized_fields(None)}
             if cur in holidays:
                 entry["holiday"] = holidays[cur]
+        # The day's shift (PLAN.md §28) when a roster or default shift decides it, and minutes beyond the shift.
+        brief = plan.brief()
+        if brief:
+            entry["shift"] = brief
+            entry["overtime_minutes"] = overtime_minutes(plan, entry["working_minutes"])
         req = requests.get(cur)
         entry["request"] = ({"id": req.id, "status": req.status, "reason_label": req.get_reason_type_display()}
                             if req else None)
@@ -646,6 +671,9 @@ def today_summary(users):
     """Admin/manager 'today' tiles for a set of employees."""
     today = timezone.localdate()
     records = {a.user_id: a for a in Attendance.objects.filter(user__in=users, date=today)}
+    from .roster import Book
+    book = Book([u.id for u in users], today, today)
+    holiday = is_holiday(today)
     counts = {"present": 0, "late": 0, "leave": 0, "absent": 0, "half_day": 0, "not_checked_in": 0}
     rows = []
     for u in users:
@@ -656,8 +684,8 @@ def today_summary(users):
             if status in (AttendanceStatus.PRESENT, AttendanceStatus.LATE) and not rec.check_in:
                 counts["not_checked_in"] += 1
         else:
-            status = (AttendanceStatus.HOLIDAY if is_holiday(today)
-                      else AttendanceStatus.WEEK_OFF if is_week_off(today)
+            status = (AttendanceStatus.HOLIDAY if holiday
+                      else AttendanceStatus.WEEK_OFF if book.is_off(u.id, today)
                       else "not_checked_in")
             counts[status] = counts.get(status, 0) + 1
         rows.append({

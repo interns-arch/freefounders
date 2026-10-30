@@ -4484,3 +4484,97 @@ none of its installer scripts ran, and no files of its own (`memory-security.md`
   - New: Tasks `visitors/tests_security.py`, `tenancy/tests_integrations.py::AiAddressSecurityTests`.
   - `npm run quick-check -- --tests platform,tasks,assets` and `npm run web:build` green.
 **Deploy**: Platform, Tasks + worker (chown step first), Assets, gateway (FF_BIND), website. No migrations, no new APK.
+
+## 28. Roster management (founder 2026-10-30)
+Founder: "I want roster management where I can select the specific person's shift that I want."
+Before this there was **no shift model**: one company office-hours pair (`HR_WORK_START` / `HR_WORK_END`, grace,
+half-day hours, week-offs in `CompanySetting`) decided late, early leaving, half day, absent, punch-in reminders and
+payroll for everyone.
+
+### 28.1 What is reused, what is new
+- **Reused**: the company HR rules stay the fallback ("office hours"); Attendance rows, `services.cfg()`, the team
+  `Calendar`, `monthly_report`, punch reminders, regularization, import and payroll keep their shape. One new resolver
+  (`hr/roster.py`) answers "this person's day" and every rule asks it instead of reading `work_start` directly.
+- **New tables** (hr migration 0013, every company schema): `Shift` (name, code ≤ 4 letters e.g. G / M / N / OFF,
+  start, end — end before start = **overnight**, break minutes, grace minutes, half-day hours, colour = one of a fixed
+  set of theme token names, `is_off` for the weekly-off entry, active, order); `RosterEntry` (person, date, shift;
+  unique per person and date; who / when changed); `PersonShift` (person → default shift). A company starts with one
+  built-in **Off** shift (code OFF). Shifts are archived (inactive), never deleted while a roster uses them.
+
+### 28.2 A person's shift for a date (one rule everywhere)
+1. **Roster entry** for that date (a working shift, or Off).
+2. else the person's **default shift** (hours only; the company week-offs still make the weekday an off day).
+3. else the **company office hours** (exactly the behaviour before §28).
+Off day = a roster Off entry, or no roster entry and the weekday is a company week-off. A rostered working shift on a
+company week-off day is a working day. Holidays stay holidays. A shift's empty grace / half-day hours use the company
+value. With no roster entries and no default shifts nothing changes for a company.
+
+### 28.3 Where attendance uses it
+- **Punch in**: late = after shift start + grace on the shift's date. **Overnight**: a punch after midnight before
+  the previous day's overnight shift ends belongs to the previous day (the shift's start date); punch out finds the
+  open overnight day. Rostered Off days can still be punched (worked off day, as with week-offs today).
+- **Punch out**: early = before the shift end (next day for overnight); half day = hours below the shift's half-day
+  hours. **Overtime** (new, read-only): worked minutes beyond the shift length (end − start − break), shown on the
+  month view and in the roster day info; nothing is paid from it automatically.
+- **Absent / Not checked in** (My attendance month, Daily, Live, Dashboard, Reports, Home, Team 360): Off days are
+  "Week off", never absent; "Not checked in" only on a working day.
+- **Punch-in reminders** (§19.39): slots from each person's own shift start (+30 / +60 / +90), none on their off day,
+  none after their shift end; the message names their shift start.
+- **Regularization** (§19.38): "on duty / WFH" without times use the person's shift; "today after the shift" uses
+  their shift end; approved days are judged with their shift.
+- **Leave days** and **payroll working days**: per person (a rostered off day is not a working day, a rostered
+  working day on a week-off is). The run's company `working_days` override still wins.
+- Attendance import: late / early with the person's shift.
+
+### 28.4 Screens
+- **Attendance → Roster** (`/attendance/roster`, Manage group, menu "Roster"): people × days grid (week or month),
+  filter by department, manager, search; each cell shows the shift code in its theme colour (text + colour, never
+  colour alone); click a cell → shift picker (or the leave, read-only); select many cells (drag, Shift-click,
+  Ctrl-click) → one shift; **Apply to week** (copy a person's first selected day across the week), **Copy last week**,
+  **Repeat pattern** (e.g. G, M, N weekly rotation from a start date), **Default shift** per person; changes stay
+  unsaved (count shown) until **Save**, **Discard** undoes them; warnings (not blocking): less than N hours of rest
+  between two shifts (default 11). Phones: the grid scrolls inside its card with names sticky, plus a "By day" list.
+  Excel export (and import of the same template).
+- **Attendance → HR settings → Shifts**: the shift library (add / edit / archive), rest-warning hours.
+- **My roster**: the person's next 14 days on Today (phone too: the app is the web app).
+
+### 28.5 Who
+- New permission **`hr.roster` "Roster and shifts"** (Team attendance, scopes team / department / company). Catalogue
+  version 4: roles with HR settings get it at company scope (data migration + Platform upgrade with the same rules);
+  managers get it only when their role is given it (team = their reports). Shift library edits need company scope.
+- Everyone sees their own roster (`GET /hr/roster/mine/`).
+- A changed shift tells the person in-app: "Your shift on Mon 3 Nov changed to Night 22:00–06:00" (one notification
+  per save per person, listing up to 3 days), type `roster_changed`, area Attendance. No WhatsApp template fits →
+  in-app only.
+
+### 28.6 API (Tasks, under `/api/hr/` → Attendance plan area, 403 without it; per company schema)
+`GET/POST /hr/shifts/`, `PATCH /hr/shifts/<id>/` · `GET /hr/roster/?from=&to=&department=&manager=&q=` (people,
+entries, defaults, leaves, holidays, week-offs, warnings; at most 62 days) · `PUT /hr/roster/` `{changes: [{user,
+date, shift|null}], defaults: [{user, shift|null}]}` (scope checked per person, all or nothing) · `GET
+/hr/roster/mine/?days=14` · `GET /hr/roster/export/?from=&to=&format=xlsx|csv` · `POST /hr/roster/import/` (dry run
+first). AI helper: read-only tools `my_roster` and `team_roster` (GET only, the person's own token).
+
+### 28.7 Status (built 2026-10-30)
+- **Tasks**: `hr/roster.py` (resolver `Book` / `plan_for`, overnight `punch_day`, overtime, rest warnings),
+  `hr/roster_views.py` (API), migration **hr 0013_roster** (tables + the built-in Off shift + catalogue v4 grants);
+  `services.check_in/out`, `monthly_report`, `today_summary`, `leave_working_days(user)`, team `Calendar` (Daily, Live,
+  Dashboard, Reports incl. minutes late, Team 360), punch reminders, regularization, import, payroll
+  `working_days_in(user)` / `count_days` all ask the resolver. New HR setting `roster_min_rest_hours`
+  (ROSTER_MIN_REST_HOURS, 11). `people_delete` lists RosterEntry / PersonShift.
+- **Notes**: Overnight punch-in reminders fire only before midnight of the shift's start day. The old check-out after
+  midnight on a day shift was flagged "early" (time-of-day compare); it is now compared with the shift end date-time.
+  A changed **default** shift does not notify (only roster days from today on). My roster shows only when a roster or
+  default shift decides the person's days.
+- **Platform**: AI tools `my_roster`, `team_roster` + knowledge text.
+- **Web**: `features/hr/roster.tsx` (grid, By day, picker bar, bulk actions, dialogs, import), `shift-parts.tsx`,
+  `shifts-settings.tsx` (HR settings › Shifts), `my-roster.tsx` (Today); core `packages/core/src/hr/roster.ts`.
+- **Tests**: Tasks `hr/tests_roster.py` (17: precedence, week-off / rostered work, overnight + length, office rules
+  unchanged, late / early / half day from the shift, overnight punches + late after midnight, off day not absent +
+  Daily + payroll days, leave days, reminders per shift + none on Off, scope / own-records / shift library rights, notify
+  text, leave day read-only + rest warning, My roster, export + import, plan gate); `tenancy` roster isolation
+  (Postgres); `accounts` catalogue version 4. Platform `ai-tools.test.ts` (roster GETs). e2e `web-roster.spec.ts`
+  (green against the dev suite). `npm run quick-check -- --tests tasks,platform`: platform 228/228; Tasks 1209 with 2
+  failures that also fail on the unchanged HEAD (`crm.tests_home` staff block / top performers, date-dependent).
+- **Deploy**: Tasks API + worker (migration hr 0013 via `migrate_companies`; restart the worker for the per-shift
+  reminders), Platform (AI tools; it upgrades each company's roles to Tasks catalogue v4 on the next sync), website.
+  No new APK.

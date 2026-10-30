@@ -16,6 +16,7 @@ from config.exports import ExportMixin, export_file, export_format
 from . import approvals, services
 from . import exports as hr_exports
 from . import punch_reminders
+from . import roster_views
 from .models import (
     Attendance, AttendanceCorrection, CorrectionStatus, FaceProfile,
     LeaveRequest, LeaveStatus, LeaveType, OfficeLocation,
@@ -141,22 +142,28 @@ class AttendanceViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"])
     def today(self, request):
-        rec = Attendance.objects.filter(user=request.user, date=timezone.localdate()).first()
+        from . import roster
+        # The day a punch now belongs to: yesterday while an overnight shift that began then is open (PLAN.md §28.3).
+        day = roster.punch_day(request.user)
+        rec = Attendance.objects.filter(user=request.user, date=day).first()
         conf = services.cfg()
+        plan = roster.plan_for(request.user, day, conf)
         return Response({
             "attendance": AttendanceSerializer(rec).data if rec else None,
             "can_check_in": not (rec and rec.check_in),
             "can_check_out": bool(rec and rec.check_in and not rec.check_out),
             "geofence_enabled": conf["geofence_enabled"],
             "face_enabled": False,  # no face check any more (PLAN.md §19.18); kept for older clients
-            "work_start": conf["work_start"], "work_end": conf["work_end"],
+            # The person's own hours (their shift; the office hours without one) and the shift itself (PLAN.md §28).
+            "work_start": plan.start_text() or conf["work_start"], "work_end": plan.end_text() or conf["work_end"],
+            "shift": plan.brief(), "date": day.isoformat(),
             "photo": conf["photo"],
             "uniform_check": conf["uniform_check"], "uniform_message": conf["uniform_message"],
             # Punch-in reminders (PLAN.md §19.39): the company rule (the phone app plans its own reminders from it),
             # why today needs none (holiday / week_off / leave) and how many the server sent today.
-            "punch_reminders": punch_reminders.rule(conf),
-            "day_off": punch_reminders.day_off_reason(request.user, timezone.localdate()),
-            "reminders_sent": punch_reminders.sent_today([request.user.id], timezone.localdate()).get(request.user.id, 0),
+            "punch_reminders": punch_reminders.rule(conf, plan),
+            "day_off": punch_reminders.day_off_reason(request.user, day),
+            "reminders_sent": punch_reminders.sent_today([request.user.id], day).get(request.user.id, 0),
         })
 
     @action(detail=True, methods=["get"], url_path=r"photo/(?P<which>in|out)")
@@ -529,7 +536,7 @@ class LeaveRequestViewSet(ExportMixin, viewsets.ModelViewSet):
         data = serializer.validated_data
         target = self._on_behalf_of(self.request)
         user = target or self.request.user
-        days = len(services.leave_working_days(data["start_date"], data["end_date"]))
+        days = len(services.leave_working_days(data["start_date"], data["end_date"], user))
         if days == 0:
             raise ValidationError({"start_date": "That range has no working days (holidays/week-offs only)."})
         overlap = LeaveRequest.objects.filter(
@@ -579,7 +586,7 @@ class LeaveRequestViewSet(ExportMixin, viewsets.ModelViewSet):
         start, end = data.get("start_date", leave.start_date), data.get("end_date", leave.end_date)
         if end < start:
             raise ValidationError({"end_date": "The end date is before the start date."})
-        days = len(services.leave_working_days(start, end))
+        days = len(services.leave_working_days(start, end, leave.user))
         if days == 0:
             raise ValidationError({"start_date": "That range has no working days (holidays/week-offs only)."})
         overlap = LeaveRequest.objects.filter(
@@ -749,7 +756,7 @@ def hr_config(request):
         # Uniform check at punch-in (PLAN.md §19.27): read by every employee's punch screen.
         "uniform_check": conf["uniform_check"], "uniform_message": conf["uniform_message"],
         # Punch-in reminders (PLAN.md §19.39): defaults for the phone app's own reminder.
-        "punch_reminders": punch_reminders.rule(conf),
+        "punch_reminders": punch_reminders.rule(conf, roster_plan_today(request.user, conf)),
         "can_approve": approvals.is_approver(request.user),
         # Regularization goes to the reporting manager (PLAN.md §19.38): anyone people report to sees Approvals.
         "can_approve_regularization": regularization_reviewer(request.user),
@@ -758,5 +765,11 @@ def hr_config(request):
         # "manager approves" rule (PLAN.md §19.19).
         "screens": {name: team.may_view_team(request.user, (key,))
                     for name, key in (("live", "hr.live"), ("daily", "hr.daily"),
-                                      ("dashboard", "hr.dashboard"), ("reports", "hr.reports"))},
+                                      ("dashboard", "hr.dashboard"), ("reports", "hr.reports"))}
+        | {"roster": roster_views.edit_scope(request.user) is not None},
     })
+
+
+def roster_plan_today(user, conf):
+    from .roster import plan_for
+    return plan_for(user, timezone.localdate(), conf)

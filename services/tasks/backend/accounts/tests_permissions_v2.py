@@ -78,7 +78,7 @@ class CatalogueTests(TestCase):
             api.credentials(HTTP_AUTHORIZATION=f"Bearer {token('platform', {}, aud='tasks-internal')}")
             res = api.get("/api/internal/permissions")
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["version"], 3)
+        self.assertEqual(res.data["version"], 4)
         self.assertEqual(res.data["retired"], ["hr.manage"])
         live = next(p for p in res.data["permissions"] if p["key"] == "hr.live")
         self.assertEqual(live["scopes"], ["team", "department", "company"])

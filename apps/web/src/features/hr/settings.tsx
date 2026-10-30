@@ -24,6 +24,7 @@ import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Checkbox, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 import { Chip, ErrorNote, Panel } from '../tasks/general/parts';
+import { ShiftsSettings } from './shifts-settings';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const PHOTO_LABELS: Record<string, string> = { off: 'Off', optional: 'Optional', required: 'Required at every punch' };
@@ -35,6 +36,7 @@ export function HrSettingsTab() {
       <UniformCheck />
       <RegularizationPolicy />
       <PunchReminders />
+      <ShiftsSettings />
       <Offices />
       <LeaveTypes />
     </div>
@@ -46,6 +48,8 @@ const UNIFORM_KEYS: string[] = ['uniform_check', 'uniform_message'];
 /** Punch-in reminders have their own card and save (PLAN.md §19.39). */
 const PUNCH_KEYS: string[] = ['punch_reminders', 'punch_reminder_count', 'punch_reminder_gap', 'punch_reminder_first'];
 /** The regularization policy has its own card and save too (PLAN.md §19.38). */
+/** The roster rest-time warning is saved with the Shifts card (PLAN.md §28). */
+const ROSTER_KEYS: string[] = ['roster_min_rest_hours'];
 const REG_KEYS: string[] = ['reg_enabled', 'reg_reasons', 'reg_monthly_limit', 'reg_limit_period', 'reg_days_back', 'reg_person_limits', 'reg_mark'];
 
 /** Working hours and attendance rules, saved for this company. */
@@ -71,7 +75,7 @@ function AttendanceRules() {
     e.preventDefault();
     setMsg('');
     // The uniform check and the regularization policy have their own cards and saves (below); never resend them from here.
-    const rules = Object.fromEntries(Object.entries(form).filter(([k]) => !UNIFORM_KEYS.includes(k) && !REG_KEYS.includes(k) && !PUNCH_KEYS.includes(k)));
+    const rules = Object.fromEntries(Object.entries(form).filter(([k]) => !UNIFORM_KEYS.includes(k) && !REG_KEYS.includes(k) && !PUNCH_KEYS.includes(k) && !ROSTER_KEYS.includes(k)));
     save.mutate(rules, {
       onSuccess: (d) => {
         setMsg('Saved');

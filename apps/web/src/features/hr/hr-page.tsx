@@ -1,6 +1,6 @@
 /**
  * /attendance — the Attendance workspace (old pages/HR.jsx; PLAN.md §19.4). /attendance/<tab> opens a section directly:
- * history, leave, salary, holidays, team (live), daily, dashboard, reports, approvals, payroll, settings (old /tasks/hr?tab= links
+ * history, leave, salary, holidays, team (live), daily, dashboard, reports, roster (PLAN.md §28), approvals, payroll, settings (old /tasks/hr?tab= links
  * redirect here). Salary and Payroll show only while the `payroll` module is on. Each section is its own permission
  * (PLAN.md §19.19, ATTENDANCE_SCREENS in nav.ts). /attendance/history?user=<id>&name= opens someone else's month (the API
  * checks they may).
@@ -21,11 +21,12 @@ import { LiveTab } from './live';
 import { MySalaryTab, PayrollTab } from './payroll';
 import { ATTENDANCE_SCREENS as S } from './nav';
 import { ReportsTab } from './reports';
+import { RosterTab } from './roster';
 import { HrSettingsTab } from './settings';
 import { ApprovalsTab } from './team';
 import { TodayTab } from './today';
 
-type Tab = 'today' | 'history' | 'leave' | 'salary' | 'holidays' | 'team' | 'daily' | 'dashboard' | 'reports' | 'approvals' | 'payroll' | 'settings';
+type Tab = 'today' | 'history' | 'leave' | 'salary' | 'holidays' | 'team' | 'daily' | 'dashboard' | 'reports' | 'roster' | 'approvals' | 'payroll' | 'settings';
 
 const BACK: Record<string, string> = { team: 'Live team', daily: 'Daily attendance', dashboard: 'Attendance dashboard' };
 
@@ -51,6 +52,7 @@ export function HrPage() {
     daily: S.daily(access) || !!screens.daily,
     dashboard: S.dashboard(access) || !!screens.dashboard,
     reports: S.reports(access) || !!screens.reports,
+    roster: S.roster(access) || !!screens.roster,
     approvals: S.approvals(access) || !!cfg.data?.can_approve || !!cfg.data?.can_approve_regularization,
     payroll: S.payroll(access),
     settings: S.settings(access),
@@ -68,6 +70,7 @@ export function HrPage() {
       ['daily', 'Daily'],
       ['dashboard', 'Dashboard'],
       ['reports', 'Reports'],
+      ['roster', 'Roster'],
       ['approvals', 'Approvals'],
       ['payroll', 'Payroll'],
       ['settings', 'HR Settings'],
@@ -101,6 +104,7 @@ export function HrPage() {
       {tab === 'daily' && <DailyTab />}
       {tab === 'dashboard' && <DashboardTab />}
       {tab === 'reports' && <ReportsTab />}
+      {tab === 'roster' && <RosterTab />}
       {tab === 'approvals' && <ApprovalsTab />}
       {tab === 'payroll' && <PayrollTab />}
       {tab === 'settings' && <HrSettingsTab />}

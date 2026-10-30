@@ -12,6 +12,7 @@ import { AttendanceChip, hrs } from './parts';
 import { usePunch } from './punch';
 import { RegularizeDialog, RegularizedTag } from './regularize';
 import { PunchReminderCard } from './reminder';
+import { MyRosterCard } from './my-roster';
 
 export function TodayTab() {
   const p = usePunch();
@@ -62,10 +63,17 @@ export function TodayTab() {
                     Mark attendance
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Office hours{' '}
-                    <span className="font-mono font-semibold text-foreground">
-                      {data.work_start}–{data.work_end}
-                    </span>
+                    {/* The person's shift when a roster or default shift decides the day (PLAN.md §28). */}
+                    {data.shift ? (data.shift.off ? 'Your day off' : `Your shift: ${data.shift.name}`) : 'Office hours'}
+                    {!data.shift?.off && (
+                      <>
+                        {' '}
+                        <span className="font-mono font-semibold text-foreground">
+                          {data.work_start}–{data.work_end}
+                        </span>
+                        {data.shift?.overnight ? ' (next day)' : ''}
+                      </>
+                    )}
                     .
                   </p>
                 </div>
@@ -160,7 +168,9 @@ export function TodayTab() {
           />
         </div>
       )}
-      {/* Phone app only (PLAN.md §19.32): nothing in a browser. */}
+      {/* My roster (PLAN.md §28): the next 14 days, when the company plans shifts for this person. */}
+      <MyRosterCard />
+            {/* Phone app only (PLAN.md §19.32): nothing in a browser. */}
       {punches && <PunchReminderCard />}
       {p.camera}
     </div>
