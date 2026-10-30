@@ -33,7 +33,7 @@ from .models import (
 )
 from .scoping import (
     assign_refusal, assignable_users, can_assign_to, can_delete_task,
-    OWNER_ONLY, can_edit_task, delete_refusal, edits_need_giver, visible_leads, visible_tasks,
+    OWNER_ONLY, delete_refusal, edits_need_giver, visible_leads, visible_tasks,
 )
 from .serializers import (
     HolidaySerializer, TaskActivitySerializer, TaskAttachmentSerializer,

@@ -93,7 +93,6 @@ class AccessSyncTests(TestCase):
         u = User.objects.get(pk=self.u.pk)
         self.assertTrue(access.is_admin(u))
         self.assertTrue(u.is_admin_role)
-        self.assertIn(u, access.users_at_level(3))
         self.assertIn(u, access.users_with("tasks.view_all"))
         self.assertFalse(access.is_super_admin(u))
 

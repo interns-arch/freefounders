@@ -174,15 +174,3 @@ def visible_tasks(user, include_deleted=False):
         Q(assigned_to=user) | Q(created_by=user) | Q(subscribers=user)
         | Q(group__members=user) | Q(group__owner=user) | reports_clause
     ).distinct()
-
-
-def can_edit_task(user, task: Task) -> bool:
-    if has_capability(user, "tasks.view_all"):
-        return True
-    if has_capability(user, "tasks.view_department") and task.assigned_to.department == user.department:
-        return True
-    return task.assigned_to_id == user.id or task.created_by_id == user.id
-
-
-def can_assign_tasks(user) -> bool:
-    return has_capability(user, "tasks.assign")

@@ -470,10 +470,6 @@ def users_with(capability: str):
     return _holding(role_codes_with(capability))
 
 
-def users_at_level(minimum: int):
-    return _holding(role_codes_at_level(minimum))
-
-
 def role_level(code: str) -> int:
     """Level of one role code (1 when unknown)."""
     from crm.scoping import ROLE_LEVEL

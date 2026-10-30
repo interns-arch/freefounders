@@ -337,11 +337,8 @@ export const useCheckInVisitor = () => useVisitorsMutation((body: CheckInInput) 
 export const useAcceptVisit = () => useVisitorsMutation(({ id, ...body }: Partial<CheckInInput> & { id: number }) => tasksApi.post<Visit>(`/visitors/visits/${id}/accept/`, body));
 export const useRejectVisit = () => useVisitorsMutation(({ id, reason }: { id: number; reason?: string }) => tasksApi.post<Visit>(`/visitors/visits/${id}/reject/`, { reason }));
 export const useCheckOutVisit = () => useVisitorsMutation((id: number) => tasksApi.post<Visit>(`/visitors/visits/${id}/checkout/`));
-/** Scan the pass QR (or type the pass number): that visitor is checked out. */
-export const useCheckOutPass = () => useVisitorsMutation((code: string) => tasksApi.post<Visit>('/visitors/visits/checkout_pass/', { code }));
 /** The host's answer when the company asks hosts first. */
 export const useDecideVisit = () => useVisitorsMutation(({ id, decision }: { id: number; decision: 'allow' | 'deny' }) => tasksApi.post<Visit>(`/visitors/visits/${id}/decide/`, { decision }));
-export const useEditVisit = () => useVisitorsMutation(({ id, ...body }: Partial<CheckInInput> & { id: number }) => tasksApi.patch<Visit>(`/visitors/visits/${id}/`, body));
 // ─── V4: codes, check-out approval, where to wait ─────────────────────────────
 
 export interface CodeHit {
@@ -358,9 +355,6 @@ export const useAnswerVisit = () =>
   useVisitorsMutation(({ id, ...body }: { id: number; answer: HostAnswer; place?: string; note?: string }) => tasksApi.post<Visit>(`/visitors/visits/${id}/answer/`, body));
 /** The guard sent the visitor to the place the host named. */
 export const useSentToPlace = () => useVisitorsMutation((id: number) => tasksApi.post<Visit>(`/visitors/visits/${id}/sent_to_place/`));
-
-/** The gate scans a pass QR (or types a pass number / code): which visit it is. */
-export const useFindPass = () => useMutation({ mutationFn: (code: string) => tasksApi.get<Visit>('/visitors/visits/find/', { code }) });
 
 // ─── pre-invites (V2) ─────────────────────────────────────────────────────────
 
