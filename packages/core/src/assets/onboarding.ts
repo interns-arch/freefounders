@@ -69,5 +69,3 @@ export function issueOnboardingItem(caseId: string, itemId: string, assetId: str
 }
 /** PATCH /onboarding/:id {joinDate}. */
 export const useSetJoinDate = mutationHook(({ caseId, joinDate }: { caseId: string; joinDate: string }) => assetsApi.patch(`/onboarding/${caseId}`, { joinDate }));
-/** POST /onboarding — HR starts a joiner's list. */
-export const useCreateOnboarding = mutationHook((body: unknown) => assetsApi.post<{ id: string; caseNumber: string }>('/onboarding', body));

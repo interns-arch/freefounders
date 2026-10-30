@@ -1,5 +1,5 @@
 /** "My team" (old pages/Users.jsx): the directory everyone sees and the users.manage list. */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { type DrfPage, resultsOf, tasksApi } from '../http';
 
 /** GET /team/ — the people I may see (my department, or who reports to me). */
@@ -78,58 +78,4 @@ export function useMemberWorkload(userId: number | null) {
     queryFn: () => tasksApi.get<MemberWorkload>('/tasks/workload/', { user: userId! }),
     enabled: userId != null,
   });
-}
-
-function useInvalidateUsers() {
-  const qc = useQueryClient();
-  return () => qc.invalidateQueries({ predicate: (q) => ['tasks-users', 'tasks-lookup'].includes(String(q.queryKey[0])) });
-}
-
-/**
- * PATCH /users/:id/. In Kaampilot the department and "reports to" belong to the Platform's People directory
- * (PLAN.md §17.1), so they are not sent from here.
- */
-export interface ManagedUserInput {
-  email: string;
-  first_name: string;
-  last_name: string;
-  /** Not sent by the web app: roles come from the Platform (PLAN.md §19.28). */
-  role?: string;
-  whatsapp_phone: string;
-  password?: string;
-}
-export function useUpdateManagedUser() {
-  const done = useInvalidateUsers();
-  return useMutation({ mutationFn: ({ id, ...body }: ManagedUserInput & { id: number }) => tasksApi.patch<ManagedUser>(`/users/${id}/`, body), onSuccess: done });
-}
-
-/** POST /users/:id/activate|deactivate/ */
-export function useSetManagedUserActive() {
-  const done = useInvalidateUsers();
-  return useMutation({ mutationFn: ({ id, active }: { id: number; active: boolean }) => tasksApi.post(`/users/${id}/${active ? 'activate' : 'deactivate'}/`), onSuccess: done });
-}
-
-export interface PurgeInfo {
-  id: number;
-  name: string;
-  username: string;
-  is_active: boolean;
-  tasks_total: number;
-  tasks_open: number;
-  tasks_overdue: number;
-  tasks_done: number;
-  tasks_given_to_others: number;
-  mistakes: number;
-  reports: number;
-}
-
-/** GET /users/:id/purge/ — what goes with a deactivated person. */
-export function usePurgeInfo(userId: number | null) {
-  return useQuery({ queryKey: ['tasks-users', 'purge', userId], queryFn: () => tasksApi.get<PurgeInfo>(`/users/${userId}/purge/`), enabled: userId != null });
-}
-
-/** POST /users/:id/purge/ {confirm: username} — deletes for good. */
-export function usePurgeManagedUser() {
-  const done = useInvalidateUsers();
-  return useMutation({ mutationFn: ({ id, confirm }: { id: number; confirm: string }) => tasksApi.post(`/users/${id}/purge/`, { confirm }), onSuccess: done });
 }

@@ -95,8 +95,6 @@ export function gstinMatchesState(gstin: string, state: string): boolean {
   return !s || gstin.trim().slice(0, 2) === s.code;
 }
 
-export const GST_RATE = 18;
-
 /** Price per user (paise) of a plan for an interval, whatever field the server used. Yearly falls back to 10 × monthly. */
 export function planPrice(plan: Plan, interval: BillingInterval): number {
   const v = plan.prices?.[interval] ?? plan.pricePerSeat?.[interval] ?? (interval === 'month' ? (plan.priceMonthly ?? plan.monthly) : (plan.priceYearly ?? plan.yearly));

@@ -53,19 +53,8 @@ export function usePickerEmployees(search: string, filter: Record<string, string
 /** POST /employees/:id/verify-assets — "everything they hold was checked today". */
 export const useVerifyEmployeeAssets = mutationHook((id: string) => assetsApi.post(`/employees/${id}/verify-assets`, {}));
 
-/** POST /employees/:id/access — make or change their login. */
-export const useGrantEmployeeAccess = mutationHook(({ id, body }: { id: string; body: AccessInput }) => assetsApi.post<Credentials>(`/employees/${id}/access`, body));
-
-/** PATCH /users/:id {isActive:false} — turn a login off. */
-export const useDisableLogin = mutationHook((userId: string) => assetsApi.patch(`/users/${userId}`, { isActive: false }));
-
 /** POST /employees or PATCH /employees/:id. */
 export const useSaveEmployee = mutationHook(({ id, body }: { id?: string | null; body: unknown }) =>
   id ? assetsApi.patch<EmployeeDetail & { credentials?: Credentials | null }>(`/employees/${id}`, body) : assetsApi.post<EmployeeDetail & { credentials: Credentials | null }>('/employees', body),
 );
 
-/** POST /employees/:id/status — active / notice period (opens an exit case) / exited. */
-export const useSetEmployeeStatus = mutationHook(
-  ({ id, body }: { id: string; body: { status: string; lastWorkingDate: string | null; noticeDate: string | null; reason: string } }) =>
-    assetsApi.post<{ ok: boolean; exitCaseId?: string }>(`/employees/${id}/status`, body),
-);

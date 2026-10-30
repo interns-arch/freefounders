@@ -4,7 +4,6 @@ export type TaskStatus = 'open' | 'in_progress' | 'done';
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type TaskFrequency = 'one_time' | 'daily' | 'weekly' | 'monthly';
 
-export const TASK_STATUS_LABELS: Record<TaskStatus, string> = { open: 'Open', in_progress: 'In progress', done: 'Done' };
 export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' };
 export const TASK_FREQUENCY_LABELS: Record<TaskFrequency, string> = { one_time: 'One time', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 

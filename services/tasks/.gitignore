@@ -16,9 +16,3 @@ backend/.venv/
 __pycache__/
 *.pyc
 
-# --- frontend ---
-frontend/node_modules/
-frontend/dist/
-
-# built Android app: copied in at deploy time, not kept in git
-frontend/public/downloads/*.apk

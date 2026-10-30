@@ -21,7 +21,6 @@ PUBLIC_PHOTO_MAX = 600 * 1024
 # A gate or visitor photo is at most a phone camera frame. A small PNG/WebP can claim a huge canvas that decodes into
 # hundreds of MB (security audit 2026-10-29): anything bigger is refused before it is decoded.
 PHOTO_MAX_PIXELS = 16_000_000
-CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 ACTIVE = (VisitStatus.WAITING, VisitStatus.WAITING_HOST, VisitStatus.INSIDE)
 
 
@@ -157,14 +156,6 @@ def store_photo(filefield, raw: bytes, preset=(720, 65)):
     if not ext and out[:3] != b"\xff\xd8\xff":
         raise ValidationError({"photo": "The photo could not be read. Please take it again."})
     filefield.save("photo.jpg", ContentFile(out), save=False)
-
-
-def new_short_code() -> str:
-    for _ in range(20):
-        code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(6))
-        if not Visit.objects.filter(short_code=code, status__in=ACTIVE).exists():
-            return code
-    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(8))
 
 
 # ---------------------------------------------------------------- audit + notices

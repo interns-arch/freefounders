@@ -5,7 +5,6 @@
  * permission-checked by the same code as the list itself. Client-side files (`toXlsx`/`toCsv`) are only for screens
  * that already hold all their rows.
  */
-import { useMutation } from '@tanstack/react-query';
 import { assetsApi, platformApi, tasksApi, type Query } from '../http';
 
 export { safeCell, toCsv, toXlsx, zip, type SheetCell, type SheetData } from './sheet';
@@ -42,11 +41,6 @@ export function exportQuery(target: ExportTarget, format: ExportFormat): Query {
 /** Fetches the file for a target (the token rides along, so not a plain link). */
 export function fetchExport(target: ExportTarget, format: ExportFormat): Promise<Blob> {
   return APIS[target.api].blob(target.path, exportQuery(target, format));
-}
-
-/** The download as a mutation: `mutateAsync({ target, format })` → Blob. */
-export function useExportFile() {
-  return useMutation({ mutationFn: ({ target, format }: { target: ExportTarget; format: ExportFormat }) => fetchExport(target, format) });
 }
 
 /** A file-name part from free text: lower case, a-z 0-9 and dashes. */

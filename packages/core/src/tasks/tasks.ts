@@ -66,16 +66,6 @@ export function useTaskAssignees() {
 export function useTeamPeople() {
   return useQuery({ queryKey: ['tasks-lookup', 'team-people'], queryFn: () => tasksApi.get<import('./types').PersonOption[]>('/leads/assignees/'), ...LOOKUP });
 }
-/** GET /task-categories/?department=  (undefined = every department; '' = only the general categories). */
-export function useTaskCategories(department?: string) {
-  return useQuery({
-    queryKey: ['tasks-lookup', 'categories', department ?? '*'],
-    // The client drops empty parameters, so an explicit empty department goes in the path.
-    queryFn: () =>
-      tasksApi.get<DrfPage<TaskCategory> | TaskCategory[]>(department === '' ? '/task-categories/?department=' : '/task-categories/', department ? { department } : undefined).then(resultsOf),
-    ...LOOKUP,
-  });
-}
 /** GET /groups/?active=true */
 export function useActiveGroups() {
   return useQuery({ queryKey: ['groups', 'active'], queryFn: () => tasksApi.get<DrfPage<GroupBrief> | GroupBrief[]>('/groups/', { active: 'true' }).then(resultsOf), ...LOOKUP });

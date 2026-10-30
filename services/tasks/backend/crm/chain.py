@@ -106,11 +106,6 @@ def excused_for_admins(rows, admin_ids, now=None):
     return parents_with_late_parts(late_admin_tasks, now)
 
 
-def own_effort(task):
-    return max(0, (task.effort_minutes or 0) - given_effort(task)) \
-        if task.effort_minutes is not None else None
-
-
 def _latest_review(task):
     return task.completions.order_by("-created_at").first()
 

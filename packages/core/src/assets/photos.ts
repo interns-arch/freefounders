@@ -62,16 +62,3 @@ export function useDeleteAssetPhoto(options?: MutationOptions<{ deleted: true },
     },
   });
 }
-
-/** PATCH /assets/:id/photos/:photoId — caption and/or position (0 = first, becomes the thumbnail). */
-export function useUpdateAssetPhoto(options?: MutationOptions<AllocationPhoto, { assetId: string; photoId: string; caption?: string | null; sortOrder?: number }>) {
-  const qc = useQueryClient();
-  return useMutation<AllocationPhoto, Error, { assetId: string; photoId: string; caption?: string | null; sortOrder?: number }>({
-    ...options,
-    mutationFn: ({ assetId, photoId, ...body }) => assetsApi.patch<AllocationPhoto>(`/assets/${assetId}/photos/${photoId}`, body),
-    onSuccess: async (...args) => {
-      await invalidateAssetData(qc);
-      await options?.onSuccess?.(...args);
-    },
-  });
-}

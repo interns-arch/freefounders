@@ -11,7 +11,6 @@ export * from './onboarding';
 export * from './service';
 export * from './catalog';
 export * from './org';
-export * from './admin';
 export * from './history';
 export * from './insights';
 export * from './scan';

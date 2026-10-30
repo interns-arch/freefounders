@@ -206,12 +206,6 @@ export function useDevRenew() {
 
 // ─── owner console (Kaampilot staff) ─────────────────────────────────────
 
-export function useConsoleSummary(enabled = true) {
-  return useQuery({ queryKey: billingKeys.consoleSummary, queryFn: billingApi.consoleSummary, enabled });
-}
-export function useConsoleCompanies(enabled = true) {
-  return useQuery({ queryKey: billingKeys.consoleCompanies, queryFn: billingApi.consoleCompanies, enabled });
-}
 /** The owner console's "Recent actions" (staff audit log), newest first. */
 export function useConsoleAudit(filters: ConsoleAuditFilters, enabled = true) {
   return useQuery({ queryKey: billingKeys.consoleAudit(filters), queryFn: () => billingApi.consoleAudit(filters), enabled, placeholderData: (prev) => prev });

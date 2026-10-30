@@ -9,7 +9,7 @@ import QRCodeLib from 'qrcode';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Camera, Copy, ImageIcon, Printer, RefreshCw, Send, ShieldAlert, X } from '@/components/icons';
+import { Camera, Copy, ImageIcon, Printer, Send, ShieldAlert, X } from '@/components/icons';
 import { QRCode } from '@/components/common/codes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -369,14 +369,6 @@ export function alertGuard() {
   } catch {
     /* autoplay blocked until the guard has tapped the page once */
   }
-}
-
-export function RefreshNote({ fetching, onRefresh }: { fetching: boolean; onRefresh: () => void }) {
-  return (
-    <Button variant="ghost" size="sm" onClick={onRefresh} aria-label="Refresh">
-      <RefreshCw className={cn(fetching && 'animate-spin')} /> Refresh
-    </Button>
-  );
 }
 
 // ─── printed visitor badge (V2) ───────────────────────────────────────────────

@@ -15,7 +15,6 @@ export const useDeleteField = mutationHook((f: FieldDefinition) => assetsApi.del
 export function saveField(id: string | null | undefined, body: unknown) {
   return id ? assetsApi.patch(`/fields/${id}`, body) : assetsApi.post('/fields', body);
 }
-export const useSaveField = mutationHook(({ id, body }: { id?: string | null; body: unknown }) => saveField(id, body));
 export const useDeleteAssetType = mutationHook((id: string) => assetsApi.del(`/asset-types/${id}`));
 export const useDeleteCategory = mutationHook((id: string) => assetsApi.del(`/categories/${id}`));
 export const useSaveAssetType = mutationHook(({ id, body }: { id?: string | null; body: unknown }) =>
