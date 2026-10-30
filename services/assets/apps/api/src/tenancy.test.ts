@@ -3,11 +3,15 @@
 // and drops them afterwards.
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import type { INestApplication } from '@nestjs/common';
 import { exportJWK, SignJWT } from 'jose';
 import { DbService } from './db/db.service';
+import { deletableSchema, dropCompany } from './db/tenancy';
 import { createApp } from './main';
 import { hashPassword } from './modules/auth/auth.service';
 
@@ -232,5 +236,85 @@ describe('multi-company mode', () => {
     assert.deepEqual(await count(BETA.schema), { users: 1, employees: 1 });
     // History stays append-only in the company schema afterwards.
     await assert.rejects(dbs.pool.query(`delete from "${ACME.schema}".history_events`), /append-only|not allowed/i);
+  });
+
+  test('company -- delete: GET lists, DELETE removes only that company; the same code can be set up again', async () => {
+    const GONE = { companyId: randomUUID(), code: 'gone_t', schema: 'co_gone_t', name: 'Gone Test Pvt Ltd' };
+    const dir = await mkdtemp(path.join(tmpdir(), 'ff-uploads-'));
+    const before = process.env.UPLOAD_DIR;
+    process.env.UPLOAD_DIR = dir;
+    const extraIds: string[] = [];
+    try {
+      await dbs.pool.query(`drop schema if exists "${GONE.schema}" cascade`);
+      assert.equal((await call('POST', '/internal/companies', { token: await service(), body: GONE })).status, 201);
+      const owner = await provision('Gita', GONE);
+      const cat = await call('POST', '/categories', { token: await access(owner), body: { name: 'Gone cat', code: 'GNC' } });
+      const type = await call('POST', '/asset-types', { token: await access(owner), body: { categoryId: cat.body.id, name: 'Gone type', code: 'GNT', trackingMode: 'INDIVIDUAL' } });
+      const asset = await call('POST', '/assets', { token: await access(owner), body: { assetTypeId: type.body.id, name: 'Gone asset', status: 'AVAILABLE', attributes: {} } });
+      assert.equal(asset.status, 201, JSON.stringify(asset.body));
+      // An older photo kept on disk (no data in the row), and a file of nobody's that must stay.
+      await dbs.pool.query(
+        `insert into "${GONE.schema}".allocation_photos (asset_id, kind, file_name, mime_type, size_bytes) values ($1, 'ASSET', 'legacy-gone.jpg', 'image/jpeg', 3)`,
+        [asset.body.id],
+      );
+      await writeFile(path.join(dir, 'legacy-gone.jpg'), 'abc');
+      await writeFile(path.join(dir, 'other.jpg'), 'keep');
+      const url = `/internal/companies/${GONE.companyId}`;
+
+      const info = await call('GET', url, { token: await service() });
+      assert.equal(info.status, 200, JSON.stringify(info.body));
+      assert.equal(info.body.registered, true);
+      assert.equal(info.body.schema, GONE.schema);
+      assert.ok(info.body.tables > 10 && info.body.rows > 0);
+      assert.equal(info.body.files.count, 1);
+
+      assert.equal((await call('DELETE', url)).status, 401, 'service token only');
+      // An access token is not a service token (refused before anything is touched; the guard's own lookup fails closed).
+      assert.ok((await call('DELETE', url, { token: await access(owner) })).status >= 400);
+      assert.equal((await call('GET', url, { token: await service() })).body.registered, true);
+      assert.equal((await call('DELETE', url, { token: await service(ACME.companyId) })).status, 403, 'token for another company');
+      assert.equal((await call('DELETE', '/internal/companies/not-a-uuid', { token: await service() })).status, 400);
+
+      const res = await call('DELETE', url, { token: await service() });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      assert.equal(res.body.deleted, true);
+      const left = await dbs.pool.query(
+        `select (select count(*)::int from information_schema.schemata where schema_name = $1) as schemas, (select count(*)::int from ff.companies where company_id = $2) as registry`,
+        [GONE.schema, GONE.companyId],
+      );
+      assert.deepEqual(left.rows[0], { schemas: 0, registry: 0 });
+      await assert.rejects(stat(path.join(dir, 'legacy-gone.jpg')));
+      assert.equal(await readFile(path.join(dir, 'other.jpg'), 'utf8'), 'keep');
+      assert.equal((await call('GET', '/auth/me', { token: await access(owner) })).status, 401, 'the company is gone (cache forgotten)');
+      // Other companies untouched.
+      const { rows } = await dbs.pool.query(`select (select count(*)::int from "${ACME.schema}".users) as acme, (select count(*)::int from "${BETA.schema}".users) as beta`);
+      assert.ok(rows[0].acme > 0 && rows[0].beta > 0);
+      assert.deepEqual((await call('DELETE', url, { token: await service() })).body, { registered: false, schema: null, deleted: false });
+
+      // The same code again, as a new company: a fresh schema, the same employee and email free again.
+      const again = { ...GONE, companyId: randomUUID() };
+      extraIds.push(again.companyId);
+      const created = await call('POST', '/internal/companies', { token: await service(), body: again });
+      assert.equal(created.status, 201, JSON.stringify(created.body));
+      assert.equal(created.body.created, true);
+      const back = await provision('Gita', again);
+      assert.equal((await call('GET', '/auth/me', { token: await access(back) })).status, 200);
+      const assets = await dbs.pool.query(`select count(*)::int as n from "${GONE.schema}".assets`);
+      assert.equal(assets.rows[0].n, 0);
+
+      // A registry row naming a non-company schema is never dropped.
+      const bad = randomUUID();
+      extraIds.push(bad);
+      await dbs.pool.query("insert into ff.companies (company_id, schema_name, name) values ($1, 'ff_none', 'Bad')", [bad]);
+      assert.equal((await call('DELETE', `/internal/companies/${bad}`, { token: await service() })).status, 409);
+      assert.ok(deletableSchema('co_x') && !deletableSchema('ff_none') && !deletableSchema('public') && !deletableSchema('ff'));
+      await assert.rejects(dropCompany(dbs.pool, again.companyId, ACME.schema), /not this company/);
+    } finally {
+      await dbs.pool.query(`drop schema if exists "${GONE.schema}" cascade`);
+      await dbs.pool.query('delete from ff.companies where company_id = any($1::uuid[])', [[GONE.companyId, ...extraIds]]);
+      if (before === undefined) delete process.env.UPLOAD_DIR;
+      else process.env.UPLOAD_DIR = before;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

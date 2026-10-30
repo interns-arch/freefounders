@@ -11,6 +11,8 @@ import { ConsoleDashboardController, LogsIngestController } from './console/cons
 import { ConsoleDashboardService } from './console/console.service';
 import { LogsService } from './console/logs.service';
 import { CompanySetupService } from './company/setup.service';
+import { CompanyDeleteService } from './company/delete.service';
+import { CompanyGrantService } from './company/grant.service';
 import { InvitesService } from './invites/invites.service';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthController } from './auth/auth.controller';
@@ -48,6 +50,8 @@ import { RolesService } from './roles/roles.service';
     DirectoryService,
     FlowsService,
     CompanySetupService,
+    CompanyDeleteService,
+    CompanyGrantService,
     TicketsService,
     OtpService,
     // One-time codes: the Platform log (OTP_SENDER=fake, default) or MSG91 (OTP_SENDER=msg91, PLAN.md §21.8).

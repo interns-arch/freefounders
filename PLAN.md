@@ -566,6 +566,25 @@ Follow-ups for later phases: the Tasks web app still shows "Automation Task / Ca
 (per-company branding is a Settings Center item, Phase 4); per-company settings have no screen yet (Phase 4;
 `manage.py company_setting` until then); expired Assets session rows are still not cleaned up.
 
+### 14.10 Deleting a company, wipe-all, grant (2026-10-30)
+Founder (2026-10-30): delete the test companies on the live server, then everything (CARTRENDS too) and every account
+but Kaampilot staff; the founder signs up CarTrends again and it gets everything unlocked for good. Built as staff CLI
+commands (`services/platform/src/companies.ts`; how to run them: infra/deploy/README.md "Deleting a company"):
+- `company -- delete --code X [--confirm X] [--force-paid] [--allow-last]`: dry run by default. Tasks and Assets each get
+  `GET/DELETE /api/internal/companies/<id>` (service token without `cid`; internal only): files (Tasks
+  `media/c/co_<code>/`, Assets the company's older photo files in UPLOAD_DIR), then `DROP SCHEMA co_<code> CASCADE` and
+  the registry row, together. Only the schema the app's own registry maps to the id, only `co_*`, never `ff_none` /
+  `public`; symlinks never followed. Then the Platform rows in one transaction and the accounts left with no company
+  (never staff); `company.delete` in the staff audit. Refuses the last company (unless `--allow-last`) and a company that
+  paid (unless `--force-paid`). Every step repeats safely.
+- `company -- wipe-all [--confirm WIPE-ALL-COMPANIES]`: every company as above, then every account in no company.
+- `company -- grant --code X --complimentary --all-modules [--confirm X]`: complimentary plan, no module list, AI, both
+  apps, every module switch on, pushed to the apps; `company.grant` in the staff audit.
+- `company -- rename --code X --name "…"` (owners rename in Settings; there was no CLI).
+After a delete the same code / name / emails / usernames sign up cleanly (tested in all three services). Each app forgets
+the cached company → schema entry in the serving process; restart `tasks tasks-worker assets` after a wipe to clear the
+other workers' caches (harmless meanwhile: only a deleted company's tokens could reach them).
+
 ---
 
 ## 15. Phase 3 design: one role builder (APPROVED 2026-10-08)

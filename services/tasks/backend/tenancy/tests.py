@@ -333,6 +333,173 @@ class MultiCompanyTests(SimpleTestCase):
             profile.forget()
 
 
+@unittest.skipUnless(connection.vendor == "postgresql", "multi-company mode needs Postgres")
+@override_settings(TENANCY="schemas", PLATFORM_JWKS=JWKS)
+class CompanyDeleteTests(SimpleTestCase):
+    """`company -- delete` (PLAN.md §14): DELETE /api/internal/companies/<id> removes exactly one company."""
+
+    databases = {"default"}
+    GONE_ID, KEEP_ID = str(uuid.uuid4()), str(uuid.uuid4())
+    GONE, KEEP = "co_gone_t", "co_keep_t"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        schemas.ensure_registry()
+        # The company that stays is made once (creating a schema runs every migration); the one deleted, per test.
+        schemas.create_company(cls.KEEP_ID, cls.KEEP, "Keep")
+        with schemas.use(cls.KEEP):
+            user = make_user("asha")
+            Task.objects.create(title=f"{cls.KEEP} task", assigned_to=user, created_by=user)
+
+    @classmethod
+    def tearDownClass(cls):
+        with connection.cursor() as cur:
+            for schema in (cls.GONE, cls.KEEP):
+                cur.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+            cur.execute(f"DELETE FROM {schemas.REGISTRY} WHERE company_id::text IN (%s, %s)", [cls.GONE_ID, cls.KEEP_ID])
+        schemas._cache.clear()
+        super().tearDownClass()
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        self.media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media, True)
+        media = override_settings(MEDIA_ROOT=self.media)
+        media.enable()
+        self.addCleanup(media.disable)
+        with connection.cursor() as cur:  # fresh each test (a test may have left it in place)
+            cur.execute(f'DROP SCHEMA IF EXISTS "{self.GONE}" CASCADE')
+            cur.execute(f"DELETE FROM {schemas.REGISTRY} WHERE schema_name = %s", [self.GONE])
+        schemas._cache.clear()
+        schemas.create_company(self.GONE_ID, self.GONE, "Gone")
+        with schemas.use(self.GONE):
+            user = make_user("asha")
+            Task.objects.create(title=f"{self.GONE} task", assigned_to=user, created_by=user)
+        for schema in (self.GONE, self.KEEP):
+            folder = Path(self.media, "c", schema, "task_files")
+            folder.mkdir(parents=True)
+            (folder / "a.pdf").write_bytes(b"%PDF-1.4 test")
+
+    def api(self, tok):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+        return client
+
+    def schema_exists(self, schema):
+        with connection.cursor() as cur:
+            cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name = %s", [schema])
+            return cur.fetchone() is not None
+
+    def test_dry_run_then_delete_only_that_company(self):
+        import os
+
+        url = f"/api/internal/companies/{self.GONE_ID}"
+        info = self.api(service()).get(url)
+        self.assertEqual(info.status_code, 200, info.content)
+        body = info.json()
+        self.assertEqual((body["registered"], body["schema"], body["schemaExists"]), (True, self.GONE, True))
+        self.assertGreater(body["tables"], 10)
+        self.assertGreaterEqual(body["rows"], 2)
+        self.assertEqual(body["files"]["count"], 1)
+        self.assertTrue(self.schema_exists(self.GONE), "GET changes nothing")
+
+        res = self.api(service()).delete(url)
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual((res.json()["deleted"], res.json()["schema"], res.json()["files"]["count"]), (True, self.GONE, 1))
+        self.assertFalse(self.schema_exists(self.GONE))
+        self.assertIsNone(schemas.registered_schema(self.GONE_ID))
+        self.assertIsNone(schemas.schema_for(self.GONE_ID))
+        self.assertFalse(os.path.exists(os.path.join(self.media, "c", self.GONE)))
+        # The other company is untouched: schema, registry, data and files.
+        self.assertTrue(self.schema_exists(self.KEEP))
+        self.assertEqual(schemas.registered_schema(self.KEEP_ID), self.KEEP)
+        with schemas.use(self.KEEP):
+            self.assertTrue(Task.objects.filter(title=f"{self.KEEP} task").exists())
+        self.assertTrue(os.path.exists(os.path.join(self.media, "c", self.KEEP, "task_files", "a.pdf")))
+        # A repeat finishes quietly.
+        again = self.api(service()).delete(url)
+        self.assertEqual(again.json(), {"registered": False, "schema": None, "deleted": False})
+
+    def test_same_code_can_be_set_up_again_after_a_delete(self):
+        url = f"/api/internal/companies/{self.GONE_ID}"
+        self.assertEqual(self.api(service()).get(url).status_code, 200)  # warms the company -> schema cache
+        self.assertEqual(schemas.schema_for(self.GONE_ID), self.GONE)
+        self.assertTrue(self.api(service()).delete(url).json()["deleted"])
+        self.assertIsNone(schemas.schema_for(self.GONE_ID), "the delete forgets the cached schema")
+        new_id = str(uuid.uuid4())
+        try:
+            res = self.api(service()).post("/api/internal/companies", {"companyId": new_id, "code": "gone_t", "name": "Gone again"}, format="json")
+            self.assertEqual(res.status_code, 201, res.content)
+            self.assertEqual(res.json()["created"], True)
+            with schemas.use(self.GONE):
+                self.assertFalse(Task.objects.exists(), "a new, empty schema")
+                make_user("asha")  # same username as before: free again
+        finally:
+            with connection.cursor() as cur:
+                cur.execute(f"DELETE FROM {schemas.REGISTRY} WHERE company_id::text = %s", [new_id])
+
+    def test_finishes_after_a_partial_failure(self):
+        # Files already gone (the earlier run stopped before the schema): the repeat drops the schema and the row.
+        import shutil
+        from pathlib import Path
+
+        shutil.rmtree(Path(self.media, "c", self.GONE))
+        res = self.api(service()).delete(f"/api/internal/companies/{self.GONE_ID}")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["files"]["count"], 0)
+        self.assertFalse(self.schema_exists(self.GONE))
+
+    def test_only_internal_and_only_the_registered_company_schema(self):
+        url = f"/api/internal/companies/{self.GONE_ID}"
+        self.assertEqual(APIClient().delete(url).status_code, 401, "no token")
+        self.assertEqual(self.api(access(self.GONE_ID, type("U", (), {"platform_person_id": uuid.uuid4(), "pk": 1})())).delete(url).status_code, 401,
+                         "an access token is not a service token")
+        self.assertEqual(self.api(service(self.KEEP_ID)).delete(url).status_code, 403, "token for another company")
+        self.assertEqual(self.api(service()).delete("/api/internal/companies/not-a-uuid").status_code, 400)
+        self.assertEqual(self.api(service()).delete(f"/api/internal/companies/{uuid.uuid4()}").json()["deleted"], False)
+        # A registry row pointing at a non-company schema is never dropped.
+        bad_id = str(uuid.uuid4())
+        with connection.cursor() as cur:
+            cur.execute(f"INSERT INTO {schemas.REGISTRY} (company_id, schema_name, name) VALUES (%s, 'public', 'Bad')", [bad_id])
+        try:
+            res = self.api(service()).delete(f"/api/internal/companies/{bad_id}")
+            self.assertEqual(res.status_code, 409)
+            self.assertTrue(self.schema_exists("public"))
+            with self.assertRaises(ValueError):
+                schemas.drop_company(bad_id, "public")
+            with self.assertRaises(ValueError):
+                schemas.drop_company(self.GONE_ID, self.KEEP)  # not the schema registered for that id
+            self.assertTrue(self.schema_exists(self.KEEP))
+        finally:
+            with connection.cursor() as cur:
+                cur.execute(f"DELETE FROM {schemas.REGISTRY} WHERE company_id::text = %s", [bad_id])
+        for name in ("ff_none", "public", "co_", "co_x; drop", "tasks"):
+            self.assertFalse(schemas.deletable(name), name)
+
+    def test_symlinked_folder_loses_only_the_link(self):
+        import os
+        from pathlib import Path
+
+        outside = Path(self.media).parent / f"outside_{uuid.uuid4().hex}"
+        outside.mkdir()
+        self.addCleanup(__import__("shutil").rmtree, outside, True)
+        (outside / "keep.txt").write_text("not ours")
+        gone = Path(self.media, "c", self.GONE)
+        __import__("shutil").rmtree(gone)
+        try:
+            os.symlink(outside, gone, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks need extra rights on this machine")
+        res = self.api(service()).delete(f"/api/internal/companies/{self.GONE_ID}")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertFalse(gone.is_symlink() or gone.exists())
+        self.assertTrue((outside / "keep.txt").exists(), "never follows the link")
+
+
 class TenancyOffTests(SimpleTestCase):
     """With TENANCY unset nothing changes: no company, plain env lookups."""
 

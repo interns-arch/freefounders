@@ -152,6 +152,57 @@ def schema_for(company_id) -> str | None:
     return None
 
 
+def registered_schema(company_id: str) -> str | None:
+    """The registry's schema for a company, read fresh (no cache): what `drop_company` may remove."""
+    with connection.cursor() as cur:
+        cur.execute(f"SELECT schema_name FROM {REGISTRY} WHERE company_id::text = %s", [str(company_id)])
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def deletable(schema: str | None) -> bool:
+    """Only a company schema (co_<code>) is ever dropped: never ff_none, public or anything else."""
+    return bool(schema) and schema not in (NO_COMPANY, PUBLIC) and bool(_SCHEMA_RE.match(schema)) and schema.startswith("co_")
+
+
+def schema_stats(schema: str) -> dict:
+    """Whether the schema exists, its tables and their exact row count (dry run of `company -- delete`)."""
+    if not deletable(schema):
+        raise ValueError(f"Not a company schema: {schema!r}")
+    with connection.cursor() as cur:
+        cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name = %s", [schema])
+        if cur.fetchone() is None:
+            return {"schemaExists": False, "tables": 0, "rows": 0}
+        cur.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = %s AND table_type = 'BASE TABLE'",
+            [schema],
+        )
+        tables = [r[0] for r in cur.fetchall() if re.match(r"^[A-Za-z0-9_]+$", r[0])]
+        rows = 0
+        for table in tables:
+            cur.execute(f'SELECT count(*) FROM "{schema}"."{table}"')
+            rows += cur.fetchone()[0]
+    return {"schemaExists": True, "tables": len(tables), "rows": rows}
+
+
+def drop_company(company_id: str, schema: str) -> None:
+    """Drops the company's schema and its registry row, together (`company -- delete`). `schema` must be what the
+    registry maps this company to; it is checked again here. Idempotent."""
+    from django.db import transaction
+
+    if not deletable(schema) or registered_schema(company_id) != schema:
+        raise ValueError(f"Refusing to drop {schema!r}: not this company's registered schema")
+    with transaction.atomic(), connection.cursor() as cur:
+        cur.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        cur.execute(f"DELETE FROM {REGISTRY} WHERE company_id::text = %s", [str(company_id)])
+    forget(company_id)
+
+
+def forget(company_id) -> None:
+    with _cache_lock:
+        _cache.pop(str(company_id), None)
+
+
 def companies() -> list[dict]:
     with connection.cursor() as cur:
         cur.execute(f"SELECT company_id::text, schema_name, name FROM {REGISTRY} ORDER BY created_at, schema_name")

@@ -111,6 +111,33 @@ export class ProvisionClient {
     throw new BadGatewayException(`${app} could not set up ${company.name}: ${body?.message ?? body?.detail ?? `HTTP ${res.status}`}`);
   }
 
+  /**
+   * `company -- delete` (PLAN.md §14): what an app holds for a company (`GET /internal/companies/<id>`, read only) or
+   * permanently removes it (`DELETE`: the schema its own registry maps to the id, the registry row, its files). The token
+   * carries no `cid`: the app never switches into the company, it only reads its registry. `null` = the app runs without
+   * multi-company mode (409), so there is no company schema to remove.
+   */
+  async companyData(app: AppKey, companyId: string, method: 'GET' | 'DELETE'): Promise<AppCompanyData | null> {
+    const base = internalUrl(app);
+    if (!base) throw new BadGatewayException(`${app} is not connected (${app.toUpperCase()}_INTERNAL_URL is not set)`);
+    let res: Response;
+    try {
+      res = await fetch(`${base}/companies/${encodeURIComponent(companyId)}`, {
+        method,
+        headers: { authorization: `Bearer ${await this.tokens.signService(app)}`, 'x-requested-with': 'XMLHttpRequest' },
+        signal: AbortSignal.timeout(600_000),
+      });
+    } catch (err) {
+      throw new BadGatewayException(`Could not reach ${app}: ${(err as Error).message}`);
+    }
+    const body = (await res.json().catch(() => null)) as (AppCompanyData & { message?: string; detail?: string }) | null;
+    if (res.status === 409 && /multi-company mode is off/i.test(String(body?.message ?? body?.detail ?? ''))) return null;
+    if (!res.ok || !body || typeof body.registered !== 'boolean') {
+      throw new BadGatewayException(`${app}: ${body?.message ?? body?.detail ?? `HTTP ${res.status}`}`);
+    }
+    return body;
+  }
+
   /** The permissions an app offers to the role builder. */
   async permissions(app: AppKey, companyId: string): Promise<AppCatalogue> {
     return this.internalJson<AppCatalogue>(app, 'GET', '/permissions', companyId);
@@ -226,6 +253,21 @@ export class ProvisionClient {
     if (!res.ok || data === null) throw new BadGatewayException(`${app}: ${data?.message ?? data?.detail ?? `HTTP ${res.status}`}`);
     return data;
   }
+}
+
+/** What an app answers to GET / DELETE /internal/companies/<id>. */
+export interface AppCompanyData {
+  /** The registry still maps the company to a schema (after a DELETE: false). */
+  registered: boolean;
+  schema: string | null;
+  schemaExists?: boolean;
+  /** Tables in the schema and their rows (estimated from Postgres statistics). */
+  tables?: number;
+  rows?: number;
+  /** Files: Tasks `c/<schema>/` under MEDIA_ROOT; Assets the company's older photo files in UPLOAD_DIR. */
+  files?: { path: string; count: number; bytes?: number };
+  /** DELETE: whether anything was removed this time (false on a repeat). */
+  deleted?: boolean;
 }
 
 /** What an app answers to DELETE /internal/people/<id>. */

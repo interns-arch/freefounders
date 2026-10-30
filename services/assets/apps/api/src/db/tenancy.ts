@@ -127,3 +127,65 @@ export async function migrateCompanySchema(pool: pg.Pool, schema: string): Promi
   }
   return applied;
 }
+
+// ─── Deleting a company (`company -- delete` on the Platform, PLAN.md §14) ────────────────────────────────────
+
+/** Only a company schema (co_<code>) is ever dropped: never ff_none, public, ff or anything else. */
+export function deletableSchema(name: string | null | undefined): name is string {
+  return !!name && name !== NO_COMPANY && SCHEMA_RE.test(name);
+}
+
+/** The registry's schema for a company, read fresh (no cache). */
+export async function registeredSchema(db: Queryable, companyId: string): Promise<string | null> {
+  const { rows } = await db.query<{ schema_name: string }>('select schema_name from ff.companies where company_id = $1', [companyId]);
+  return rows[0]?.schema_name ?? null;
+}
+
+/** Drops this process's cached company → schema entry. */
+export function forgetCompany(companyId: string): void {
+  cache.delete(companyId);
+}
+
+/** Whether the schema exists, its tables and their exact row count. */
+export async function schemaStats(db: Queryable, schema: string): Promise<{ schemaExists: boolean; tables: number; rows: number }> {
+  const q = quoteSchema(schema);
+  if (!deletableSchema(schema)) throw new Error(`Not a company schema: ${schema}`);
+  const exists = await db.query('select 1 from information_schema.schemata where schema_name = $1', [schema]);
+  if (!exists.rows.length) return { schemaExists: false, tables: 0, rows: 0 };
+  const { rows: tables } = await db.query<{ t: string }>(
+    "select table_name as t from information_schema.tables where table_schema = $1 and table_type = 'BASE TABLE'",
+    [schema],
+  );
+  let rows = 0;
+  for (const { t } of tables) {
+    if (!/^[A-Za-z0-9_]+$/.test(t)) continue;
+    const { rows: r } = await db.query<{ n: number }>(`select count(*)::int as n from ${q}."${t}"`);
+    rows += Number(r[0]?.n ?? 0);
+  }
+  return { schemaExists: true, tables: tables.length, rows };
+}
+
+/**
+ * Drops the company's schema (CASCADE) and deletes its registry row, in one transaction. `schema` must be what the
+ * registry maps this company to (checked again here); a name from a request is never used. Idempotent.
+ */
+export async function dropCompany(pool: pg.Pool, companyId: string, schema: string): Promise<void> {
+  if (!deletableSchema(schema)) throw new Error(`Refusing to drop ${schema}: not a company schema`);
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    try {
+      const { rows } = await client.query<{ schema_name: string }>('select schema_name from ff.companies where company_id = $1 for update', [companyId]);
+      if (rows[0]?.schema_name !== schema) throw new Error(`Refusing to drop ${schema}: not this company's registered schema`);
+      await client.query(`drop schema if exists ${quoteSchema(schema)} cascade`);
+      await client.query('delete from ff.companies where company_id = $1', [companyId]);
+      await client.query('commit');
+    } catch (err) {
+      await client.query('rollback');
+      throw err;
+    }
+  } finally {
+    client.release();
+  }
+  forgetCompany(companyId);
+}

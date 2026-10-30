@@ -274,6 +274,62 @@ Every console view of a company or a person is written to the staff audit log (C
 30 days (`LOG_RETENTION_DAYS`). The **Health** strip shows each service's version: `ff.sh` passes the deployed commit as
 `APP_VERSION` (containers pick it up on `ff.sh up -d`).
 
+## Deleting a company, wiping all companies, unlocking a company (staff)
+
+Permanent; staff only, from the server shell (there is no screen for it). Take a backup first (**Backups** below).
+Every command is a **dry run** unless the confirmation is given: it prints what would go and changes nothing.
+Needs Platform, Tasks and Assets deployed at commit `<this commit>` or later (Tasks and Assets answer
+`GET/DELETE /api/internal/companies/<id>`; the Platform has the commands).
+
+```
+P="app/infra/deploy/ff.sh exec -T platform node dist/companies.js"
+$P list                                                   # codes, people, plan
+$P delete --code ACME                                     # dry run: everything that would go, with row counts
+$P delete --code ACME --confirm ACME                      # deletes it
+$P wipe-all                                               # dry run: every company + accounts left with no company
+$P wipe-all --confirm WIPE-ALL-COMPANIES                  # deletes every company and every non-staff account
+$P grant --code CARTRENDS --complimentary --all-modules   # dry run
+$P grant --code CARTRENDS --complimentary --all-modules --confirm CARTRENDS
+$P rename --code ACME --name "Acme India Pvt Ltd"         # new name (same uniqueness rule as Settings), sent to the apps
+app/infra/deploy/ff.sh restart tasks tasks-worker assets  # after delete / wipe-all (see below)
+```
+
+What `delete` removes, in this order (each step can be repeated: if it stops part-way, run the same command again):
+1. The company is closed (`status = deleting`): nobody can sign in, refresh or call an API for it.
+2. **Tasks** and **Assets**, each through its internal endpoint (service token; the gateway answers 404 for
+   `/tasks/api/internal/*` and `/assets/api/internal/*` from outside): the company's files (Tasks
+   `data/tasks-media/c/co_<code>/`; Assets: the company's older photo files in `data/assets-uploads/`, newer photos are
+   in the database), then its schema `co_<code>` (DROP … CASCADE) and its registry row. Only the schema the app's own
+   registry maps to that company id is touched (never a name from the request), never `ff_none`, `public` or any
+   non-`co_` schema; symlinks are never followed.
+3. **Platform**, in one transaction: payments, seat changes, invoices (+ lines), checkout sessions, GST details,
+   invites, event cursors, people (with their logins, app links, refresh sessions, role holdings, personal roles), roles,
+   departments, subscription, the company; then the **accounts left with no company** (never Kaampilot staff accounts;
+   an account also in another company stays). The staff audit log gets `company.delete` (who = `cli`, code, counts);
+   older staff audit rows and the 30-day production log keep their rows (the company code stays readable).
+
+Refused (nothing changes): the **last remaining company** unless `--allow-last`; a company that **paid** (a paid GST
+invoice or a captured payment: tax records) unless `--force-paid`; when `TASKS_INTERNAL_URL` / `ASSETS_INTERNAL_URL` are
+not set or an app cannot be asked (run it in the platform container). `wipe-all` checks every company first and
+deletes nothing if one is refused, then deletes them one by one and finally every account in no company (staff stay).
+
+**After a delete the same code, name, emails, mobiles and usernames are free again**: a new sign-up "Acme" gets code
+`ACME` and a fresh, empty `co_acme` in both apps. Tasks and Assets forget the deleted company's schema in the process
+that served the delete; other gunicorn workers may keep the old company id → schema mapping until they restart. That
+mapping is only reachable with a token of the deleted company (refused by the Platform; tokens last 15 minutes, and
+the apps match the user's person id, which a new company never reuses), so it cannot open the new company — restarting
+`tasks tasks-worker assets` after a delete or wipe simply clears it.
+
+`grant --complimentary --all-modules`: the **complimentary** plan (never expires, never read-only, no user limit, no
+billing), no module list (Tasks, Attendance, Assets, Visitors, Payroll), the AI helper, both apps, and every module
+switch of every app on (opt-in ones too); the profile is pushed to Tasks and Assets (as `sync`), `company.grant` in the
+staff audit log. Same plan as console → Set plan → Complimentary, plus AI and every switch. Owners can still switch
+modules off in Settings.
+
+**The 2026-10-30 reset (founder)**: `wipe-all` (dry run, read it), backup, `wipe-all --confirm WIPE-ALL-COMPANIES`,
+restart the apps, `list` (empty). The founder signs up "CarTrends" at kaampilot.com, then
+`grant --code CARTRENDS --complimentary --all-modules --confirm CARTRENDS`.
+
 ## Known limits of the http demo
 - Browsers allow camera, microphone, geolocation and service workers only on https (or localhost): punch-in with
   GPS/selfie, QR scanning, voice notes and offline caching do not work on `http://<ip>:7395`. Put a domain + https in

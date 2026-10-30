@@ -1,8 +1,10 @@
-import { Body, ConflictException, Controller, Get, HttpCode, Post, Put, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, ConflictException, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Post, Put, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { Response } from 'express';
 import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
+import { lstat, unlink } from 'node:fs/promises';
+import path from 'node:path';
 import { and, asc, eq, isNotNull, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { ADMIN_PERMISSIONS, ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSIONS } from '@eam/shared';
 import { z } from 'zod';
@@ -13,7 +15,21 @@ import { SequenceService } from '../../core/sequence.service';
 import { DbService } from '../../db/db.service';
 import { MODULES, ProfileService, profilePushSchema } from '../../core/profile.service';
 import { employees, roles, sessions, syncState, userRoles, users } from '../../db/schema';
-import { ensureRegistry, listCompanies, migrateCompanySchema, registerCompany, schemaFor, schemaForCode, tenancyEnabled } from '../../db/tenancy';
+import {
+  deletableSchema,
+  dropCompany,
+  ensureRegistry,
+  listCompanies,
+  migrateCompanySchema,
+  quoteSchema,
+  registeredSchema,
+  registerCompany,
+  schemaFor,
+  schemaForCode,
+  schemaStats,
+  tenancyEnabled,
+} from '../../db/tenancy';
+import { uploadDir } from '../assets/photos.service';
 import { createSystemRoles, setUpCompany } from '../../seed/company-setup';
 import { CatalogService } from '../catalog/catalog.service';
 import { OrgService } from '../org/org.service';
@@ -122,6 +138,67 @@ export class InternalController {
     );
     res.status(created ? 201 : 200);
     return { companyId: input.companyId, schema, created };
+  }
+
+  /**
+   * `company -- delete` on the Platform (PLAN.md §14). GET: what Assets holds for the company (schema, tables, rows,
+   * files); DELETE: removes it permanently. Only the schema the registry maps to this id is touched (never a name from
+   * the request), and only a co_<code> schema. Photos live in the database; the company's older photo files (rows with
+   * no data, a plain file name in UPLOAD_DIR) are deleted first, symlinks never followed. The registry row goes last,
+   * with the schema, so a repeat after a failure finishes the job; a repeat after success answers deleted=false.
+   */
+  @Public()
+  @Get('companies/:companyId')
+  async companyData(@Req() req: AuthedRequest, @Param('companyId') companyId: string) {
+    return this.companyDelete(req, companyId, false);
+  }
+
+  @Public()
+  @Delete('companies/:companyId')
+  @HttpCode(200)
+  async deleteCompany(@Req() req: AuthedRequest, @Param('companyId') companyId: string) {
+    return this.companyDelete(req, companyId, true);
+  }
+
+  private async companyDelete(req: AuthedRequest, rawId: string, remove: boolean) {
+    const token = bearerToken(req.headers.authorization);
+    const claims = token ? await verifyPlatformToken(token, SERVICE_AUDIENCE) : null;
+    if (!claims || claims.sub !== 'platform') throw new UnauthorizedException('Platform service token required');
+    if (!tenancyEnabled()) throw new ConflictException('Multi-company mode is off (TENANCY=schemas)');
+    const companyId = String(rawId ?? '').toLowerCase();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(companyId)) throw badRequest('companyId must be a UUID');
+    if (claims.cid !== undefined && claims.cid !== companyId) throw new ForbiddenException('Token is for another company');
+    const pool = this.dbs.pool;
+    await ensureRegistry(pool);
+    const schema = await registeredSchema(pool, companyId);
+    if (!schema) return { registered: false, schema: null, deleted: false };
+    if (!deletableSchema(schema)) throw new ConflictException(`Refusing: ${schema} is not a company schema`);
+    const stats = await schemaStats(pool, schema);
+    const files = await this.companyFiles(schema, stats.schemaExists);
+    if (!remove) return { registered: true, schema, ...stats, files: { path: files.path, count: files.names.length, bytes: files.bytes } };
+    for (const f of files.names) await unlink(f).catch(() => undefined);
+    await dropCompany(pool, companyId, schema);
+    return { registered: false, schema, deleted: true, ...stats, files: { path: files.path, count: files.names.length, bytes: files.bytes } };
+  }
+
+  /** The company's older photo files on disk: plain names inside UPLOAD_DIR, regular files only (no symlinks). */
+  private async companyFiles(schema: string, exists: boolean) {
+    const dir = path.resolve(uploadDir());
+    const out = { path: dir, names: [] as string[], bytes: 0 };
+    if (!exists) return out;
+    const has = await this.dbs.pool.query("select 1 from information_schema.tables where table_schema = $1 and table_name = 'allocation_photos'", [schema]);
+    if (!has.rows.length) return out;
+    const { rows } = await this.dbs.pool.query<{ file_name: string }>(`select distinct file_name from ${quoteSchema(schema)}.allocation_photos where data is null`);
+    for (const { file_name: name } of rows) {
+      if (!/^[\w.-]+$/.test(name) || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      if (path.dirname(full) !== dir) continue;
+      const st = await lstat(full).catch(() => null);
+      if (!st?.isFile()) continue; // missing, a folder or a symlink: never followed
+      out.names.push(full);
+      out.bytes += st.size;
+    }
+    return out;
   }
 
   /**
