@@ -278,7 +278,7 @@ Every console view of a company or a person is written to the staff audit log (C
 
 Permanent; staff only, from the server shell (there is no screen for it). Take a backup first (**Backups** below).
 Every command is a **dry run** unless the confirmation is given: it prints what would go and changes nothing.
-Needs Platform, Tasks and Assets deployed at commit `<this commit>` or later (Tasks and Assets answer
+Needs Platform, Tasks and Assets deployed at commit `95b57b0` or later (Tasks and Assets answer
 `GET/DELETE /api/internal/companies/<id>`; the Platform has the commands).
 
 ```
