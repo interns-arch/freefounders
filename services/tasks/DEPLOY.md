@@ -76,8 +76,7 @@ Nothing is scheduled yet -- worth adding. A manual one:
 
 From the project root on the dev machine:
 
-    tar czf app.tgz --exclude='./.git' --exclude='./frontend/node_modules' \
-      --exclude='./frontend/dist' --exclude='./backend/.venv' \
+    tar czf app.tgz --exclude='./.git' --exclude='./backend/.venv' \
       --exclude='./backend/.env' --exclude='./backend/db.sqlite3' \
       --exclude='./backend/staticfiles' --exclude='__pycache__' .
     scp -i <key.pem> app.tgz ubuntu@52.66.83.8:/home/ubuntu/automate-task/

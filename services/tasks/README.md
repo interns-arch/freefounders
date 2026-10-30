@@ -1,38 +1,33 @@
-# CarTrends CRM
+# Kaampilot Tasks API (`services/tasks`)
 
-Internal CRM & business-automation system for CarTrends. **Fully independent
-project** — no code, credentials, database, or deployment shared with any other
-project. External services (WhatsApp Cloud API, Gmail API, Claude API, Neon
-Postgres) are wired purely through environment variables and stay **OFF** until
-their own new credentials are added to `backend/.env`.
+The Tasks API of Kaampilot (Django 6 + Django REST Framework): tasks, leads, groups, notices, links, attendance and
+leave, payroll, visitors, mistakes, notifications and the WhatsApp/Gmail/AI intake. It is a copy of the CarTrends
+Automation app (`Automation_Task-main`, see the repo's CLAUDE.md for the copied commits), which keeps running on its
+own and is never edited from here. **This folder is an API only**: the screens are the Kaampilot web app
+(`apps/web`, URLs `/tasks/…`, `/attendance/…`, `/visitors/…`) and the old React frontend was removed in PLAN.md §19.13.
 
-**Status: CRM, workspace modules, Leave & Attendance, Payroll and the Template Directory are complete. 206 backend API tests, all passing.**
-
-> Kaampilot, 2026-10-13 (PLAN.md §19.23): the **Idea board** and **Web forms** were removed at the founder's request
-> (the `webforms` app, the `workspace` Idea models, their API, permissions and screens). Their tables are dropped by
-> `accounts/0022_remove_forms_and_ideas` and `workspace/0002_remove_idea_board`. The history below still mentions them.
+Sections 4–7 and 9 describe the API as it was copied; PLAN.md is the source of truth for what changed since
+(single login §13, multi-company §14, roles from the Platform §15/§19.28, Idea board and Web forms removed §19.23,
+face attendance replaced by geofence + selfie §19.18, roster §28).
 
 ---
 
-## Table of contents
+## Contents
 
-1. [Feature overview](#1-feature-overview)
+1. [Features (API)](#1-features-api)
 2. [Tech stack](#2-tech-stack)
-3. [How to run](#3-how-to-run)
+3. [Run and test](#3-run-and-test)
 4. [Roles & permissions](#4-roles--permissions)
 5. [Data model](#5-data-model)
 6. [API endpoints](#6-api-endpoints)
-7. [File-by-file reference — backend](#7-file-by-file-reference--backend)
-8. [File-by-file reference — frontend](#8-file-by-file-reference--frontend)
-9. [Environment variables (.env)](#9-environment-variables-env)
-10. [Testing](#10-testing)
-11. [How the automations work](#11-how-the-automations-work)
-12. [Build history / phases](#12-build-history--phases)
-13. [Not built yet](#13-not-built-yet)
+7. [File-by-file reference](#7-file-by-file-reference)
+8. [Environment variables (.env)](#8-environment-variables-env)
+9. [How the automations work](#9-how-the-automations-work)
 
 ---
 
-## 1. Feature overview
+
+## 1. Features (API)
 
 | Area | What it does |
 |---|---|
@@ -50,7 +45,6 @@ their own new credentials are added to `backend/.env`.
 | **Notices** | Company notice board (separate from per-user Notifications): draft → publish (schedulable) → expire/archive, priority, category, attachment, and audience targeting — everyone / role / department / group / specific users. Per-user read tracking with All/Read/Unread filters + search. Admin manages. |
 | **Links** | Shared bookmark manager: named collections ("Important Tools"), per-link description, group-scoped visibility, ★ favorites, search + filters. http/https-only URL validation. Anyone adds; edit/delete own (managers/admin any); managers manage collections. |
 | **Leave & Attendance** | **Attendance**: check-in/out with server-computed status (Present / Late / Half Day / Absent / Leave / Holiday / Week Off), working hours, late & early-checkout flags, missing-checkout detection, month view with per-status totals, correction requests with manager review that rewrites the day. **Leave**: types with annual quotas & document rules, apply with date range (working days only — skips holidays/week-offs), overlap guard, balances (quota/used/pending), cancel, manager approve/reject with remarks + notification; **approved leave writes LEAVE days into attendance** and blocks check-in. **Geo-fencing**: admin-defined office locations (lat/lng/radius); when `GEOFENCE_ENABLED=true` the server haversine-validates the GPS sent at check-in and rejects anything outside every fence. **Face recognition** (`FACE_RECOGNITION_ENABLED`): admin-only enrolment storing a numeric descriptor (never an image), euclidean matching against `FACE_MATCH_THRESHOLD`, and attendance is **never** marked on a below-threshold or unenrolled scan. |
-| **Mobile / installable app** | Below 820px the sidebar becomes a slide-in drawer behind a top app bar (page title + notification bell); grids collapse to one column, tables scroll on their own, modals become bottom sheets, kanban columns become swipeable, tap targets grow, and notched phones get safe-area padding. Installs to a phone home screen as a **PWA** (manifest, 192/512/maskable icons, iOS meta tags, quick-action shortcuts) and a service worker caches the app shell for instant opening — but **never `/api` or `/media`**, so business data is always live. The app needs a connection to do anything beyond opening. |
 | **Face attendance** | Removed in Kaampilot (PLAN.md §19.18): a punch is the office geofence + a selfie stored with it. Old face profiles and the `face_verified` / `face_confidence` columns are kept readable; `FACE_RECOGNITION_ENABLED` is switched off for every company (migration `hr 0006`) and no longer read. |
 | **Payroll** | Salary structures with history (monthly gross, optional basic, PF %, professional tax, other deduction, effective-from — a new entry never overwrites the old, so old payslips stay explainable). Monthly payroll runs computed **from the recorded attendance**: working days = calendar − week-offs − holidays; payable = present + late + half-days(×0.5) + *paid* leave; the rest is LWP. Advances are recovered automatically and settled on finalise. Draft runs can be recalculated freely; finalising locks the month. Per-employee payslip breakdown, CSV export, and a **My Salary** tab where every employee sees their own finalised payslips only. Guardrails: PF is charged on *earned* basic, and a payslip can never go below zero. |
 | **Industry Template Directory** | A browsable library of ready-made task templates, kept **separate** from the company's own private Task Templates. Browse by industry (13 seeded: E-commerce, Distributor, Automotive & Spare Parts, Garment Manufacturing, Construction, Education, Financial Services, CA Firm, Travel, Photography, Health & Wellness, Service Provider, Hiring Agency) → category → template → preview its steps → **Create tasks** (steps become real tasks, spaced by `offset_days`, optionally assigned to a teammate or a group) or **Add to my Task Templates**. Content lives in JSON/CSV and loads via `manage.py load_directory` — never hand-written in code. |
@@ -59,41 +53,36 @@ their own new credentials are added to `backend/.env`.
 
 | Layer | Tech |
 |---|---|
-| Backend | Django 6 + Django REST Framework + SimpleJWT (Python 3.13) |
-| Frontend | React 18 + Vite + react-router 6 + Chart.js (port 5174, proxies `/api` → backend) |
-| Database | SQLite locally (zero setup); any `DATABASE_URL` postgres string (the new Neon DB) switches to Postgres |
-| WhatsApp | Meta WhatsApp Cloud API, direct Graph v23 — **no BSP** |
-| Email | Gmail API over REST (OAuth refresh-token flow — no Google SDK) |
+| API | Django 6 + Django REST Framework + SimpleJWT (Python 3.12+; the Docker image uses 3.13) |
+| Screens | none here: the Kaampilot web app (`apps/web`) |
+| Database | SQLite when `DATABASE_URL` is blank (standalone dev, tests); Postgres otherwise (`npm run dev` uses the local Postgres on :5434, db `ff_tasks`) |
+| WhatsApp | Meta WhatsApp Cloud API, direct Graph v23 (no BSP) |
+| Email | Gmail API over REST (OAuth refresh-token flow, no Google SDK) |
 | AI | Claude API (Anthropic Messages API over REST) with deterministic fallback |
 
-## 3. How to run
+## 3. Run and test
+
+The usual way is the whole suite from the repo root: `npm run dev` (everything on http://localhost:8080, single
+login through the Platform, multi-company mode with a `run_worker` process). On its own (Windows):
 
 ```powershell
-# Terminal 1 - backend (port 8000)
-cd D:\Downloads\cartrends-crm
-venv\Scripts\python backend\manage.py runserver 8000
+cd services	asksackend
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python manage.py migrate
+.venv\Scripts\python manage.py runserver 8000     # API on http://localhost:8000/api/
 ```
+
+`manage.py seed_users` creates an admin (pass `--admin-password`; the default is only for throwaway local data) and
+`--demo-team` one demo user per role, for standalone dev only. Tests (SQLite, no scheduler thread):
 
 ```powershell
-# Terminal 2 - frontend (port 5174)
-cd D:\Downloads\cartrends-crm\frontend
-npm run dev
+set DATABASE_URL= & set NOTIF_SCHEDULER=false & .venv\Scripts\python manage.py test
 ```
 
-First-time setup:
-
-```powershell
-cd D:\Downloads\cartrends-crm
-python -m venv venv
-venv\Scripts\python -m pip install -r backend\requirements.txt
-cd frontend; npm install; cd ..
-venv\Scripts\python backend\manage.py migrate
-venv\Scripts\python backend\manage.py seed_users --demo-team
-```
-
-Open <http://localhost:5174>. Default admin: `admin` / `admin@12345` (change it).
-Demo users: `rahul | amit | priya | meera | vikram | anita | karan`, password
-`<username>@12345`. Django admin panel: <http://localhost:8000/admin/>.
+Multi-company tests need Postgres (`node services/platform/scripts/pg-up.mjs`, then
+`set DATABASE_URL=postgres://postgres:postgres@localhost:5434/ff_tasks & set DB_SSLMODE=disable` and
+`manage.py test tenancy`). Run the command for the current test count. Production runs from `infra/deploy`.
 
 ## 4. Roles & permissions
 
@@ -265,7 +254,7 @@ All under `/api/`, JWT `Authorization: Bearer <token>` unless noted.
 | `webhooks/whatsapp` | GET/POST | Meta (signature) | webhook verify handshake + message delivery |
 | `/health` | GET | public | liveness check |
 
-## 7. File-by-file reference — backend
+## 7. File-by-file reference
 
 ### `backend/manage.py`
 Standard Django entry point: `runserver`, `migrate`, `test`, and the custom
@@ -292,7 +281,7 @@ Neon). Copy to `.env` and fill in what you have; blanks stay safely off.
 | File | What it does |
 |---|---|
 | `models.py` | Custom `User` (extends AbstractUser): `role` (6-role enum), `department`, `whatsapp_phone`, `reporting_manager` (self-FK → "Reports To"). Admin role auto-sets `is_staff`. `ROLE_DEFAULT_DEPARTMENT` map used by seeding. |
-| `permissions.py` | **The heart of RBAC.** `ROLE_CAPABILITIES` — one dict mapping each role to its capability strings (`leads.view_own`, `tasks.assign`, `dashboard.view`, …). Helpers `capabilities_for()` / `has_capability()`; DRF permission classes `IsAdmin` and `HasCapability.of("x")` used by every guarded view. The frontend receives the same strings via `/auth/me` and shows/hides UI from them. |
+| `permissions.py` | **The heart of RBAC.** `ROLE_CAPABILITIES` — one dict mapping each role to its capability strings (`leads.view_own`, `tasks.assign`, `dashboard.view`, …). Helpers `capabilities_for()` / `has_capability()`; DRF permission classes `IsAdmin` and `HasCapability.of("x")` used by every guarded view. The web app receives the same strings via `/auth/me` and shows/hides screens from them. |
 | `serializers.py` | `UserSerializer` (read; includes capabilities + reporting-manager name), `UserWriteSerializer` (admin create/update; password required on create, optional on update, Django password validation), `ChangePasswordSerializer`. |
 | `views.py` | `me` (profile + capabilities), `change_password`, `logout` (blacklists the refresh token), `team_directory` (read-only company directory for every role), `UserViewSet` (admin CRUD; DELETE returns 405 — deactivate instead; `deactivate` blocks self). |
 | `urls.py` | Routes: `auth/*`, `team/`, `users/` router. |
@@ -385,36 +374,7 @@ Neon). Copy to `.env` and fill in what you have; blanks stay safely off.
 | `urls.py` / `admin.py` | Webhook path + intake router; admin registration. |
 | `tests.py` | 18 tests — the spec's exact "brake pad and oil filter for Tata 407" extraction, urgency/support/accounts/spam classification, quantity parsing, Claude success + failure-fallback (mocked), lead create/append/dedupe by phone & email, webhook handshake, bad-signature rejection, redelivery idempotency, simulator permissions. |
 
-## 8. File-by-file reference — frontend
-
-| File | What it does |
-|---|---|
-| `index.html` | Single-page shell; loads Outfit + IBM Plex Mono fonts. |
-| `vite.config.js` | Dev server on **5174**, proxies `/api` and `/health` to the Django backend on 8000 (so no CORS pain in dev). |
-| `package.json` | React 18, react-router-dom 6, chart.js + react-chartjs-2, Vite 5. |
-| `src/main.jsx` | React root; mounts `<App/>` with the stylesheet. |
-| `src/api.js` | Tiny API client: JWT storage in localStorage, automatic **refresh-and-retry once** on 401, hard logout when the refresh token dies, `ApiError` + `errorText()` (flattens DRF field errors), `apiUpload()` for multipart file uploads, `login()`/`logout()`. |
-| `src/auth.jsx` | `AuthProvider` context: session restore from stored token on load, `user`, `ready`, `can(capability)` — the single place the UI asks "is this allowed?". |
-| `src/App.jsx` | Router + the app shell: dark sidebar with role-aware nav (Dashboard, Leads, Tasks, Notifications [unread badge, 30s poll], AI Inbox, My Team, Automation), `Protected` route wrapper (redirects to `/login`, enforces capability per route), sign-out. |
-| `src/styles.css` | The whole design system: CSS variables (emerald/ivory palette), sidebar/shell, stat tiles, filter row, kanban board + cards, drawer, tabs, modal, tables, notification feed, AI-inbox chips, task rows, dashboard grid, charts. |
-| `src/pages/Login.jsx` | Login card; error states for bad credentials / deactivated accounts; redirects when already signed in. |
-| `src/pages/Home.jsx` | Role-splitting home: `dashboard.view` roles get the **Dashboard** (11 tiles, Chart.js leads-per-day bar chart, pipeline-by-stage bars, employee performance table incl. open tasks, lead-source table, recent WhatsApp/Gmail feed, recent lead activity); everyone else gets a personal welcome card listing their capabilities. |
-| `src/pages/Leads.jsx` | The CRM board: stats strip, search + priority/source/assignee filters + overdue chip, 6-column **drag-and-drop kanban** (drop = status change via API), Add-Lead modal (role-aware assignee field), and the **Lead drawer** — editable status/priority/assignee/follow-up, plus Timeline (notes + all auto events), Documents (upload/download), Quotations (create, status flow) tabs. Read-only roles get disabled controls. |
-| `src/pages/Tasks.jsx` | The 7-tab Tasks area: **TaskDashboard** (range chips Today→All Time, My Report/Delegated/Group scope switch, category filter, search, 6 tiles, per-category table ⇄ bar chart), **TaskList** (shared by My/Delegated/Subscribed: status tabs, overdue filter, checkbox complete, status dropdown, 🔔 follow toggle, add-task modal with category/frequency/lead/assignee/due), **Templates** (grouped by category; Use → prefilled task modal; manage for assigners), **Activities** (audit feed with day filters), **Holidays** (calendar; admin add/delete). |
-| `src/pages/Notifications.jsx` | Notification feed: unread highlighting, per-channel delivery chips (✉/💬 sent/skipped/error with reason on hover), click-to-read, mark-all-read; updates the sidebar badge. |
-| `src/pages/Intake.jsx` | AI Inbox (admin + managers): every inbound message with channel tag, status, classification chips (intent / vehicle / items / priority / department / provider) and the lead it became; **Simulator** (admin) posts any text through the real pipeline. |
-| `src/pages/Users.jsx` | Two views in one route: **Directory** for all roles (search, role filter, Mobile / Reports To / Department / role badges — read-only) and **ManageTeam** for admins (same table + status, Edit/Deactivate/Activate, member-count, reporting-manager filter, and the add/edit modal incl. role, department, WhatsApp number, reports-to, password). |
-| `src/pages/Settings.jsx` | Automation page (admin): per-department assignment-rule cards — active toggle, strategy select, ordered member pills with move-up/down/remove, add-member dropdown, "next in rotation" hint. |
-| `src/pages/Groups.jsx` | Groups: card grid of your groups → detail view with **Dashboard / Tasks / Links / Members** tabs; create/edit/archive for managers+owners, member add/remove, group task list with checkbox completion. |
-| `src/pages/Notices.jsx` | Notice board: All/Read/Unread + search feed with expand-to-read (auto mark-read); admin **Manage** mode — draft/publish/archive/delete table + create/edit modal with the audience picker (everyone/role/department/group/users), scheduling and expiry. |
-| `src/pages/Links.jsx` | Links: collections with grouped link lists, add-link modal (collection, optional group visibility), ★ favorite toggle + favorites filter, search, new-collection input for managers. |
-| `src/face.js` | Lazy loader for the face engine: dynamically imports `@vladmandic/face-api`, loads the three model nets from `/models`, and exposes `describeFace(video)` → a 128-number descriptor (throws user-facing messages for "no face" / "more than one face") plus `isSupported()`. |
-| `src/pages/FaceCapture.jsx` | The camera modal used for both check-in and enrolment: `getUserMedia`, mirrored preview with a guide oval, progress status while models load, per-error messages (permission denied / no camera / no face), always stops the camera stream on close, and returns only the descriptor. |
-| `src/pages/Payroll.jsx` | Two exports used by the HR page: **PayrollAdmin** (`hr.manage`) with Monthly-payroll / Salaries / Advances sub-tabs — run a month, recalculate a draft, finalise, per-employee payslip table, CSV download; and **MySalary** (everyone) — current salary, payslip history, and a line-by-line payslip breakdown. |
-| `src/pages/Directory.jsx` | The **Template Directory** tab inside Tasks: industry cards → category filter / global search → template list with tags & step counts → expandable step preview → "Create N tasks" (assignee + group pickers) and "Add to my Task Templates". |
-| `src/pages/HR.jsx` | Attendance & leave, role-aware tabs: **Today** (check-in/out with browser geolocation, live status tiles, policy/feature banner), **My Attendance** (month picker, per-status totals, day table with late/early/no-checkout flags, "Fix" → correction request), **My Leave** (balance tiles, apply modal with document upload when required, history, cancel), **Team** (today's roster + counts, drill into any member's month) and **Approvals** (pending leave + corrections with remarks, approve/reject) for `hr.approve`, plus **HR Settings** (office geo-fences with "use my current location", leave types, live policy readout) for `hr.manage`. |
-
-## 9. Environment variables (.env)
+## 8. Environment variables (.env)
 
 Copy `backend/.env.example` → `backend/.env`. Everything blank = feature off,
 app still fully works. Full instructions for obtaining each credential are in
@@ -429,24 +389,7 @@ the file itself.
 | Claude | `AI_ENABLED`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `AI_TIMEOUT_SECONDS` | AI classification (falls back to keyword rules otherwise) |
 | Jobs | `NOTIF_SCHEDULER` | the in-process 5-min reminder ticker |
 
-## 10. Testing
-
-```powershell
-venv\Scripts\python backend\manage.py test            # all 99
-venv\Scripts\python backend\manage.py test crm        # one app
-```
-
-133 tests across: `accounts/tests.py` (13), `crm/tests.py` (19),
-`crm/tests_assignment.py` (12), `crm/tests_dashboard.py` (5),
-`crm/tests_tasks.py` (11), `crm/tests_tasks_area.py` (16),
-`notifications/tests.py` (6), `intake/tests.py` (18),
-`workspace/tests.py`, `hr/tests.py` (28), `hr/tests_hr_role.py` (12), `directory/tests.py` (14), `payroll/tests.py` (19) —
-run the command for the authoritative count.
-Every phase was additionally verified end-to-end in the browser (login flows,
-drag-and-drop, uploads, round-robin, notifications, simulator, group
-workspaces, notice targeting, favorites).
-
-## 11. How the automations work
+## 9. How the automations work
 
 **New lead (any source) →**
 `auto_assign()` picks the employee from the department's rule (round-robin or
@@ -468,50 +411,3 @@ notification per date; rescheduling re-arms them.
 **Recurring tasks →**
 Marking a daily/weekly/monthly task done auto-creates the next occurrence with
 the advanced due date, same assignee/subscribers.
-
-## 12. Build history / phases
-
-- **Phase 0** — Auth + RBAC + team management (JWT, 6 roles, capability matrix, admin user CRUD, login UI).
-- **Phase 1** — Lead CRM core (pipeline, timeline, notes, documents, quotations, role scoping, kanban UI).
-- **Phase 2** — Auto-assignment (round-robin/fixed per department) + notification center (in-app/Gmail/WhatsApp fan-out, reminders).
-- **Phase 3** — AI intake (WhatsApp webhook, Gmail poller, Claude classifier + rules fallback, simulator, `.env.example`).
-- **Phase 4** — Admin dashboard (tiles, Chart.js, employee/source performance, activity feeds).
-- **Tasks module** — assignment, lead links, due dates, dashboard tile.
-- **Tasks area v2** — reference-app parity: task dashboard (6 tiles/ranges/scopes/category table/bar chart), My/Delegated/Subscribed, Templates, Activities, Holidays, recurring tasks, My Team directory for all roles + reporting managers.
-- **Phase 5.1–5.4 — Workspace modules**: Groups (team workspaces with task
-  integration + per-group dashboard), Notices (audience-targeted notice
-  board with read tracking), Links (collections + favorites + group
-  scoping), Idea Board (votes, comments, review workflow). 21 new API
-  tests (120 total).
-- **Phase 5.5 — Forms**: builder (10 field types, reorder, lifecycle),
-  in-app + anonymous share-link submissions with server-side validation
-  and file uploads, submissions view + CSV export, and the lead/task
-  integrations that reuse `auto_assign()` and the notification center.
-  13 new API tests (133 total).
-- **Phase 6 — Leave & Attendance**: attendance check-in/out with
-  server-side status rules, month reports, correction requests; leave
-  types/balances/apply/cancel/approve with attendance integration;
-  geo-fenced attendance (haversine, admin-managed offices); optional
-  face-recognition attendance (admin enrolment, threshold matching,
-  never marks on a weak match). 28 new API tests (161 total).
-- **Separation of duties (HR)**: new **HR Manager** role — full company-wide
-  leave/attendance powers + user onboarding, and **no access to the sales
-  pipeline** (no Leads, dashboard, AI Inbox or Automation). **Nobody
-  approves their own leave or attendance correction — the Admin included**;
-  the error names who *can* review it, or tells you to add an HR Manager if
-  no other approver exists. `/api/users/` moved from an admin-role check to
-  the `users.manage` capability, with a guard so a non-Admin cannot grant
-  the Admin role, edit an Admin, or change their own role. 12 new API tests.
-
-## 13. Not built yet
-
-- **Payroll**: salary structures with history, monthly runs computed from
-  attendance (working days, LWP, paid-vs-unpaid leave), PF / professional tax /
-  other deductions, advances recovered and settled on finalise, draft →
-  finalised lifecycle, CSV export, employee "My Salary" payslip view.
-  Two guardrails caught during the build: PF is charged on *earned* basic, and
-  a payslip can never go below zero. 19 new API tests (206 total).
-- **Phase 8 — External integrations**: IndiaMART / TradeIndia adapters (need their paid API keys; new sources create inbound records and reuse the existing pipeline + `auto_assign`), Google Calendar/Sheets, outbound webhooks, CSV import.
-- **Phase 9 — Support ecosystem**: tickets, events, tutorials, help center, setup checklist, KAM/CS profiles, Achievers Club.
-- **Phase 10 — Production**: Neon `DATABASE_URL`, `render.yaml` + `DEBUG=false`/`ALLOWED_HOSTS` pass, then live WhatsApp/Gmail/Claude verification.
-- Live credential wiring: WhatsApp send/receive, Gmail send/poll and Claude classification are fully coded but run in `skipped`/fallback mode until keys are pasted into `backend/.env`.
