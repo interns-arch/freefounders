@@ -23,9 +23,16 @@ class HomeTests(Base):
         self.assertEqual(res.status_code, 200, res.data)
         return res.data
 
+    def around_today(self):
+        """A custom range a week each side of today. The scores bucket tasks by DUE date and task() makes a
+        done task due in 2 days, so the default "this month" missed it on the last two days of a month."""
+        today = timezone.localdate()
+        return {"range": "custom", "start": (today - timedelta(days=7)).isoformat(),
+                "end": (today + timedelta(days=7)).isoformat()}
+
     def test_staff_get_their_own_block_and_no_team(self):
         self.task(self.rahul, self.manager, done=True)
-        d = self.home(self.rahul)
+        d = self.home(self.rahul, **self.around_today())
         self.assertIsNone(d["team"])
         self.assertEqual(d["me"]["completed"], 1)
         self.assertIsNotNone(d["me"]["score"])
@@ -61,7 +68,7 @@ class HomeTests(Base):
     def test_top_performers_ranked_by_score(self):
         self.task(self.rahul, self.admin, done=True)
         self.task(self.amit, self.admin, days_late=1)
-        top = self.home(self.admin)["team"]["top"]
+        top = self.home(self.admin, **self.around_today())["team"]["top"]
         self.assertEqual(top[0]["name"], "rahul")
 
     def test_bad_custom_range_is_a_400(self):
