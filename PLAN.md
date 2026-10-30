@@ -1204,6 +1204,17 @@ Kept on purpose (founder's choice): the old worktree `.claude/worktrees/prod-rea
 database. Disk: about 210 MB of installed packages and builds went with the deleted folders; local test screenshots
 (34 MB) were cleared. CarTrends' live server is not affected: it runs from the original folders, which were not touched.
 
+**Clean-up 2026-10-30** (founder approved groups A1 + B of a read-only inventory; recoverable from git history):
+template Expo icon `apps/mobile/assets/expo.icon/`, stale `.claude/launch.json` in services/tasks and services/assets,
+`services/assets/PROGRESS.md`, ignore lines for the deleted Tasks `frontend/`; unused web components
+(DropdownMenuRadioGroup/RadioItem, visitors RefreshNote); 16 core hooks no screen calls plus `GST_RATE` (core copy) and
+`TASK_STATUS_LABELS` (their API endpoints stay); visitors `useCheckOutPass`/`useEditVisit`/`useFindPass` (replaced by
+the V4/V4.1 code flow); Tasks `own_effort`, `new_short_code`, `users_at_level`, `can_edit_task`, `can_assign_tasks`
+(the last two still exist in the original app). The Tasks and Assets READMEs now describe API-only services. Kept:
+`react-native-reanimated`/`react-native-worklets` in apps/mobile (expo-router, @expo/ui and the drawer still pull them
+in as peers, so removing the pins saves nothing and lets their versions drift from the Expo SDK). Two Tasks home tests
+that failed on the last two days of a month now use a range around today.
+
 ### 19.14 One frame, no workspace page: Home first, attendance first (2026-10-10)
 Founder: "I don't like the first login page then second workspace page; reduce the efforts; make it easily accessible; more
 user friendly and accessible; keep in mind we are going to make it a mobile application." Later the same day: "anyone can
