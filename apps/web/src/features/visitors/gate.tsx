@@ -418,7 +418,9 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const local: Record<string, string> = {};
-    if (!accept && f.mobile.replace(/\D/g, '').length < 10) local.mobile = 'Enter the 10-digit mobile number.';
+    // No phone with them: the guard leaves the mobile empty. A number that is typed must be complete.
+    const digits = f.mobile.replace(/\D/g, '').length;
+    if (!accept && digits > 0 && digits < 10) local.mobile = 'Enter the 10-digit mobile number, or leave it empty if they have no phone.';
     if (!f.name.trim()) local.name = "Enter the visitor's name.";
     if (!f.host && !f.host_label?.trim()) local.host = 'Pick whom they came to meet (or Reception).';
     if (photoRequired && !hasPhoto) local.photo = "Take the visitor's photo.";
@@ -476,7 +478,7 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
           </p>
         )}
         {accept?.watch_note && <WatchNote note={accept.watch_note} />}
-        <Field label="Mobile number" required error={errors.mobile}>
+        <Field label="Mobile number" required={!!accept} hint={accept ? undefined : 'Leave empty if they have no phone'} error={errors.mobile}>
           <Input
             type="tel"
             inputMode="numeric"

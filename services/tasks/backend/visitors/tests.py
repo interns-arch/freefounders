@@ -111,6 +111,19 @@ class GateTests(Base):
         self.assertIn("id_last4", res.data)
         self.assertEqual(self.check_in(id_type="Aadhaar", id_last4="9012").data["id_last4"], "9012")
 
+    def test_guard_checks_in_a_visitor_without_a_phone(self):
+        first = self.check_in(mobile="")
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertEqual(first.data["status"], "inside")
+        # Two people without a phone stay two visitors (never merged on the empty number).
+        self.assertEqual(self.check_in(mobile="", name="Sita Devi").status_code, 201)
+        self.assertEqual(Visit.objects.filter(mobile="").values("visitor").distinct().count(), 2)
+        v = Visit.objects.filter(name="Ravi Kumar").get()
+        edit = self.api(self.guard).patch(f"/api/visitors/visits/{v.pk}/", {"notes": "No phone"}, format="json")
+        self.assertEqual(edit.status_code, 200, edit.data)
+        # A typed number must still be a real one.
+        self.assertIn("mobile", self.check_in(mobile="123").data)
+
     def test_returning_visitor_is_found_by_mobile(self):
         self.check_in()
         res = self.api(self.guard).get("/api/visitors/lookup/?mobile=9876543210")

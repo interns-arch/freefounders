@@ -195,13 +195,13 @@ def _visitor_for(mobile, name, company):
     return found
 
 
-def apply_fields(v: Visit, data: dict, s: dict, *, require_photo: bool):
+def apply_fields(v: Visit, data: dict, s: dict, *, require_photo: bool, require_mobile: bool = True):
     """Fields the guard fills (check-in or accepting a QR sign-in)."""
     from accounts.models import User
     from hr.models import OfficeLocation
 
     if "mobile" in data or not v.mobile:
-        v.mobile = clean_mobile(data.get("mobile", v.mobile), required=True)
+        v.mobile = clean_mobile(data.get("mobile", v.mobile), required=require_mobile)
     v.name = text(data.get("name", v.name), 80)
     if not v.name:
         raise ValidationError({"name": "Enter the visitor's name."})
@@ -282,13 +282,14 @@ def _admit(v: Visit, actor, s, action, via="gate"):
 
 def check_in(actor, data: dict) -> Visit:
     s = conf.get()
-    mobile = clean_mobile(data.get("mobile"), required=True)
+    # The guard checks in someone without a phone too: the mobile number is optional here (never on the QR form).
+    mobile = clean_mobile(data.get("mobile"))
     name = text(data.get("name"), 80)
     if not name:
         raise ValidationError({"name": "Enter the visitor's name."})
     visitor = _visitor_for(mobile, name, text(data.get("company"), 120))
     v = Visit(visitor=visitor, source=VisitSource.GATE, consent_at=timezone.now())
-    apply_fields(v, {**data, "mobile": mobile}, s, require_photo=True)
+    apply_fields(v, {**data, "mobile": mobile}, s, require_photo=True, require_mobile=False)
     hit = screen(actor, v, data, s)
     v = _admit(v, actor, s, GateAction.VISIT_IN, via="gate")
     _after_admit(actor, v, s, hit)
@@ -384,7 +385,7 @@ def edit_visit(actor, v: Visit, data: dict) -> Visit:
                 "id_type": v.id_type, "id_last4": v.id_last4}
     before = snap()
     apply_fields(v, {k: data[k] for k in EDITABLE if k in data} | ({"photo": data["photo"]} if data.get("photo") else {}),
-                 conf.get(), require_photo=False)
+                 conf.get(), require_photo=False, require_mobile=False)
     v.save()
     after = snap()
     changes = {k: [before[k], after[k]] for k in before if before[k] != after[k]}
