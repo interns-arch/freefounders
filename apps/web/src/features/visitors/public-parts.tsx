@@ -18,6 +18,14 @@ export function readDevice(company: string): string | null {
     return null;
   }
 }
+/** This phone stops following its visit (the next sign-in on this phone is someone else's). */
+export function forgetDevice(company: string) {
+  try {
+    localStorage.removeItem(DEVICE_KEY(company));
+  } catch {
+    /* storage blocked: nothing kept */
+  }
+}
 export function saveDevice(company: string, device: string) {
   try {
     localStorage.setItem(DEVICE_KEY(company), device);

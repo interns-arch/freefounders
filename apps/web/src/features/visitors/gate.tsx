@@ -42,7 +42,7 @@ import { CameraScanner } from '@/features/assets/inventory/scan-page';
 import { cn } from '@/lib/utils';
 import { CodeDialog, CodeEntry, HostAnswerLine, LeavingActions } from './gate-codes';
 
-import { HostPicker, PassDialog, PhotoField, PrivatePhoto, StatusBadge, WatchNote, alertGuard, clock, formatMinutes, hostName, useBlobUrl } from './parts';
+import { HostPicker, PassDialog, PeopleCount, PhotoField, PrivatePhoto, StatusBadge, WatchNote, alertGuard, clock, formatMinutes, hostName, useBlobUrl } from './parts';
 
 const GATE_KEY = 'ff-visitors-gate';
 function lastGate(): number | null {
@@ -523,8 +523,8 @@ export function CheckInSheet({ config, accept, onClose, onDone }: { config: Visi
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="People">
-            <Input type="number" min={1} max={50} value={f.people} onChange={(e) => set('people', Number(e.target.value) || 1)} className="h-11" />
+          <Field label="Number of visitors">
+            <PeopleCount value={f.people ?? 1} onChange={(n) => set('people', n)} className="h-11" />
           </Field>
           {config.locations.length > 0 && (
             <Field label="Gate / site">

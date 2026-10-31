@@ -9,7 +9,7 @@ import QRCodeLib from 'qrcode';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Camera, Copy, ImageIcon, Printer, Send, ShieldAlert, X } from '@/components/icons';
+import { Camera, Copy, ImageIcon, Minus, Plus, Printer, Send, ShieldAlert, X } from '@/components/icons';
 import { QRCode } from '@/components/common/codes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,43 @@ import { Badge, type BadgeTone } from '@/components/ui/primitives';
 import { compressImage, dataUrlToBlob } from '@/lib/compress-image';
 import { AppRequestError, appRequest, isInApp } from '@/lib/native-bridge';
 import { cn } from '@/lib/utils';
+
+/** Number of visitors: − / + buttons and a box that can be cleared and retyped (1–50, kept in range on leaving it). */
+export function PeopleCount({ value, onChange, id, className }: { value: number; onChange: (n: number) => void; id?: string; className?: string }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    if (Number(text) !== value) setText(String(value));
+  }, [value]);
+  const clamp = (n: number) => Math.min(50, Math.max(1, Math.round(n) || 1));
+  const step = (d: number) => onChange(clamp(value + d));
+  return (
+    <div className={cn('flex items-center gap-1.5', className)}>
+      <Button type="button" variant="outline" size="icon" className="h-full min-h-11 shrink-0" onClick={() => step(-1)} disabled={value <= 1} aria-label="One visitor less">
+        <Minus aria-hidden />
+      </Button>
+      <Input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={text}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\D/g, '').slice(0, 2);
+          setText(digits);
+          if (digits) onChange(clamp(Number(digits)));
+        }}
+        onBlur={() => setText(String(value))}
+        className="h-full min-h-11 min-w-0 flex-1 text-center text-base tabular-nums"
+        aria-label="Number of visitors"
+        data-testid="people-count"
+      />
+      <Button type="button" variant="outline" size="icon" className="h-full min-h-11 shrink-0" onClick={() => step(1)} disabled={value >= 50} aria-label="One visitor more">
+        <Plus aria-hidden />
+      </Button>
+    </div>
+  );
+}
 
 export const STATUS_TONE: Record<VisitStatus, BadgeTone> = {
   expected: 'blue',

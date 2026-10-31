@@ -10,7 +10,7 @@ import { ApiError, errorMessage } from '@kaampilot/core';
 import { type DeviceState, type PublicVisitorForm, type PublicVisitorInput, useDeviceState, usePublicHosts, usePublicVisitorForm, useSubmitPublicVisitor } from '@kaampilot/core/visitors';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import { Check, CheckCircle2, ChevronsUpDown, Clock, HelpCircle, LogOut, MapPin, ShieldCheck, UserRound } from '@/components/icons';
+import { Check, CheckCircle2, ChevronsUpDown, Clock, HelpCircle, LogOut, MapPin, ShieldCheck, UserPlus, UserRound } from '@/components/icons';
 import { Field } from '@/components/common/form';
 import { PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,8 @@ import { Input, NativeSelect } from '@/components/ui/input';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Popover, PopoverContent, PopoverTrigger } from '@/components/ui/overlays';
 import { Checkbox } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
-import { PhotoField } from './parts';
-import { BigCode, PublicCard, PublicShell, readDevice, saveDevice, until, usePublicBrand } from './public-parts';
+import { PeopleCount, PhotoField } from './parts';
+import { BigCode, PublicCard, PublicShell, forgetDevice, readDevice, saveDevice, until, usePublicBrand } from './public-parts';
 
 /** Whom to meet as chosen: a person from the list, "Not sure", or nothing yet. */
 type Choice = { id: number; name: string; department: string } | 'not_sure' | null;
@@ -27,11 +27,13 @@ type Choice = { id: number; name: string; department: string } | 'not_sure' | nu
 /** Visit states the phone keeps following (a reload of this page goes straight back to them). */
 const FOLLOWING: DeviceState['state'][] = ['pending', 'waiting_host', 'inside', 'leaving', 'held'];
 
+const EMPTY: PublicVisitorInput = { name: '', mobile: '', company: '', purpose: '', host_name: '', host: null, people: 1, vehicle_no: '', photo: null, consent: false, website: '' };
+
 export function PublicVisitorPage() {
   const { code = '', token = '' } = useParams();
   const form = usePublicVisitorForm(code, token);
   const submit = useSubmitPublicVisitor(code, token);
-  const [f, setF] = useState<PublicVisitorInput>({ name: '', mobile: '', company: '', purpose: '', host_name: '', host: null, people: 1, vehicle_no: '', photo: null, consent: false, website: '' });
+  const [f, setF] = useState<PublicVisitorInput>(EMPTY);
   const [choice, setChoice] = useState<Choice>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<{ code: string; expires_at: string | null } | null>(null);
@@ -69,6 +71,17 @@ export function PublicVisitorPage() {
     }
   };
 
+  // The same QR page, a fresh form: the guard (or someone in the group) signs in the next visitor on this phone.
+  const another = () => {
+    forgetDevice(code);
+    setDevice(null);
+    setDone(null);
+    setF(EMPTY);
+    setChoice(null);
+    setErrors({});
+    window.scrollTo({ top: 0 });
+  };
+
   if (form.isLoading || (!done && device && d && state.isLoading)) return <PageLoader />;
   if (form.error || !d) {
     return (
@@ -81,9 +94,10 @@ export function PublicVisitorPage() {
     );
   }
 
-  const s = state.data;
+  // A cached answer from before "Check in another visitor" is not this phone's visit any more.
+  const s = device ? state.data : undefined;
   if (done || (s && FOLLOWING.includes(s.state))) {
-    return <VisitStatus d={d} company={company} s={s} first={(done ? f.name : s?.first_name || '').split(' ')[0]} done={done} />;
+    return <VisitStatus d={d} company={company} s={s} first={(done ? f.name : s?.first_name || '').split(' ')[0]} done={done} onAnother={another} />;
   }
 
   return (
@@ -123,8 +137,8 @@ export function PublicVisitorPage() {
           />
         )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Number of people" error={errors.people}>
-            <Input type="number" inputMode="numeric" min={1} max={50} value={f.people} onChange={(e) => set('people', Number(e.target.value) || 1)} className="h-12 text-base" />
+          <Field label="Number of visitors" error={errors.people}>
+            <PeopleCount value={f.people ?? 1} onChange={(n) => set('people', n)} className="h-12" />
           </Field>
           <Field label="Vehicle number" error={errors.vehicle_no}>
             <Input value={f.vehicle_no} onChange={(e) => set('vehicle_no', e.target.value.toUpperCase())} className="h-12 font-mono text-base" placeholder="Optional" />
@@ -165,11 +179,31 @@ export function PublicVisitorPage() {
 }
 
 /** After the form (or a reload): the code, then "You are checked in" with where to wait on top, updated live. */
-function VisitStatus({ d, company, s, first, done }: { d: PublicVisitorForm; company: string; s: DeviceState | undefined; first: string; done: { code: string; expires_at: string | null } | null }) {
+function VisitStatus({
+  d,
+  company,
+  s,
+  first,
+  done,
+  onAnother,
+}: {
+  d: PublicVisitorForm;
+  company: string;
+  s: DeviceState | undefined;
+  first: string;
+  done: { code: string; expires_at: string | null } | null;
+  onAnother: () => void;
+}) {
   const inside = !!s && ['inside', 'leaving', 'held'].includes(s.state);
   const shell = (title: string, subtitle: string | undefined, body: React.ReactNode) => (
     <PublicShell company={company} logoUrl={d.logo_url} kicker="Visitor check-in" title={title} subtitle={subtitle}>
       {body}
+      <div className="mt-4 space-y-1.5 text-center">
+        <Button type="button" variant="outline" size="lg" className="h-12 w-full text-base" onClick={onAnother} data-testid="visitor-another">
+          <UserPlus aria-hidden /> Check in another visitor
+        </Button>
+        <p className="text-[13px] text-muted-foreground">For the guard, or to sign in someone with you. This phone then stops following this visit.</p>
+      </div>
     </PublicShell>
   );
   if (inside) {
