@@ -1,6 +1,7 @@
 """Visitors API (PLAN.md §22): /api/visitors/..."""
 import hashlib
 import hmac
+import os
 import re
 from datetime import datetime, time, timedelta
 
@@ -668,8 +669,10 @@ def _registered(schema: str) -> bool:
         return False
 
 
-PER_IP_HOUR = 10
-PER_LINK_HOUR = 120
+# Check-ins per hour from one network address and per gate QR. Many visitors share one guest Wi-Fi (one address), so
+# the per-address limit must fit a busy gate (founder 2026-10-31: 10/hour refused real visitors). Env to adjust.
+PER_IP_HOUR = int(os.environ.get("VISITOR_PER_IP_HOUR", "100"))
+PER_LINK_HOUR = int(os.environ.get("VISITOR_PER_LINK_HOUR", "600"))
 
 
 def _public(request, code, token):
@@ -696,7 +699,7 @@ def _public(request, code, token):
     ip = _ip_hash(request)
     recent = Visit.objects.filter(source="open_link", created_at__gte=hour_ago)
     if recent.filter(ip_hash=ip).count() >= PER_IP_HOUR or recent.filter(gate_link=link).count() >= PER_LINK_HOUR:
-        return Response({"detail": "Too many sign-ins from here. Please ask the guard."}, status=429)
+        return Response({"detail": "Too many check-ins from this network just now. Please wait a few minutes and try again, or ask the guard."}, status=429)
     secret, device_hash = v4.new_device()
     v = sv.public_submit(link, data, ip, device_hash)
     hit = sv.watch_match(v.mobile, v.name)

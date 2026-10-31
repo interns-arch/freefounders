@@ -151,11 +151,11 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "ai": env("THROTTLE_AI", "30/min"),  # per person: AI drafting, proofreading, voice notes, summaries
         # per address: the open QR visitor sign-in (no login, PLAN.md section 22.8); each company also limits per address + link
-        "visitor_public": env("THROTTLE_VISITOR_PUBLIC", "30/hour"),
+        "visitor_public": env("THROTTLE_VISITOR_PUBLIC", "300/hour"),
         "visitor_pass": env("THROTTLE_VISITOR_PASS", "120/hour"),
         # V4 (PLAN.md section 22.11): the phone polls its own visit / searches whom to meet; check-out requests
         "visitor_device": env("THROTTLE_VISITOR_DEVICE", "900/hour"),
-        "visitor_checkout": env("THROTTLE_VISITOR_CHECKOUT", "20/hour"),
+        "visitor_checkout": env("THROTTLE_VISITOR_CHECKOUT", "200/hour"),
     },
     "NUM_PROXIES": int(env("NUM_PROXIES", "0")) or None,
 }

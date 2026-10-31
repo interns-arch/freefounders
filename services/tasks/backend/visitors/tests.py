@@ -196,10 +196,19 @@ class OpenLinkTests(Base):
         self.assertEqual(APIClient().post(self.url, self.body, format="json").status_code, 404)
 
     def test_rate_limit_per_address(self):
-        codes = [APIClient().post(self.url, {**self.body, "mobile": f"91234567{i:02d}"}, format="json").status_code
-                 for i in range(services_limit() + 1)]
-        self.assertEqual(codes[-1], 429)
-        self.assertEqual(Visit.objects.count(), services_limit())
+        from unittest import mock
+        from . import views
+        with mock.patch.object(views, "PER_IP_HOUR", 5):
+            codes = [APIClient().post(self.url, {**self.body, "mobile": f"91234567{i:02d}"}, format="json").status_code
+                     for i in range(services_limit() + 1)]
+            self.assertEqual(codes[-1], 429)
+            self.assertEqual(Visit.objects.count(), services_limit())
+
+    def test_busy_gate_defaults(self):
+        # Founder 2026-10-31: 10/hour refused real visitors sharing one guest Wi-Fi.
+        from . import views
+        self.assertGreaterEqual(views.PER_IP_HOUR, 100)
+        self.assertGreaterEqual(views.PER_LINK_HOUR, 600)
 
     def test_honeypot_saves_nothing(self):
         res = APIClient().post(self.url, {**self.body, "website": "http://spam"}, format="json")
