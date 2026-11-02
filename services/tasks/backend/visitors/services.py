@@ -387,6 +387,7 @@ def edit_visit(actor, v: Visit, data: dict) -> Visit:
     apply_fields(v, {k: data[k] for k in EDITABLE if k in data} | ({"photo": data["photo"]} if data.get("photo") else {}),
                  conf.get(), require_photo=False, require_mobile=False)
     v.save()
+    touch_vehicle(v)
     after = snap()
     changes = {k: [before[k], after[k]] for k in before if before[k] != after[k]}
     if data.get("photo"):
@@ -397,6 +398,12 @@ def edit_visit(actor, v: Visit, data: dict) -> Visit:
 
 
 # ---------------------------------------------------------------- vehicles
+
+def touch_vehicle(visit: Visit) -> None:
+    """A visit's details are part of its vehicle's record in the Vehicle API (PLAN.md §22.12): `updated_since` sees it."""
+    if visit.vehicle_id:
+        VehicleEntry.objects.filter(pk=visit.vehicle_id).update(updated_at=timezone.now())
+
 
 VEHICLE_FIELDS = (("driver_name", 80), ("purpose", 120), ("company", 120), ("items", 300), ("parking_slot", 30),
                   ("notes", 500))
@@ -425,6 +432,7 @@ def vehicle_in(actor, data: dict) -> VehicleEntry:
     if visit:
         visit.vehicle, visit.vehicle_no = e, e.number
         visit.save(update_fields=["vehicle", "vehicle_no"])
+        touch_vehicle(visit)
     log(actor, GateAction.VEHICLE_IN, f"{e.number} ({e.get_type_display()}) in{f', driver {e.driver_name}' if e.driver_name else ''}", vehicle=e)
     return e
 
@@ -583,6 +591,7 @@ def retention_cleanup(now=None) -> int:
         v.email, v.watch_note, v.pass_channels = "", "", []
         v.device_hash, v.host_note, v.feedback_comment, v.checkout_hold_note = "", "", "", ""
         v.save()
+        touch_vehicle(v)
         n += 1
     for vis in Visitor.objects.filter(anonymised=False, last_visit_at__lt=cutoff):
         if vis.photo:

@@ -1,7 +1,7 @@
-from django.urls import path
+from django.urls import path, re_path
 from rest_framework.routers import DefaultRouter
 
-from . import views, views_v3
+from . import vehicle_api, views, views_v3
 
 router = DefaultRouter()
 router.register("visitors/visits", views.VisitViewSet, basename="visitor-visits")
@@ -34,4 +34,13 @@ urlpatterns = [
     path("visitors/id-scan/", views_v3.id_scan_view),
     path("visitors/task-options/", views_v3.task_options_view),
     path("visitors/reports/", views_v3.reports_view),
+    # The Vehicle API (PLAN.md §22.12): API key, not a sign-in. The slash is optional, nothing here redirects.
+    path("visitors/api-keys/", vehicle_api.api_keys_view),
+    path("visitors/api-keys/<int:pk>/revoke/", vehicle_api.api_key_revoke_view),
+    re_path(r"^visitors/v1/vehicles/?$", vehicle_api.vehicles),
+    re_path(r"^visitors/v1/vehicles/inside/?$", vehicle_api.vehicles_inside),
+    re_path(r"^visitors/v1/vehicles/summary/?$", vehicle_api.vehicles_summary),
+    re_path(r"^visitors/v1/vehicles/(?P<pk>\d{1,18})/?$", vehicle_api.vehicle_detail),
+    re_path(r"^visitors/v1/vehicles/(?P<pk>\d{1,18})/photos/(?P<which>in|out)/?$", vehicle_api.vehicle_photo),
+    re_path(r"^visitors/v1(?:/.*)?$", vehicle_api.not_found),
 ] + router.urls

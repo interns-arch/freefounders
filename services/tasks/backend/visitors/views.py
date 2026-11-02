@@ -503,6 +503,8 @@ def config_view(request):
     s = conf.get()
     can = {"gate": sv.can_gate(u), "invite": sv.can_invite(u), "view_all": sv.can_view_all(u), "settings": sv.can_settings(u)}
     _need(any(can.values()))
+    from .vehicle_api import can_manage
+    can["api_keys"] = can["settings"] and can_manage(u)
     return Response({
         "can": can, "purposes": s["purposes"], "host_approval": s["host_approval"], "photo_visitor": s["photo_visitor"],
         "photo_vehicle": s["photo_vehicle"], "id_proof": s["id_proof"], "id_types": conf.ID_TYPES,

@@ -30,7 +30,7 @@ export interface Place {
 }
 
 export interface VisitorConfig {
-  can: { gate: boolean; invite: boolean; view_all: boolean; settings: boolean };
+  can: { gate: boolean; invite: boolean; view_all: boolean; settings: boolean; api_keys: boolean };
   purposes: string[];
   host_approval: boolean;
   photo_visitor: PhotoRule;
@@ -556,6 +556,28 @@ export function useVisitorLink(enabled = true) {
 /** "Make a new QR" (the old one stops working) or switch the open sign-in on / off. */
 export const useChangeVisitorLink = () =>
   useVisitorsMutation((body: { regenerate?: boolean; regenerate_checkout?: boolean; enabled?: boolean }) => tasksApi.post<VisitorLink>('/visitors/link/', body));
+
+// ─── API access: keys for the read-only Vehicle API (PLAN.md §22.12) ──────────
+export interface VehicleApiKey {
+  id: number;
+  name: string;
+  /** The start of the key, to recognise it; the whole key exists only in the answer that made it. */
+  hint: string;
+  scope: string;
+  created_by: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  state: 'active' | 'expired' | 'revoked';
+}
+export function useVehicleApiKeys() {
+  return useQuery({ queryKey: [...KEY, 'api-keys'], queryFn: () => tasksApi.get<VehicleApiKey[]>('/visitors/api-keys/') });
+}
+export const useCreateVehicleApiKey = () =>
+  useVisitorsMutation((body: { name: string; expires_at: string | null }) => tasksApi.post<VehicleApiKey & { key: string }>('/visitors/api-keys/', body));
+export const useRevokeVehicleApiKey = () => useVisitorsMutation((id: number) => tasksApi.post<VehicleApiKey>(`/visitors/api-keys/${id}/revoke/`, {}));
 
 // ─── the open QR sign-in (no sign-in needed) ──────────────────────────────────
 

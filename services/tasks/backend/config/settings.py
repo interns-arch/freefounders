@@ -159,6 +159,8 @@ REST_FRAMEWORK = {
     },
     "NUM_PROXIES": int(env("NUM_PROXIES", "0")) or None,
 }
+# The Vehicle API (PLAN.md section 22.12): requests per API key, counted per gunicorn worker (LocMem cache).
+VEHICLE_API_RATE = env("VEHICLE_API_RATE", "120/min")
 # The visitor's device cookie (PLAN.md section 22.11): the path the browser uses for the public visitor API.
 VISITOR_COOKIE_PATH = env("VISITOR_COOKIE_PATH", "/tasks/api/visitors/public/")
 

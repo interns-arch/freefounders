@@ -185,6 +185,7 @@ Menu items: **Home**, **Tasks**, **Team performance**, **Groups**, **Notices**, 
 - Both QR posters are in Visitors › **Settings** (download PNG or print).
 - **My visitors** (any employee): **Invite visitor** sends a pass link in advance. Here you also see parcels waiting for you, and **Where should they wait?** for a visitor who is here.
 - **Vehicles**: in/out with plate photo. **Parcels**: receive, hand over or return.
+- **Vehicle API**: Visitors → Settings → API access (Owner or Admin): make a read-only key for another system or an IT person; the full key is shown once; revoke it there. The guide button has every field and example.
 - Also: **Contractors** (multi-day passes), **Material passes** (goods in/out, manager-approved), **Patrol** (QR checkpoints), **Incidents**.
 - **Inside now**: roll call for evacuation.
 - Admin screens: **Register**, **Reports**, **Guard activity**, **Watchlist** and **Settings**.

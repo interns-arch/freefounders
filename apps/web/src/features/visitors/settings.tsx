@@ -3,7 +3,7 @@
  * 2026-10-26: one fixed QR per company, printed once; "Make a new QR" replaces it and the old one stops working).
  */
 import { errorMessage } from '@kaampilot/core';
-import { type BadgeFormat, type PhotoRule, type VisitorSettings, type WatchAction, useChangeVisitorLink, useSaveVisitorSettings, useVisitorLink, useVisitorSettings } from '@kaampilot/core/visitors';
+import { type BadgeFormat, type PhotoRule, type VisitorSettings, type WatchAction, useChangeVisitorLink, useSaveVisitorSettings, useVisitorConfig, useVisitorLink, useVisitorSettings } from '@kaampilot/core/visitors';
 import QRCodeLib from 'qrcode';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 
 import { dataUrlToBlob } from '@/lib/compress-image';
 import { saveFile } from '@/lib/native-bridge';
+import { ApiAccessCard } from './api-access';
 
 const MODES: Array<[PhotoRule, string]> = [
   ['off', 'Off'],
@@ -28,6 +29,7 @@ const MODES: Array<[PhotoRule, string]> = [
 
 export function VisitorSettingsPage() {
   const q = useVisitorSettings();
+  const config = useVisitorConfig();
   if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   if (!q.data) return <PageLoader />;
   return (
@@ -36,6 +38,7 @@ export function VisitorSettingsPage() {
       <QrCard kind="in" />
       <QrCard kind="out" />
       <SettingsForm initial={q.data} />
+      {config.data?.can.api_keys && <ApiAccessCard />}
     </div>
   );
 }

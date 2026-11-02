@@ -3463,7 +3463,7 @@ per period, cancel any time to stop the next period, no partial refunds; duplica
 on our side refunded in full, started within 7 working days. Constants `SUPPORT_EMAIL`, `OPERATOR`, `UPDATED` sit at the
 top of `legal.tsx`.
 
-## 22. Visitor management (V1, V2, V3 built 2026-10-26, §22.8–§22.10; V4 2026-10-28, V4.1 2026-10-29, §22.11)
+## 22. Visitor management (V1, V2, V3 built 2026-10-26, §22.8–§22.10; V4 2026-10-28, V4.1 2026-10-29, §22.11; Vehicle API 2026-11-02, §22.12)
 
 Founder (2026-10-26): "one more option: visitor management software, to keep the record of every visitor and all the
 company's security records." This is a plan only; nothing is built until the founder answers §22.7.
@@ -3884,6 +3884,57 @@ e2e: `web-visitors-v4.spec.ts` (dropdown, no check-out code, Waiting to leave ap
 **Deploy (V4.1)**: Tasks + web. `migrate_companies` runs `visitors/0006` (data only); no new env. Reprint the check-out
 QR poster only if wanted (the QR is the same; only the printed steps changed). Tell guards: check-outs now appear in
 "Waiting to leave", no code.
+
+### 22.12 Vehicle API: read-only, with per-company API keys (2026-11-02)
+
+Founder (2026-11-02): "I want an API I can give to my senior manager, for the visitor management vehicle part, with all
+the information." Guide for the reader's IT person: `docs/api/VEHICLE-API.md` (also served, no sign-in, at
+`/docs/vehicle-api.txt`, copied at build time). Code: `visitors/vehicle_api.py`; web `features/visitors/api-access.tsx`.
+
+**Keys.** Table `VehicleApiKey` in each company schema: name, prefix, SHA-256 of the whole key, scope `vehicles:read`,
+created by/at, last used, optional end date, revoked by/at. Format `kpv_<company code>_<40 letters and digits>` (the secret
+has no `_`, so the code can be read back; a change of company code would invalidate keys, codes do not change). **Prefix =
+the first 8 characters of the secret**, not of the key: the first 8 of the key would be `kpv_<code>`, the same on every key.
+Visitors → Settings → **API access** makes, lists and revokes keys; the full key is in the one answer that made it (with
+`no-store`). **Owner or Admin only** (`access.is_admin` / `is_owner`, level 3; `visitors.settings` alone is not enough, since
+a key opens every driver's number with no person behind it); `can.api_keys` in the config only hides the card. Made and
+revoked go to the gate log (`GateAction.API_KEY`: name and prefix, never the key). `people_delete`: both people fields go null
+and the key keeps working.
+
+**Finding the company.** `/api/visitors/v1/` is in `NO_COMPANY_PATHS` (so it starts in `ff_none`) and in the module gate's
+`_SHARED` (the API answers for itself, 403 in its own format). The key's code → `schema_for_code` → must be in the registry
+→ `schemas.use(schema)` → lookup by prefix, `hmac.compare_digest` on the hash. The hash covers the code too, so a secret moved
+to another company's code never matches. Every failure is the same 401: malformed, unknown company, wrong secret, revoked,
+expired, no key, a key in the URL (never read from there). Order: 405 → 401 → 403 module → 429 → the answer.
+
+**Endpoints** (GET only, plain Django views, no cookies, CSRF exempt; no gateway or Caddy change: `/tasks/api/*` already passes
+all headers; no CORS, server to server): `v1/vehicles/` (filters `from`, `to`, `status`, `vehicle_number`, `type`, `purpose`,
+`updated_since`; newest first by `-in_at, -id`; `page_size` default 50, above 200 is capped), `v1/vehicles/<id>/`,
+`v1/vehicles/inside/`, `v1/vehicles/summary/` (default last 30 days, at most 366), `v1/vehicles/<id>/photos/<in|out>/`.
+`{count,next,previous,results}`, errors `{error:{code,message}}`. Links use `/tasks/api` when the request came through a
+gateway (`X-Forwarded-Host`), else `/api`. A page past the end is an empty 200 so a client loop ends quietly.
+
+**Fields**: everything on `VehicleEntry` plus the linked visits' id, visitor name, people, host (name + department). Decisions:
+make / model / colour are not stored, so not offered (no new gate fields). `VehicleEntry.updated_at` is new (for
+`updated_since`; the migration fills it with out time, else in time); `services.touch_vehicle` bumps it when a linked visit is
+edited, linked or anonymised. Anonymised rows show as stored, with `anonymised: true`.
+
+**Limits.** `VEHICLE_API_RATE` (default `120/min`), per key, fixed window in the cache. **The cache is per process (LocMem) and
+production runs 2 gunicorn workers, so the real ceiling can reach twice the setting** (same as every other throttle here).
+`last_used_at` is written at most once a minute. Access goes to the log sink (`info`, `vehicle_api.request`: prefix, method,
+route, status, company) with the route instead of the id so identical calls fold and cannot use up the sink's 60 entries a
+minute; never the key, query or answer.
+
+**Known gap, for the founder**: Tasks does not know a company's subscription state; a read-only or suspended company is stopped
+at Platform sign-in. Its keys keep reading until the Visitors module is switched off for it (the QR pages behave the same).
+
+**Tests**: `visitors/tests_api.py` (shown once + hash only, audit, only Owner/Admin, every field, retention, filters + IST + offsets,
+`updated_since`, pagination + cap, inside, summary, the same 401 for every bad key, key in URL, a person's sign-in does not
+open it, only GET, module off, last used, rate limit, log has no secrets, photos; Postgres: own company only, forged code,
+same ids apart, module per company, connection back to no company). e2e `web-visitors-api.spec.ts`.
+
+**Deploy**: Tasks + web. `migrate_companies` runs `visitors/0007`; no required env (optional `VEHICLE_API_RATE`). After deploy,
+check with one key that `next` starts with `https://kaampilot.com/tasks/api/`.
 
 ## 23. Internal names renamed to Kaampilot (2026-10-26)
 

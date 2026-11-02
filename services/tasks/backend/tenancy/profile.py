@@ -51,7 +51,8 @@ _AREA_OF = {segment: area for area, (_n, segments) in PLAN_AREAS.items() for seg
 # Switchable modules that come with a plan area: leads, AI inbox, mistakes and links with Tasks; payroll with Attendance.
 MODULE_AREA = {"leads": "tasks", "intake": "tasks", "mistakes": "tasks", "links": "tasks", "payroll": "attendance"}
 # Paths under a module's prefix that other, always-on screens use: the team list for Groups, templates, settings.
-_SHARED = ("/api/leads/assignees/",)
+# The Vehicle API checks the module itself, inside the key's company, and answers in its own format (403).
+_SHARED = ("/api/leads/assignees/", "/api/visitors/v1/")
 
 _TTL = 30
 _lock = threading.Lock()

@@ -161,6 +161,8 @@ RELATIONS = {
     "visitors.VehicleEntry.in_by": NULL,
     "visitors.VehicleEntry.out_by": NULL,
     "visitors.GateLog.actor": NULL,
+    "visitors.VehicleApiKey.created_by": NULL,   # a key keeps working when the person who made it leaves (PLAN.md §22.12)
+    "visitors.VehicleApiKey.revoked_by": NULL,
     "visitors.Visit.invited_by": NULL,
     "visitors.Delivery.recipient": NULL,
     "visitors.Delivery.received_by": NULL,

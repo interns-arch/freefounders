@@ -196,6 +196,8 @@ class VehicleEntry(models.Model):
     out_at = models.DateTimeField(null=True, blank=True)
     out_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     anonymised = models.BooleanField(default=False)
+    # Vehicle API (PLAN.md §22.12): `updated_since` for incremental sync.
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
     class Meta:
         ordering = ["-in_at"]
@@ -307,6 +309,7 @@ class GateAction(models.TextChoices):
     CHECKOUT_HOLD = "checkout_hold", "Check-out held"
     SETTINGS = "settings", "Visitor settings changed"
     LINK = "link", "Visitor QR link changed"
+    API_KEY = "api_key", "Vehicle API key changed"
 
 
 class GateLog(models.Model):
@@ -327,6 +330,24 @@ class GateLog(models.Model):
 
     class Meta:
         ordering = ["-at", "-id"]
+
+
+class VehicleApiKey(models.Model):
+    """A key for the read-only Vehicle API (PLAN.md §22.12), in the company's own schema. Only a SHA-256 of the full key
+    is kept; the key itself is shown once, when it is made."""
+    name = models.CharField(max_length=80)
+    prefix = models.CharField(max_length=8, db_index=True)  # the secret's first 8 characters: to recognise a key
+    key_hash = models.CharField(max_length=64, unique=True)
+    scope = models.CharField(max_length=20, default="vehicles:read")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 # ================================================================ V3 (PLAN.md §22.10)

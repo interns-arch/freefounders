@@ -17,7 +17,8 @@ from . import schemas
 # Paths that never touch a company's data.
 # The open QR visitor sign-in and the visitor's pass page find their company from the code in their URL
 # (visitors/views.py public_view, public_pass_view).
-NO_COMPANY_PATHS = ("/health", "/api/internal/companies", "/api/visitors/public/", "/api/visitors/pass/")
+# The Vehicle API finds its company from its API key (visitors/vehicle_api.py).
+NO_COMPANY_PATHS = ("/health", "/api/internal/companies", "/api/visitors/public/", "/api/visitors/pass/", "/api/visitors/v1/")
 
 
 def _company_id(request) -> str | None:

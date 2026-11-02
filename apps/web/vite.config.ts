@@ -1,12 +1,32 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // One id per build: the saved query cache (PLAN.md §19.18) is dropped when it changes, so a new deploy never reads
 // data saved in an older shape.
 const BUILD_ID = process.env.FF_BUILD_ID || new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+
+// The Vehicle API guide (PLAN.md §22.12): docs/api/VEHICLE-API.md is the one source; the settings card links to this plain
+// text copy, which needs no sign-in, so it can be forwarded to someone's IT person.
+function vehicleApiGuide(): Plugin {
+  const source = fileURLToPath(new URL('../../docs/api/VEHICLE-API.md', import.meta.url));
+  const address = 'docs/vehicle-api.txt';
+  return {
+    name: 'vehicle-api-guide',
+    configureServer(server) {
+      server.middlewares.use(`/${address}`, (_req, res) => {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.end(readFileSync(source, 'utf8'));
+      });
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: address, source: readFileSync(source, 'utf8') });
+    },
+  };
+}
 
 // The Kaampilot web app (PLAN.md §18). Served at "/" on the shared address; the gateway sends the APIs
 // (/api/platform, /tasks/api, /assets/api, /media) to their services. Dev: http://localhost:8080 (through the gateway).
@@ -14,6 +34,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    vehicleApiGuide(),
     // The app's files stay on the phone (PLAN.md §19.18): a service worker built from sw/sw.js, production builds only
     // (registered by src/lib/sw-register.ts). It precaches index.html + /static/*; it never touches the API paths.
     VitePWA({
