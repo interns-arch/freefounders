@@ -152,7 +152,8 @@ services:
     command: >-
       sh -c "python manage.py migrate_companies --verbosity 1 &&
       exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --timeout 120
-      --max-requests 2000 --max-requests-jitter 200 --access-logfile - --error-logfile -"
+      --max-requests 2000 --max-requests-jitter 200 --access-logfile - --error-logfile -
+      --access-logformat '%(h)s %(l)s %(u)s %(t)s \"%(r)s\" %(s)s %(b)s \"%(f)s\" \"%(a)s\" %(L)s'"
     volumes:
       - ${FF_HOME:?}/data/tasks-media:/app/backend/media
     networks: [internal]

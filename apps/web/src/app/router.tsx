@@ -5,9 +5,6 @@ import { attendanceRoutes, hrRoutes } from '@/features/hr/routes';
 import { tasksRoutes } from '@/features/tasks/routes';
 import { teamRoutes } from '@/features/team/routes';
 import { oldVisitorRoutes, visitorsRoutes } from '@/features/visitors/routes';
-import { AccountPage } from './pages/account';
-import { HomePage } from './pages/home';
-import { LoginPage } from './pages/login';
 import { NotFound, RouteError } from './pages/errors';
 import { RequireSession } from './session-guard';
 import { AppShell } from './shell';
@@ -23,7 +20,7 @@ function area(routes: RouteObject[]): RouteObject[] {
  * longer served.
  */
 export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },
+  { path: '/login', lazy: async () => ({ Component: (await import('./pages/login')).LoginPage }), errorElement: <RouteError /> },
   // Public account pages (PLAN.md §21.1): sign-up, forgot password, invite links.
   { path: '/signup', lazy: async () => ({ Component: (await import('@/features/account/signup')).SignupPage }), errorElement: <RouteError /> },
   { path: '/forgot', lazy: async () => ({ Component: (await import('@/features/account/forgot')).ForgotPage }), errorElement: <RouteError /> },
@@ -44,7 +41,7 @@ export const router = createBrowserRouter([
     element: <RequireSession />,
     errorElement: <RouteError />,
     children: [
-      { path: 'account', element: <AccountPage /> },
+      { path: 'account', lazy: async () => ({ Component: (await import('./pages/account')).AccountPage }) },
       // Signed in, without the app frame: a new company, the fake payment page, a printable invoice.
       { path: 'new-company', lazy: async () => ({ Component: (await import('@/features/account/new-company')).NewCompanyPage }) },
       { path: 'billing/pay/:sessionId', lazy: async () => ({ Component: (await import('@/features/billing/pay')).PayPage }) },
@@ -53,7 +50,7 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           // Home (PLAN.md §19.14): attendance first, then the other areas; /?choose is a plain alias, /?home=1 skips the phone redirect.
-          { index: true, element: <HomePage /> },
+          { index: true, lazy: async () => ({ Component: (await import('./pages/home')).HomePage }) },
           ...adminRoutes,
           // Kaampilot console (PLAN.md §21.1, §21.9): Kaampilot staff only (the screens send anyone else Home; the API answers 403).
           { path: 'console', lazy: async () => ({ Component: (await import('@/features/billing/console')).ConsolePage }) },

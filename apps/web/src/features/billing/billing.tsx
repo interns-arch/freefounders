@@ -50,21 +50,8 @@ import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Card, Checkbox, Switch } from '@/components/ui/primitives';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
+import { useOpenCheckout } from './open-checkout';
 import { SeatStepper, StateBadge } from './parts';
-
-/** Opens the payment page the server named: our own pages in-app, anything else as a full page. */
-export function useOpenCheckout() {
-  const navigate = useNavigate();
-  return (url: string) => {
-    try {
-      const u = new URL(url, window.location.origin);
-      if (u.origin === window.location.origin) return navigate(u.pathname + u.search);
-    } catch {
-      /* not a URL: fall through */
-    }
-    window.location.assign(url);
-  };
-}
 
 export function BillingPage() {
   const summary = useBilling();

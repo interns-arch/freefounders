@@ -12,7 +12,7 @@ import { ErrorState, PageLoader } from '@/components/common/page';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/primitives';
 import { formatDate } from '@/lib/utils';
-import { useOpenCheckout } from './billing';
+import { useOpenCheckout } from './open-checkout';
 
 const GST = 0.18;
 
