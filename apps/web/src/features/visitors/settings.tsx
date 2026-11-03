@@ -47,12 +47,14 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
   const [f, setF] = useState(initial);
   const [purposes, setPurposes] = useState(initial.purposes.join('\n'));
   const [places, setPlaces] = useState(initial.waiting_places.join('\n'));
+  const [alertNumbers, setAlertNumbers] = useState(initial.alert_wa_numbers.join('\n'));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useSaveVisitorSettings();
   useEffect(() => {
     setF(initial);
     setPurposes(initial.purposes.join('\n'));
     setPlaces(initial.waiting_places.join('\n'));
+    setAlertNumbers(initial.alert_wa_numbers.join('\n'));
   }, [initial]);
   const set = <K extends keyof VisitorSettings>(k: K, v: VisitorSettings[K]) => setF((cur) => ({ ...cur, [k]: v }));
   const submit = async () => {
@@ -61,6 +63,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
         ...f,
         purposes: purposes.split('\n').map((p) => p.trim()).filter(Boolean),
         waiting_places: places.split('\n').map((p) => p.trim()).filter(Boolean),
+        alert_wa_numbers: alertNumbers.split('\n').map((p) => p.trim()).filter(Boolean),
       });
       setErrors({});
       toast.success('Visitor settings saved');
@@ -193,6 +196,17 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
           </Field>
           <Field label="Template language" error={errors.host_wa_lang}>
             <Input value={f.host_wa_lang} onChange={(e) => set('host_wa_lang', e.target.value.trim())} placeholder="en" className="font-mono" />
+          </Field>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="WhatsApp every new visitor to" hint="One number per line, with country code. Sent at each check-in, at any hour." error={errors.alert_wa_numbers}>
+            <Textarea rows={3} value={alertNumbers} onChange={(e) => setAlertNumbers(e.target.value)} placeholder="919812345678" className="font-mono" />
+          </Field>
+          <Field label="WhatsApp template for new visitors" hint="Meta-approved name, e.g. visitor_new. Empty: no message." error={errors.alert_wa_template}>
+            <Input value={f.alert_wa_template} onChange={(e) => set('alert_wa_template', e.target.value.trim())} placeholder="visitor_new" className="font-mono" />
+          </Field>
+          <Field label="Template language" error={errors.alert_wa_lang}>
+            <Input value={f.alert_wa_lang} onChange={(e) => set('alert_wa_lang', e.target.value.trim())} placeholder="en" className="font-mono" />
           </Field>
         </div>
         <Field label="Waiting places" hint="One per line. The host picks one (or “I’m coming to the gate” / “Not available”)." error={errors.waiting_places}>

@@ -56,6 +56,10 @@ DEFAULTS = {
     "host_wa_template": "",          # Meta-approved utility template for the host (empty = in-app notice only)
     "host_wa_lang": "en",
     "checkout_qr": True,             # the check-out QR (visitors check out from the phone they checked in with)
+    # PLAN.md §22.13: these numbers get a WhatsApp at every check-in (a Meta-approved template; no free-form WhatsApp)
+    "alert_wa_numbers": [],
+    "alert_wa_template": "",
+    "alert_wa_lang": "en",
 }
 
 
@@ -114,12 +118,27 @@ def clean(data: dict) -> tuple[dict, dict]:
                 cur[key] = _bounded_int(value, 10, 720, "Code valid for")
             elif key == "host_answer_minutes":
                 cur[key] = _bounded_int(value, 1, 60, "Host answer")
-            elif key in ("host_wa_template", "host_wa_lang"):
+            elif key in ("host_wa_template", "host_wa_lang", "alert_wa_template", "alert_wa_lang"):
                 t = str(value or "").strip()
-                if not re.fullmatch(r"[a-z0-9_]{0,60}" if key == "host_wa_template" else r"[a-zA-Z_]{2,8}", t):
+                name = key.endswith("_template")
+                if not re.fullmatch(r"[a-z0-9_]{0,60}" if name else r"[a-zA-Z_]{2,8}", t):
                     raise ValueError("Lower-case letters, digits and _ only (the name as approved by Meta)"
-                                     if key == "host_wa_template" else "A language code like en or en_US")
+                                     if name else "A language code like en or en_US")
                 cur[key] = t
+            elif key == "alert_wa_numbers":
+                items = value if isinstance(value, list) else str(value).split(",")
+                numbers = []
+                for item in items:
+                    digits = re.sub(r"\D", "", str(item))
+                    if not digits:
+                        continue
+                    if not 10 <= len(digits) <= 15:
+                        raise ValueError(f"{item} is not a valid mobile number")
+                    if digits not in numbers:
+                        numbers.append(digits)
+                if len(numbers) > 10:
+                    raise ValueError("At most 10 numbers")
+                cur[key] = numbers
             elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan", "checkout_qr",
                          "whom_to_meet", "whom_required"):
                 if not isinstance(value, bool):

@@ -316,6 +316,8 @@ def accept(actor, v: Visit, data: dict) -> Visit:
 def _after_admit(actor, v: Visit, s: dict, hit):
     if hit:
         log(actor, GateAction.WATCH_ALERT, f"{who(v)} let in although on the watchlist: {hit.reason}", visit=v)
+    from .services_v4 import alert_new_visitor
+    alert_new_visitor(v, s)
     # The pass on the visitor's phone (V2); an invited visitor already has the link, it now shows "Inside".
     if s["send_pass"] and not v.pass_sent_at and (v.mobile or v.email):
         send_pass(v)

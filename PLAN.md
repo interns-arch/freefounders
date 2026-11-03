@@ -3936,6 +3936,17 @@ same ids apart, module per company, connection back to no company). e2e `web-vis
 **Deploy**: Tasks + web. `migrate_companies` runs `visitors/0007`; no required env (optional `VEHICLE_API_RATE`). After deploy,
 check with one key that `next` starts with `https://kaampilot.com/tasks/api/`.
 
+### 22.13 WhatsApp alert for every new visitor (founder 2026-11-03)
+
+Visitors → Settings: up to 10 numbers and a Meta-approved template. Each time a visitor is checked in or sent to their
+host for approval (`_after_admit`: the guard's check-in, a QR visitor's code, an invited visitor), every number gets one
+message, at any hour (not limited to the WhatsApp hours). A filled-in QR form alone sends nothing: the guard has not seen
+them yet. No template or no numbers: nothing is sent. A failed message is logged and never holds up the gate.
+
+**Template to submit to Meta** (category **Utility**, name `visitor_new`, language English):
+`New visitor at the gate: {{1}} from {{2}}, mobile {{3}}. Purpose: {{4}}. Number of visitors: {{5}}. To meet: {{6}}. Time: {{7}}. Pass: {{8}}.`
+(samples: Ravi Kumar · ABC Ltd · 9812345678 · Meeting · 1 · Neha Sharma · 03 Nov 2026, 11:30 AM · V00012)
+
 ## 23. Internal names renamed to Kaampilot (2026-10-26)
 
 Founder: "make the project name everywhere Kaampilot, not FreeFounders". This finishes §19.x's visible rename:

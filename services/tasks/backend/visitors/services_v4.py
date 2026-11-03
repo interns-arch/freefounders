@@ -5,6 +5,7 @@ V4.1 (2026-10-29): check-out needs no code (the request shows in the guard's "Wa
 and whom to meet is optional (company setting `whom_to_meet`, optionally `whom_required`).
 """
 import hashlib
+import logging
 import secrets
 from datetime import timedelta
 
@@ -15,6 +16,8 @@ from rest_framework.exceptions import PermissionDenied, Throttled, ValidationErr
 from . import conf
 from .models import GateAction, GateLog, Visit, VisitStatus
 from .services import can_gate, can_view_all, log, name_of, text, who
+
+logger = logging.getLogger(__name__)
 
 CODE_TRIES = 10                    # wrong codes per guard ...
 CODE_WINDOW = timedelta(minutes=5)  # ... in this window lock code entry for the rest of it
@@ -219,6 +222,27 @@ def ask_host(v: Visit) -> None:
         pass
     v.host_notified_at = timezone.now()
     v.save(update_fields=["host_notified_at"])
+
+
+def alert_new_visitor(v: Visit, s: dict) -> None:
+    """Every check-in: the company's alert numbers get a WhatsApp template (PLAN.md §22.13). At any hour: a visitor at
+    the gate does not wait for the WhatsApp hours. A failed message never holds up the gate."""
+    numbers, template = s["alert_wa_numbers"], s["alert_wa_template"]
+    if not numbers or not template:
+        return
+    from notifications.channels import whatsapp
+    from .services import in_background
+    at = timezone.localtime(v.check_in_at or timezone.now()).strftime("%d %b %Y, %I:%M %p")
+    params = [v.name, v.company or "-", v.mobile or "-", v.purpose or "visit", str(v.people or 1),
+              name_of(v.host) if v.host else (v.host_label or "-"), at, v.pass_no or "-"]
+    lang = s["alert_wa_lang"] or "en"
+
+    def send():
+        for number in numbers:
+            r = whatsapp.send_template(number, template, params, lang=lang)
+            if r.get("status") != "sent":
+                logger.warning("Visitor alert not sent: %s %s", r.get("status"), (r.get("detail") or "")[:120])
+    in_background(send)
 
 
 def host_answer(actor, v: Visit, data: dict) -> Visit:

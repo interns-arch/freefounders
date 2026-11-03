@@ -194,6 +194,49 @@ class HostAnswerTests(V4Base):
         self.assertEqual([c["status"] for c in n.channels if c["channel"] == "whatsapp"], ["skipped"])
 
 
+class NewVisitorAlertTests(V4Base):
+    SENT = {"channel": "whatsapp", "status": "sent", "detail": ""}
+
+    def setUp(self):
+        super().setUp()
+        conf.save({**conf.get(), "send_pass": False, "alert_wa_numbers": ["919812345678", "919876543210"],
+                   "alert_wa_template": "visitor_new"})
+
+    def test_qr_visitor_alerts_every_number_once_when_the_guard_approves(self):
+        with mock.patch("notifications.channels.whatsapp.send_template", return_value=self.SENT) as tpl:
+            code = self.sign_in().data["code"]
+            tpl.assert_not_called()  # the form alone sends nothing: the guard has not seen them yet
+            self.approve(code)
+        v = Visit.objects.get()
+        self.assertEqual([c.args[0] for c in tpl.call_args_list], ["919812345678", "919876543210"])
+        args = tpl.call_args.args
+        self.assertEqual(args[1], "visitor_new")
+        self.assertEqual(args[2][:5], ["Priya Shah", "Acme", v.mobile, "Interview", "1"])
+        self.assertEqual(args[2][7], v.pass_no)
+
+    def test_guard_check_in_alerts_too(self):
+        with mock.patch("notifications.channels.whatsapp.send_template", return_value=self.SENT) as tpl:
+            self.assertEqual(self.check_in().status_code, 201)
+        self.assertEqual(tpl.call_count, 2)
+
+    def test_no_template_sends_nothing(self):
+        conf.save({**conf.get(), "alert_wa_template": ""})
+        with mock.patch("notifications.channels.whatsapp.send_template") as tpl:
+            self.check_in()
+        tpl.assert_not_called()
+
+    def test_a_failed_message_still_checks_the_visitor_in(self):
+        failed = {"channel": "whatsapp", "status": "failed", "detail": "token expired"}
+        with mock.patch("notifications.channels.whatsapp.send_template", return_value=failed):
+            self.assertEqual(self.check_in().status_code, 201)
+
+    def test_numbers_are_cleaned_and_a_bad_one_refused(self):
+        cleaned, errors = conf.clean({"alert_wa_numbers": ["+91 98123-45678", "919812345678", ""]})
+        self.assertEqual((cleaned["alert_wa_numbers"], errors), (["919812345678"], {}))
+        _, errors = conf.clean({"alert_wa_numbers": ["12345"]})
+        self.assertIn("alert_wa_numbers", errors)
+
+
 class CheckoutTests(V4Base):
     def inside(self):
         res = self.sign_in()
