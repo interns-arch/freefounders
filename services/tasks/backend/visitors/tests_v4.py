@@ -19,7 +19,7 @@ from notifications.models import Notification
 
 from . import conf, services, services_v4
 from .models import GateAction, GateLog, Visit, Visitor
-from .tests import Base, jpeg, person
+from .tests import Base, jpeg, person, role_with
 
 CODE = re.compile(r"^\d{4}$")
 
@@ -235,6 +235,46 @@ class NewVisitorAlertTests(V4Base):
         self.assertEqual((cleaned["alert_wa_numbers"], errors), (["919812345678"], {}))
         _, errors = conf.clean({"alert_wa_numbers": ["12345"]})
         self.assertIn("alert_wa_numbers", errors)
+
+
+class ArrivalNoticeTests(V4Base):
+    def setUp(self):
+        super().setUp()
+        conf.save({**conf.get(), "send_pass": False})
+        self.manager = person("prateek", role_with("gate_manager", "notifications.view", "visitors.view_all"))
+
+    def notices(self, user):
+        return Notification.objects.filter(user=user, type="visitor_checked_in")
+
+    def test_people_with_the_register_are_told_with_the_purpose(self):
+        self.assertEqual(self.check_in().status_code, 201)
+        n = self.notices(self.manager).get()
+        self.assertEqual(n.title, "Ravi Kumar has arrived")
+        self.assertIn("Meeting", n.body)
+        self.assertIn(Visit.objects.get().pass_no, n.body)
+
+    def test_not_the_guard_or_the_host_or_anyone_else(self):
+        self.check_in()
+        for u in (self.guard, self.host, self.other):
+            self.assertFalse(self.notices(u).exists(), u.username)
+
+    def test_the_filled_in_form_alone_tells_nobody_until_the_guard_approves(self):
+        code = self.sign_in().data["code"]
+        self.assertFalse(self.notices(self.manager).exists())
+        self.approve(code)
+        self.assertEqual(self.notices(self.manager).count(), 1)
+
+    def test_it_can_be_switched_off(self):
+        conf.save({**conf.get(), "arrival_notice": False})
+        self.check_in()
+        self.assertFalse(self.notices(self.manager).exists())
+
+    def test_no_whatsapp_or_email(self):
+        with mock.patch("notifications.channels.gmail.send_email") as mail:
+            self.check_in()
+        channels = {c["channel"]: c["status"] for c in self.notices(self.manager).get().channels}
+        self.assertEqual(channels.get("whatsapp"), "skipped")
+        self.assertFalse([c for c in mail.call_args_list if c.args and c.args[0] == self.manager.email])
 
 
 class CheckoutTests(V4Base):

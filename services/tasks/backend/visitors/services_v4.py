@@ -245,6 +245,26 @@ def alert_new_visitor(v: Visit, s: dict) -> None:
     in_background(send)
 
 
+def tell_visitor_arrived(actor, v: Visit, s: dict) -> None:
+    """For their knowledge (PLAN.md §22.14): everyone who can see the visitor register gets an in-app notice at check-in.
+    Not the guard who let them in, nor the host, who has their own notice. No WhatsApp or email."""
+    if not s["arrival_notice"]:
+        return
+    from accounts.access import users_with
+    from notifications.service import notify
+    skip = {actor.pk if actor else None, v.host_id}
+    meets = f" · to meet {name_of(v.host) if v.host else v.host_label}" if v.host or v.host_label else ""
+    for u in users_with("visitors.view_all"):
+        if not u.is_active or u.pk in skip:
+            continue
+        try:
+            notify(u, "visitor_checked_in", f"{v.name} has arrived"[:200],
+                   f"{who(v)} · {v.purpose or 'visit'}{meets} · pass {v.pass_no}", link=f"/visitors/register?visit={v.pk}",
+                   link_label="Open", want_email=False, want_whatsapp=False)
+        except Exception:  # noqa: BLE001 -- a failed notice never blocks the gate
+            pass
+
+
 def host_answer(actor, v: Visit, data: dict) -> Visit:
     if v.host_id != actor.pk and not can_view_all(actor):
         raise PermissionDenied("Only the person they came to meet can answer.")

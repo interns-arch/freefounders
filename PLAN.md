@@ -3947,6 +3947,13 @@ them yet. No template or no numbers: nothing is sent. A failed message is logged
 `New visitor at the gate: {{1}} from {{2}}, mobile {{3}}. Purpose: {{4}}. Number of visitors: {{5}}. To meet: {{6}}. Time: {{7}}. Pass: {{8}}.`
 (samples: Ravi Kumar · ABC Ltd · 9812345678 · Meeting · 1 · Neha Sharma · 03 Nov 2026, 11:30 AM · V00012)
 
+### 22.14 In-app notice when a visitor arrives (founder 2026-11-05)
+
+"A notification that the visitor has arrived, for knowledge." On by default (Visitors → Settings, "Tell managers when a
+visitor arrives"). At each check-in (`_after_admit`, same moment as §22.13) everyone with `visitors.view_all` gets a
+bell notification "<name> has arrived" with company, purpose, whom to meet and pass, under Visitors; it opens that visit in the Register.
+Not the guard who let them in, not the host (who has their own `visitor_arrived` notice). No WhatsApp, no email, no action.
+
 ## 23. Internal names renamed to Kaampilot (2026-10-26)
 
 Founder: "make the project name everywhere Kaampilot, not FreeFounders". This finishes §19.x's visible rename:

@@ -56,6 +56,7 @@ DEFAULTS = {
     "host_wa_template": "",          # Meta-approved utility template for the host (empty = in-app notice only)
     "host_wa_lang": "en",
     "checkout_qr": True,             # the check-out QR (visitors check out from the phone they checked in with)
+    "arrival_notice": True,          # PLAN.md §22.14: everyone with the visitor register gets an in-app notice at check-in
     # PLAN.md §22.13: these numbers get a WhatsApp at every check-in (a Meta-approved template; no free-form WhatsApp)
     "alert_wa_numbers": [],
     "alert_wa_template": "",
@@ -139,7 +140,7 @@ def clean(data: dict) -> tuple[dict, dict]:
                 if len(numbers) > 10:
                     raise ValueError("At most 10 numbers")
                 cur[key] = numbers
-            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan", "checkout_qr",
+            elif key in ("host_approval", "photo_vehicle", "open_link", "send_pass", "id_scan", "checkout_qr", "arrival_notice",
                          "whom_to_meet", "whom_required"):
                 if not isinstance(value, bool):
                     raise ValueError("On or off")

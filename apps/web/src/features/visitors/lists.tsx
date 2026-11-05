@@ -20,7 +20,7 @@ import {
   useVisits,
   visitorExports,
 } from '@kaampilot/core/visitors';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { CalendarClock, Car, Check, Copy, HardHat, MapPin, Package, Send, UserCheck, UserPlus, Users, X } from '@/components/icons';
@@ -352,6 +352,15 @@ export function RegisterPage({ config }: { config: VisitorConfig }) {
   };
   const rows = list.data?.results ?? [];
   const pages = Math.max(1, Math.ceil((list.data?.count ?? 0) / 50));
+  // A notification "<name> has arrived" opens that visit (PLAN.md §22.14).
+  const [params, setParams] = useSearchParams();
+  const focus = Number(params.get('visit')) || null;
+  const focused = rows.find((v) => v.id === focus);
+  useEffect(() => {
+    if (!focused) return;
+    setOpen(focused);
+    setParams((p) => (p.delete('visit'), p), { replace: true });
+  }, [focused, setParams]);
   return (
     <div className="space-y-4">
       <PageHeader

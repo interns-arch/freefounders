@@ -73,7 +73,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
     }
   };
   const toggle = (
-    k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass' | 'id_scan' | 'checkout_qr' | 'whom_to_meet' | 'whom_required',
+    k: 'host_approval' | 'photo_vehicle' | 'open_link' | 'send_pass' | 'id_scan' | 'checkout_qr' | 'arrival_notice' | 'whom_to_meet' | 'whom_required',
     label: string,
     hint: string,
     disabled = false,
@@ -99,6 +99,7 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
           {toggle('whom_to_meet', 'Ask visitors whom they are meeting', 'On: the QR form has a “Whom are you meeting?” list of your people (name and department only). The person picked is asked where the visitor should wait, and the visitor’s phone shows the answer. Off: not asked; the guard flow is the same.')}
           {toggle('whom_required', 'Whom to meet is required', 'Off: visitors may leave it as “Not sure”. On: they must pick someone.', !f.whom_to_meet)}
           {toggle('photo_vehicle', 'Vehicle photo required', 'A photo of the vehicle / number plate at vehicle check-in.')}
+          {toggle('arrival_notice', 'Tell managers when a visitor arrives', 'At each check-in, everyone who can see the visitor register gets a notification in the app, with the purpose. No WhatsApp or email.')}
           {toggle('send_pass', 'Send the visitor pass', 'The pass link (QR) goes to the visitor by WhatsApp, and by email when given: at check-in and with every invite.')}
           {toggle('id_scan', 'Read ID cards with AI', "The guard photographs the ID card; the company's AI fills the name, ID type and last 4 digits. The card photo is sent to the AI provider once and never kept. Needs the company's AI set up.")}
         </div>

@@ -202,6 +202,7 @@ export interface VisitorSettings {
   host_answer_minutes: number;
   host_wa_template: string;
   host_wa_lang: string;
+  arrival_notice: boolean;
   alert_wa_numbers: string[];
   alert_wa_template: string;
   alert_wa_lang: string;
