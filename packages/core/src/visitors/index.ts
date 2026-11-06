@@ -205,6 +205,7 @@ export interface VisitorSettings {
   arrival_notice: boolean;
   alert_wa_numbers: string[];
   alert_wa_template: string;
+  alert_wa_vehicle_template: string;
   alert_wa_lang: string;
   checkout_qr: boolean;
 }

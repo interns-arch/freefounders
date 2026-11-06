@@ -437,6 +437,8 @@ def vehicle_in(actor, data: dict) -> VehicleEntry:
         visit.save(update_fields=["vehicle", "vehicle_no"])
         touch_vehicle(visit)
     log(actor, GateAction.VEHICLE_IN, f"{e.number} ({e.get_type_display()}) in{f', driver {e.driver_name}' if e.driver_name else ''}", vehicle=e)
+    from .services_v4 import alert_new_vehicle
+    alert_new_vehicle(e, s)
     return e
 
 

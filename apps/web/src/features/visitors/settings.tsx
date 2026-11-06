@@ -199,12 +199,15 @@ function SettingsForm({ initial }: { initial: VisitorSettings }) {
             <Input value={f.host_wa_lang} onChange={(e) => set('host_wa_lang', e.target.value.trim())} placeholder="en" className="font-mono" />
           </Field>
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="WhatsApp every new visitor to" hint="One number per line, with country code. Sent at each check-in, at any hour." error={errors.alert_wa_numbers}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="WhatsApp every new visitor and vehicle to" hint="One number per line, with country code. Sent at each check-in, at any hour." error={errors.alert_wa_numbers}>
             <Textarea rows={3} value={alertNumbers} onChange={(e) => setAlertNumbers(e.target.value)} placeholder="919812345678" className="font-mono" />
           </Field>
           <Field label="WhatsApp template for new visitors" hint="Meta-approved name, e.g. visitor_new. Empty: no message." error={errors.alert_wa_template}>
             <Input value={f.alert_wa_template} onChange={(e) => set('alert_wa_template', e.target.value.trim())} placeholder="visitor_new" className="font-mono" />
+          </Field>
+          <Field label="WhatsApp template for new vehicles" hint="Meta-approved name, e.g. vehicle_new. Empty: no message." error={errors.alert_wa_vehicle_template}>
+            <Input value={f.alert_wa_vehicle_template} onChange={(e) => set('alert_wa_vehicle_template', e.target.value.trim())} placeholder="vehicle_new" className="font-mono" />
           </Field>
           <Field label="Template language" error={errors.alert_wa_lang}>
             <Input value={f.alert_wa_lang} onChange={(e) => set('alert_wa_lang', e.target.value.trim())} placeholder="en" className="font-mono" />

@@ -237,6 +237,38 @@ class NewVisitorAlertTests(V4Base):
         self.assertIn("alert_wa_numbers", errors)
 
 
+class NewVehicleAlertTests(V4Base):
+    SENT = {"channel": "whatsapp", "status": "sent", "detail": ""}
+
+    def setUp(self):
+        super().setUp()
+        conf.save({**conf.get(), "alert_wa_numbers": ["919812345678"], "alert_wa_vehicle_template": "vehicle_new"})
+
+    def vehicle_in(self):
+        return self.api(self.guard).post("/api/visitors/vehicles/", {
+            "number": "MH 12 AB 1234", "type": "truck", "driver_name": "Sunil", "driver_mobile": "9876543210",
+            "company": "Blue Dart", "purpose": "Delivery", "photo": jpeg()}, format="json")
+
+    def test_vehicle_check_in_alerts_with_the_details(self):
+        with mock.patch("notifications.channels.whatsapp.send_template", return_value=self.SENT) as tpl:
+            self.assertEqual(self.vehicle_in().status_code, 201)
+        to, template, params = tpl.call_args.args
+        self.assertEqual((to, template), ("919812345678", "vehicle_new"))
+        self.assertEqual(params[:6], ["MH12AB1234", "Truck", "Sunil", "9876543210", "Blue Dart", "Delivery"])
+        self.assertEqual(len(params), 7)
+
+    def test_no_vehicle_template_sends_nothing_even_with_a_visitor_template(self):
+        conf.save({**conf.get(), "alert_wa_vehicle_template": "", "alert_wa_template": "visitor_new"})
+        with mock.patch("notifications.channels.whatsapp.send_template") as tpl:
+            self.vehicle_in()
+        tpl.assert_not_called()
+
+    def test_a_failed_message_still_lets_the_vehicle_in(self):
+        failed = {"channel": "whatsapp", "status": "failed", "detail": "token expired"}
+        with mock.patch("notifications.channels.whatsapp.send_template", return_value=failed):
+            self.assertEqual(self.vehicle_in().status_code, 201)
+
+
 class ArrivalNoticeTests(V4Base):
     def setUp(self):
         super().setUp()

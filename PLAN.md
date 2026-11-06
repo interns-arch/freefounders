@@ -3954,6 +3954,14 @@ visitor arrives"). At each check-in (`_after_admit`, same moment as §22.13) eve
 bell notification "<name> has arrived" with company, purpose, whom to meet and pass, under Visitors; it opens that visit in the Register.
 Not the guard who let them in, not the host (who has their own `visitor_arrived` notice). No WhatsApp, no email, no action.
 
+### 22.15 WhatsApp alert for every new vehicle (founder 2026-11-06)
+
+The same numbers as §22.13 get a second template at every vehicle check-in (`vehicle_in`), at any hour; empty
+template = no message. Sent from the company's own WhatsApp sender (Admin → Integrations); CarTrends uses the Automation
+Task number. **Template to submit** (Utility, `vehicle_new`, English):
+`New vehicle at the gate: {{1}} ({{2}}). Driver: {{3}}, mobile {{4}}. Company: {{5}}. Purpose: {{6}}. Time: {{7}}.`
+(samples: MH12AB1234 · Truck · Sunil · 9876543210 · Blue Dart · Delivery · 06 Nov 2026, 11:30 AM)
+
 ## 23. Internal names renamed to Kaampilot (2026-10-26)
 
 Founder: "make the project name everywhere Kaampilot, not FreeFounders". This finishes §19.x's visible rename:

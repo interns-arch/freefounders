@@ -227,21 +227,31 @@ def ask_host(v: Visit) -> None:
 def alert_new_visitor(v: Visit, s: dict) -> None:
     """Every check-in: the company's alert numbers get a WhatsApp template (PLAN.md §22.13). At any hour: a visitor at
     the gate does not wait for the WhatsApp hours. A failed message never holds up the gate."""
-    numbers, template = s["alert_wa_numbers"], s["alert_wa_template"]
+    at = timezone.localtime(v.check_in_at or timezone.now()).strftime("%d %b %Y, %I:%M %p")
+    _alert(s, s["alert_wa_template"], [v.name, v.company or "-", v.mobile or "-", v.purpose or "visit", str(v.people or 1),
+                                       name_of(v.host) if v.host else (v.host_label or "-"), at, v.pass_no or "-"])
+
+
+def alert_new_vehicle(e, s: dict) -> None:
+    """Every vehicle check-in: the same alert numbers get the vehicle template (PLAN.md §22.15)."""
+    at = timezone.localtime(e.in_at).strftime("%d %b %Y, %I:%M %p")
+    _alert(s, s["alert_wa_vehicle_template"], [e.number, e.get_type_display(), e.driver_name or "-",
+                                               e.driver_mobile or "-", e.company or "-", e.purpose or "-", at])
+
+
+def _alert(s: dict, template: str, params: list) -> None:
+    numbers = s["alert_wa_numbers"]
     if not numbers or not template:
         return
     from notifications.channels import whatsapp
     from .services import in_background
-    at = timezone.localtime(v.check_in_at or timezone.now()).strftime("%d %b %Y, %I:%M %p")
-    params = [v.name, v.company or "-", v.mobile or "-", v.purpose or "visit", str(v.people or 1),
-              name_of(v.host) if v.host else (v.host_label or "-"), at, v.pass_no or "-"]
     lang = s["alert_wa_lang"] or "en"
 
     def send():
         for number in numbers:
             r = whatsapp.send_template(number, template, params, lang=lang)
             if r.get("status") != "sent":
-                logger.warning("Visitor alert not sent: %s %s", r.get("status"), (r.get("detail") or "")[:120])
+                logger.warning("Gate alert not sent: %s %s", r.get("status"), (r.get("detail") or "")[:120])
     in_background(send)
 
 

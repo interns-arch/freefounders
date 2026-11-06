@@ -60,6 +60,7 @@ DEFAULTS = {
     # PLAN.md §22.13: these numbers get a WhatsApp at every check-in (a Meta-approved template; no free-form WhatsApp)
     "alert_wa_numbers": [],
     "alert_wa_template": "",
+    "alert_wa_vehicle_template": "",  # §22.15: the same numbers at every vehicle check-in
     "alert_wa_lang": "en",
 }
 
@@ -119,7 +120,8 @@ def clean(data: dict) -> tuple[dict, dict]:
                 cur[key] = _bounded_int(value, 10, 720, "Code valid for")
             elif key == "host_answer_minutes":
                 cur[key] = _bounded_int(value, 1, 60, "Host answer")
-            elif key in ("host_wa_template", "host_wa_lang", "alert_wa_template", "alert_wa_lang"):
+            elif key in ("host_wa_template", "host_wa_lang", "alert_wa_template", "alert_wa_lang",
+                         "alert_wa_vehicle_template"):
                 t = str(value or "").strip()
                 name = key.endswith("_template")
                 if not re.fullmatch(r"[a-z0-9_]{0,60}" if name else r"[a-zA-Z_]{2,8}", t):
